@@ -1,11 +1,14 @@
+import { useState, useRef } from 'react'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import ThemeSwitcher from '../theme-switcher/ThemeSwitcher'
 import CodeBlueButton from '../code-blue/CodeBlueButton'
+import SkillsDropdown from '../skills-dropdown/SkillsDropdown'
 
 interface SABarProps {
   agents: AgentState[]
   onCodeBlue?: () => void
+  selectedAgentRepoPath?: string
 }
 
 const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
@@ -21,12 +24,14 @@ const VIEW_MODES = [
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
   const toggleSound = useViewStore((s) => s.toggleSound)
+  const [skillsOpen, setSkillsOpen] = useState(false)
+  const skillsBtnRef = useRef<HTMLButtonElement>(null)
 
   return (
     <header
@@ -78,6 +83,24 @@ function SABar({ agents, onCodeBlue }: SABarProps): React.JSX.Element {
       {agents.length > 0 && onCodeBlue && (
         <CodeBlueButton onActivate={onCodeBlue} />
       )}
+
+      {/* Skills dropdown */}
+      <div className="relative">
+        <button
+          ref={skillsBtnRef}
+          data-testid="skills-button"
+          onClick={() => setSkillsOpen((prev) => !prev)}
+          className="text-[10px] font-medium text-base-content/50 hover:text-base-content/80 transition-colors px-2 py-0.5 rounded hover:bg-base-content/5"
+          title="Skills"
+        >
+          Skills
+        </button>
+        <SkillsDropdown
+          isOpen={skillsOpen}
+          onClose={() => setSkillsOpen(false)}
+          repoPath={selectedAgentRepoPath}
+        />
+      </div>
 
       {/* Sound toggle */}
       <button

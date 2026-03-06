@@ -430,7 +430,11 @@ function App(): React.JSX.Element {
   return (
     <div className="flex flex-col h-full" data-theme={theme}>
       {/* SA Bar — persistent status header */}
-      <SABar agents={agentList} onCodeBlue={handleCodeBlueActivate} />
+      <SABar
+        agents={agentList}
+        onCodeBlue={handleCodeBlueActivate}
+        selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
+      />
 
       {/* Main layout: sidebar + content */}
       <main className="flex-1 flex min-h-0">

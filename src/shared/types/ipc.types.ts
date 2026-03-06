@@ -90,6 +90,11 @@ export interface AgentHubBridge {
     get: (agentId: string) => Promise<IpcResponse<import('./history.types').HistoryEntry[]>>
     search: (agentId: string, query: string) => Promise<IpcResponse<import('./history.types').HistorySearchResult[]>>
   }
+  skills: {
+    list: (repoPath?: string) => Promise<IpcResponse<import('./skills.types').SkillItem[]>>
+    execute: (skillId: string, repoPath?: string) => Promise<IpcResponse<import('./skills.types').SkillExecutionResult>>
+    refresh: (repoPath?: string) => Promise<IpcResponse<import('./skills.types').SkillItem[]>>
+  }
   git: {
     getStatus: (repoPath: string) => Promise<IpcResponse<import('./git.types').GitRepoStatus>>
     getAllStatus: () => Promise<IpcResponse<import('./git.types').GitRepoStatus[]>>

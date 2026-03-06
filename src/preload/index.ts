@@ -88,6 +88,14 @@ const agentHubBridge = {
     createSbar: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.RECOVERY.CREATE_SBAR, input),
     ackRecovery: () => ipcRenderer.invoke(IPC_CHANNELS.RECOVERY.ACK_RECOVERY)
   },
+  skills: {
+    list: (repoPath?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILLS.LIST, { repoPath }),
+    execute: (skillId: string, repoPath?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILLS.EXECUTE, { skillId, repoPath }),
+    refresh: (repoPath?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILLS.REFRESH, { repoPath })
+  },
   git: {
     getStatus: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_STATUS, repoPath),
     getAllStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_ALL_STATUS),

@@ -94,6 +94,11 @@ export const IPC_CHANNELS = {
     GET_BRANCHES: 'git:get-branches',
     SUGGEST_COMMIT: 'git:suggest-commit'
   },
+  SKILLS: {
+    LIST: 'skills:list',
+    EXECUTE: 'skills:execute',
+    REFRESH: 'skills:refresh'
+  },
   SYSTEM: {
     GET_APP_VERSION: 'system:get-app-version',
     GET_PLATFORM: 'system:get-platform',

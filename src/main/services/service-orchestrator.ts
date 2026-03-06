@@ -10,6 +10,7 @@ import { GuardrailsManager } from './guardrails-manager'
 import { AutoPauseService } from './auto-pause'
 import { TrayManager } from './tray-manager'
 import { GitService } from './git-service'
+import { SkillsService } from './skills-service'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -22,6 +23,7 @@ let guardrailsManager: GuardrailsManager | null = null
 let autoPauseService: AutoPauseService | null = null
 let trayManager: TrayManager | null = null
 let gitService: GitService | null = null
+let skillsService: SkillsService | null = null
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -141,6 +143,16 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 8. SkillsService — standalone, scans for skill files
+  skillsService = new SkillsService({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    logWarning: (message: string, meta?: Record<string, unknown>) => {
+      log.warn(message, meta)
+    }
+  })
+
   log.info('All services initialized')
 }
 
@@ -179,4 +191,8 @@ export function getGuardrailsManager(): GuardrailsManager | null {
 
 export function getGitService(): GitService | null {
   return gitService
+}
+
+export function getSkillsService(): SkillsService | null {
+  return skillsService
 }
