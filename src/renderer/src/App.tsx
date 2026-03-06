@@ -7,7 +7,6 @@ import AgentSidebar from './widgets/agent-sidebar/AgentSidebar'
 import SABar from './widgets/sa-bar/SABar'
 import SpawnDialog from './widgets/spawn-dialog/SpawnDialog'
 import UnifiedView from './widgets/unified-view/UnifiedView'
-import FullTerminal from './widgets/full-terminal/FullTerminal'
 import BriefingView from './widgets/briefing-view/BriefingView'
 import CommandPalette from './widgets/command-palette/CommandPalette'
 import EvidencePanel from './widgets/evidence-panel/EvidencePanel'
@@ -16,8 +15,8 @@ import KillConfirmToast from './widgets/kill-confirm/KillConfirmToast'
 import { RecoveryScreen } from './widgets/recovery-screen/RecoveryScreen'
 import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
-import TerminalToolbar from './widgets/terminal-toolbar/TerminalToolbar'
 import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
+import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -294,6 +293,24 @@ function App(): React.JSX.Element {
     }
   }, [])
 
+  const handleSendInput = useCallback(async (agentId: string, data: string) => {
+    try {
+      await window.agentHub.agents.sendInput(agentId, data)
+    } catch (err) {
+      console.error('Send input failed:', err)
+    }
+  }, [])
+
+  const handleSpawnWithTask = useCallback(
+    (task: string) => {
+      const agent = activeAgentId ? agents.get(activeAgentId) : null
+      if (agent) {
+        handleSpawn(agent.cwd, `task-${Date.now().toString(36)}`, agent.repoId, undefined, task)
+      }
+    },
+    [activeAgentId, agents, handleSpawn]
+  )
+
   const handleSearchResult = useCallback((result: SearchResult) => {
     if (result.type === 'agent') {
       handleSelectAgent(result.id)
@@ -437,109 +454,101 @@ function App(): React.JSX.Element {
               onKillAgent={handleKillRequest}
               onSpawnTester={() => {}}
             />
-          ) : viewMode === 'raid' || viewMode === 'channel' ? (
-            <div className="flex-1 min-h-0 bg-base-100">
-              {agentList.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
+          ) : (
+            /* Workspace view — master-detail layout */
+            <div className="flex-1 flex min-h-0 bg-base-100">
+              {/* Overview panel (raid/channel grid) — only in raid/channel modes */}
+              {(viewMode === 'raid' || viewMode === 'channel') && (
+                <div
+                  className={`min-h-0 overflow-y-auto ${
+                    activeAgentId && agents.get(activeAgentId)
+                      ? 'w-[320px] shrink-0 border-r border-base-content/10'
+                      : 'flex-1'
+                  }`}
+                >
+                  {agentList.length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="panel-glass p-8 text-center max-w-md">
+                        <h2 className="text-2xl font-bold mb-3">Welcome to AgentHub</h2>
+                        <p className="text-base-content/70 mb-5 text-sm">
+                          Command & Control center for AI coding agents.
+                        </p>
+                        <button
+                          onClick={() => setSpawnDialogOpen(true)}
+                          className="btn-lcars btn-primary w-full"
+                        >
+                          Launch First Agent
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <UnifiedView
+                      agents={agentList}
+                      onSelectAgent={handleSelectAgent}
+                      onContextMenu={(agentId, pos) => setContextMenu({ agentId, position: pos })}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Agent Detail Panel — shows when agent is selected */}
+              {activeAgentId && agents.get(activeAgentId) ? (
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {/* Evidence panel for paused agents */}
+                  {agents.get(activeAgentId)?.status === 'paused' &&
+                    pausedAgentAnomalies.length > 0 && (
+                      <div className="px-4 py-2 shrink-0">
+                        <EvidencePanel
+                          agentId={activeAgentId}
+                          agentName={agents.get(activeAgentId)?.name ?? ''}
+                          anomalies={pausedAgentAnomalies}
+                          pausedAt={pausedAt}
+                          onResume={() => handleResume(activeAgentId)}
+                          onKill={() => handleKillRequest(activeAgentId)}
+                          onRestart={(_prompt) => {
+                            handleKillDirect(activeAgentId).then(() => {
+                              const agent = agents.get(activeAgentId)
+                              if (agent) {
+                                handleSpawn(agent.cwd, agent.name + '-retry', agent.repoId)
+                              }
+                            })
+                          }}
+                          onDismiss={(anomalyId) => {
+                            setPausedAgentAnomalies((prev) =>
+                              prev.filter((a) => a.id !== anomalyId)
+                            )
+                          }}
+                        />
+                      </div>
+                    )}
+                  <AgentDetailPanel
+                    agent={agents.get(activeAgentId)!}
+                    initialTab={viewMode === 'terminal' ? 'terminal' : 'general'}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    onKill={handleKillRequest}
+                    onSendInput={handleSendInput}
+                    onSpawnWithTask={handleSpawnWithTask}
+                  />
+                </div>
+              ) : viewMode === 'terminal' ? (
+                /* Terminal mode with no agent selected — show welcome */
+                <div className="flex-1 flex items-center justify-center">
                   <div className="panel-glass p-8 text-center max-w-md">
-                    <h2 className="text-2xl font-bold mb-3">Welcome to AgentHub</h2>
+                    <h2 className="text-2xl font-bold mb-3">No Agent Selected</h2>
                     <p className="text-base-content/70 mb-5 text-sm">
-                      Command & Control center for AI coding agents.
+                      Select an agent from the sidebar or launch a new one.
                     </p>
                     <button
                       onClick={() => setSpawnDialogOpen(true)}
                       className="btn-lcars btn-primary w-full"
                     >
-                      Launch First Agent
+                      Launch Agent
                     </button>
                   </div>
                 </div>
-              ) : (
-                <UnifiedView
-                  agents={agentList}
-                  onSelectAgent={handleSelectAgent}
-                  onContextMenu={(agentId, pos) => setContextMenu({ agentId, position: pos })}
-                />
-              )}
+              ) : null}
             </div>
-          ) : (
-            /* Terminal view — persistent terminals */
-            <>
-              {activeAgentId && (
-                <div className="flex items-center gap-2 px-4 py-1.5 border-b border-base-content/10 shrink-0">
-                  <span className="text-sm font-medium">
-                    {agents.get(activeAgentId)?.name}
-                  </span>
-                  <span className="text-xs text-base-content/40 truncate">
-                    {agents.get(activeAgentId)?.cwd}
-                  </span>
-                  <span className="text-[10px] text-base-content/30 capitalize ml-auto">
-                    {agents.get(activeAgentId)?.status}
-                  </span>
-                </div>
-              )}
-              {activeAgentId && agents.get(activeAgentId) && (
-                <TerminalToolbar
-                  agent={agents.get(activeAgentId)!}
-                  onPause={handlePause}
-                  onResume={handleResume}
-                  onStop={handleKillRequest}
-                  onForceKill={handleKillDirect}
-                />
-              )}
-              {activeAgentId &&
-                agents.get(activeAgentId)?.status === 'paused' &&
-                pausedAgentAnomalies.length > 0 && (
-                  <div className="px-4 py-2 shrink-0">
-                    <EvidencePanel
-                      agentId={activeAgentId}
-                      agentName={agents.get(activeAgentId)?.name ?? ''}
-                      anomalies={pausedAgentAnomalies}
-                      pausedAt={pausedAt}
-                      onResume={() => handleResume(activeAgentId)}
-                      onKill={() => handleKillRequest(activeAgentId)}
-                      onRestart={(_prompt) => {
-                        handleKillDirect(activeAgentId).then(() => {
-                          const agent = agents.get(activeAgentId)
-                          if (agent) {
-                            handleSpawn(agent.cwd, agent.name + '-retry', agent.repoId)
-                          }
-                        })
-                      }}
-                      onDismiss={(anomalyId) => {
-                        setPausedAgentAnomalies((prev) =>
-                          prev.filter((a) => a.id !== anomalyId)
-                        )
-                      }}
-                    />
-                  </div>
-                )}
-              <div className="flex-1 min-h-0 bg-base-100 relative">
-                {agentList.map((agent) => (
-                  <FullTerminal
-                    key={agent.id}
-                    agentId={agent.id}
-                    visible={agent.id === activeAgentId}
-                  />
-                ))}
-                {agentList.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="panel-glass p-8 text-center max-w-md">
-                      <h2 className="text-2xl font-bold mb-3">Welcome to AgentHub</h2>
-                      <p className="text-base-content/70 mb-5 text-sm">
-                        Command & Control center for AI coding agents.
-                      </p>
-                      <button
-                        onClick={() => setSpawnDialogOpen(true)}
-                        className="btn-lcars btn-primary w-full"
-                      >
-                        Launch First Agent
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
           )}
         </div>
       </main>

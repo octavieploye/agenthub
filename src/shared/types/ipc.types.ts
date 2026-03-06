@@ -78,6 +78,18 @@ export interface AgentHubBridge {
     createSbar: (input: import('./recovery.types').CreateSBARInput) => Promise<IpcResponse<import('./recovery.types').SBARHandoff>>
     ackRecovery: () => Promise<IpcResponse<void>>
   }
+  notes: {
+    get: (id: number) => Promise<IpcResponse<import('./note.types').NoteItem | null>>
+    getByAgent: (agentId: string) => Promise<IpcResponse<import('./note.types').NoteItem[]>>
+    getByRepo: (repoPath: string) => Promise<IpcResponse<import('./note.types').NoteItem[]>>
+    getGlobal: () => Promise<IpcResponse<import('./note.types').NoteItem[]>>
+    save: (input: import('./note.types').CreateNoteInput) => Promise<IpcResponse<import('./note.types').NoteItem>>
+    delete: (id: number) => Promise<IpcResponse<void>>
+  }
+  history: {
+    get: (agentId: string) => Promise<IpcResponse<import('./history.types').HistoryEntry[]>>
+    search: (agentId: string, query: string) => Promise<IpcResponse<import('./history.types').HistorySearchResult[]>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>

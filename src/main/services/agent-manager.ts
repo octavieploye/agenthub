@@ -7,11 +7,14 @@ import { getDb } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.queries'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
+import { insertTerminalOutput } from '../db/queries/history.queries'
 
 interface ManagedAgent {
   state: AgentState
   ptyProcess: pty.IPty
   parser: ClaudeCliOutputParser
+  outputBuffer: string
+  flushTimer: ReturnType<typeof setTimeout> | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -26,6 +29,18 @@ function emitToRenderer(channel: string, ...args: unknown[]): void {
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, ...args)
   }
+}
+
+function flushOutputBuffer(agentId: string): void {
+  const managed = agents.get(agentId)
+  if (!managed || managed.outputBuffer.length === 0) return
+  try {
+    insertTerminalOutput(getDb(), agentId, managed.outputBuffer)
+  } catch (err) {
+    log.warn('Failed to persist terminal output', { agentId, error: err instanceof Error ? err.message : String(err) })
+  }
+  managed.outputBuffer = ''
+  managed.flushTimer = null
 }
 
 export function spawnAgent(options: AgentSpawnOptions): AgentState {
@@ -82,13 +97,24 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   ptyProcess.onData((data: string) => {
     emitToRenderer(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, data)
 
+    // Buffer output for batched DB persistence
+    const managed = agents.get(agentState.id)
+    if (managed) {
+      managed.outputBuffer += data
+      if (!managed.flushTimer) {
+        managed.flushTimer = setTimeout(() => {
+          flushOutputBuffer(agentState.id)
+        }, 2000)
+      }
+    }
+
     const parsed = parser.parse(data)
     if (parsed) {
-      const managed = agents.get(agentState.id)
-      if (managed && managed.state.status !== parsed.status) {
+      const mgd = agents.get(agentState.id)
+      if (mgd && mgd.state.status !== parsed.status) {
         const newStatus = parsed.status as AgentLifecycleStatus
-        managed.state.status = newStatus
-        managed.state.confidence = parsed.confidence
+        mgd.state.status = newStatus
+        mgd.state.confidence = parsed.confidence
         updateAgentStatus(db, agentState.id, newStatus, parsed.confidence)
         emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed.confidence)
         log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed.confidence })
@@ -97,6 +123,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   })
 
   ptyProcess.onExit(({ exitCode }) => {
+    // Flush any remaining output
+    flushOutputBuffer(agentState.id)
+
     log.info('Agent exited', { id: agentState.id, exitCode })
     updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
     emitToRenderer(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
@@ -108,7 +137,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null })
   emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
 
   // Auto-launch claude CLI with the task after shell initializes
@@ -146,6 +175,9 @@ export function resizeAgent(agentId: string, cols: number, rows: number): void {
 export function killAgent(agentId: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
+
+  // Flush remaining output before kill
+  flushOutputBuffer(agentId)
 
   log.info('Killing agent', { id: agentId })
   managed.ptyProcess.kill()
@@ -195,6 +227,8 @@ export function listAgents(): AgentState[] {
 export function cleanupAllAgents(): void {
   for (const [id, managed] of agents) {
     try {
+      if (managed.flushTimer) clearTimeout(managed.flushTimer)
+      flushOutputBuffer(id)
       managed.ptyProcess.kill()
     } catch {
       log.warn('Failed to kill agent during cleanup', { id })

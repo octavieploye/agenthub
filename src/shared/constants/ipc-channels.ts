@@ -69,6 +69,18 @@ export const IPC_CHANNELS = {
   HEALTH: {
     GET_SNAPSHOT: 'health:get-snapshot'
   },
+  NOTES: {
+    GET: 'notes:get',
+    GET_BY_AGENT: 'notes:get-by-agent',
+    GET_BY_REPO: 'notes:get-by-repo',
+    GET_GLOBAL: 'notes:get-global',
+    SAVE: 'notes:save',
+    DELETE: 'notes:delete'
+  },
+  HISTORY: {
+    GET: 'history:get',
+    SEARCH: 'history:search'
+  },
   SYSTEM: {
     GET_APP_VERSION: 'system:get-app-version',
     GET_PLATFORM: 'system:get-platform',

@@ -12,6 +12,8 @@ import { registerDialogHandlers } from './dialog.ipc'
 import { registerUsageHandlers } from './usage.ipc'
 import { registerGuardrailsHandlers } from './guardrails.ipc'
 import { registerHealthHandlers } from './health.ipc'
+import { registerNotesHandlers } from './notes.ipc'
+import { registerHistoryHandlers } from './history.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -27,5 +29,7 @@ export function registerAllIpcHandlers(): void {
   registerUsageHandlers()
   registerGuardrailsHandlers()
   registerHealthHandlers()
+  registerNotesHandlers()
+  registerHistoryHandlers()
   log.info('All IPC handlers registered')
 }

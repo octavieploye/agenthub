@@ -48,6 +48,19 @@ const agentHubBridge = {
     resolve: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BUGS.RESOLVE, id),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.BUGS.DELETE, id)
   },
+  notes: {
+    get: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.NOTES.GET, id),
+    getByAgent: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.NOTES.GET_BY_AGENT, agentId),
+    getByRepo: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS.NOTES.GET_BY_REPO, repoPath),
+    getGlobal: () => ipcRenderer.invoke(IPC_CHANNELS.NOTES.GET_GLOBAL),
+    save: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.NOTES.SAVE, input),
+    delete: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.NOTES.DELETE, id)
+  },
+  history: {
+    get: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.HISTORY.GET, agentId),
+    search: (agentId: string, query: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.HISTORY.SEARCH, agentId, query)
+  },
   dialog: {
     openDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG.OPEN_DIRECTORY)
   },

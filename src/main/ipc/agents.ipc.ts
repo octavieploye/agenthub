@@ -13,6 +13,8 @@ import {
   sendInput,
   resizeAgent
 } from '../services/agent-manager'
+import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
+import { getDb } from '../db/connection'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { AgentState } from '../../shared/types/agent.types'
 import { z } from 'zod/v4'
@@ -40,6 +42,8 @@ export function registerAgentHandlers(): void {
         const validation = validateInput(z.string(), agentId)
         if (!validation.valid) return validation.response
         killAgent(validation.data)
+        // Clean up scratch notes for killed agent
+        try { deleteAgentScratchNotes(getDb(), validation.data) } catch { /* non-critical */ }
         return success(undefined)
       } catch (err) {
         return error('KILL_ERROR', err instanceof Error ? err.message : String(err))
