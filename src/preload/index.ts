@@ -88,6 +88,27 @@ const agentHubBridge = {
     createSbar: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.RECOVERY.CREATE_SBAR, input),
     ackRecovery: () => ipcRenderer.invoke(IPC_CHANNELS.RECOVERY.ACK_RECOVERY)
   },
+  git: {
+    getStatus: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_STATUS, repoPath),
+    getAllStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_ALL_STATUS),
+    getDiff: (input: { repoPath: string; staged?: boolean }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_DIFF, input),
+    stageFiles: (input: { repoPath: string; files: string[] }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.STAGE_FILES, input),
+    unstageFiles: (input: { repoPath: string; files: string[] }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.UNSTAGE_FILES, input),
+    commit: (input: { repoPath: string; message: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.COMMIT, input),
+    push: (input: { repoPath: string; branch?: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.PUSH, input),
+    pull: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT.PULL, repoPath),
+    getLog: (input: { repoPath: string; limit?: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_LOG, input),
+    getBranches: (repoPath: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.GET_BRANCHES, repoPath),
+    suggestCommit: (repoPath: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT.SUGGEST_COMMIT, repoPath)
+  },
   system: {
     getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_APP_VERSION),
     getPlatform: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_PLATFORM),

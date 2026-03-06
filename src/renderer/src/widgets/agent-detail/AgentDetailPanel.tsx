@@ -6,8 +6,9 @@ import NotesTab from './NotesTab'
 import HistoryTab from './HistoryTab'
 import TodoTab from './TodoTab'
 import BugsTab from './BugsTab'
+import GitTab from './GitTab'
 
-type DetailTab = 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs'
+type DetailTab = 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs' | 'git'
 
 interface AgentDetailPanelProps {
   agent: AgentState
@@ -25,7 +26,8 @@ const tabs: { id: DetailTab; label: string }[] = [
   { id: 'notes', label: 'Notes' },
   { id: 'history', label: 'History' },
   { id: 'todo', label: 'Todo' },
-  { id: 'bugs', label: 'Bugs' }
+  { id: 'bugs', label: 'Bugs' },
+  { id: 'git', label: 'Git' }
 ]
 
 function AgentDetailPanel({
@@ -80,6 +82,7 @@ function AgentDetailPanel({
         {activeTab === 'history' && <HistoryTab agent={agent} />}
         {activeTab === 'todo' && <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />}
         {activeTab === 'bugs' && <BugsTab agent={agent} />}
+        {activeTab === 'git' && <GitTab agent={agent} />}
       </div>
     </div>
   )

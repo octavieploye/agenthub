@@ -90,6 +90,19 @@ export interface AgentHubBridge {
     get: (agentId: string) => Promise<IpcResponse<import('./history.types').HistoryEntry[]>>
     search: (agentId: string, query: string) => Promise<IpcResponse<import('./history.types').HistorySearchResult[]>>
   }
+  git: {
+    getStatus: (repoPath: string) => Promise<IpcResponse<import('./git.types').GitRepoStatus>>
+    getAllStatus: () => Promise<IpcResponse<import('./git.types').GitRepoStatus[]>>
+    getDiff: (input: { repoPath: string; staged?: boolean }) => Promise<IpcResponse<import('./git.types').GitDiffResult>>
+    stageFiles: (input: { repoPath: string; files: string[] }) => Promise<IpcResponse<void>>
+    unstageFiles: (input: { repoPath: string; files: string[] }) => Promise<IpcResponse<void>>
+    commit: (input: { repoPath: string; message: string }) => Promise<IpcResponse<string>>
+    push: (input: { repoPath: string; branch?: string }) => Promise<IpcResponse<void>>
+    pull: (repoPath: string) => Promise<IpcResponse<void>>
+    getLog: (input: { repoPath: string; limit?: number }) => Promise<IpcResponse<import('./git.types').GitCommitEntry[]>>
+    getBranches: (repoPath: string) => Promise<IpcResponse<import('./git.types').GitBranchInfo>>
+    suggestCommit: (repoPath: string) => Promise<IpcResponse<string>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>

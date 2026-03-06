@@ -14,6 +14,7 @@ import { registerGuardrailsHandlers } from './guardrails.ipc'
 import { registerHealthHandlers } from './health.ipc'
 import { registerNotesHandlers } from './notes.ipc'
 import { registerHistoryHandlers } from './history.ipc'
+import { registerGitHandlers } from './git.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -31,5 +32,6 @@ export function registerAllIpcHandlers(): void {
   registerHealthHandlers()
   registerNotesHandlers()
   registerHistoryHandlers()
+  registerGitHandlers()
   log.info('All IPC handlers registered')
 }

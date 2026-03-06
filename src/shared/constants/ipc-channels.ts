@@ -81,6 +81,19 @@ export const IPC_CHANNELS = {
     GET: 'history:get',
     SEARCH: 'history:search'
   },
+  GIT: {
+    GET_STATUS: 'git:get-status',
+    GET_ALL_STATUS: 'git:get-all-status',
+    GET_DIFF: 'git:get-diff',
+    STAGE_FILES: 'git:stage-files',
+    UNSTAGE_FILES: 'git:unstage-files',
+    COMMIT: 'git:commit',
+    PUSH: 'git:push',
+    PULL: 'git:pull',
+    GET_LOG: 'git:get-log',
+    GET_BRANCHES: 'git:get-branches',
+    SUGGEST_COMMIT: 'git:suggest-commit'
+  },
   SYSTEM: {
     GET_APP_VERSION: 'system:get-app-version',
     GET_PLATFORM: 'system:get-platform',
