@@ -9,5 +9,5 @@ out
 _bmad
 _bmad-output
 .env                                                                                                                                                                                   
-  .env.*
-  *.tsbuildinfo
+.env.*
+*.tsbuildinfo

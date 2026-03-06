@@ -8,7 +8,7 @@ const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000
 interface RaidFrameProps {
   agent: AgentState
   onSelect: (agentId: string) => void
-  onContextMenu: (agentId: string) => void
+  onContextMenu: (agentId: string, position: { x: number; y: number }) => void
 }
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
@@ -37,7 +37,7 @@ function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JS
       onClick={() => onSelect(agent.id)}
       onContextMenu={(e) => {
         e.preventDefault()
-        onContextMenu(agent.id)
+        onContextMenu(agent.id, { x: e.clientX, y: e.clientY })
       }}
     >
       <div className="flex items-center gap-1.5">

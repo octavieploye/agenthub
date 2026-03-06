@@ -7,7 +7,7 @@ import FullTerminal from '@renderer/widgets/full-terminal/FullTerminal'
 interface UnifiedViewProps {
   agents: AgentState[]
   onSelectAgent?: (agentId: string) => void
-  onContextMenu?: (agentId: string) => void
+  onContextMenu?: (agentId: string, position: { x: number; y: number }) => void
   onSoloAgent?: (agentId: string) => void
   onMuteAgent?: (agentId: string) => void
   onKillAgent?: (agentId: string) => void

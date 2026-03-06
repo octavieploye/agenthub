@@ -128,14 +128,14 @@ describe('RaidFrame', () => {
       expect(mockOnSelect).toHaveBeenCalledWith(agent.id)
     })
 
-    it('fires onContextMenu callback on right-click', () => {
+    it('fires onContextMenu callback on right-click with agent id and position', () => {
       const agent = createMockAgent()
       render(
         <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
       )
       const frame = screen.getByTestId('raid-frame')
-      fireEvent.contextMenu(frame)
-      expect(mockOnContextMenu).toHaveBeenCalledWith(agent.id)
+      fireEvent.contextMenu(frame, { clientX: 200, clientY: 300 })
+      expect(mockOnContextMenu).toHaveBeenCalledWith(agent.id, { x: 200, y: 300 })
     })
   })
 })

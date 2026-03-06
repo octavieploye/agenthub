@@ -16,6 +16,8 @@ import KillConfirmToast from './widgets/kill-confirm/KillConfirmToast'
 import { RecoveryScreen } from './widgets/recovery-screen/RecoveryScreen'
 import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
+import TerminalToolbar from './widgets/terminal-toolbar/TerminalToolbar'
+import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -57,6 +59,9 @@ function App(): React.JSX.Element {
     repoPath: string
   } | null>(null)
   const [guardrailsConfig, setGuardrailsConfig] = useState<GuardrailConfig>({ ...DEFAULT_GUARDRAILS })
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ agentId: string; position: { x: number; y: number } } | null>(null)
 
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
@@ -203,6 +208,14 @@ function App(): React.JSX.Element {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [previousViewMode, handleShutdownRequest])
+
+  // Close context menu on any click outside
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleClickOutside = (): void => setContextMenu(null)
+    window.addEventListener('click', handleClickOutside)
+    return () => window.removeEventListener('click', handleClickOutside)
+  }, [contextMenu])
 
   const handleSelectAgent = useCallback((agentId: string) => {
     setActiveAgent(agentId)
@@ -445,6 +458,7 @@ function App(): React.JSX.Element {
                 <UnifiedView
                   agents={agentList}
                   onSelectAgent={handleSelectAgent}
+                  onContextMenu={(agentId, pos) => setContextMenu({ agentId, position: pos })}
                 />
               )}
             </div>
@@ -463,6 +477,15 @@ function App(): React.JSX.Element {
                     {agents.get(activeAgentId)?.status}
                   </span>
                 </div>
+              )}
+              {activeAgentId && agents.get(activeAgentId) && (
+                <TerminalToolbar
+                  agent={agents.get(activeAgentId)!}
+                  onPause={handlePause}
+                  onResume={handleResume}
+                  onStop={handleKillRequest}
+                  onForceKill={handleKillDirect}
+                />
               )}
               {activeAgentId &&
                 agents.get(activeAgentId)?.status === 'paused' &&
@@ -595,6 +618,25 @@ function App(): React.JSX.Element {
             />
           </div>
         </div>
+      )}
+
+      {/* Agent context menu (right-click on raid frames) */}
+      {contextMenu && agents.get(contextMenu.agentId) && (
+        <AgentContextMenu
+          agent={agents.get(contextMenu.agentId)!}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onPause={handlePause}
+          onResume={handleResume}
+          onKill={handleKillRequest}
+          onViewOutput={(agentId) => {
+            handleSelectAgent(agentId)
+            useViewStore.getState().setViewMode('terminal')
+          }}
+          onCopyId={(agentId) => {
+            navigator.clipboard.writeText(agentId).catch(() => {})
+          }}
+        />
       )}
     </div>
   )

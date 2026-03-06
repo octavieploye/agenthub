@@ -5,7 +5,7 @@ import RaidFrame from './RaidFrame'
 interface RaidFrameGridProps {
   agents: AgentState[]
   onSelectAgent?: (agentId: string) => void
-  onContextMenu?: (agentId: string) => void
+  onContextMenu?: (agentId: string, position: { x: number; y: number }) => void
 }
 
 function RaidFrameGrid({ agents, onSelectAgent, onContextMenu }: RaidFrameGridProps): React.JSX.Element {
