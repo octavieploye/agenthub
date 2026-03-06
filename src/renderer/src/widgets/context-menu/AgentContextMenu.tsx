@@ -9,6 +9,8 @@ interface AgentContextMenuProps {
   onKill: (agentId: string) => void
   onViewOutput: (agentId: string) => void
   onCopyId: (agentId: string) => void
+  onSendTask?: (agentId: string) => void
+  onViewNotes?: (agentId: string) => void
 }
 
 function AgentContextMenu({
@@ -19,7 +21,9 @@ function AgentContextMenu({
   onResume,
   onKill,
   onViewOutput,
-  onCopyId
+  onCopyId,
+  onSendTask,
+  onViewNotes
 }: AgentContextMenuProps): React.JSX.Element {
   const handleAction = (action: (agentId: string) => void): void => {
     action(agent.id)
@@ -28,6 +32,7 @@ function AgentContextMenu({
 
   const canPause = agent.status === 'busy' || agent.status === 'idle' || agent.status === 'locked'
   const canResume = agent.status === 'paused'
+  const canSendTask = agent.status === 'idle' || agent.status === 'completed' || agent.status === 'locked'
 
   return (
     <div
@@ -62,6 +67,26 @@ function AgentContextMenu({
       >
         View Output
       </button>
+
+      {onSendTask && canSendTask && (
+        <button
+          data-testid="context-menu-send-task"
+          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          onClick={() => handleAction(onSendTask)}
+        >
+          Send Task
+        </button>
+      )}
+
+      {onViewNotes && (
+        <button
+          data-testid="context-menu-view-notes"
+          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          onClick={() => handleAction(onViewNotes)}
+        >
+          View Notes
+        </button>
+      )}
 
       <button
         data-testid="context-menu-copy-id"

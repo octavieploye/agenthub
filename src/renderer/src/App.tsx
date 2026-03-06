@@ -17,6 +17,7 @@ import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
 import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
 import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
+import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -222,14 +223,15 @@ function App(): React.JSX.Element {
   }, [setActiveAgent, setFocusedAgent])
 
   const handleSpawn = useCallback(
-    async (cwd: string, name: string, repoId: string, model?: string, task?: string) => {
+    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string) => {
       try {
         const response = await window.agentHub.agents.spawn({
           repoId,
           name,
           cwd,
           model,
-          taskDescription: task || 'Interactive session'
+          taskDescription: task || 'Interactive session',
+          color
         })
         if (response.success && response.data) {
           addAgent(response.data)
@@ -530,6 +532,11 @@ function App(): React.JSX.Element {
                     onSendInput={handleSendInput}
                     onSpawnWithTask={handleSpawnWithTask}
                   />
+                  {/* Global inline task input — visible when agent selected */}
+                  <InlineTaskInput
+                    agent={agents.get(activeAgentId)!}
+                    onSendInput={handleSendInput}
+                  />
                 </div>
               ) : viewMode === 'terminal' ? (
                 /* Terminal mode with no agent selected — show welcome */
@@ -644,6 +651,13 @@ function App(): React.JSX.Element {
           }}
           onCopyId={(agentId) => {
             navigator.clipboard.writeText(agentId).catch(() => {})
+          }}
+          onSendTask={(agentId) => {
+            handleSelectAgent(agentId)
+            useViewStore.getState().setViewMode('terminal')
+          }}
+          onViewNotes={(agentId) => {
+            handleSelectAgent(agentId)
           }}
         />
       )}

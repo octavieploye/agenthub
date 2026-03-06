@@ -25,6 +25,7 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
     createdAt: '2026-03-06T00:00:00Z',
     updatedAt: '2026-03-06T00:00:00Z',
     progress: 50,
+    color: '#3B82F6',
     ...overrides
   }
 }

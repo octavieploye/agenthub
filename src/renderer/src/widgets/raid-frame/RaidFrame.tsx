@@ -33,7 +33,8 @@ function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JS
   return (
     <div
       data-testid="raid-frame"
-      className="panel-glass p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden"
+      className="panel-glass p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px]"
+      style={{ borderLeftColor: agent.color, boxShadow: `0 0 12px ${agent.color}20` }}
       onClick={() => onSelect(agent.id)}
       onContextMenu={(e) => {
         e.preventDefault()

@@ -68,7 +68,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     cwd: options.cwd,
     model: options.model,
     provider: options.provider,
-    taskDescription: options.taskDescription
+    taskDescription: options.taskDescription,
+    color: options.color
   })
 
   const env: Record<string, string> = {

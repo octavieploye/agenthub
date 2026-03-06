@@ -18,7 +18,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     cwd: row.cwd as string,
     progress: (row.progress as number) ?? 0,
     createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string
+    updatedAt: row.updated_at as string,
+    color: (row.color as string) ?? '#3B82F6'
   }
 }
 
@@ -43,14 +44,16 @@ export function insertAgent(
     model?: string
     provider?: AgentState['provider']
     taskDescription?: string
+    color?: string
   }
 ): AgentState {
   const id = randomUUID()
   const now = new Date().toISOString()
+  const color = agent.color ?? '#3B82F6'
 
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, task_description, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, task_description, color, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
@@ -59,6 +62,7 @@ export function insertAgent(
     agent.model ?? 'claude-sonnet-4-20250514',
     agent.provider ?? 'anthropic',
     agent.taskDescription ?? '',
+    color,
     now,
     now
   )
@@ -78,7 +82,8 @@ export function insertAgent(
     cwd: agent.cwd,
     progress: 0,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    color
   }
 }
 

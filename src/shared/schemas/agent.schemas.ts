@@ -30,7 +30,8 @@ export const AgentStateSchema = z.object({
   cwd: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  progress: z.number().min(0).max(100)
+  progress: z.number().min(0).max(100),
+  color: z.string()
 })
 
 export const AgentSpawnOptionsSchema = z.object({
@@ -40,5 +41,6 @@ export const AgentSpawnOptionsSchema = z.object({
   model: z.string().optional(),
   provider: ModelProviderSchema.optional(),
   taskDescription: z.string().optional(),
-  envOverrides: z.record(z.string(), z.string()).optional()
+  envOverrides: z.record(z.string(), z.string()).optional(),
+  color: z.string().optional()
 })

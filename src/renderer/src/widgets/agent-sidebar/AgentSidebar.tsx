@@ -66,13 +66,18 @@ function AgentSidebar({
               onClick={() => onSelectAgent(agent.id)}
               className={`mx-1 mb-0.5 px-2 py-2 rounded-lg cursor-pointer transition-all ${
                 isActive
-                  ? 'panel-glass-active bg-primary/10'
+                  ? 'panel-glass-active'
                   : 'hover:bg-base-content/5'
               }`}
+              style={isActive ? { backgroundColor: `${agent.color}15` } : undefined}
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0 border-2"
+                  style={{ backgroundColor: agent.color, borderColor: `${agent.color}80` }}
+                />
+                <span
+                  className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
                     STATUS_COLORS[agent.status] ?? 'bg-base-content/30'
                   }`}
                 />

@@ -17,6 +17,7 @@ function createAgent(id: string, overrides?: Partial<AgentState>): AgentState {
     ptyFd: null,
     cwd: '/tmp/test',
     progress: 50,
+    color: '#3B82F6',
     createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides

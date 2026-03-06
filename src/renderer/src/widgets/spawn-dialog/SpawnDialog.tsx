@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { RepoConfig } from '@shared/types/config.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
+import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
@@ -15,7 +16,7 @@ const AVAILABLE_MODELS: ModelInfo[] = [
 interface SpawnDialogProps {
   open: boolean
   onClose: () => void
-  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string) => void
+  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string) => void
 }
 
 type Step = 'configure' | 'pre-launch' | 'model-select'
@@ -30,6 +31,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [step, setStep] = useState<Step>('configure')
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
+  const [selectedColor, setSelectedColor] = useState(AGENT_COLOR_PALETTE[0])
 
   const plan = useUsageStore((s) => s.plan)
   const totalMessages = useUsageStore((s) => s.totalMessages)
@@ -54,6 +56,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
       setShowAddRepo(false)
       setStep('configure')
       setSelectedModel('claude-sonnet-4-6')
+      setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
   }, [open, loadRepos])
 
@@ -99,10 +102,10 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
     (task: string) => {
       const name = agentName.trim() || `agent-${Date.now().toString(36).slice(-4)}`
       const repoId = selectedRepoId || 'default'
-      onSpawn(resolvedCwd, name, repoId, selectedModel, task)
+      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor)
       onClose()
     },
-    [resolvedCwd, agentName, selectedRepoId, selectedModel, onSpawn, onClose]
+    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, onSpawn, onClose]
   )
 
   if (!open) return null
@@ -179,6 +182,34 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
               onChange={(e) => setAgentName(e.target.value)}
               className="input input-bordered w-full rounded-xl bg-base-200/50 text-sm"
             />
+          </div>
+
+          <div>
+            <label className="text-xs text-base-content/50 mb-1 block">Agent Color</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {AGENT_COLOR_PALETTE.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  data-testid={`color-swatch-${color}`}
+                  onClick={() => setSelectedColor(color)}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${
+                    selectedColor === color
+                      ? 'border-base-content scale-110'
+                      : 'border-transparent hover:border-base-content/30'
+                  }`}
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+              <input
+                type="color"
+                value={selectedColor}
+                onChange={(e) => setSelectedColor(e.target.value)}
+                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                title="Custom color"
+              />
+            </div>
           </div>
 
           {repos.length > 0 && (

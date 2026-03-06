@@ -56,9 +56,10 @@ function ChannelStrip({
   return (
     <div
       data-testid="channel-strip"
-      className={`panel-glass w-[120px] h-full shrink-0 flex flex-col gap-1 p-2 cursor-pointer transition-all overflow-hidden ${
+      className={`panel-glass w-[120px] h-full shrink-0 flex flex-col gap-1 p-2 cursor-pointer transition-all overflow-hidden border-l-[3px] ${
         isDimmed ? 'opacity-40 dimmed' : ''
       }`}
+      style={{ borderLeftColor: agent.color }}
       onClick={() => onSelect(agent.id)}
     >
       {/* Drag handle header */}
@@ -145,8 +146,8 @@ function ChannelStrip({
       <div data-testid="strip-progress-bar" className="w-full h-1 rounded-full bg-base-content/10">
         <div
           data-testid="strip-progress-fill"
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${Math.round(agent.progress * 100)}%` }}
+          className="h-full rounded-full transition-all"
+          style={{ width: `${Math.round(agent.progress * 100)}%`, backgroundColor: agent.color }}
         />
       </div>
 

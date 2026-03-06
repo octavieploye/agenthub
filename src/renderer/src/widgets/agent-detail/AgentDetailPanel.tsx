@@ -46,8 +46,11 @@ function AgentDetailPanel({
 
   return (
     <div data-testid="agent-detail-panel" className="flex flex-col h-full w-full">
-      {/* Tab bar */}
-      <div className="flex gap-1 px-3 py-1.5 border-b border-base-content/10 shrink-0 bg-base-200/50">
+      {/* Tab bar — colored with agent color */}
+      <div
+        className="flex gap-1 px-3 py-1.5 border-b shrink-0"
+        style={{ borderBottomColor: `${agent.color}40`, backgroundColor: `${agent.color}08` }}
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -55,9 +58,10 @@ function AgentDetailPanel({
             onClick={() => setActiveTab(tab.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab.id
-                ? 'bg-primary/20 text-primary'
+                ? 'text-white'
                 : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'
             }`}
+            style={activeTab === tab.id ? { backgroundColor: agent.color } : undefined}
           >
             {tab.label}
           </button>

@@ -28,6 +28,7 @@ export interface AgentState {
   createdAt: string
   updatedAt: string
   progress: number
+  color: string
 }
 
 export interface AgentSpawnOptions {
@@ -38,4 +39,5 @@ export interface AgentSpawnOptions {
   provider?: ModelProvider
   taskDescription?: string
   envOverrides?: Record<string, string>
+  color?: string
 }
