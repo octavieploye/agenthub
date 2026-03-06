@@ -1,0 +1,133 @@
+import { create } from 'zustand'
+import type { TaskItem, CreateTaskInput, UpdateTaskInput, BacklogGroup } from '@shared/types/task.types'
+import type { RepoConfig } from '@shared/types/config.types'
+
+interface TaskStore {
+  tasks: TaskItem[]
+  loading: boolean
+  error: string | null
+
+  setTasks: (tasks: TaskItem[]) => void
+  addTask: (task: TaskItem) => void
+  updateTaskLocal: (id: string, input: UpdateTaskInput) => void
+  removeTask: (id: string) => void
+  setLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
+
+  fetchTasks: () => Promise<void>
+  createTask: (input: CreateTaskInput) => Promise<TaskItem | null>
+  updateTaskRemote: (id: string, input: UpdateTaskInput) => Promise<boolean>
+  deleteTask: (id: string) => Promise<boolean>
+}
+
+export const useTaskStore = create<TaskStore>((set, get) => ({
+  tasks: [],
+  loading: false,
+  error: null,
+
+  setTasks: (tasks) => set({ tasks }),
+  addTask: (task) => set((s) => ({ tasks: [...s.tasks, task] })),
+  updateTaskLocal: (id, input) =>
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              ...(input.title !== undefined && { title: input.title }),
+              ...(input.description !== undefined && { description: input.description }),
+              ...(input.priority !== undefined && { priority: input.priority }),
+              ...(input.status !== undefined && { status: input.status }),
+              ...(input.agentId !== undefined && { agentId: input.agentId }),
+              updatedAt: new Date().toISOString()
+            }
+          : t
+      )
+    })),
+  removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+
+  fetchTasks: async () => {
+    set({ loading: true, error: null })
+    try {
+      const response = await window.agentHub.tasks.list()
+      if (response.success) {
+        set({ tasks: response.data, loading: false })
+      } else {
+        set({ error: response.error.message, loading: false })
+      }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err), loading: false })
+    }
+  },
+
+  createTask: async (input) => {
+    try {
+      const response = await window.agentHub.tasks.create(input)
+      if (response.success) {
+        get().addTask(response.data)
+        return response.data
+      }
+      set({ error: response.error.message })
+      return null
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
+      return null
+    }
+  },
+
+  updateTaskRemote: async (id, input) => {
+    try {
+      const response = await window.agentHub.tasks.update(id, input)
+      if (response.success) {
+        get().updateTaskLocal(id, input)
+        return true
+      }
+      set({ error: response.error.message })
+      return false
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
+      return false
+    }
+  },
+
+  deleteTask: async (id) => {
+    try {
+      const response = await window.agentHub.tasks.delete(id)
+      if (response.success) {
+        get().removeTask(id)
+        return true
+      }
+      set({ error: response.error.message })
+      return false
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
+      return false
+    }
+  }
+}))
+
+export function buildBacklogGroups(tasks: TaskItem[], repos: RepoConfig[]): BacklogGroup[] {
+  const repoMap = new Map(repos.map((r) => [r.id, r.name]))
+  const groups = new Map<string, BacklogGroup>()
+
+  for (const task of tasks) {
+    if (task.status !== 'backlog') continue
+    let group = groups.get(task.repoId)
+    if (!group) {
+      group = {
+        repoId: task.repoId,
+        repoName: repoMap.get(task.repoId) ?? 'Unknown',
+        tasks: [],
+        priorityCounts: { p1: 0, p2: 0, p3: 0 }
+      }
+      groups.set(task.repoId, group)
+    }
+    group.tasks.push(task)
+    if (task.priority === 1) group.priorityCounts.p1++
+    else if (task.priority === 2) group.priorityCounts.p2++
+    else group.priorityCounts.p3++
+  }
+
+  return Array.from(groups.values())
+}

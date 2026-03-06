@@ -1,0 +1,287 @@
+import { useState, useEffect, useCallback } from 'react'
+import type { RepoConfig } from '@shared/types/config.types'
+import { useUsageStore } from '@renderer/stores/usage-store'
+import { PLAN_LIMITS } from '@shared/constants/plan-limits'
+import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
+import ModelPool from '@renderer/widgets/model-pool/ModelPool'
+import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
+
+const AVAILABLE_MODELS: ModelInfo[] = [
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', available: true, contextWindow: 200000 },
+  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic', available: true, contextWindow: 200000 },
+  { id: 'llama3', name: 'Llama 3', provider: 'ollama-local', available: false, contextWindow: 128000, unavailableReason: 'Ollama not detected' }
+]
+
+interface SpawnDialogProps {
+  open: boolean
+  onClose: () => void
+  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string) => void
+}
+
+type Step = 'configure' | 'pre-launch' | 'model-select'
+
+function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.Element | null {
+  const [repos, setRepos] = useState<RepoConfig[]>([])
+  const [selectedRepoId, setSelectedRepoId] = useState<string>('')
+  const [customCwd, setCustomCwd] = useState('')
+  const [agentName, setAgentName] = useState('')
+  const [newRepoName, setNewRepoName] = useState('')
+  const [newRepoPath, setNewRepoPath] = useState('')
+  const [showAddRepo, setShowAddRepo] = useState(false)
+  const [step, setStep] = useState<Step>('configure')
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
+
+  const plan = useUsageStore((s) => s.plan)
+  const totalMessages = useUsageStore((s) => s.totalMessages)
+  const quotaPercent = useUsageStore((s) => s.quotaPercent)
+  const burnRate = useUsageStore((s) => s.burnRate)
+
+  const loadRepos = useCallback(async () => {
+    try {
+      const response = await window.agentHub.db.getRepos()
+      if (response.success) setRepos(response.data)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      loadRepos()
+      setAgentName('')
+      setCustomCwd('')
+      setSelectedRepoId('')
+      setShowAddRepo(false)
+      setStep('configure')
+      setSelectedModel('claude-sonnet-4-6')
+    }
+  }, [open, loadRepos])
+
+  const handleAddRepo = useCallback(async () => {
+    if (!newRepoName.trim() || !newRepoPath.trim()) return
+    try {
+      const response = await window.agentHub.db.addRepo({
+        name: newRepoName.trim(),
+        path: newRepoPath.trim()
+      })
+      if (response.success) {
+        setSelectedRepoId(response.data.id)
+        setNewRepoName('')
+        setNewRepoPath('')
+        setShowAddRepo(false)
+        loadRepos()
+      }
+    } catch {
+      // ignore
+    }
+  }, [newRepoName, newRepoPath, loadRepos])
+
+  const handleBrowse = useCallback(async () => {
+    try {
+      const response = await window.agentHub.dialog.openDirectory()
+      if (response.success && response.data) {
+        setCustomCwd(response.data)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const selectedRepo = repos.find((r) => r.id === selectedRepoId)
+  const resolvedCwd = selectedRepo?.path ?? customCwd.trim()
+  const canProceed = !!resolvedCwd
+
+  const handleNext = useCallback(() => {
+    if (canProceed) setStep('pre-launch')
+  }, [canProceed])
+
+  const handleLaunch = useCallback(
+    (task: string) => {
+      const name = agentName.trim() || `agent-${Date.now().toString(36).slice(-4)}`
+      const repoId = selectedRepoId || 'default'
+      onSpawn(resolvedCwd, name, repoId, selectedModel, task)
+      onClose()
+    },
+    [resolvedCwd, agentName, selectedRepoId, selectedModel, onSpawn, onClose]
+  )
+
+  if (!open) return null
+
+  const limits = PLAN_LIMITS[plan]
+  const repoName = selectedRepo?.name ?? resolvedCwd.split('/').pop() ?? 'Project'
+
+  if (step === 'model-select') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="w-full max-w-md mx-4">
+          <ModelPool
+            models={AVAILABLE_MODELS}
+            quotaPercent={quotaPercent}
+            planLabel={limits?.label ?? 'Pro'}
+            selectedModelId={selectedModel}
+            onSelectModel={(modelId) => {
+              setSelectedModel(modelId)
+              setStep('pre-launch')
+            }}
+          />
+          <button
+            onClick={() => setStep('pre-launch')}
+            className="btn btn-sm btn-ghost rounded-full mt-3 w-full"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'pre-launch') {
+    const modelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel)
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <PreLaunchCard
+          repoId={selectedRepoId || 'default'}
+          repoName={repoName}
+          initialTask="Interactive session"
+          recommendedModel={modelInfo?.name ?? selectedModel}
+          modelRationale={
+            selectedModel.includes('opus')
+              ? 'Maximum capability for complex tasks'
+              : selectedModel.includes('sonnet')
+                ? 'Balanced speed and capability for general tasks'
+                : 'Local model — no quota usage'
+          }
+          quotaUsed={totalMessages}
+          quotaLimit={limits?.messageLimit ?? 250}
+          quotaPercent={quotaPercent}
+          burnRate={burnRate}
+          estimatedImpact={selectedModel.includes('opus') ? 25 : 15}
+          onLaunch={handleLaunch}
+          onChangeModel={() => setStep('model-select')}
+          onCancel={() => setStep('configure')}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="panel-glass p-6 w-full max-w-md mx-4">
+        <h2 className="text-lg font-bold mb-4">Launch Agent</h2>
+
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs text-base-content/50 mb-1 block">Agent Name (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. frontend-refactor"
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+              className="input input-bordered w-full rounded-xl bg-base-200/50 text-sm"
+            />
+          </div>
+
+          {repos.length > 0 && (
+            <div>
+              <label className="text-xs text-base-content/50 mb-1 block">Select Repository</label>
+              <select
+                value={selectedRepoId}
+                onChange={(e) => {
+                  setSelectedRepoId(e.target.value)
+                  if (e.target.value) setCustomCwd('')
+                }}
+                className="select select-bordered w-full rounded-xl bg-base-200/50 text-sm"
+              >
+                <option value="">-- Custom path --</option>
+                {repos.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.name} — {repo.path}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!selectedRepoId && (
+            <div>
+              <label className="text-xs text-base-content/50 mb-1 block">Working Directory</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="/Users/you/project"
+                  value={customCwd}
+                  onChange={(e) => setCustomCwd(e.target.value)}
+                  className="input input-bordered flex-1 rounded-xl bg-base-200/50 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleBrowse}
+                  className="btn btn-sm btn-ghost rounded-xl border border-base-content/10"
+                >
+                  Browse
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!showAddRepo ? (
+            <button
+              onClick={() => setShowAddRepo(true)}
+              className="text-xs text-primary hover:underline self-start"
+            >
+              + Register new repository
+            </button>
+          ) : (
+            <div className="panel-glass p-3 flex flex-col gap-2">
+              <span className="text-xs font-medium text-base-content/60">New Repository</span>
+              <input
+                type="text"
+                placeholder="Repository name"
+                value={newRepoName}
+                onChange={(e) => setNewRepoName(e.target.value)}
+                className="input input-bordered input-sm w-full rounded-lg bg-base-200/50 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Absolute path"
+                value={newRepoPath}
+                onChange={(e) => setNewRepoPath(e.target.value)}
+                className="input input-bordered input-sm w-full rounded-lg bg-base-200/50 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddRepo}
+                  disabled={!newRepoName.trim() || !newRepoPath.trim()}
+                  className="btn btn-xs btn-primary rounded-full"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => setShowAddRepo(false)}
+                  className="btn btn-xs btn-ghost rounded-full"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose} className="btn btn-sm btn-ghost rounded-full">
+            Cancel
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={!canProceed}
+            className="btn-lcars btn-primary"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default SpawnDialog
