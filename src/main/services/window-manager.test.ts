@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockWindowInstances, createMockBrowserWindow, windowIdState, MockBrowserWindowCtor } =
+const { mockWindowInstances, windowIdState, MockBrowserWindowCtor } =
   vi.hoisted(() => {
     const windowIdState = { counter: 0 }
 

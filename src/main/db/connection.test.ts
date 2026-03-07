@@ -58,6 +58,6 @@ describe('Database Connection', () => {
   it('sets user_version after migration', () => {
     const db = getDb(':memory:')
     const version = db.pragma('user_version', { simple: true })
-    expect(version).toBe(3)
+    expect(version).toBe(5)
   })
 })
