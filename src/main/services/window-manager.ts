@@ -2,13 +2,16 @@ import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import type { BreakoutWindowInfo } from '../../shared/types/window.types'
+import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 
 interface WindowManagerDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
+  emitToAllRenderers?: (channel: string, ...args: unknown[]) => void
 }
 
 export class WindowManager {
   private breakouts = new Map<string, { window: BrowserWindow; info: BreakoutWindowInfo }>()
+  private suppressCloseEvent = new Set<string>()
   private deps: WindowManagerDeps
 
   constructor(deps: WindowManagerDeps) {
@@ -71,6 +74,10 @@ export class WindowManager {
     breakoutWindow.on('closed', () => {
       this.breakouts.delete(agentId)
       this.deps.logInfo('Breakout window closed', { agentId })
+      // Only emit when user closed the window (not programmatic close)
+      if (!this.suppressCloseEvent.delete(agentId)) {
+        this.deps.emitToAllRenderers?.(IPC_EVENTS.WINDOWS.BREAKOUT_CLOSED, agentId)
+      }
     })
 
     this.deps.logInfo('Breakout window created', { agentId, windowId: breakoutWindow.id })
@@ -80,6 +87,7 @@ export class WindowManager {
   closeBreakout(agentId: string): void {
     const entry = this.breakouts.get(agentId)
     if (entry && !entry.window.isDestroyed()) {
+      this.suppressCloseEvent.add(agentId)
       entry.window.close()
     }
     this.breakouts.delete(agentId)
@@ -105,8 +113,9 @@ export class WindowManager {
   }
 
   closeAll(): void {
-    for (const [, entry] of this.breakouts) {
+    for (const [agentId, entry] of this.breakouts) {
       if (!entry.window.isDestroyed()) {
+        this.suppressCloseEvent.add(agentId)
         entry.window.close()
       }
     }

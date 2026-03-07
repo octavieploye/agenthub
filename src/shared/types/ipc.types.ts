@@ -142,6 +142,7 @@ export interface AgentHubBridge {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
     agentExit: (callback: (agentId: string, exitCode: number) => void) => () => void
+    breakoutClosed: (callback: (agentId: string) => void) => () => void
     snapshotSaved: (callback: () => void) => () => void
   }
 }

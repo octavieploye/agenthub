@@ -131,6 +131,9 @@ export const IPC_EVENTS = {
     OUTPUT: 'on-agents:output',
     EXIT: 'on-agents:exit'
   },
+  WINDOWS: {
+    BREAKOUT_CLOSED: 'on-windows:breakout-closed'
+  },
   RECOVERY: {
     SNAPSHOT_SAVED: 'on-recovery:snapshot-saved'
   }

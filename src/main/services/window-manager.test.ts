@@ -55,7 +55,7 @@ function getLastMockWindow() {
 
 describe('WindowManager', () => {
   let wm: WindowManager
-  const deps = { logInfo: vi.fn() }
+  const deps = { logInfo: vi.fn(), emitToAllRenderers: vi.fn() }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -124,6 +124,22 @@ describe('WindowManager', () => {
       expect(wm.listBreakouts()).toHaveLength(0)
     })
 
+    it('emits breakout-closed event when window closes', () => {
+      wm.createBreakout('agent-1', 'Test', '/repo', '#000')
+
+      const mockWin = getLastMockWindow()
+      const closedCall = mockWin.on.mock.calls.find(
+        (c: unknown[]) => c[0] === 'closed'
+      )
+      const closedHandler = closedCall![1] as () => void
+      closedHandler()
+
+      expect(deps.emitToAllRenderers).toHaveBeenCalledWith(
+        'on-windows:breakout-closed',
+        'agent-1'
+      )
+    })
+
     it('logs breakout creation', () => {
       const info = wm.createBreakout('agent-1', 'Test', '/repo', '#000')
 
@@ -158,6 +174,21 @@ describe('WindowManager', () => {
 
       wm.closeBreakout('agent-1')
       expect(mockWin.close).toHaveBeenCalled()
+    })
+
+    it('suppresses breakout-closed event on programmatic close', () => {
+      wm.createBreakout('agent-1', 'Test', '/repo', '#000')
+      const mockWin = getLastMockWindow()
+      // Simulate close() triggering the 'closed' handler
+      mockWin.close.mockImplementation(() => {
+        const closedCall = mockWin.on.mock.calls.find(
+          (c: unknown[]) => c[0] === 'closed'
+        )
+        ;(closedCall![1] as () => void)()
+      })
+
+      wm.closeBreakout('agent-1')
+      expect(deps.emitToAllRenderers).not.toHaveBeenCalled()
     })
 
     it('does nothing for unknown agent', () => {
@@ -278,6 +309,24 @@ describe('WindowManager', () => {
 
     it('handles empty breakout list', () => {
       expect(() => wm.closeAll()).not.toThrow()
+    })
+
+    it('suppresses breakout-closed events during closeAll', () => {
+      wm.createBreakout('agent-1', 'A1', '/r1', '#000')
+      wm.createBreakout('agent-2', 'A2', '/r2', '#FFF')
+
+      // Simulate close() triggering the 'closed' handler for each
+      for (const win of mockWindowInstances) {
+        win.close.mockImplementation(() => {
+          const closedCall = win.on.mock.calls.find(
+            (c: unknown[]) => c[0] === 'closed'
+          )
+          ;(closedCall![1] as () => void)()
+        })
+      }
+
+      wm.closeAll()
+      expect(deps.emitToAllRenderers).not.toHaveBeenCalled()
     })
   })
 })

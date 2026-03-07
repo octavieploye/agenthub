@@ -195,6 +195,17 @@ function AppMain(): React.JSX.Element {
     }
   }, [updateStatus])
 
+  // When a breakout window closes, select that agent and switch to terminal view
+  useEffect(() => {
+    const unsub = window.agentHub.on.breakoutClosed((agentId) => {
+      if (!useAgentStore.getState().agents.has(agentId)) return
+      setActiveAgent(agentId)
+      setFocusedAgent(agentId)
+      useViewStore.getState().setViewMode('terminal')
+    })
+    return unsub
+  }, [setActiveAgent, setFocusedAgent])
+
   // Clean up all cached terminals on window close
   useEffect(() => {
     const cleanup = (): void => terminalCache.disposeAll()

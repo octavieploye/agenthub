@@ -162,7 +162,8 @@ export function initializeServices(db: Database.Database): void {
   windowManager = new WindowManager({
     logInfo: (message: string, meta?: Record<string, unknown>) => {
       log.info(message, meta)
-    }
+    },
+    emitToAllRenderers
   })
 
   // 10. SettingsService — app-level settings persistence
