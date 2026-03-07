@@ -427,14 +427,12 @@ function AppMain(): React.JSX.Element {
   }, [])
 
   const [proxyAgents, setProxyAgents] = useState<Set<string>>(new Set())
-  const [proxyCommands, setProxyCommands] = useState<Map<string, string>>(new Map())
 
   const handleAttachTerminal = useCallback(async (agentId: string) => {
     try {
       const res = await window.agentHub.agents.attachTerminal(agentId)
       if (res.success) {
         setProxyAgents((prev) => new Set(prev).add(agentId))
-        setProxyCommands((prev) => new Map(prev).set(agentId, res.data.attachCommand))
         // Auto-launch external terminal with the attach command
         window.agentHub.system.openTerminal(res.data.attachCommand).catch((err) => {
           console.warn('Auto-launch terminal failed (command copied to clipboard):', err)
@@ -450,12 +448,6 @@ function AppMain(): React.JSX.Element {
       await window.agentHub.agents.detachTerminal(agentId)
       setProxyAgents((prev) => {
         const next = new Set(prev)
-        next.delete(agentId)
-        return next
-      })
-      setProxyCommands((prev) => {
-        if (!prev.has(agentId)) return prev
-        const next = new Map(prev)
         next.delete(agentId)
         return next
       })
@@ -856,45 +848,6 @@ function AppMain(): React.JSX.Element {
       {/* Git panel */}
       {gitPanelOpen && <StandaloneGitPanel onClose={() => setGitPanelOpen(false)} />}
 
-      {/* Proxy attach command toasts — one per attached agent */}
-      {proxyCommands.size > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md">
-          {Array.from(proxyCommands.entries()).map(([agentId, command]) => {
-            const agentName = agents.get(agentId)?.name ?? agentId.slice(0, 8)
-            return (
-              <div key={agentId} className="panel-glass p-3 rounded-lg shadow-lg border border-base-content/10">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-xs font-medium text-success">Proxy: {agentName}</span>
-                  <button
-                    className="btn btn-xs btn-ghost"
-                    onClick={() =>
-                      setProxyCommands((prev) => {
-                        const next = new Map(prev)
-                        next.delete(agentId)
-                        return next
-                      })
-                    }
-                  >
-                    Dismiss
-                  </button>
-                </div>
-                <p className="text-xs text-base-content/60 mb-2">Run this in your external terminal:</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs bg-base-300 px-2 py-1 rounded flex-1 truncate">{command}</code>
-                  <button
-                    className="btn btn-xs btn-ghost"
-                    onClick={() => {
-                      navigator.clipboard.writeText(command).catch(() => {})
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
