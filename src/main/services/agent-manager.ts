@@ -267,7 +267,7 @@ export function startPtyProxy(agentId: string): { socketPath: string; attachComm
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
   const socketPath = ptyProxy.startProxy(agentId, managed.ptyProcess)
-  const attachCommand = `node -e "const n=require('net'),s=n.connect('${socketPath}');process.stdin.setRawMode(true);process.stdin.resume();process.stdin.pipe(s);s.pipe(process.stdout);s.on('close',()=>process.exit())"
+  const attachCommand = `node -e "const n=require('net'),s=n.connect('${socketPath}');process.stdin.setRawMode(true);process.stdin.resume();process.stdin.pipe(s);s.pipe(process.stdout);s.on('close',()=>process.exit())"`
   return { socketPath, attachCommand }
 }
 
