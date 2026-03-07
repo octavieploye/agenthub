@@ -1,9 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
-import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useThemeStore } from '@renderer/stores/theme-store'
-import { getXtermTheme } from './theme-bridge'
+import { terminalCache } from '@renderer/services/terminal-cache'
 
 interface FullTerminalProps {
   agentId: string
@@ -12,98 +11,56 @@ interface FullTerminalProps {
 }
 
 function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.JSX.Element {
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<Terminal | null>(null)
-  const cleanupRef = useRef<(() => void)[]>([])
+  const containerRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
 
-  const initTerminal = useCallback(() => {
-    if (!terminalRef.current || xtermRef.current) return
+  // Attach/detach the cached terminal when agentId or container changes
+  useEffect(() => {
+    if (!containerRef.current) return
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
-      theme: getXtermTheme(),
-      allowTransparency: true,
-      scrollback: 5000
-    })
-
-    term.open(terminalRef.current)
-
-    try {
-      const webgl = new WebglAddon()
-      term.loadAddon(webgl)
-      webgl.onContextLoss(() => {
-        webgl.dispose()
-      })
-    } catch {
-      // WebGL not available, fall back to canvas renderer
-    }
-
-    xtermRef.current = term
-
-    // Subscribe to agent output
-    const unsubOutput = window.agentHub.on.agentOutput((id, data) => {
-      if (id === agentId) {
-        term.write(data)
-      }
-    })
-    cleanupRef.current.push(unsubOutput)
-
-    // Forward keyboard input to agent
-    const disposable = term.onData((data) => {
-      window.agentHub.agents.sendInput(agentId, data)
-    })
-    cleanupRef.current.push(() => disposable.dispose())
+    const term = terminalCache.getOrCreate(agentId)
+    terminalCache.attach(agentId, containerRef.current)
 
     // Handle resize
+    const container = containerRef.current
     const resizeObserver = new ResizeObserver(() => {
-      if (terminalRef.current && xtermRef.current) {
-        const { cols, rows } = fitTerminal(terminalRef.current, xtermRef.current)
+      if (container) {
+        const { cols, rows } = fitTerminal(container, term)
         window.agentHub.agents.resize(agentId, cols, rows)
       }
     })
-    resizeObserver.observe(terminalRef.current)
-    cleanupRef.current.push(() => resizeObserver.disconnect())
+    resizeObserver.observe(container)
 
     // Initial fit
-    const { cols, rows } = fitTerminal(terminalRef.current, term)
+    const { cols, rows } = fitTerminal(container, term)
     window.agentHub.agents.resize(agentId, cols, rows)
 
     onReady?.()
-  }, [agentId, onReady])
-
-  useEffect(() => {
-    initTerminal()
 
     return () => {
-      for (const cleanup of cleanupRef.current) {
-        cleanup()
-      }
-      cleanupRef.current = []
-      xtermRef.current?.dispose()
-      xtermRef.current = null
+      resizeObserver.disconnect()
+      terminalCache.detach(agentId)
     }
-  }, [initTerminal])
+  }, [agentId, onReady])
 
-  // Update terminal theme when DaisyUI theme changes
+  // Update all cached terminal themes when DaisyUI theme changes
   useEffect(() => {
-    if (xtermRef.current) {
-      xtermRef.current.options.theme = getXtermTheme()
-    }
+    terminalCache.updateTheme()
   }, [theme])
 
   // Re-fit when becoming visible
   useEffect(() => {
-    if (visible && terminalRef.current && xtermRef.current) {
-      requestAnimationFrame(() => {
-        if (terminalRef.current && xtermRef.current) {
-          const { cols, rows } = fitTerminal(terminalRef.current, xtermRef.current)
-          window.agentHub.agents.resize(agentId, cols, rows)
-          xtermRef.current.focus()
-        }
-      })
+    if (visible && containerRef.current) {
+      const term = terminalCache.get(agentId)
+      if (term) {
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            const { cols, rows } = fitTerminal(containerRef.current, term)
+            window.agentHub.agents.resize(agentId, cols, rows)
+            term.focus()
+          }
+        })
+      }
     }
   }, [visible, agentId])
 
@@ -113,7 +70,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       style={{ display: visible ? 'flex' : 'none' }}
     >
       <div
-        ref={terminalRef}
+        ref={containerRef}
         className="flex-1 min-h-0"
         style={{ padding: '4px' }}
       />

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { useThemeStore } from '@renderer/stores/theme-store'
 
@@ -11,15 +11,14 @@ const mockTerminalInstance = {
   focus: vi.fn(),
   onData: vi.fn(() => ({ dispose: vi.fn() })),
   dispose: vi.fn(),
+  element: document.createElement('div'),
   options: {} as Record<string, unknown>
 }
 
-// Use a class so `new Terminal(...)` works
 vi.mock('@xterm/xterm', () => {
   const MockTerminal = vi.fn(function (this: unknown, opts: Record<string, unknown>) {
     mockTerminalInstance.options = { ...opts }
     Object.assign(this as Record<string, unknown>, mockTerminalInstance)
-    // Also keep a mutable reference on the singleton for theme updates
     return mockTerminalInstance
   })
   return { Terminal: MockTerminal }
@@ -31,6 +30,22 @@ vi.mock('@xterm/addon-webgl', () => {
   })
   return { WebglAddon: MockWebglAddon }
 })
+
+/* ---------- Mock terminal-cache ---------- */
+const mockCache = {
+  getOrCreate: vi.fn(() => mockTerminalInstance),
+  attach: vi.fn(),
+  detach: vi.fn(),
+  get: vi.fn(() => mockTerminalInstance),
+  has: vi.fn(() => true),
+  updateTheme: vi.fn(),
+  dispose: vi.fn(),
+  disposeAll: vi.fn()
+}
+
+vi.mock('@renderer/services/terminal-cache', () => ({
+  terminalCache: mockCache
+}))
 
 /* ---------- Mock ResizeObserver (not in jsdom) ---------- */
 class MockResizeObserver {
@@ -114,66 +129,57 @@ describe('FullTerminal', () => {
     vi.clearAllMocks()
     activeCssVars = CSS_VARS
     setupComputedStyleMock()
-    // Reset theme store to default
     useThemeStore.setState({ theme: 'deep-space' })
     document.documentElement.setAttribute('data-theme', 'deep-space')
-    // Reset terminal instance options
     mockTerminalInstance.options = {}
   })
 
-  it('creates Terminal with theme derived from CSS custom properties', async () => {
-    const { Terminal } = await import('@xterm/xterm')
-    // Dynamic import of component so mocks are in place
+  it('uses terminal cache to get or create terminal instance', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
-    expect(Terminal).toHaveBeenCalledTimes(1)
-
-    const constructorCall = vi.mocked(Terminal).mock.calls[0][0]
-    const theme = constructorCall?.theme as Record<string, string>
-
-    // The theme should have been derived from CSS vars, not hardcoded
-    expect(theme).toBeDefined()
-    expect(theme.background).toBeDefined()
-    expect(theme.foreground).toBeDefined()
-    expect(theme.cursor).toBeDefined()
-    expect(theme.cursorAccent).toBeDefined()
-    expect(theme.selectionBackground).toBeDefined()
-    expect(theme.black).toBeDefined()
-    expect(theme.red).toBeDefined()
-    expect(theme.green).toBeDefined()
-    expect(theme.yellow).toBeDefined()
-    expect(theme.blue).toBeDefined()
-    expect(theme.magenta).toBeDefined()
-    expect(theme.cyan).toBeDefined()
-    expect(theme.white).toBeDefined()
-    expect(theme.brightBlack).toBeDefined()
-    expect(theme.brightWhite).toBe('#ffffff')
-
-    // allowTransparency should still be true
-    expect(constructorCall?.allowTransparency).toBe(true)
+    expect(mockCache.getOrCreate).toHaveBeenCalledWith('agent-1')
+    expect(mockCache.attach).toHaveBeenCalledWith('agent-1', expect.any(HTMLElement))
   })
 
-  it('updates terminal theme when theme store changes', async () => {
+  it('detaches terminal on unmount instead of disposing', async () => {
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    const { unmount } = render(<FullTerminal agentId="agent-1" visible={true} />)
+
+    unmount()
+
+    expect(mockCache.detach).toHaveBeenCalledWith('agent-1')
+    // Should NOT dispose — terminal stays alive in cache
+    expect(mockCache.dispose).not.toHaveBeenCalled()
+  })
+
+  it('calls updateTheme on all cached terminals when theme changes', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
-    // Capture theme after initial render
-    const initialTheme = { ...mockTerminalInstance.options.theme as Record<string, string> }
-    expect(initialTheme).toBeDefined()
-
-    // Switch to ember theme
     activeCssVars = EMBER_VARS
     act(() => {
       useThemeStore.getState().setTheme('ember')
     })
 
-    // The terminal options.theme should have been reassigned
-    const updatedTheme = mockTerminalInstance.options.theme as Record<string, string>
-    expect(updatedTheme).toBeDefined()
-    // The background should differ since ember has a different base-100
-    expect(updatedTheme.background).not.toBe(initialTheme.background)
+    expect(mockCache.updateTheme).toHaveBeenCalled()
+  })
+
+  it('detaches old agent and attaches new agent on agentId change', async () => {
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    const { rerender } = render(<FullTerminal agentId="agent-1" visible={true} />)
+
+    expect(mockCache.getOrCreate).toHaveBeenCalledWith('agent-1')
+    expect(mockCache.attach).toHaveBeenCalledWith('agent-1', expect.any(HTMLElement))
+
+    rerender(<FullTerminal agentId="agent-2" visible={true} />)
+
+    expect(mockCache.detach).toHaveBeenCalledWith('agent-1')
+    expect(mockCache.getOrCreate).toHaveBeenCalledWith('agent-2')
+    expect(mockCache.attach).toHaveBeenCalledWith('agent-2', expect.any(HTMLElement))
   })
 })

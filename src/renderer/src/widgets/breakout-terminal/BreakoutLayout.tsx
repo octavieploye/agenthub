@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
+import { terminalCache } from '@renderer/services/terminal-cache'
 import type { AgentState } from '@shared/types/agent.types'
 
 function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
@@ -30,6 +31,16 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
               }
             : prev
         )
+      }
+    })
+    return unsub
+  }, [agentId])
+
+  // Clean up terminal cache when agent exits (breakout has its own JS context)
+  useEffect(() => {
+    const unsub = window.agentHub.on.agentExit((id) => {
+      if (id === agentId) {
+        terminalCache.dispose(agentId)
       }
     })
     return unsub

@@ -28,6 +28,7 @@ import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
+import { terminalCache } from './services/terminal-cache'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -172,6 +173,9 @@ function AppMain(): React.JSX.Element {
         pendingSounds.delete(agentId)
       }
 
+      // Clean up cached terminal for this agent
+      terminalCache.dispose(agentId)
+
       if (typeof exitCode === 'number' && exitCode !== 0) {
         updateStatus(agentId, 'error', 'confirmed')
         playAgentSound('code_blue', soundDeps.current)
@@ -190,6 +194,13 @@ function AppMain(): React.JSX.Element {
       unsubExit()
     }
   }, [updateStatus])
+
+  // Clean up all cached terminals on window close
+  useEffect(() => {
+    const cleanup = (): void => terminalCache.disposeAll()
+    window.addEventListener('beforeunload', cleanup)
+    return () => window.removeEventListener('beforeunload', cleanup)
+  }, [])
 
   // Fetch usage on mount and periodically (30s)
   useEffect(() => {
