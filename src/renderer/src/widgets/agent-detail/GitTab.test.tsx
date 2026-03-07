@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import GitTab from './GitTab'
 import { useGitStore } from '../../stores/git-store'
 import type { AgentState } from '@shared/types/agent.types'
-import type { GitRepoStatus, GitCommitEntry, GitBranchInfo } from '@shared/types/git.types'
+import type { GitRepoStatus, GitCommitEntry, GitBranchInfo, GitDiffResult } from '@shared/types/git.types'
 
 const mockAgent: AgentState = {
   id: 'agent-1',
@@ -54,6 +54,21 @@ const mockLog: GitCommitEntry[] = [
 const mockBranches: GitBranchInfo = {
   current: 'main',
   branches: ['main', 'dev']
+}
+
+const mockDiff: GitDiffResult = {
+  repoPath: '/test/repo',
+  diff: [
+    'diff --git a/src/app.ts b/src/app.ts',
+    '--- a/src/app.ts',
+    '+++ b/src/app.ts',
+    '@@ -1,3 +1,4 @@',
+    ' import { foo } from "bar"',
+    '-const old = true',
+    '+const updated = true',
+    '+const added = false'
+  ].join('\n'),
+  stats: { insertions: 2, deletions: 1, filesChanged: 1 }
 }
 
 function setupStore(overrides: Partial<ReturnType<typeof useGitStore.getState>> = {}): void {
@@ -261,5 +276,88 @@ describe('GitTab', () => {
   it('shows branch count', () => {
     render(<GitTab agent={mockAgent} />)
     expect(screen.getByText('2 branches')).toBeInTheDocument()
+  })
+
+  it('switches to diff section and shows diff content', async () => {
+    const fetchDiff = vi.fn()
+    setupStore({ diff: mockDiff, fetchDiff })
+
+    render(<GitTab agent={mockAgent} />)
+    fireEvent.click(screen.getByTestId('git-section-diff'))
+
+    await waitFor(() => {
+      expect(fetchDiff).toHaveBeenCalledWith('/test/repo', false)
+    })
+    expect(screen.getByTestId('diff-content')).toBeInTheDocument()
+    expect(screen.getByText(/const updated = true/)).toBeInTheDocument()
+  })
+
+  it('shows diff stats', () => {
+    setupStore({ diff: mockDiff })
+    render(<GitTab agent={mockAgent} />)
+    fireEvent.click(screen.getByTestId('git-section-diff'))
+
+    const stats = screen.getByTestId('diff-stats')
+    expect(stats).toHaveTextContent('1 files changed')
+    expect(stats).toHaveTextContent('2 insertions(+)')
+    expect(stats).toHaveTextContent('1 deletions(-)')
+  })
+
+  it('toggles between staged and unstaged diff', async () => {
+    const fetchDiff = vi.fn()
+    setupStore({ diff: mockDiff, fetchDiff })
+
+    render(<GitTab agent={mockAgent} />)
+    fireEvent.click(screen.getByTestId('git-section-diff'))
+
+    // Initially unstaged is active
+    await waitFor(() => {
+      expect(fetchDiff).toHaveBeenCalledWith('/test/repo', false)
+    })
+
+    // Click staged toggle
+    fireEvent.click(screen.getByTestId('diff-staged-toggle'))
+    await waitFor(() => {
+      expect(fetchDiff).toHaveBeenCalledWith('/test/repo', true)
+    })
+
+    // Click unstaged toggle
+    fireEvent.click(screen.getByTestId('diff-unstaged-toggle'))
+    await waitFor(() => {
+      expect(fetchDiff).toHaveBeenLastCalledWith('/test/repo', false)
+    })
+  })
+
+  it('highlights diff lines with correct CSS classes', () => {
+    setupStore({ diff: mockDiff })
+    render(<GitTab agent={mockAgent} />)
+    fireEvent.click(screen.getByTestId('git-section-diff'))
+
+    // Line 0: "diff --git ..." → bold
+    const line0 = screen.getByTestId('diff-line-0')
+    expect(line0.className).toContain('font-bold')
+
+    // Line 3: "@@ -1,3 +1,4 @@" → info color
+    const line3 = screen.getByTestId('diff-line-3')
+    expect(line3.className).toContain('text-info')
+
+    // Line 5: "-const old = true" → red/error
+    const line5 = screen.getByTestId('diff-line-5')
+    expect(line5.className).toContain('bg-error/10')
+    expect(line5.className).toContain('text-error')
+
+    // Line 6: "+const updated = true" → green/success
+    const line6 = screen.getByTestId('diff-line-6')
+    expect(line6.className).toContain('bg-success/10')
+    expect(line6.className).toContain('text-success')
+  })
+
+  it('shows empty diff message when diff is empty', () => {
+    setupStore({
+      diff: { repoPath: '/test/repo', diff: '', stats: { insertions: 0, deletions: 0, filesChanged: 0 } }
+    })
+    render(<GitTab agent={mockAgent} />)
+    fireEvent.click(screen.getByTestId('git-section-diff'))
+    expect(screen.getByText('No changes')).toBeInTheDocument()
   })
 })

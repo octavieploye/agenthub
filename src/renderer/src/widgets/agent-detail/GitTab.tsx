@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGitStore } from '../../stores/git-store'
 import type { AgentState } from '@shared/types/agent.types'
-import type { GitFileChange } from '@shared/types/git.types'
+import type { GitFileChange, GitDiffResult } from '@shared/types/git.types'
 
 interface GitTabProps {
   agent: AgentState
 }
 
-type GitSection = 'status' | 'commit' | 'log'
+type GitSection = 'status' | 'commit' | 'log' | 'diff'
 
 const STATUS_ICON: Record<string, string> = {
   A: '+',
@@ -49,12 +49,14 @@ export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
   const repoPath = agent.cwd
   const {
     status,
+    diff,
     log,
     branches,
     suggestedMessage,
     loading,
     error,
     fetchStatus,
+    fetchDiff,
     fetchLog,
     fetchBranches,
     fetchSuggestedMessage,
@@ -159,7 +161,7 @@ export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
       {/* Section toggle + actions */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10 shrink-0">
         <div className="flex gap-1">
-          {(['status', 'commit', 'log'] as const).map((s) => (
+          {(['status', 'commit', 'log', 'diff'] as const).map((s) => (
             <button
               key={s}
               data-testid={`git-section-${s}`}
@@ -237,6 +239,10 @@ export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
         )}
 
         {!loading && section === 'log' && <LogSection log={log} />}
+
+        {!loading && section === 'diff' && (
+          <DiffSection diff={diff} repoPath={repoPath} fetchDiff={fetchDiff} />
+        )}
       </div>
     </div>
   )
@@ -441,6 +447,79 @@ function LogSection({
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function getDiffLineClass(line: string): string {
+  if (line.startsWith('diff --git')) return 'font-bold'
+  if (line.startsWith('@@')) return 'text-info'
+  if (line.startsWith('+++') || line.startsWith('---')) return ''
+  if (line.startsWith('+')) return 'bg-success/10 text-success'
+  if (line.startsWith('-')) return 'bg-error/10 text-error'
+  return ''
+}
+
+function DiffSection({
+  diff,
+  repoPath,
+  fetchDiff
+}: {
+  diff: GitDiffResult | null
+  repoPath: string
+  fetchDiff: (repoPath: string, staged?: boolean) => Promise<void>
+}): React.JSX.Element {
+  const [staged, setStaged] = useState(false)
+
+  useEffect(() => {
+    fetchDiff(repoPath, staged)
+  }, [repoPath, staged, fetchDiff])
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1">
+        <button
+          data-testid="diff-unstaged-toggle"
+          onClick={() => setStaged(false)}
+          className={`px-2 py-0.5 rounded text-xs font-medium ${
+            !staged
+              ? 'bg-base-content/10 text-base-content'
+              : 'text-base-content/50 hover:text-base-content'
+          }`}
+        >
+          Unstaged
+        </button>
+        <button
+          data-testid="diff-staged-toggle"
+          onClick={() => setStaged(true)}
+          className={`px-2 py-0.5 rounded text-xs font-medium ${
+            staged
+              ? 'bg-base-content/10 text-base-content'
+              : 'text-base-content/50 hover:text-base-content'
+          }`}
+        >
+          Staged
+        </button>
+      </div>
+
+      {diff && diff.diff ? (
+        <>
+          <div data-testid="diff-stats" className="text-xs text-base-content/60">
+            {diff.stats.filesChanged} files changed, {diff.stats.insertions} insertions(+), {diff.stats.deletions} deletions(-)
+          </div>
+          <pre data-testid="diff-content" className="font-mono text-xs whitespace-pre-wrap">
+            {diff.diff.split('\n').map((line, idx) => (
+              <div key={idx} data-testid={`diff-line-${idx}`} className={getDiffLineClass(line)}>
+                {line}
+              </div>
+            ))}
+          </pre>
+        </>
+      ) : (
+        <div className="flex items-center justify-center py-8">
+          <p className="text-xs text-base-content/40">No changes</p>
+        </div>
+      )}
     </div>
   )
 }
