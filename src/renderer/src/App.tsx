@@ -90,25 +90,22 @@ function AppMain(): React.JSX.Element {
     createSoundAlertDeps(() => useViewStore.getState().soundEnabled)
   )
 
-  // Map agent lifecycle status to sound event
-  const statusToSoundEvent = useCallback(
-    (status: AgentLifecycleStatus): Parameters<typeof playAgentSound>[0] | null => {
-      switch (status) {
-        case 'completed':
-          return 'agent_completed'
-        case 'locked':
-          return 'agent_locked'
-        case 'looping':
-          return 'agent_looping'
-        default:
-          return null
-      }
-    },
-    []
-  )
+  // Track known agent IDs to detect first spawn
+  const knownAgentIds = useRef(new Set<string>())
 
   // Subscribe to IPC events
+  // ── Sound logic: only 3 sounds ──────────────────────────────────────────
+  // 1. agent_spawned   — on first status change for a new agent
+  // 2. user_approval   — AI stopped processing and it's NOT completion
+  // 3. agent_completed — AI stopped processing and it IS completion
+  //
+  // Trigger = status transitions FROM "busy" to anything else.
+  // "completed" → bridge-deep.  Anything else → user-approval.
+  // Everything between spawn and the next "AI stopped" = silent.
   useEffect(() => {
+    const pendingSounds = new Map<string, ReturnType<typeof setTimeout>>()
+    const lastStatus = new Map<string, AgentLifecycleStatus>()
+
     const unsubStatus = window.agentHub.on.agentStatusChange((agentId, status, confidence) => {
       updateStatus(
         agentId,
@@ -116,23 +113,83 @@ function AppMain(): React.JSX.Element {
         confidence as Parameters<typeof updateStatus>[2]
       )
 
-      // Play sound for status change
-      const soundEvent = statusToSoundEvent(status as AgentLifecycleStatus)
-      if (soundEvent) {
-        playAgentSound(soundEvent, soundDeps.current)
+      const lifecycleStatus = status as AgentLifecycleStatus
+
+      // Detect first status change for a new agent -> agent_spawned sound
+      if (!knownAgentIds.current.has(agentId)) {
+        knownAgentIds.current.add(agentId)
+        playAgentSound('agent_spawned', soundDeps.current)
+        lastStatus.set(agentId, lifecycleStatus)
+        return
+      }
+
+      const prev = lastStatus.get(agentId)
+      lastStatus.set(agentId, lifecycleStatus)
+
+      // Only trigger sounds when AI STOPS processing: busy → non-busy
+      if (prev !== 'busy') return
+
+      // Cancel any pending sound for this agent
+      const pending = pendingSounds.get(agentId)
+      if (pending !== undefined) {
+        clearTimeout(pending)
+        pendingSounds.delete(agentId)
+      }
+
+      if (lifecycleStatus === 'completed') {
+        // Delay completion sound — Claude CLI TUI keeps animating after Done!
+        const timer = setTimeout(() => {
+          pendingSounds.delete(agentId)
+          playAgentSound('agent_completed', soundDeps.current)
+          // Check mission_complete: all agents done AND more than 1 agent
+          const currentAgents = useAgentStore.getState().agents
+          if (currentAgents.size > 1) {
+            const allDone = Array.from(currentAgents.values()).every(
+              (a) => a.status === 'completed' || a.status === 'interrupted'
+            )
+            if (allDone) {
+              playAgentSound('mission_complete', soundDeps.current)
+            }
+          }
+        }, 1500)
+        pendingSounds.set(agentId, timer)
+      } else {
+        // AI stopped for any other reason → needs user attention
+        // Small delay to let TUI settle and avoid false triggers
+        const timer = setTimeout(() => {
+          pendingSounds.delete(agentId)
+          playAgentSound('user_approval', soundDeps.current)
+        }, 800)
+        pendingSounds.set(agentId, timer)
       }
     })
 
-    const unsubExit = window.agentHub.on.agentExit((agentId) => {
-      updateStatus(agentId, 'completed', 'confirmed')
-      playAgentSound('agent_completed', soundDeps.current)
+    const unsubExit = window.agentHub.on.agentExit((agentId, exitCode) => {
+      // Cancel any pending sound
+      const pending = pendingSounds.get(agentId)
+      if (pending !== undefined) {
+        clearTimeout(pending)
+        pendingSounds.delete(agentId)
+      }
+
+      if (typeof exitCode === 'number' && exitCode !== 0) {
+        updateStatus(agentId, 'error', 'confirmed')
+        playAgentSound('code_blue', soundDeps.current)
+      } else {
+        updateStatus(agentId, 'completed', 'confirmed')
+        playAgentSound('agent_completed', soundDeps.current)
+      }
     })
 
     return () => {
+      for (const timer of pendingSounds.values()) {
+        clearTimeout(timer)
+      }
+      pendingSounds.clear()
       unsubStatus()
       unsubExit()
     }
-  }, [updateStatus, statusToSoundEvent])
+  }, [updateStatus])
 
   // Fetch usage on mount and periodically (30s)
   useEffect(() => {

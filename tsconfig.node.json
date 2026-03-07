@@ -9,6 +9,10 @@
   "compilerOptions": {
     "composite": true,
     "strict": true,
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
   }
 }

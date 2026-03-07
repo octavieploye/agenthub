@@ -17,7 +17,9 @@ const TRIAGE_RULES: Record<AgentLifecycleStatus, { level: TriageLevel; reason: s
   spawning: { level: 'low', reason: 'Agent spawning' },
   busy: { level: 'low', reason: 'Agent working' },
   idle: { level: 'low', reason: 'Agent idle' },
-  tray_running: { level: 'low', reason: 'Agent running in tray' }
+  tray_running: { level: 'low', reason: 'Agent running in tray' },
+  error: { level: 'critical', reason: 'Agent encountered an error' },
+  awaiting_approval: { level: 'high', reason: 'Agent awaiting tool approval' }
 }
 
 export function triageAgentEvent(input: TriageInput): TriageEvent {

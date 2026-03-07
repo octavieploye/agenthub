@@ -8,6 +8,8 @@ export type AgentLifecycleStatus =
   | 'paused'
   | 'interrupted'
   | 'tray_running'
+  | 'error'
+  | 'awaiting_approval'
 
 export type StatusConfidence = 'confirmed' | 'inferred' | 'unknown'
 
