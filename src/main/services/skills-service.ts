@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs'
 import { execFile } from 'child_process'
-import { join, basename, dirname, relative } from 'path'
+import { join, basename, dirname, relative, extname } from 'path'
 import { homedir } from 'os'
 import type { SkillItem, SkillExecutionResult } from '../../shared/types/skills.types'
+
+export const SUPPORTED_SKILL_EXTENSIONS = ['.md', '.sh', '.py', '.js']
 
 export interface SkillsServiceDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
@@ -40,18 +42,36 @@ export class SkillsService {
       return { skillId, output: `Skill not found: ${skillId}`, exitCode: 1, duration: 0 }
     }
 
-    const content = readFileSync(skill.path, 'utf-8')
+    const ext = extname(skill.path)
     const startTime = Date.now()
 
     return new Promise<SkillExecutionResult>((resolve) => {
-      const args = ['--print', '-p', content]
+      let command: string
+      let args: string[]
+
+      if (ext === '.sh') {
+        command = 'bash'
+        args = [skill.path]
+      } else if (ext === '.py') {
+        command = 'python3'
+        args = [skill.path]
+      } else if (ext === '.js') {
+        command = 'node'
+        args = [skill.path]
+      } else {
+        // .md — original behavior
+        const content = readFileSync(skill.path, 'utf-8')
+        command = 'claude'
+        args = ['--print', '-p', content]
+      }
+
       const options: { cwd?: string; timeout: number; encoding: BufferEncoding } = {
         timeout: 60_000,
         encoding: 'utf-8'
       }
       if (repoPath) options.cwd = repoPath
 
-      execFile('claude', args, options, (err, stdout, stderr) => {
+      execFile(command, args, options, (err, stdout, stderr) => {
         const duration = Date.now() - startTime
         if (err) {
           const exitCode = (err as NodeJS.ErrnoException & { code?: number }).code
@@ -121,16 +141,18 @@ export class SkillsService {
 
       if (stat.isDirectory()) {
         this.walkDir(fullPath, rootDir, source, results)
-      } else if (entry.endsWith('.md')) {
+      } else if (SUPPORTED_SKILL_EXTENSIONS.includes(extname(entry))) {
         results.push(this.parseSkillFile(fullPath, rootDir, source))
       }
     }
   }
 
   private parseSkillFile(filePath: string, rootDir: string, source: 'global' | 'project'): SkillItem {
-    const id = basename(filePath, '.md')
+    const ext = extname(filePath)
+    const id = basename(filePath).replace(/\.[^.]+$/, '')
     const relDir = relative(rootDir, dirname(filePath))
     const category = relDir || 'general'
+    const format = ext.slice(1) // strip leading dot
 
     let name = id
     let description = ''
@@ -139,36 +161,50 @@ export class SkillsService {
       const content = readFileSync(filePath, 'utf-8')
       const lines = content.split('\n')
 
-      // Extract name from first heading
-      for (const line of lines) {
-        const headingMatch = line.match(/^#\s+(.+)/)
-        if (headingMatch) {
-          name = headingMatch[1].trim()
-          break
+      if (ext === '.md') {
+        // Extract name from first heading
+        for (const line of lines) {
+          const headingMatch = line.match(/^#\s+(.+)/)
+          if (headingMatch) {
+            name = headingMatch[1].trim()
+            break
+          }
         }
-      }
 
-      // Extract description from first non-heading, non-empty paragraph
-      let foundHeading = false
-      for (const line of lines) {
-        if (line.match(/^#/)) {
-          foundHeading = true
-          continue
+        // Extract description from first non-heading, non-empty paragraph
+        let foundHeading = false
+        for (const line of lines) {
+          if (line.match(/^#/)) {
+            foundHeading = true
+            continue
+          }
+          const trimmed = line.trim()
+          if (foundHeading && trimmed && !trimmed.startsWith('#')) {
+            description = trimmed.slice(0, 200)
+            break
+          }
+          if (!foundHeading && trimmed && !trimmed.startsWith('#')) {
+            description = trimmed.slice(0, 200)
+            break
+          }
         }
-        const trimmed = line.trim()
-        if (foundHeading && trimmed && !trimmed.startsWith('#')) {
-          description = trimmed.slice(0, 200)
-          break
-        }
-        if (!foundHeading && trimmed && !trimmed.startsWith('#')) {
-          description = trimmed.slice(0, 200)
-          break
-        }
+      } else if (ext === '.sh' || ext === '.py') {
+        const commentLines = lines
+          .filter((line) => line.match(/^#\s+/))
+          .map((line) => line.replace(/^#\s+/, '').trim())
+        if (commentLines.length >= 1) name = commentLines[0]
+        if (commentLines.length >= 2) description = commentLines[1].slice(0, 200)
+      } else if (ext === '.js') {
+        const commentLines = lines
+          .filter((line) => line.match(/^\/\/\s+/))
+          .map((line) => line.replace(/^\/\/\s+/, '').trim())
+        if (commentLines.length >= 1) name = commentLines[0]
+        if (commentLines.length >= 2) description = commentLines[1].slice(0, 200)
       }
     } catch {
       // File read error — use defaults
     }
 
-    return { id, name, description, category, path: filePath, source }
+    return { id, name, description, category, path: filePath, source, format }
   }
 }

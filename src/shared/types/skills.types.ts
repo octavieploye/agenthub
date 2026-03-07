@@ -5,6 +5,7 @@ export interface SkillItem {
   category: string
   path: string
   source: 'global' | 'project'
+  format?: string
 }
 
 export interface SkillExecutionResult {

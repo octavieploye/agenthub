@@ -238,6 +238,284 @@ describe('SkillsService', () => {
     })
   })
 
+  describe('listSkills — multi-format discovery', () => {
+    it('finds .sh files in global skills dir', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['deploy.sh'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Deploy Script\n# Deploys to production\nset -e\n')
+
+      const skills = service.listSkills()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].id).toBe('deploy')
+      expect(skills[0].source).toBe('global')
+      expect(skills[0].format).toBe('sh')
+    })
+
+    it('finds .py files in global skills dir', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['lint.py'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Lint Code\n# Runs linting checks\nimport sys\n')
+
+      const skills = service.listSkills()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].id).toBe('lint')
+      expect(skills[0].source).toBe('global')
+      expect(skills[0].format).toBe('py')
+    })
+
+    it('finds .js files in global skills dir', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['build.js'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('// Build Project\n// Compiles the project\nconst fs = require("fs");\n')
+
+      const skills = service.listSkills()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].id).toBe('build')
+      expect(skills[0].source).toBe('global')
+      expect(skills[0].format).toBe('js')
+    })
+
+    it('discovers mixed file types together', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['a.md', 'b.sh', 'c.py', 'd.js', 'e.txt'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('content')
+
+      const skills = service.listSkills()
+      expect(skills).toHaveLength(4) // .txt is excluded
+      expect(skills.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd'])
+    })
+  })
+
+  describe('parseSkillFile — multi-format metadata', () => {
+    it('parses .sh file metadata from hash comments', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['setup.sh'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('#!/bin/bash\n# Setup Environment\n# Installs dependencies and configures env\necho "done"')
+
+      const skills = service.listSkills()
+      expect(skills[0].name).toBe('Setup Environment')
+      expect(skills[0].description).toBe('Installs dependencies and configures env')
+    })
+
+    it('parses .py file metadata from hash comments', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['analyze.py'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Analyze Data\n# Runs data analysis pipeline\nimport pandas as pd\n')
+
+      const skills = service.listSkills()
+      expect(skills[0].name).toBe('Analyze Data')
+      expect(skills[0].description).toBe('Runs data analysis pipeline')
+    })
+
+    it('parses .js file metadata from // comments', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['bundle.js'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('// Bundle Assets\n// Bundles all static assets for production\nconst path = require("path");\n')
+
+      const skills = service.listSkills()
+      expect(skills[0].name).toBe('Bundle Assets')
+      expect(skills[0].description).toBe('Bundles all static assets for production')
+    })
+
+    it('falls back to filename as name when no comment metadata in .sh', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['no-comments.sh'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('#!/bin/bash\necho "hello"')
+
+      const skills = service.listSkills()
+      expect(skills[0].name).toBe('no-comments')
+      expect(skills[0].description).toBe('')
+    })
+
+    it('falls back to filename as name when no comment metadata in .js', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['bare.js'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('const x = 1;\nconsole.log(x);\n')
+
+      const skills = service.listSkills()
+      expect(skills[0].name).toBe('bare')
+      expect(skills[0].description).toBe('')
+    })
+  })
+
+  describe('format field', () => {
+    it('sets format to md for .md files', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['test.md'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Test\nContent')
+
+      const skills = service.listSkills()
+      expect(skills[0].format).toBe('md')
+    })
+
+    it('sets format to sh for .sh files', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['test.sh'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Name\n# Desc\necho 1')
+
+      const skills = service.listSkills()
+      expect(skills[0].format).toBe('sh')
+    })
+
+    it('sets format to py for .py files', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['test.py'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Name\n# Desc\nprint(1)')
+
+      const skills = service.listSkills()
+      expect(skills[0].format).toBe('py')
+    })
+
+    it('sets format to js for .js files', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['test.js'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('// Name\n// Desc\nconsole.log(1)')
+
+      const skills = service.listSkills()
+      expect(skills[0].format).toBe('js')
+    })
+  })
+
+  describe('executeSkill — multi-format execution', () => {
+    it('executes .sh skill with bash', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['deploy.sh'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Deploy\n# Deploys app\necho "deployed"')
+
+      mockExecFile.mockImplementation(
+        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'deployed', '')
+        }
+      )
+
+      const result = await service.executeSkill('deploy')
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toBe('deployed')
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'bash',
+        ['/home/testuser/.claude/skills/deploy.sh'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+
+    it('executes .py skill with python3', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['analyze.py'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Analyze\n# Analyzes data\nprint("done")')
+
+      mockExecFile.mockImplementation(
+        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'done', '')
+        }
+      )
+
+      const result = await service.executeSkill('analyze')
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toBe('done')
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'python3',
+        ['/home/testuser/.claude/skills/analyze.py'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+
+    it('executes .js skill with node', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['build.js'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('// Build\n// Builds project\nconsole.log("built")')
+
+      mockExecFile.mockImplementation(
+        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'built', '')
+        }
+      )
+
+      const result = await service.executeSkill('build')
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toBe('built')
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'node',
+        ['/home/testuser/.claude/skills/build.js'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+
+    it('executes .md skill with claude CLI (unchanged behavior)', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockReturnValue(['prompt.md'])
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Prompt\nSome prompt content')
+
+      mockExecFile.mockImplementation(
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'claude output', '')
+        }
+      )
+
+      const result = await service.executeSkill('prompt')
+      expect(result.exitCode).toBe(0)
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'claude',
+        ['--print', '-p', '# Prompt\nSome prompt content'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+  })
+
   describe('refresh', () => {
     it('clears cache and re-scans', () => {
       mockExistsSync.mockReturnValue(false)
