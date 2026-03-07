@@ -20,6 +20,7 @@ import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
+import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -42,7 +43,7 @@ function App(): React.JSX.Element {
 }
 
 function AppMain(): React.JSX.Element {
-  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent } =
+  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, updateColor, removeAgent } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
   const theme = useThemeStore((s) => s.theme)
@@ -80,6 +81,9 @@ function AppMain(): React.JSX.Element {
 
   // Settings panel
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Git panel
+  const [gitPanelOpen, setGitPanelOpen] = useState(false)
 
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
@@ -329,6 +333,14 @@ function AppMain(): React.JSX.Element {
     }
   }, [])
 
+  const handleColorChange = useCallback(
+    (agentId: string) => {
+      handleSelectAgent(agentId)
+      useViewStore.getState().setViewMode('terminal')
+    },
+    [handleSelectAgent]
+  )
+
   const handleSpawnWithTask = useCallback(
     (task: string) => {
       const agent = activeAgentId ? agents.get(activeAgentId) : null
@@ -461,6 +473,7 @@ function AppMain(): React.JSX.Element {
         onCodeBlue={handleCodeBlueActivate}
         selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenGit={() => setGitPanelOpen(true)}
       />
 
       {/* Main layout: sidebar + content */}
@@ -692,11 +705,15 @@ function AppMain(): React.JSX.Element {
             handleSelectAgent(agentId)
           }}
           onBreakout={handleBreakout}
+          onChangeColor={handleColorChange}
         />
       )}
 
       {/* Settings panel */}
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      {/* Git panel */}
+      {gitPanelOpen && <StandaloneGitPanel onClose={() => setGitPanelOpen(false)} />}
     </div>
   )
 }

@@ -1,9 +1,82 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import type { HistoryEntry } from '@shared/types/history.types'
 
+const ITEM_HEIGHT = 60
+const BUFFER = 5
+
 interface HistoryTabProps {
   agent: AgentState
+}
+
+interface VirtualizedHistoryListProps {
+  entries: HistoryEntry[]
+  renderEntry: (entry: HistoryEntry, index: number) => React.JSX.Element
+}
+
+function VirtualizedHistoryList({
+  entries,
+  renderEntry
+}: VirtualizedHistoryListProps): React.JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [containerHeight, setContainerHeight] = useState(400)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const observer = new ResizeObserver((resizeEntries) => {
+      for (const resizeEntry of resizeEntries) {
+        setContainerHeight(resizeEntry.contentRect.height)
+      }
+    })
+    observer.observe(el)
+    setContainerHeight(el.clientHeight)
+    return () => observer.disconnect()
+  }, [])
+
+  const totalHeight = entries.length * ITEM_HEIGHT
+
+  const startIndex = useMemo(
+    () => Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER),
+    [scrollTop]
+  )
+
+  const endIndex = useMemo(
+    () => Math.min(entries.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + BUFFER),
+    [scrollTop, containerHeight, entries.length]
+  )
+
+  const visibleEntries = useMemo(
+    () => entries.slice(startIndex, endIndex),
+    [entries, startIndex, endIndex]
+  )
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
+  return (
+    <div
+      ref={containerRef}
+      data-testid="virtualized-list-container"
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto px-3 pb-3"
+    >
+      <div
+        data-testid="virtualized-list-spacer"
+        style={{ height: totalHeight, position: 'relative' }}
+      >
+        <div
+          data-testid="virtualized-list-window"
+          style={{ position: 'absolute', top: startIndex * ITEM_HEIGHT, width: '100%' }}
+        >
+          {visibleEntries.map((entry, i) => renderEntry(entry, startIndex + i))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function stripAnsi(text: string): string {
@@ -96,7 +169,6 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
   const [loading, setLoading] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
   const [copyFeedback, setCopyFeedback] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -113,12 +185,6 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
       cancelled = true
     }
   }, [agent.id])
-
-  useEffect(() => {
-    if (scrollRef.current && !searchQuery) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [entries, searchQuery])
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -190,6 +256,64 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
     })
   }, [])
 
+  const renderEntry = useCallback(
+    (entry: HistoryEntry, index: number): React.JSX.Element => {
+      const stripped = stripAnsi(entry.content)
+      const isCollapsible = shouldCollapse(stripped)
+      const isExpanded = expandedEntries.has(entry.id)
+      const markerClass = getTimelineMarkerClass(
+        entry.content,
+        index,
+        entries.length,
+        agent.status
+      )
+
+      return (
+        <div
+          key={entry.id}
+          data-testid={`history-entry-${entry.id}`}
+          className="flex gap-2 py-1.5 border-b border-base-content/5 last:border-b-0"
+        >
+          {/* Timeline marker */}
+          <span
+            data-testid={`timeline-marker-${index}`}
+            className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${markerClass}`}
+          />
+
+          {/* Timestamp */}
+          <span className="text-[10px] font-mono text-base-content/40 pt-0.5 shrink-0">
+            {formatTimestamp(entry.createdAt)}
+          </span>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <pre className="text-xs font-mono text-base-content/80 whitespace-pre-wrap break-all m-0">
+              {isCollapsible && !isExpanded
+                ? searchQuery.trim()
+                  ? highlightMatch(truncateContent(stripped), searchQuery)
+                  : truncateContent(stripped)
+                : searchQuery.trim()
+                  ? highlightMatch(stripped, searchQuery)
+                  : stripped}
+            </pre>
+            {isCollapsible && (
+              <button
+                data-testid={`expand-toggle-${entry.id}`}
+                onClick={() => toggleExpand(entry.id)}
+                className="text-[10px] text-primary hover:text-primary/80 mt-0.5"
+              >
+                {isExpanded
+                  ? 'Show less'
+                  : `Show more (${getLineCount(stripped)} lines)`}
+              </button>
+            )}
+          </div>
+        </div>
+      )
+    },
+    [expandedEntries, entries.length, agent.status, searchQuery, toggleExpand]
+  )
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -228,74 +352,21 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
       </div>
 
       {/* Entry list */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-3">
-        {loading && (
-          <div className="flex items-center justify-center py-8">
-            <span className="loading loading-dots loading-sm text-base-content/40" />
-          </div>
-        )}
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <span className="loading loading-dots loading-sm text-base-content/40" />
+        </div>
+      )}
 
-        {!loading && entries.length === 0 && (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-xs text-base-content/40">No output recorded yet</p>
-          </div>
-        )}
+      {!loading && entries.length === 0 && (
+        <div className="flex items-center justify-center py-8">
+          <p className="text-xs text-base-content/40">No output recorded yet</p>
+        </div>
+      )}
 
-        {!loading &&
-          entries.map((entry, index) => {
-            const stripped = stripAnsi(entry.content)
-            const isCollapsible = shouldCollapse(stripped)
-            const isExpanded = expandedEntries.has(entry.id)
-            const markerClass = getTimelineMarkerClass(
-              entry.content,
-              index,
-              entries.length,
-              agent.status
-            )
-
-            return (
-              <div
-                key={entry.id}
-                className="flex gap-2 py-1.5 border-b border-base-content/5 last:border-b-0"
-              >
-                {/* Timeline marker */}
-                <span
-                  data-testid={`timeline-marker-${index}`}
-                  className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${markerClass}`}
-                />
-
-                {/* Timestamp */}
-                <span className="text-[10px] font-mono text-base-content/40 pt-0.5 shrink-0">
-                  {formatTimestamp(entry.createdAt)}
-                </span>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <pre className="text-xs font-mono text-base-content/80 whitespace-pre-wrap break-all m-0">
-                    {isCollapsible && !isExpanded
-                      ? searchQuery.trim()
-                        ? highlightMatch(truncateContent(stripped), searchQuery)
-                        : truncateContent(stripped)
-                      : searchQuery.trim()
-                        ? highlightMatch(stripped, searchQuery)
-                        : stripped}
-                  </pre>
-                  {isCollapsible && (
-                    <button
-                      data-testid={`expand-toggle-${entry.id}`}
-                      onClick={() => toggleExpand(entry.id)}
-                      className="text-[10px] text-primary hover:text-primary/80 mt-0.5"
-                    >
-                      {isExpanded
-                        ? 'Show less'
-                        : `Show more (${getLineCount(stripped)} lines)`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-      </div>
+      {!loading && entries.length > 0 && (
+        <VirtualizedHistoryList entries={entries} renderEntry={renderEntry} />
+      )}
     </div>
   )
 }

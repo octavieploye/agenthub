@@ -149,6 +149,27 @@ describe('AgentContextMenu', () => {
     })
   })
 
+  describe('change color menu item', () => {
+    it('renders Change Color item when onChangeColor prop is provided', () => {
+      const onChangeColor = vi.fn()
+      render(<AgentContextMenu {...defaultProps} onChangeColor={onChangeColor} />)
+      expect(screen.getByTestId('context-menu-change-color')).toBeInTheDocument()
+    })
+
+    it('does not render Change Color item when onChangeColor prop is not provided', () => {
+      render(<AgentContextMenu {...defaultProps} />)
+      expect(screen.queryByTestId('context-menu-change-color')).not.toBeInTheDocument()
+    })
+
+    it('fires onChangeColor with agent id and closes menu when Change Color clicked', () => {
+      const onChangeColor = vi.fn()
+      render(<AgentContextMenu {...defaultProps} onChangeColor={onChangeColor} />)
+      fireEvent.click(screen.getByTestId('context-menu-change-color'))
+      expect(onChangeColor).toHaveBeenCalledWith('agent-1')
+      expect(defaultProps.onClose).toHaveBeenCalled()
+    })
+  })
+
   describe('breakout terminal menu item', () => {
     it('renders Breakout Terminal item when onBreakout prop is provided', () => {
       const onBreakout = vi.fn()

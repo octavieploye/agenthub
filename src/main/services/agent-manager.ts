@@ -4,7 +4,7 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.queries'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
 import { insertTerminalOutput } from '../db/queries/history.queries'
@@ -219,6 +219,15 @@ export function getAgentState(agentId: string): AgentState | null {
 
 export function listAgents(): AgentState[] {
   return getAllAgents(getDb())
+}
+
+export function updateAgentColor(agentId: string, color: string): void {
+  const managed = agents.get(agentId)
+  if (managed) {
+    managed.state.color = color
+  }
+  dbUpdateAgentColor(getDb(), agentId, color)
+  log.debug('Agent color updated', { id: agentId, color })
 }
 
 export function cleanupAllAgents(): void {

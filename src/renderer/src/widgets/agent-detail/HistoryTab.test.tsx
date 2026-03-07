@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import HistoryTab from './HistoryTab'
 import type { AgentState } from '@shared/types/agent.types'
@@ -14,7 +14,18 @@ const mockClipboardWrite = vi.fn().mockResolvedValue(undefined)
 const mockCreateObjectURL = vi.fn().mockReturnValue('blob:mock-url')
 const mockRevokeObjectURL = vi.fn()
 
+// Mock ResizeObserver for virtualized list
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+
 beforeAll(() => {
+  globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
+
   Object.defineProperty(window, 'agentHub', {
     value: {
       history: {
@@ -32,6 +43,10 @@ beforeAll(() => {
 
   globalThis.URL.createObjectURL = mockCreateObjectURL
   globalThis.URL.revokeObjectURL = mockRevokeObjectURL
+})
+
+afterAll(() => {
+  globalThis.ResizeObserver = originalResizeObserver
 })
 
 function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -235,6 +250,104 @@ describe('HistoryTab', () => {
     await waitFor(() => {
       expect(screen.getByText('short text')).toBeInTheDocument()
       expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Virtualized list', () => {
+    function generateManyEntries(count: number): HistoryEntry[] {
+      return Array.from({ length: count }, (_, i) =>
+        createMockEntry({
+          id: i + 1,
+          content: `Entry number ${i + 1}`,
+          createdAt: `2026-03-06T10:${String(i % 60).padStart(2, '0')}:00.000Z`
+        })
+      )
+    }
+
+    it('renders virtualized list container with many items', async () => {
+      const entries = generateManyEntries(100)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('virtualized-list-container')).toBeInTheDocument()
+      })
+    })
+
+    it('sets spacer height to total items * item height', async () => {
+      const entries = generateManyEntries(200)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        const spacer = screen.getByTestId('virtualized-list-spacer')
+        // 200 entries * 60px ITEM_HEIGHT = 12000px
+        expect(spacer.style.height).toBe('12000px')
+      })
+    })
+
+    it('does not render all items at once for a large list', async () => {
+      const entries = generateManyEntries(1000)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('virtualized-list-container')).toBeInTheDocument()
+      })
+
+      // With default containerHeight=400 and ITEM_HEIGHT=60, visible count is
+      // ceil(400/60) + BUFFER*2 = 7 + 10 = 17 at most (minus clamped start buffer)
+      // Certainly far fewer than 1000
+      const renderedEntries = screen.getAllByTestId(/^history-entry-/)
+      expect(renderedEntries.length).toBeLessThan(1000)
+      expect(renderedEntries.length).toBeLessThan(50)
+    })
+
+    it('renders correct entries in the visible window', async () => {
+      const entries = generateManyEntries(100)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        // First entry should be visible (scrollTop=0, so startIndex=0)
+        expect(screen.getByTestId('history-entry-1')).toBeInTheDocument()
+      })
+
+      // Entry 1 content should be visible
+      expect(screen.getByText('Entry number 1')).toBeInTheDocument()
+    })
+
+    it('does not render entries far outside the visible window', async () => {
+      const entries = generateManyEntries(500)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('virtualized-list-container')).toBeInTheDocument()
+      })
+
+      // With scrollTop=0 and containerHeight=400, entries near the end
+      // (e.g., entry 500) should not be rendered
+      expect(screen.queryByTestId('history-entry-500')).not.toBeInTheDocument()
+      expect(screen.queryByText('Entry number 500')).not.toBeInTheDocument()
+    })
+
+    it('renders the virtualized list window div with correct position', async () => {
+      const entries = generateManyEntries(50)
+      mockHistoryGet.mockResolvedValue({ success: true, data: entries })
+
+      render(<HistoryTab agent={mockAgent} />)
+
+      await waitFor(() => {
+        const window = screen.getByTestId('virtualized-list-window')
+        // At scrollTop=0, startIndex=max(0, floor(0/60)-5)=0
+        expect(window.style.top).toBe('0px')
+      })
     })
   })
 })

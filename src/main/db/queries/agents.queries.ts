@@ -118,6 +118,12 @@ export function updateAgentPid(
   log.debug('Agent PID updated', { id, pid })
 }
 
+export function updateAgentColor(db: Database.Database, id: string, color: string): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE agents SET color = ?, updated_at = ? WHERE id = ?').run(color, now, id)
+  log.debug('Agent color updated', { id, color })
+}
+
 export function deleteAgent(db: Database.Database, id: string): void {
   db.prepare('DELETE FROM agents WHERE id = ?').run(id)
   log.info('Agent deleted', { id })

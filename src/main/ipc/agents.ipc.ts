@@ -11,7 +11,8 @@ import {
   listAgents,
   getAgentState,
   sendInput,
-  resizeAgent
+  resizeAgent,
+  updateAgentColor
 } from '../services/agent-manager'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
 import { getDb } from '../db/connection'
@@ -133,6 +134,22 @@ export function registerAgentHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('RESIZE_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.UPDATE_COLOR,
+    async (_event, agentId: unknown, color: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const colorValidation = validateInput(z.string(), color)
+        if (!colorValidation.valid) return colorValidation.response
+        updateAgentColor(idValidation.data, colorValidation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('UPDATE_COLOR_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

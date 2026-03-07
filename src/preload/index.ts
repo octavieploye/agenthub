@@ -13,7 +13,9 @@ const agentHubBridge = {
     sendInput: (agentId: string, data: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.SEND_INPUT, agentId, data),
     resize: (agentId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESIZE, agentId, cols, rows)
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESIZE, agentId, cols, rows),
+    updateColor: (agentId: string, color: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color)
   },
   db: {
     getRepos: () => ipcRenderer.invoke(IPC_CHANNELS.DB.GET_REPOS),

@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
 import { useNow } from '@renderer/hooks/useNow'
+import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
+import { useAgentStore } from '@renderer/stores/agent-store'
 
 interface GeneralTabProps {
   agent: AgentState
@@ -56,6 +59,18 @@ function truncatePath(path: string, maxLen: number = 50): string {
 function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): React.JSX.Element {
   const isTicking = agent.status === 'busy' || agent.status === 'spawning'
   const now = useNow(isTicking ? 1000 : 0)
+  const [selectedColor, setSelectedColor] = useState(agent.color)
+  const updateColor = useAgentStore((s) => s.updateColor)
+
+  const handleColorChange = async (color: string): Promise<void> => {
+    setSelectedColor(color)
+    updateColor(agent.id, color)
+    try {
+      await window.agentHub.agents.updateColor(agent.id, color)
+    } catch (err) {
+      console.error('Update color failed:', err)
+    }
+  }
 
   const canPause = agent.status === 'busy' || agent.status === 'idle' || agent.status === 'locked'
   const canResume = agent.status === 'paused'
@@ -112,6 +127,25 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
             <span data-testid="general-task">{agent.taskDescription}</span>
           </div>
         )}
+      </div>
+
+      {/* Color picker */}
+      <div data-testid="color-picker-section" className="panel-glass rounded-lg p-4 space-y-2">
+        <h3 className="text-xs font-medium text-base-content/50">Agent Color</h3>
+        <div className="flex gap-2 flex-wrap">
+          {AGENT_COLOR_PALETTE.map((color) => (
+            <button
+              key={color}
+              data-testid={`color-swatch-${color}`}
+              className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer ${
+                selectedColor === color ? 'border-white scale-110' : 'border-transparent opacity-70 hover:opacity-100'
+              }`}
+              style={{ backgroundColor: color }}
+              onClick={() => handleColorChange(color)}
+              aria-label={`Select color ${color}`}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Progress bar */}

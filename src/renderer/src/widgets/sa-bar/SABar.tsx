@@ -10,6 +10,7 @@ interface SABarProps {
   onCodeBlue?: () => void
   selectedAgentRepoPath?: string
   onOpenSettings?: () => void
+  onOpenGit?: () => void
 }
 
 const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
@@ -25,7 +26,7 @@ const VIEW_MODES = [
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
@@ -115,6 +116,18 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings }: SA
 
       {/* Theme switcher */}
       <ThemeSwitcher />
+
+      {/* Git button */}
+      {onOpenGit && (
+        <button
+          data-testid="sa-git"
+          className="btn btn-xs btn-ghost"
+          onClick={onOpenGit}
+          title="Git Overview"
+        >
+          Git
+        </button>
+      )}
 
       {/* Settings button */}
       {onOpenSettings && (

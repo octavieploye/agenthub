@@ -7,7 +7,8 @@ export const IPC_CHANNELS = {
     LIST: 'agents:list',
     GET_STATE: 'agents:get-state',
     SEND_INPUT: 'agents:send-input',
-    RESIZE: 'agents:resize'
+    RESIZE: 'agents:resize',
+    UPDATE_COLOR: 'agents:update-color'
   },
   DB: {
     GET_REPOS: 'db:get-repos',

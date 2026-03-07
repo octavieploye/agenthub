@@ -12,6 +12,7 @@ interface AgentContextMenuProps {
   onSendTask?: (agentId: string) => void
   onViewNotes?: (agentId: string) => void
   onBreakout?: (agentId: string) => void
+  onChangeColor?: (agentId: string) => void
 }
 
 function AgentContextMenu({
@@ -25,7 +26,8 @@ function AgentContextMenu({
   onCopyId,
   onSendTask,
   onViewNotes,
-  onBreakout
+  onBreakout,
+  onChangeColor
 }: AgentContextMenuProps): React.JSX.Element {
   const handleAction = (action: (agentId: string) => void): void => {
     action(agent.id)
@@ -107,6 +109,16 @@ function AgentContextMenu({
       >
         Copy Agent ID
       </button>
+
+      {onChangeColor && (
+        <button
+          data-testid="context-menu-change-color"
+          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          onClick={() => handleAction(onChangeColor)}
+        >
+          Change Color
+        </button>
+      )}
 
       <div data-testid="context-menu-divider" className="border-t border-base-content/10 my-1" />
 

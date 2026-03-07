@@ -23,6 +23,7 @@ export interface AgentHubBridge {
     getState: (agentId: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
     sendInput: (agentId: string, data: string) => Promise<IpcResponse<void>>
     resize: (agentId: string, cols: number, rows: number) => Promise<IpcResponse<void>>
+    updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
   }
   db: {
     getRepos: () => Promise<IpcResponse<import('./config.types').RepoConfig[]>>
