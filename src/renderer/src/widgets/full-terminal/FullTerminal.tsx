@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { useThemeStore } from '@renderer/stores/theme-store'
+import { getXtermTheme } from './theme-bridge'
 
 interface FullTerminalProps {
   agentId: string
@@ -13,6 +15,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const cleanupRef = useRef<(() => void)[]>([])
+  const theme = useThemeStore((s) => s.theme)
 
   const initTerminal = useCallback(() => {
     if (!terminalRef.current || xtermRef.current) return
@@ -21,29 +24,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       cursorBlink: true,
       fontSize: 13,
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
-      theme: {
-        background: '#1a1a2e',
-        foreground: '#e0e0e0',
-        cursor: '#7c93ee',
-        cursorAccent: '#1a1a2e',
-        selectionBackground: '#7c93ee44',
-        black: '#1a1a2e',
-        red: '#ef4444',
-        green: '#10b981',
-        yellow: '#f59e0b',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#e0e0e0',
-        brightBlack: '#404060',
-        brightRed: '#f87171',
-        brightGreen: '#34d399',
-        brightYellow: '#fbbf24',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#c084fc',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff'
-      },
+      theme: getXtermTheme(),
       allowTransparency: true,
       scrollback: 5000
     })
@@ -105,6 +86,13 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       xtermRef.current = null
     }
   }, [initTerminal])
+
+  // Update terminal theme when DaisyUI theme changes
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = getXtermTheme()
+    }
+  }, [theme])
 
   // Re-fit when becoming visible
   useEffect(() => {
