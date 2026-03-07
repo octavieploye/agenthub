@@ -16,7 +16,6 @@ interface AgentDetailPanelProps {
   onPause: (agentId: string) => void
   onResume: (agentId: string) => void
   onKill: (agentId: string) => void
-  onSendInput: (agentId: string, data: string) => void
   onSpawnWithTask: (task: string) => void
   onBreakout?: (agentId: string) => void
 }
@@ -37,7 +36,6 @@ function AgentDetailPanel({
   onPause,
   onResume,
   onKill,
-  onSendInput,
   onSpawnWithTask,
   onBreakout
 }: AgentDetailPanelProps): React.JSX.Element {
@@ -84,7 +82,6 @@ function AgentDetailPanel({
         {activeTab === 'terminal' && (
           <TerminalTab
             agent={agent}
-            onSendInput={onSendInput}
             onBreakout={onBreakout}
             onPause={onPause}
             onResume={onResume}

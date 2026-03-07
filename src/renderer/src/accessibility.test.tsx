@@ -103,7 +103,6 @@ describe('Accessibility', () => {
       onPause: vi.fn(),
       onResume: vi.fn(),
       onKill: vi.fn(),
-      onSendInput: vi.fn(),
       onSpawnWithTask: vi.fn()
     }
 

@@ -640,7 +640,6 @@ function AppMain(): React.JSX.Element {
                     onPause={handlePause}
                     onResume={handleResume}
                     onKill={handleKillRequest}
-                    onSendInput={handleSendInput}
                     onSpawnWithTask={handleSpawnWithTask}
                     onBreakout={handleBreakout}
                   />
