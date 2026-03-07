@@ -1,5 +1,8 @@
 import { ipcMain, app, BrowserWindow } from 'electron'
 import { exec } from 'child_process'
+import { writeFileSync, chmodSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
 import log from 'electron-log/main'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error } from './ipc-helpers'
@@ -65,12 +68,15 @@ export function registerSystemHandlers(): void {
         const platform = process.platform
 
         if (platform === 'darwin') {
-          const script = `tell application "Terminal"
-activate
-do script "${escapedCommand.replace(/"/g, '\\"')}"
-end tell`
-          exec(`osascript -e '${script}'`, (err) => {
+          const scriptPath = join(tmpdir(), `agenthub-terminal-${Date.now()}.sh`)
+          writeFileSync(scriptPath, `#!/bin/bash\n${command}\nexec bash`, { encoding: 'utf-8' })
+          chmodSync(scriptPath, 0o755)
+          exec(`open -a Terminal "${scriptPath}"`, (err) => {
             if (err) log.warn('Failed to open macOS Terminal:', err.message)
+            // Clean up after a delay to ensure Terminal has read the script
+            setTimeout(() => {
+              try { unlinkSync(scriptPath) } catch { /* ignore */ }
+            }, 5000)
           })
         } else if (platform === 'linux') {
           exec(`which x-terminal-emulator`, (err) => {
