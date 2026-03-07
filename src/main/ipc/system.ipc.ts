@@ -60,8 +60,8 @@ export function registerSystemHandlers(): void {
     IPC_CHANNELS.SYSTEM.OPEN_TERMINAL,
     async (_event, command: string): Promise<IpcResponse<void>> => {
       try {
-        if (!command.startsWith('socat')) {
-          return error('INVALID_COMMAND', 'Only socat commands are allowed')
+        if (!command.startsWith('node -e')) {
+          return error('INVALID_COMMAND', 'Only node proxy commands are allowed')
         }
 
         const escapedCommand = command.replace(/'/g, "'\\''")
