@@ -26,12 +26,43 @@ const OLLAMA_CATEGORY_HINTS: Record<string, ModelCategory> = {
   'marco-o1': 'thinking'
 }
 
+const OLLAMA_FAMILY_HINTS: Array<{ pattern: string; family: string }> = [
+  { pattern: 'qwen', family: 'Qwen' },
+  { pattern: 'mistral', family: 'Mistral' },
+  { pattern: 'mixtral', family: 'Mistral' },
+  { pattern: 'gemini', family: 'Gemini' },
+  { pattern: 'gemma', family: 'Gemma' },
+  { pattern: 'llama', family: 'Llama' },
+  { pattern: 'deepseek', family: 'DeepSeek' },
+  { pattern: 'phi', family: 'Phi' },
+  { pattern: 'starcoder', family: 'StarCoder' },
+  { pattern: 'codellama', family: 'Llama' },
+  { pattern: 'devstral', family: 'Mistral' },
+  { pattern: 'minimax', family: 'MiniMax' },
+  { pattern: 'glm', family: 'GLM' },
+  { pattern: 'marco', family: 'Marco' },
+  { pattern: 'command-r', family: 'Command-R' },
+  { pattern: 'yi', family: 'Yi' },
+  { pattern: 'vicuna', family: 'Vicuna' },
+  { pattern: 'falcon', family: 'Falcon' },
+  { pattern: 'orca', family: 'Orca' },
+  { pattern: 'nous', family: 'Nous' }
+]
+
 function categorizeOllamaModel(name: string): ModelCategory {
   const lower = name.toLowerCase()
   for (const [hint, category] of Object.entries(OLLAMA_CATEGORY_HINTS)) {
     if (lower.includes(hint)) return category
   }
   return 'mixed'
+}
+
+function detectOllamaFamily(name: string): string {
+  const lower = name.toLowerCase()
+  for (const { pattern, family } of OLLAMA_FAMILY_HINTS) {
+    if (lower.includes(pattern)) return family
+  }
+  return 'Other'
 }
 
 function parseOllamaModels(
@@ -47,6 +78,7 @@ function parseOllamaModels(
       name,
       provider,
       category: categorizeOllamaModel(name),
+      family: detectOllamaFamily(name),
       contextWindow: 128000,
       available: true
     }

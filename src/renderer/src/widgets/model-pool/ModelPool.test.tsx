@@ -19,11 +19,12 @@ describe('ModelPool', () => {
     models: [
       createModel({ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', contextWindow: 200000 }),
       createModel({ id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'anthropic', contextWindow: 200000 }),
-      createModel({ id: 'llama3-local', name: 'Llama 3', provider: 'ollama-local', contextWindow: 8000 }),
+      createModel({ id: 'llama3-local', name: 'Llama 3', provider: 'ollama-local', family: 'Llama', contextWindow: 8000 }),
       createModel({
         id: 'llama3-cloud',
         name: 'Llama 3 Cloud',
         provider: 'ollama-cloud',
+        family: 'Llama',
         contextWindow: 8000,
         available: false,
         unavailableReason: 'Endpoint unreachable'
@@ -68,10 +69,19 @@ describe('ModelPool', () => {
       expect(screen.getByText('Llama 3 Cloud')).toBeInTheDocument()
     })
 
-    it('renders provider badge for each model', () => {
+    it('renders CLAUDE section header for anthropic models', () => {
       render(<ModelPool {...defaultProps} />)
-      const badges = screen.getAllByTestId('provider-badge')
-      expect(badges).toHaveLength(4)
+      expect(screen.getByText('CLAUDE')).toBeInTheDocument()
+    })
+
+    it('renders OLLAMA section header for non-anthropic models', () => {
+      render(<ModelPool {...defaultProps} />)
+      expect(screen.getByText('OLLAMA')).toBeInTheDocument()
+    })
+
+    it('renders family subcategory headers under OLLAMA', () => {
+      render(<ModelPool {...defaultProps} />)
+      expect(screen.getByText('Llama')).toBeInTheDocument()
     })
 
     it('renders context window size formatted as "Xk"', () => {
@@ -134,28 +144,73 @@ describe('ModelPool', () => {
     })
   })
 
+  // ─── provider grouping ───────────────────────────────────────────────
+
+  describe('provider grouping', () => {
+    it('groups Claude models under CLAUDE section', () => {
+      render(<ModelPool {...defaultProps} />)
+      const pool = screen.getByTestId('model-pool')
+      expect(pool).toHaveTextContent('CLAUDE')
+      expect(pool).toHaveTextContent('Claude Sonnet 4')
+      expect(pool).toHaveTextContent('Claude Opus 4')
+    })
+
+    it('groups Ollama models by family under OLLAMA section', () => {
+      const models = [
+        createModel({ id: 'qwen-1', name: 'Qwen 3 Coder', provider: 'ollama-local', family: 'Qwen' }),
+        createModel({ id: 'qwen-2', name: 'Qwen 2.5', provider: 'ollama-local', family: 'Qwen' }),
+        createModel({ id: 'mistral-1', name: 'Mistral 7B', provider: 'ollama-cloud', family: 'Mistral' })
+      ]
+      render(<ModelPool {...defaultProps} models={models} />)
+      expect(screen.getByText('OLLAMA')).toBeInTheDocument()
+      expect(screen.getByText('Qwen')).toBeInTheDocument()
+      expect(screen.getByText('Mistral')).toBeInTheDocument()
+    })
+
+    it('sorts family names alphabetically with "Other" last', () => {
+      const models = [
+        createModel({ id: 'z-model', name: 'Z Model', provider: 'ollama-local', family: 'Other' }),
+        createModel({ id: 'a-model', name: 'A Qwen', provider: 'ollama-local', family: 'Qwen' }),
+        createModel({ id: 'b-model', name: 'B Gemini', provider: 'ollama-cloud', family: 'Gemini' })
+      ]
+      render(<ModelPool {...defaultProps} models={models} />)
+      const pool = screen.getByTestId('model-pool')
+      const text = pool.textContent ?? ''
+      const geminiPos = text.indexOf('Gemini')
+      const qwenPos = text.indexOf('Qwen')
+      const otherPos = text.indexOf('Other')
+      expect(geminiPos).toBeLessThan(qwenPos)
+      expect(qwenPos).toBeLessThan(otherPos)
+    })
+
+    it('does not render OLLAMA section when only Claude models exist', () => {
+      const models = [
+        createModel({ id: 'claude-1', name: 'Sonnet', provider: 'anthropic' })
+      ]
+      render(<ModelPool {...defaultProps} models={models} />)
+      expect(screen.getByText('CLAUDE')).toBeInTheDocument()
+      expect(screen.queryByText('OLLAMA')).not.toBeInTheDocument()
+    })
+
+    it('does not render CLAUDE section when only Ollama models exist', () => {
+      const models = [
+        createModel({ id: 'llama-1', name: 'Llama', provider: 'ollama-local', family: 'Llama' })
+      ]
+      render(<ModelPool {...defaultProps} models={models} />)
+      expect(screen.queryByText('CLAUDE')).not.toBeInTheDocument()
+      expect(screen.getByText('OLLAMA')).toBeInTheDocument()
+    })
+  })
+
   // ─── model details ─────────────────────────────────────────────────
 
   describe('model details', () => {
-    it('Claude models show "anthropic" provider badge', () => {
-      render(<ModelPool {...defaultProps} />)
-      const row = screen.getByTestId('model-row-claude-sonnet-4')
-      const badge = row.querySelector('[data-testid="provider-badge"]')
-      expect(badge).toHaveTextContent('anthropic')
-    })
-
-    it('Ollama local models show "ollama-local" provider badge', () => {
-      render(<ModelPool {...defaultProps} />)
-      const row = screen.getByTestId('model-row-llama3-local')
-      const badge = row.querySelector('[data-testid="provider-badge"]')
-      expect(badge).toHaveTextContent('ollama-local')
-    })
-
-    it('Ollama cloud models show "ollama-cloud" provider badge', () => {
-      render(<ModelPool {...defaultProps} />)
-      const row = screen.getByTestId('model-row-llama3-cloud')
-      const badge = row.querySelector('[data-testid="provider-badge"]')
-      expect(badge).toHaveTextContent('ollama-cloud')
+    it('renders category badge when model has category', () => {
+      const models = [
+        createModel({ id: 'opus', name: 'Opus', provider: 'anthropic', category: 'thinking' })
+      ]
+      render(<ModelPool {...defaultProps} models={models} />)
+      expect(screen.getByTestId('category-badge')).toHaveTextContent('Thinking')
     })
 
     it('context window formatted as "Xk" for thousands', () => {

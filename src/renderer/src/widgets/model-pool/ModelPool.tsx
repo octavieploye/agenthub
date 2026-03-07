@@ -7,6 +7,7 @@ export interface ModelInfo {
   name: string
   provider: ModelProvider
   category?: ModelCategory
+  family?: string
   available: boolean
   contextWindow: number
   unavailableReason?: string
@@ -19,7 +20,6 @@ export interface ModelPoolProps {
   planLabel: string
   selectedModelId?: string
   onSelectModel: (modelId: string) => void
-  groupByCategory?: boolean
 }
 
 function formatContextWindow(tokens: number): string {
@@ -49,7 +49,6 @@ function ModelRow({
 }): React.JSX.Element {
   return (
     <div
-      key={model.id}
       data-testid={`model-row-${model.id}`}
       onClick={() => model.available && onSelect()}
       className={`flex items-center justify-between p-2 rounded-lg text-sm ${
@@ -62,12 +61,6 @@ function ModelRow({
     >
       <div className="flex items-center gap-2">
         <span className="font-medium">{model.name}</span>
-        <span
-          data-testid="provider-badge"
-          className="text-[10px] px-1.5 py-0.5 rounded-full bg-base-content/10"
-        >
-          {model.provider}
-        </span>
         <CategoryBadge category={model.category} />
       </div>
       <div className="flex items-center gap-2 text-xs text-base-content/50">
@@ -85,49 +78,26 @@ function ModelPool({
   quotaPercent,
   planLabel,
   selectedModelId,
-  onSelectModel,
-  groupByCategory = false
+  onSelectModel
 }: ModelPoolProps): React.JSX.Element {
-  if (!groupByCategory) {
-    return (
-      <div data-testid="model-pool" className="panel-glass p-4 rounded-xl">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold tracking-wide">Model Pool</h2>
-          <span className="text-xs text-base-content/50">
-            {planLabel} — {quotaPercent}%
-          </span>
-        </div>
+  const claudeModels = models.filter((m) => m.provider === 'anthropic')
+  const ollamaModels = models.filter((m) => m.provider !== 'anthropic')
 
-        {models.length === 0 ? (
-          <div data-testid="model-pool-empty" className="text-sm text-base-content/40 text-center py-4">
-            No models available.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {models.map((model) => (
-              <ModelRow
-                key={model.id}
-                model={model}
-                isSelected={model.id === selectedModelId}
-                onSelect={() => onSelectModel(model.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    )
+  // Group Ollama models by family
+  const ollamaFamilies: Record<string, ModelInfo[]> = {}
+  for (const model of ollamaModels) {
+    const family = model.family ?? 'Other'
+    if (!ollamaFamilies[family]) ollamaFamilies[family] = []
+    ollamaFamilies[family].push(model)
   }
-
-  const grouped: Record<string, ModelInfo[]> = {}
-  for (const model of models) {
-    const cat = model.category ?? 'mixed'
-    if (!grouped[cat]) grouped[cat] = []
-    grouped[cat].push(model)
-  }
-  const categoryOrder: ModelCategory[] = ['thinking', 'coding', 'mixed']
+  const sortedFamilies = Object.keys(ollamaFamilies).sort((a, b) => {
+    if (a === 'Other') return 1
+    if (b === 'Other') return -1
+    return a.localeCompare(b)
+  })
 
   return (
-    <div data-testid="model-pool" className="panel-glass p-4 rounded-xl">
+    <div data-testid="model-pool" className="panel-glass p-4 rounded-xl max-h-[70vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold tracking-wide">Model Pool</h2>
         <span className="text-xs text-base-content/50">
@@ -141,27 +111,52 @@ function ModelPool({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {categoryOrder.map((cat) => {
-            const catModels = grouped[cat]
-            if (!catModels || catModels.length === 0) return null
-            return (
-              <div key={cat}>
-                <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${CATEGORY_COLORS[cat]}`}>
-                  {CATEGORY_LABELS[cat]}
-                </div>
-                <div className="flex flex-col gap-1">
-                  {catModels.map((model) => (
-                    <ModelRow
-                      key={model.id}
-                      model={model}
-                      isSelected={model.id === selectedModelId}
-                      onSelect={() => onSelectModel(model.id)}
-                    />
-                  ))}
-                </div>
+          {/* CLAUDE section */}
+          {claudeModels.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-amber-400">
+                CLAUDE
               </div>
-            )
-          })}
+              <div className="flex flex-col gap-1">
+                {claudeModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    isSelected={model.id === selectedModelId}
+                    onSelect={() => onSelectModel(model.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* OLLAMA section with family subcategories */}
+          {ollamaModels.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-cyan-400">
+                OLLAMA
+              </div>
+              <div className="flex flex-col gap-2 ml-1">
+                {sortedFamilies.map((family) => (
+                  <div key={family}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide mb-1 text-base-content/40 pl-1">
+                      {family}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {ollamaFamilies[family].map((model) => (
+                        <ModelRow
+                          key={model.id}
+                          model={model}
+                          isSelected={model.id === selectedModelId}
+                          onSelect={() => onSelectModel(model.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

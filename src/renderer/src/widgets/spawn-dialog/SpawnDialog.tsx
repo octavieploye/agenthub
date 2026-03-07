@@ -16,6 +16,7 @@ function catalogToModelInfo(entry: ModelCatalogEntry): ModelInfo {
     name: entry.name,
     provider: entry.provider,
     category: entry.category,
+    family: entry.family,
     available: entry.available,
     contextWindow: entry.contextWindow,
     unavailableReason: entry.unavailableReason,
@@ -172,7 +173,6 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
               setSelectedModel(modelId)
               setStep('pre-launch')
             }}
-            groupByCategory={true}
           />
           <button
             onClick={() => setStep('pre-launch')}

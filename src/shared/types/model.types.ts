@@ -9,6 +9,7 @@ export interface ModelCatalogEntry {
   name: string
   provider: ModelProvider
   category: ModelCategory
+  family?: string
   contextWindow: number
   available: boolean
   unavailableReason?: string

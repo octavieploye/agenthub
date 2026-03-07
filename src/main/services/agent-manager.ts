@@ -142,17 +142,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
   const modelFlag = agentState.model ? ` --model ${agentState.model}` : ''
+  const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   if (task) {
     setTimeout(() => {
-      const cmd = `claude${modelFlag} "${task.replace(/"/g, '\\"')}"\n`
+      const cmd = `claude${modelFlag}${effortFlag} "${task.replace(/"/g, '\\"')}"\n`
       ptyProcess.write(cmd)
-      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, task })
+      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     // Just launch claude in interactive mode
     setTimeout(() => {
-      ptyProcess.write(`claude${modelFlag}\n`)
-      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model })
+      ptyProcess.write(`claude${modelFlag}${effortFlag}\n`)
+      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model, effort: agentState.effortLevel })
     }, 500)
   }
 
@@ -245,6 +246,8 @@ export function updateAgentModel(
     managed.state.provider = provider
     managed.state.effortLevel = effortLevel
     // Send /model command to running agent to switch model live
+    // Note: effort level can only be changed via /model picker's arrow keys in the TUI,
+    // there is no /effort slash command. Effort is set at spawn via --effort flag.
     managed.ptyProcess.write(`/model ${model}\n`)
   }
   dbUpdateAgentModel(getDb(), agentId, model, provider, effortLevel)
