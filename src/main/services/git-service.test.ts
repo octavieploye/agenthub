@@ -292,5 +292,211 @@ describe('GitService', () => {
       const msg = service.suggestCommitMessage('/test/repo')
       expect(msg).toBe('')
     })
+
+    it('includes function name when a single function is added in diff', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/main/services/git-service.ts\n')
+      // getStagedDiffSafe: diff with a single function hunk
+      mockExec.mockReturnValueOnce(
+        [
+          'diff --git a/src/main/services/git-service.ts b/src/main/services/git-service.ts',
+          '--- a/src/main/services/git-service.ts',
+          '+++ b/src/main/services/git-service.ts',
+          '@@ -10,6 +10,12 @@ class GitService',
+          '+  function parseCommitMessage(raw: string): string {',
+          '+    return raw.trim()',
+          '+  }'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('parseCommitMessage')
+    })
+
+    it('uses "add" verb for all new files', () => {
+      // getStagedFiles: all new files
+      mockExec.mockReturnValueOnce('A\tsrc/renderer/DiffViewer.tsx\nA\tsrc/renderer/DiffViewer.test.tsx\n')
+      // getStagedDiffSafe: diff with additions
+      mockExec.mockReturnValueOnce(
+        [
+          '+export function DiffViewer() {',
+          '+  return <div>Diff</div>',
+          '+}'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('add')
+      expect(msg).not.toContain('implement')
+    })
+
+    it('uses "remove" verb for all deleted files', () => {
+      // getStagedFiles: all deleted
+      mockExec.mockReturnValueOnce('D\tsrc/main/old-helper.ts\nD\tsrc/main/legacy-utils.ts\n')
+      // getStagedDiffSafe: diff with deletions
+      mockExec.mockReturnValueOnce(
+        [
+          '-export function oldHelper() {}',
+          '-export function legacyUtil() {}'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('remove')
+    })
+
+    it('detects "refactor" when diff changes are balanced', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/renderer/App.tsx\n')
+      // getStagedDiffSafe: balanced additions and deletions
+      mockExec.mockReturnValueOnce(
+        [
+          '@@ -5,10 +5,10 @@ function App',
+          '-  const oldName = "hello"',
+          '-  const oldValue = 42',
+          '-  const oldFlag = true',
+          '-  const oldCount = 0',
+          '-  const oldLabel = "world"',
+          '+  const newName = "hello"',
+          '+  const newValue = 42',
+          '+  const newFlag = true',
+          '+  const newCount = 0',
+          '+  const newLabel = "world"'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('refactor')
+    })
+
+    it('includes directory scope from file path', () => {
+      // getStagedFiles: file under src/renderer
+      mockExec.mockReturnValueOnce('A\tsrc/renderer/components/DiffViewer.tsx\n')
+      // getStagedDiffSafe: diff with a component
+      mockExec.mockReturnValueOnce(
+        [
+          '+export function DiffViewer() {',
+          '+  return <div>viewer</div>',
+          '+}'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('renderer')
+    })
+
+    it('handles empty diff gracefully and still produces a message', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/main/index.ts\n')
+      // getStagedDiffSafe: empty diff
+      mockExec.mockReturnValueOnce('')
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toBeTruthy()
+      expect(msg).toContain('update')
+    })
+
+    it('handles diff fetch failure gracefully', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/main/index.ts\n')
+      // getStagedDiffSafe: throws error
+      mockExec.mockImplementationOnce(() => {
+        throw new Error('git diff failed')
+      })
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toBeTruthy()
+      expect(msg).toContain('update')
+    })
+
+    it('uses "implement" when diff is mostly additions', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/main/services/new-feature.ts\n')
+      // getStagedDiffSafe: mostly additions
+      mockExec.mockReturnValueOnce(
+        [
+          '@@ -1,2 +1,20 @@',
+          '-// placeholder',
+          '+export class NewFeature {',
+          '+  private value: string',
+          '+  constructor(val: string) {',
+          '+    this.value = val',
+          '+  }',
+          '+  getValue(): string {',
+          '+    return this.value',
+          '+  }',
+          '+  setValue(val: string): void {',
+          '+    this.value = val',
+          '+  }',
+          '+  reset(): void {',
+          '+    this.value = ""',
+          '+  }',
+          '+  isEmpty(): boolean {',
+          '+    return this.value === ""',
+          '+  }',
+          '+  toString(): string {',
+          '+    return this.value',
+          '+  }',
+          '+}'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('implement')
+    })
+
+    it('uses "clean up" when diff is mostly deletions', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/renderer/App.tsx\n')
+      // getStagedDiffSafe: mostly deletions
+      mockExec.mockReturnValueOnce(
+        [
+          '@@ -1,20 +1,2 @@',
+          '-import { unused1 } from "./unused1"',
+          '-import { unused2 } from "./unused2"',
+          '-import { unused3 } from "./unused3"',
+          '-import { unused4 } from "./unused4"',
+          '-import { unused5 } from "./unused5"',
+          '-import { unused6 } from "./unused6"',
+          '-import { unused7 } from "./unused7"',
+          '-import { unused8 } from "./unused8"',
+          '-import { unused9 } from "./unused9"',
+          '-import { unused10 } from "./unused10"',
+          '+import { used } from "./used"'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('clean up')
+    })
+
+    it('extracts class name from hunk header context', () => {
+      // getStagedFiles: one modified file
+      mockExec.mockReturnValueOnce('M\tsrc/main/services/agent-manager.ts\n')
+      // getStagedDiffSafe: hunk header with class name
+      mockExec.mockReturnValueOnce(
+        [
+          'diff --git a/src/main/services/agent-manager.ts b/src/main/services/agent-manager.ts',
+          '--- a/src/main/services/agent-manager.ts',
+          '+++ b/src/main/services/agent-manager.ts',
+          '@@ -50,6 +50,8 @@ class AgentManager',
+          '+    this.timeout = 5000',
+          '+    this.retries = 3'
+        ].join('\n') + '\n'
+      )
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('AgentManager')
+    })
+
+    it('uses multi scope for files in different src subdirectories', () => {
+      // getStagedFiles: files in different src subdirectories
+      mockExec.mockReturnValueOnce('M\tsrc/main/index.ts\nM\tsrc/renderer/App.tsx\n')
+      // getStagedDiffSafe: some diff
+      mockExec.mockReturnValueOnce('+const x = 1\n')
+
+      const msg = service.suggestCommitMessage('/test/repo')
+      expect(msg).toContain('multi')
+    })
   })
 })

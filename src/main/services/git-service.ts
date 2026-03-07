@@ -102,8 +102,13 @@ export class GitService {
     const staged = this.getStagedFiles(repoPath)
     if (staged.length === 0) return ''
 
+    const diffContent = this.getStagedDiffSafe(repoPath)
+    const diffAnalysis = this.analyzeDiff(diffContent)
+    const extractedNames = this.extractNamesFromDiff(diffContent)
+
     const types = new Set<string>()
     const scopes = new Set<string>()
+    const directories = new Set<string>()
 
     for (const file of staged) {
       const ext = file.path.split('.').pop() ?? ''
@@ -125,20 +130,133 @@ export class GitService {
         const subdir = file.path.split('/')[1] ?? ''
         if (subdir) scopes.add(subdir)
       }
+
+      const parentDir = this.getParentDirectory(file.path)
+      if (parentDir) directories.add(parentDir)
     }
 
     const type = types.size === 1 ? [...types][0] : 'feat'
-    const scope = scopes.size === 1 ? [...scopes][0] : scopes.size > 1 ? 'multi' : ''
+    const scope = this.resolveScope(scopes, directories)
     const prefix = scope ? `${type}(${scope})` : type
-    const fileCount = staged.length
-    const verb =
-      staged.every((f) => f.status === 'A')
-        ? 'add'
-        : staged.every((f) => f.status === 'D')
-          ? 'remove'
-          : 'update'
+    const verb = this.resolveVerb(staged, diffAnalysis)
+    const subject = this.resolveSubject(staged, extractedNames, verb)
 
-    return `${prefix}: ${verb} ${fileCount} file${fileCount !== 1 ? 's' : ''}`
+    return `${prefix}: ${verb} ${subject}`
+  }
+
+  private getStagedDiffSafe(repoPath: string): string {
+    try {
+      return this.exec(['diff', '--cached'], repoPath)
+    } catch {
+      return ''
+    }
+  }
+
+  private analyzeDiff(diff: string): { additions: number; deletions: number } {
+    if (!diff) return { additions: 0, deletions: 0 }
+
+    let additions = 0
+    let deletions = 0
+
+    for (const line of diff.split('\n')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        additions++
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        deletions++
+      }
+    }
+
+    return { additions, deletions }
+  }
+
+  private extractNamesFromDiff(diff: string): string[] {
+    if (!diff) return []
+
+    const names: string[] = []
+    const seen = new Set<string>()
+
+    for (const line of diff.split('\n')) {
+      // Parse hunk headers: @@ -a,b +c,d @@ functionName or className
+      const hunkMatch = line.match(/^@@\s[^@]+@@\s+(?:(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface|type|enum|const|let|var)\s+)?(\w+)/)
+      if (hunkMatch && hunkMatch[1] && !seen.has(hunkMatch[1])) {
+        seen.add(hunkMatch[1])
+        names.push(hunkMatch[1])
+        continue
+      }
+
+      // Parse added lines for declarations
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        const declMatch = line.match(/^\+\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface|type|enum)\s+(\w+)/)
+        if (declMatch && declMatch[1] && !seen.has(declMatch[1])) {
+          seen.add(declMatch[1])
+          names.push(declMatch[1])
+          continue
+        }
+
+        const constMatch = line.match(/^\+\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=/)
+        if (constMatch && constMatch[1] && !seen.has(constMatch[1])) {
+          seen.add(constMatch[1])
+          names.push(constMatch[1])
+        }
+      }
+    }
+
+    return names
+  }
+
+  private getParentDirectory(filePath: string): string {
+    const parts = filePath.split('/')
+    if (parts.length <= 1) return ''
+    return parts[parts.length - 2]
+  }
+
+  private resolveScope(scopes: Set<string>, directories: Set<string>): string {
+    if (scopes.size === 1) return [...scopes][0]
+    if (scopes.size > 1) return 'multi'
+    if (directories.size === 1) return [...directories][0]
+    if (directories.size > 1) return 'multi'
+    return ''
+  }
+
+  private resolveVerb(staged: GitFileChange[], diffAnalysis: { additions: number; deletions: number }): string {
+    if (staged.every((f) => f.status === 'A')) return 'add'
+    if (staged.every((f) => f.status === 'D')) return 'remove'
+
+    const { additions, deletions } = diffAnalysis
+    const total = additions + deletions
+    if (total === 0) return 'update'
+
+    const addRatio = additions / total
+    const delRatio = deletions / total
+
+    if (addRatio > 0.8) return 'implement'
+    if (delRatio > 0.8) return 'clean up'
+    if (addRatio > 0.4 && delRatio > 0.4) return 'refactor'
+
+    return 'update'
+  }
+
+  private resolveSubject(staged: GitFileChange[], extractedNames: string[], verb: string): string {
+    // If a single function/class was changed, mention it by name
+    if (extractedNames.length === 1) {
+      return extractedNames[0]
+    }
+
+    // If we have a few extracted names, mention the most relevant one
+    if (extractedNames.length > 1 && extractedNames.length <= 3) {
+      return `${extractedNames[extractedNames.length - 1]} and related changes`
+    }
+
+    // If a single file, use the file basename without extension
+    if (staged.length === 1) {
+      const filename = staged[0].path.split('/').pop() ?? ''
+      const nameWithoutExt = filename.replace(/\.\w+$/, '')
+      return nameWithoutExt || filename
+    }
+
+    // Fallback to file count
+    const fileCount = staged.length
+    return `${fileCount} file${fileCount !== 1 ? 's' : ''}`
   }
 
   private getCurrentBranch(repoPath: string): string {
