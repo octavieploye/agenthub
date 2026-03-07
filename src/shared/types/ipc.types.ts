@@ -40,6 +40,7 @@ export interface AgentHubBridge {
     create: (input: import('./task.types').CreateTaskInput) => Promise<IpcResponse<import('./task.types').TaskItem>>
     update: (id: string, input: import('./task.types').UpdateTaskInput) => Promise<IpcResponse<void>>
     delete: (id: string) => Promise<IpcResponse<void>>
+    search: (query: string) => Promise<IpcResponse<import('./task.types').TaskItem[]>>
   }
   clips: {
     list: () => Promise<IpcResponse<import('./clip.types').ClipItem[]>>
@@ -72,6 +73,11 @@ export interface AgentHubBridge {
   }
   health: {
     getSnapshot: (agentId: string) => Promise<IpcResponse<unknown>>
+  }
+  snapshots: {
+    take: (trigger?: string) => Promise<IpcResponse<import('./recovery.types').SessionSnapshot>>
+    getLatest: () => Promise<IpcResponse<import('./recovery.types').SessionSnapshot | null>>
+    prune: () => Promise<IpcResponse<{ deleted: number }>>
   }
   recovery: {
     getInfo: () => Promise<IpcResponse<import('./recovery.types').RecoveryInfo>>
@@ -131,5 +137,6 @@ export interface AgentHubBridge {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
     agentExit: (callback: (agentId: string, exitCode: number) => void) => () => void
+    snapshotSaved: (callback: () => void) => () => void
   }
 }

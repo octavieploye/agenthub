@@ -7,6 +7,7 @@ import {
   getAllTasks,
   getTasksByRepo,
   getTasksByStatus,
+  searchTasks,
   insertTask,
   updateTask,
   deleteTask
@@ -116,6 +117,19 @@ export function registerTasksHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('TASKS_DELETE_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.TASKS.SEARCH,
+    async (_event, query: unknown): Promise<IpcResponse<TaskItem[]>> => {
+      try {
+        const validation = validateInput(z.string(), query)
+        if (!validation.valid) return validation.response
+        return success(searchTasks(getDb(), validation.data))
+      } catch (err) {
+        return error('TASKS_SEARCH_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

@@ -111,6 +111,16 @@ export function deleteTask(db: Database.Database, id: string): void {
   log.info('Task deleted', { id })
 }
 
+export function searchTasks(db: Database.Database, query: string): TaskItem[] {
+  const pattern = `%${query}%`
+  const rows = db
+    .prepare(
+      `SELECT * FROM tasks WHERE title LIKE ? OR description LIKE ? ORDER BY priority ASC, created_at DESC`
+    )
+    .all(pattern, pattern)
+  return rows.map((r) => mapRow(r as Record<string, unknown>))
+}
+
 export function getCompletedTasksSince(db: Database.Database, since: string): TaskItem[] {
   const rows = db
     .prepare(

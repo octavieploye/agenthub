@@ -31,7 +31,8 @@ const agentHubBridge = {
     getByStatus: (status: string) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.GET_BY_STATUS, status),
     create: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.CREATE, input),
     update: (id: string, input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.UPDATE, id, input),
-    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.DELETE, id)
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.DELETE, id),
+    search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.TASKS.SEARCH, query)
   },
   clips: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPS.LIST),
@@ -171,6 +172,11 @@ const agentHubBridge = {
       ): void => callback(agentId, exitCode)
       ipcRenderer.on(IPC_EVENTS.AGENTS.EXIT, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.AGENTS.EXIT, handler)
+    },
+    snapshotSaved: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED, handler)
     }
   }
 }

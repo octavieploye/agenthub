@@ -123,30 +123,21 @@ const allEvents = eventEntries.map((e) => e.value)
 
 /**
  * Channel constant paths intentionally excluded from the preload bridge.
- * - IPC_CHANNELS.TASKS.SEARCH ('tasks:search'): Defined in IPC_CHANNELS but
- *   not yet implemented (no handler exists and no preload method). Known gap.
+ * Currently none — all channels are wired.
  */
-const PRELOAD_EXCLUSIONS: string[] = [
-  'IPC_CHANNELS.TASKS.SEARCH'
-]
+const PRELOAD_EXCLUSIONS: string[] = []
 
 /**
  * Channel constant paths intentionally excluded from IPC handler checks.
- * - IPC_CHANNELS.TASKS.SEARCH: No handler implemented yet.
+ * Currently none — all channels have handlers.
  */
-const HANDLER_EXCLUSIONS: string[] = [
-  'IPC_CHANNELS.TASKS.SEARCH'
-]
+const HANDLER_EXCLUSIONS: string[] = []
 
 /**
  * Event constant paths intentionally excluded from preload wiring.
- * - IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED ('on-recovery:snapshot-saved'):
- *   Sent from main to renderer but not yet exposed through the preload
- *   bridge (no renderer consumer wired).
+ * Currently none — all events are wired.
  */
-const EVENT_PRELOAD_EXCLUSIONS: string[] = [
-  'IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED'
-]
+const EVENT_PRELOAD_EXCLUSIONS: string[] = []
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -236,18 +227,10 @@ describe('IPC Layer Integration — Structural Consistency', () => {
     })
 
     /**
-     * Preload namespaces that exist in the implementation but are missing
-     * from the AgentHubBridge type declaration. These are real type gaps
-     * that should be fixed by adding the namespace to the interface in
-     * src/shared/types/ipc.types.ts.
-     *
-     * - 'snapshots': Implemented in preload (take, getLatest, prune) and
-     *   has IPC handlers + IPC_CHANNELS entries, but was never added to
-     *   the AgentHubBridge interface. Renderer code using
-     *   window.agentHub.snapshots will work at runtime but has no type
-     *   safety.
+     * Preload namespaces excluded from the AgentHubBridge type check.
+     * Currently none — all namespaces are typed.
      */
-    const TYPE_GAP_EXCLUSIONS: string[] = ['snapshots']
+    const TYPE_GAP_EXCLUSIONS: string[] = []
 
     it('every preload namespace should exist in the AgentHubBridge type', () => {
       if (!preloadBridgeMatch) return
