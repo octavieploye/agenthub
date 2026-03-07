@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useThemeStore } from '@renderer/stores/theme-store'
 import { terminalCache } from '@renderer/services/terminal-cache'
@@ -18,21 +17,21 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   useEffect(() => {
     if (!containerRef.current) return
 
-    const term = terminalCache.getOrCreate(agentId)
+    terminalCache.getOrCreate(agentId)
     terminalCache.attach(agentId, containerRef.current)
 
     // Handle resize
     const container = containerRef.current
     const resizeObserver = new ResizeObserver(() => {
       if (container) {
-        const { cols, rows } = fitTerminal(container, term)
+        const { cols, rows } = fitTerminal(agentId)
         window.agentHub.agents.resize(agentId, cols, rows)
       }
     })
     resizeObserver.observe(container)
 
     // Initial fit
-    const { cols, rows } = fitTerminal(container, term)
+    const { cols, rows } = fitTerminal(agentId)
     window.agentHub.agents.resize(agentId, cols, rows)
 
     onReady?.()
@@ -55,7 +54,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       if (term) {
         requestAnimationFrame(() => {
           if (containerRef.current) {
-            const { cols, rows } = fitTerminal(containerRef.current, term)
+            const { cols, rows } = fitTerminal(agentId)
             window.agentHub.agents.resize(agentId, cols, rows)
             term.focus()
           }
@@ -78,19 +77,12 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   )
 }
 
-function fitTerminal(
-  container: HTMLElement,
-  term: Terminal
-): { cols: number; rows: number } {
-  const dims = term.options.fontSize ?? 13
-  const lineHeight = Math.ceil(dims * 1.2)
-  const charWidth = dims * 0.6
-
-  const cols = Math.max(2, Math.floor(container.clientWidth / charWidth))
-  const rows = Math.max(2, Math.floor(container.clientHeight / lineHeight))
-
-  term.resize(cols, rows)
-  return { cols, rows }
+function fitTerminal(agentId: string): { cols: number; rows: number } {
+  const term = terminalCache.get(agentId)
+  const fitAddon = terminalCache.getFitAddon(agentId)
+  if (!term || !fitAddon) return { cols: 80, rows: 24 }
+  fitAddon.fit()
+  return { cols: term.cols, rows: term.rows }
 }
 
 export default FullTerminal

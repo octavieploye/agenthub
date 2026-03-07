@@ -1,9 +1,11 @@
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { FitAddon } from '@xterm/addon-fit'
 import { getXtermTheme } from '../widgets/full-terminal/theme-bridge'
 
 interface CachedTerminal {
   term: Terminal
+  fitAddon: FitAddon
   cleanups: (() => void)[]
   offscreen: HTMLDivElement
 }
@@ -47,6 +49,9 @@ class TerminalCache {
       // WebGL not available — falls back to canvas renderer
     }
 
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+
     const cleanups: (() => void)[] = []
 
     // Subscribe to agent PTY output (once, lives for the cache entry lifetime)
@@ -61,7 +66,7 @@ class TerminalCache {
     })
     cleanups.push(() => disposable.dispose())
 
-    this.cache.set(agentId, { term, cleanups, offscreen })
+    this.cache.set(agentId, { term, fitAddon, cleanups, offscreen })
     return term
   }
 
@@ -85,6 +90,10 @@ class TerminalCache {
 
   get(agentId: string): Terminal | null {
     return this.cache.get(agentId)?.term ?? null
+  }
+
+  getFitAddon(agentId: string): FitAddon | null {
+    return this.cache.get(agentId)?.fitAddon ?? null
   }
 
   has(agentId: string): boolean {
