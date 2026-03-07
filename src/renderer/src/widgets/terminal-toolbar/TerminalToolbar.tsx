@@ -7,6 +7,7 @@ interface TerminalToolbarProps {
   onResume?: (agentId: string) => void
   onStop: (agentId: string) => void
   onForceKill: (agentId: string) => void
+  onBreakout?: (agentId: string) => void
 }
 
 function TerminalToolbar({
@@ -14,7 +15,8 @@ function TerminalToolbar({
   onPause,
   onResume,
   onStop,
-  onForceKill
+  onForceKill,
+  onBreakout
 }: TerminalToolbarProps): React.JSX.Element {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTerminal = agent.status === 'completed' || agent.status === 'interrupted'
@@ -75,6 +77,18 @@ function TerminalToolbar({
       >
         Force Kill
       </button>
+
+      {onBreakout && (
+        <div className="ml-auto">
+          <button
+            data-testid="toolbar-breakout"
+            className="btn btn-xs btn-ghost"
+            onClick={() => onBreakout(agent.id)}
+          >
+            Breakout
+          </button>
+        </div>
+      )}
     </div>
   )
 }

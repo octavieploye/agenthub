@@ -120,4 +120,24 @@ describe('TerminalToolbar', () => {
       expect(screen.getByTestId('toolbar-force-kill')).toBeDisabled()
     })
   })
+
+  describe('breakout button', () => {
+    it('renders Breakout button when onBreakout prop is provided', () => {
+      const onBreakout = vi.fn()
+      render(<TerminalToolbar {...defaultProps} onBreakout={onBreakout} />)
+      expect(screen.getByTestId('toolbar-breakout')).toBeInTheDocument()
+    })
+
+    it('does not render Breakout button when onBreakout prop is not provided', () => {
+      render(<TerminalToolbar {...defaultProps} />)
+      expect(screen.queryByTestId('toolbar-breakout')).not.toBeInTheDocument()
+    })
+
+    it('fires onBreakout with agent id when Breakout clicked', () => {
+      const onBreakout = vi.fn()
+      render(<TerminalToolbar {...defaultProps} onBreakout={onBreakout} />)
+      fireEvent.click(screen.getByTestId('toolbar-breakout'))
+      expect(onBreakout).toHaveBeenCalledWith('agent-1')
+    })
+  })
 })

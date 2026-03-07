@@ -16,6 +16,8 @@ import { registerNotesHandlers } from './notes.ipc'
 import { registerHistoryHandlers } from './history.ipc'
 import { registerGitHandlers } from './git.ipc'
 import { registerSkillsHandlers } from './skills.ipc'
+import { registerWindowsHandlers } from './windows.ipc'
+import { registerSettingsHandlers } from './settings.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -35,5 +37,7 @@ export function registerAllIpcHandlers(): void {
   registerHistoryHandlers()
   registerGitHandlers()
   registerSkillsHandlers()
+  registerWindowsHandlers()
+  registerSettingsHandlers()
   log.info('All IPC handlers registered')
 }

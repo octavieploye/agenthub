@@ -9,6 +9,7 @@ interface SABarProps {
   agents: AgentState[]
   onCodeBlue?: () => void
   selectedAgentRepoPath?: string
+  onOpenSettings?: () => void
 }
 
 const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
@@ -24,7 +25,7 @@ const VIEW_MODES = [
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue, selectedAgentRepoPath }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
@@ -114,6 +115,18 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath }: SABarProps): React
 
       {/* Theme switcher */}
       <ThemeSwitcher />
+
+      {/* Settings button */}
+      {onOpenSettings && (
+        <button
+          data-testid="sa-settings"
+          className="btn btn-xs btn-ghost"
+          onClick={onOpenSettings}
+          title="Settings"
+        >
+          Settings
+        </button>
+      )}
     </header>
   )
 }

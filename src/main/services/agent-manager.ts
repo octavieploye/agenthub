@@ -19,15 +19,11 @@ interface ManagedAgent {
 
 const agents = new Map<string, ManagedAgent>()
 
-function getMainWindow(): BrowserWindow | null {
-  const windows = BrowserWindow.getAllWindows()
-  return windows[0] ?? null
-}
-
-function emitToRenderer(channel: string, ...args: unknown[]): void {
-  const win = getMainWindow()
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(channel, ...args)
+function emitToAllRenderers(channel: string, ...args: unknown[]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, ...args)
+    }
   }
 }
 
@@ -96,7 +92,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const parser = createParser() as ClaudeCliOutputParser
 
   ptyProcess.onData((data: string) => {
-    emitToRenderer(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, data)
+    emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, data)
 
     // Buffer output for batched DB persistence
     const managed = agents.get(agentState.id)
@@ -117,7 +113,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         mgd.state.status = newStatus
         mgd.state.confidence = parsed.confidence
         updateAgentStatus(db, agentState.id, newStatus, parsed.confidence)
-        emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed.confidence)
+        emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed.confidence)
         log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed.confidence })
       }
     }
@@ -129,8 +125,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
     log.info('Agent exited', { id: agentState.id, exitCode })
     updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
-    emitToRenderer(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
-    emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
+    emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
+    emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
     agents.delete(agentState.id)
   })
 
@@ -139,7 +135,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.confidence = 'inferred'
 
   agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null })
-  emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
+  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
@@ -185,7 +181,7 @@ export function killAgent(agentId: string): void {
 
   const db = getDb()
   updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
-  emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
+  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
   agents.delete(agentId)
 }
 
@@ -199,7 +195,7 @@ export function pauseAgent(agentId: string): void {
   const db = getDb()
   updateAgentStatus(db, agentId, 'paused', 'confirmed')
   managed.state.status = 'paused'
-  emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'paused', 'confirmed')
+  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'paused', 'confirmed')
 }
 
 export function resumeAgent(agentId: string): void {
@@ -212,7 +208,7 @@ export function resumeAgent(agentId: string): void {
   const db = getDb()
   updateAgentStatus(db, agentId, 'busy', 'inferred')
   managed.state.status = 'busy'
-  emitToRenderer(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'busy', 'inferred')
+  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'busy', 'inferred')
 }
 
 export function getAgentState(agentId: string): AgentState | null {

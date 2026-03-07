@@ -11,6 +11,8 @@ import { AutoPauseService } from './auto-pause'
 import { TrayManager } from './tray-manager'
 import { GitService } from './git-service'
 import { SkillsService } from './skills-service'
+import { WindowManager } from './window-manager'
+import { SettingsService } from './settings-service'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -24,16 +26,19 @@ let autoPauseService: AutoPauseService | null = null
 let trayManager: TrayManager | null = null
 let gitService: GitService | null = null
 let skillsService: SkillsService | null = null
+let windowManager: WindowManager | null = null
+let settingsService: SettingsService | null = null
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
   return windows[0] ?? null
 }
 
-function emitToRenderer(channel: string, ...args: unknown[]): void {
-  const win = getMainWindow()
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(channel, ...args)
+function emitToAllRenderers(channel: string, ...args: unknown[]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, ...args)
+    }
   }
 }
 
@@ -69,7 +74,7 @@ export function initializeServices(db: Database.Database): void {
         new Notification({ title, body }).show()
       }
     },
-    emitToRenderer,
+    emitToRenderer: emitToAllRenderers,
     logWarning: (message: string, meta?: Record<string, unknown>) => {
       log.warn(message, meta)
     }
@@ -153,6 +158,20 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 9. WindowManager — creates/tracks breakout terminal windows
+  windowManager = new WindowManager({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    }
+  })
+
+  // 10. SettingsService — app-level settings persistence
+  settingsService = new SettingsService(db, {
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    }
+  })
+
   log.info('All services initialized')
 }
 
@@ -169,6 +188,7 @@ export function stopServices(): void {
   claudeMonitor?.stop()
   healthMonitor?.stopWatchdog()
   autoPauseService?.stopReminderTimer()
+  windowManager?.closeAll()
   trayManager?.destroy()
   log.info('All services stopped')
 }
@@ -195,4 +215,12 @@ export function getGitService(): GitService | null {
 
 export function getSkillsService(): SkillsService | null {
   return skillsService
+}
+
+export function getWindowManager(): WindowManager | null {
+  return windowManager
+}
+
+export function getSettingsService(): SettingsService | null {
+  return settingsService
 }

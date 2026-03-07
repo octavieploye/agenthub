@@ -11,6 +11,7 @@ interface AgentContextMenuProps {
   onCopyId: (agentId: string) => void
   onSendTask?: (agentId: string) => void
   onViewNotes?: (agentId: string) => void
+  onBreakout?: (agentId: string) => void
 }
 
 function AgentContextMenu({
@@ -23,7 +24,8 @@ function AgentContextMenu({
   onViewOutput,
   onCopyId,
   onSendTask,
-  onViewNotes
+  onViewNotes,
+  onBreakout
 }: AgentContextMenuProps): React.JSX.Element {
   const handleAction = (action: (agentId: string) => void): void => {
     action(agent.id)
@@ -85,6 +87,16 @@ function AgentContextMenu({
           onClick={() => handleAction(onViewNotes)}
         >
           View Notes
+        </button>
+      )}
+
+      {onBreakout && (
+        <button
+          data-testid="context-menu-breakout"
+          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          onClick={() => handleAction(onBreakout)}
+        >
+          Breakout Terminal
         </button>
       )}
 

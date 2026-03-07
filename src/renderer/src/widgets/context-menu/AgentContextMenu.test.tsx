@@ -148,4 +148,25 @@ describe('AgentContextMenu', () => {
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
   })
+
+  describe('breakout terminal menu item', () => {
+    it('renders Breakout Terminal item when onBreakout prop is provided', () => {
+      const onBreakout = vi.fn()
+      render(<AgentContextMenu {...defaultProps} onBreakout={onBreakout} />)
+      expect(screen.getByTestId('context-menu-breakout')).toBeInTheDocument()
+    })
+
+    it('does not render Breakout Terminal item when onBreakout prop is not provided', () => {
+      render(<AgentContextMenu {...defaultProps} />)
+      expect(screen.queryByTestId('context-menu-breakout')).not.toBeInTheDocument()
+    })
+
+    it('fires onBreakout with agent id and closes menu when Breakout Terminal clicked', () => {
+      const onBreakout = vi.fn()
+      render(<AgentContextMenu {...defaultProps} onBreakout={onBreakout} />)
+      fireEvent.click(screen.getByTestId('context-menu-breakout'))
+      expect(onBreakout).toHaveBeenCalledWith('agent-1')
+      expect(defaultProps.onClose).toHaveBeenCalled()
+    })
+  })
 })

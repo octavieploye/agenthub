@@ -18,6 +18,8 @@ import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
 import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
 import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
+import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
+import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -27,6 +29,19 @@ import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
 
 function App(): React.JSX.Element {
+  // Detect breakout mode from URL search params
+  const urlParams = new URLSearchParams(window.location.search)
+  const isBreakout = urlParams.get('breakout') === 'true'
+  const breakoutAgentId = urlParams.get('agentId')
+
+  if (isBreakout && breakoutAgentId) {
+    return <BreakoutLayout agentId={breakoutAgentId} />
+  }
+
+  return <AppMain />
+}
+
+function AppMain(): React.JSX.Element {
   const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
@@ -62,6 +77,9 @@ function App(): React.JSX.Element {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ agentId: string; position: { x: number; y: number } } | null>(null)
+
+  // Settings panel
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
@@ -303,6 +321,14 @@ function App(): React.JSX.Element {
     }
   }, [])
 
+  const handleBreakout = useCallback(async (agentId: string) => {
+    try {
+      await window.agentHub.windows.createBreakout(agentId)
+    } catch (err) {
+      console.error('Breakout failed:', err)
+    }
+  }, [])
+
   const handleSpawnWithTask = useCallback(
     (task: string) => {
       const agent = activeAgentId ? agents.get(activeAgentId) : null
@@ -434,6 +460,7 @@ function App(): React.JSX.Element {
         agents={agentList}
         onCodeBlue={handleCodeBlueActivate}
         selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {/* Main layout: sidebar + content */}
@@ -535,6 +562,7 @@ function App(): React.JSX.Element {
                     onKill={handleKillRequest}
                     onSendInput={handleSendInput}
                     onSpawnWithTask={handleSpawnWithTask}
+                    onBreakout={handleBreakout}
                   />
                   {/* Global inline task input — visible when agent selected */}
                   <InlineTaskInput
@@ -663,8 +691,12 @@ function App(): React.JSX.Element {
           onViewNotes={(agentId) => {
             handleSelectAgent(agentId)
           }}
+          onBreakout={handleBreakout}
         />
       )}
+
+      {/* Settings panel */}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

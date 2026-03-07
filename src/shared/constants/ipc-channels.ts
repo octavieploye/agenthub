@@ -99,6 +99,18 @@ export const IPC_CHANNELS = {
     EXECUTE: 'skills:execute',
     REFRESH: 'skills:refresh'
   },
+  WINDOWS: {
+    CREATE_BREAKOUT: 'windows:create-breakout',
+    CLOSE_BREAKOUT: 'windows:close-breakout',
+    LIST_BREAKOUTS: 'windows:list-breakouts',
+    FOCUS_BREAKOUT: 'windows:focus-breakout'
+  },
+  SETTINGS: {
+    GET_ALL: 'settings:get-all',
+    SET: 'settings:set',
+    EXPORT: 'settings:export',
+    IMPORT: 'settings:import'
+  },
   SYSTEM: {
     GET_APP_VERSION: 'system:get-app-version',
     GET_PLATFORM: 'system:get-platform',

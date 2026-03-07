@@ -117,6 +117,22 @@ const agentHubBridge = {
     suggestCommit: (repoPath: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT.SUGGEST_COMMIT, repoPath)
   },
+  windows: {
+    createBreakout: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.CREATE_BREAKOUT, agentId),
+    closeBreakout: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.CLOSE_BREAKOUT, agentId),
+    listBreakouts: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.LIST_BREAKOUTS),
+    focusBreakout: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.FOCUS_BREAKOUT, agentId)
+  },
+  settings: {
+    getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.GET_ALL),
+    set: (key: string, value: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.SET, key, value),
+    export: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.EXPORT),
+    import: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.IMPORT, data)
+  },
   system: {
     getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_APP_VERSION),
     getPlatform: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_PLATFORM),

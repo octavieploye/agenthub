@@ -1,10 +1,15 @@
 import { useState, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import FullTerminal from '../full-terminal/FullTerminal'
+import TerminalToolbar from '../terminal-toolbar/TerminalToolbar'
 
 interface TerminalTabProps {
   agent: AgentState
   onSendInput: (agentId: string, data: string) => void
+  onBreakout?: (agentId: string) => void
+  onPause?: (agentId: string) => void
+  onResume?: (agentId: string) => void
+  onKill?: (agentId: string) => void
 }
 
 function getInputConfig(status: AgentState['status']): {
@@ -33,7 +38,7 @@ function getInputConfig(status: AgentState['status']): {
   }
 }
 
-function TerminalTab({ agent, onSendInput }: TerminalTabProps): React.JSX.Element {
+function TerminalTab({ agent, onSendInput, onBreakout, onPause, onResume, onKill }: TerminalTabProps): React.JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const { disabled, placeholder } = getInputConfig(agent.status)
 
@@ -56,6 +61,16 @@ function TerminalTab({ agent, onSendInput }: TerminalTabProps): React.JSX.Elemen
 
   return (
     <div data-testid="terminal-tab" className="flex flex-col h-full">
+      {/* Toolbar with breakout */}
+      <TerminalToolbar
+        agent={agent}
+        onPause={onPause ?? (() => {})}
+        onResume={onResume}
+        onStop={onKill ?? (() => {})}
+        onForceKill={onKill ?? (() => {})}
+        onBreakout={onBreakout}
+      />
+
       {/* Terminal area */}
       <div className="flex-1 min-h-0">
         <FullTerminal agentId={agent.id} visible={true} />

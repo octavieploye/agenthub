@@ -108,6 +108,18 @@ export interface AgentHubBridge {
     getBranches: (repoPath: string) => Promise<IpcResponse<import('./git.types').GitBranchInfo>>
     suggestCommit: (repoPath: string) => Promise<IpcResponse<string>>
   }
+  windows: {
+    createBreakout: (agentId: string) => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo>>
+    closeBreakout: (agentId: string) => Promise<IpcResponse<void>>
+    listBreakouts: () => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo[]>>
+    focusBreakout: (agentId: string) => Promise<IpcResponse<void>>
+  }
+  settings: {
+    getAll: () => Promise<IpcResponse<Record<string, string>>>
+    set: (key: string, value: string) => Promise<IpcResponse<void>>
+    export: () => Promise<IpcResponse<import('./settings.types').SettingsExport>>
+    import: (data: import('./settings.types').SettingsExport) => Promise<IpcResponse<void>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>

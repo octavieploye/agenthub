@@ -18,6 +18,7 @@ interface AgentDetailPanelProps {
   onKill: (agentId: string) => void
   onSendInput: (agentId: string, data: string) => void
   onSpawnWithTask: (task: string) => void
+  onBreakout?: (agentId: string) => void
 }
 
 const tabs: { id: DetailTab; label: string }[] = [
@@ -37,7 +38,8 @@ function AgentDetailPanel({
   onResume,
   onKill,
   onSendInput,
-  onSpawnWithTask
+  onSpawnWithTask,
+  onBreakout
 }: AgentDetailPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
 
@@ -76,7 +78,14 @@ function AgentDetailPanel({
           <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
         )}
         {activeTab === 'terminal' && (
-          <TerminalTab agent={agent} onSendInput={onSendInput} />
+          <TerminalTab
+            agent={agent}
+            onSendInput={onSendInput}
+            onBreakout={onBreakout}
+            onPause={onPause}
+            onResume={onResume}
+            onKill={onKill}
+          />
         )}
         {activeTab === 'notes' && <NotesTab agent={agent} />}
         {activeTab === 'history' && <HistoryTab agent={agent} />}
