@@ -13,7 +13,10 @@ import {
   sendInput,
   resizeAgent,
   updateAgentColor,
-  updateAgentModel
+  updateAgentModel,
+  startPtyProxy,
+  stopPtyProxy,
+  getPtyProxyPath
 } from '../services/agent-manager'
 import { ModelProviderSchema, EffortLevelSchema } from '../../shared/schemas/agent.schemas'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
@@ -183,6 +186,47 @@ export function registerAgentHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('UPDATE_MODEL_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.ATTACH_TERMINAL,
+    async (_event, agentId: unknown): Promise<IpcResponse<{ socketPath: string; attachCommand: string }>> => {
+      try {
+        const validation = validateInput(z.string().uuid(), agentId)
+        if (!validation.valid) return validation.response
+        const result = startPtyProxy(validation.data)
+        return success(result)
+      } catch (err) {
+        return error('ATTACH_TERMINAL_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.DETACH_TERMINAL,
+    async (_event, agentId: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const validation = validateInput(z.string().uuid(), agentId)
+        if (!validation.valid) return validation.response
+        stopPtyProxy(validation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('DETACH_TERMINAL_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.GET_PROXY_PATH,
+    async (_event, agentId: unknown): Promise<IpcResponse<string | null>> => {
+      try {
+        const validation = validateInput(z.string().uuid(), agentId)
+        if (!validation.valid) return validation.response
+        return success(getPtyProxyPath(validation.data))
+      } catch (err) {
+        return error('GET_PROXY_PATH_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

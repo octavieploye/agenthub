@@ -8,6 +8,9 @@ interface TerminalToolbarProps {
   onStop: (agentId: string) => void
   onForceKill: (agentId: string) => void
   onBreakout?: (agentId: string) => void
+  onAttachTerminal?: (agentId: string) => void
+  onDetachTerminal?: (agentId: string) => void
+  proxyActive?: boolean
 }
 
 function TerminalToolbar({
@@ -16,7 +19,10 @@ function TerminalToolbar({
   onResume,
   onStop,
   onForceKill,
-  onBreakout
+  onBreakout,
+  onAttachTerminal,
+  onDetachTerminal,
+  proxyActive
 }: TerminalToolbarProps): React.JSX.Element {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTerminal = agent.status === 'completed' || agent.status === 'interrupted'
@@ -78,8 +84,27 @@ function TerminalToolbar({
         Force Kill
       </button>
 
-      {onBreakout && (
-        <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1">
+        {(onAttachTerminal || onDetachTerminal) && !isTerminal && (
+          proxyActive ? (
+            <button
+              data-testid="toolbar-detach-terminal"
+              className="btn btn-xs btn-ghost text-warning"
+              onClick={() => onDetachTerminal?.(agent.id)}
+            >
+              Detach
+            </button>
+          ) : (
+            <button
+              data-testid="toolbar-attach-terminal"
+              className="btn btn-xs btn-ghost"
+              onClick={() => onAttachTerminal?.(agent.id)}
+            >
+              Attach
+            </button>
+          )
+        )}
+        {onBreakout && (
           <button
             data-testid="toolbar-breakout"
             className="btn btn-xs btn-ghost"
@@ -87,8 +112,8 @@ function TerminalToolbar({
           >
             Breakout
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

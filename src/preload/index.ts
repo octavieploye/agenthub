@@ -17,7 +17,13 @@ const agentHubBridge = {
     updateColor: (agentId: string, color: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color),
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_MODEL, agentId, model, provider, effortLevel)
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_MODEL, agentId, model, provider, effortLevel),
+    attachTerminal: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.ATTACH_TERMINAL, agentId),
+    detachTerminal: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.DETACH_TERMINAL, agentId),
+    getProxyPath: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_PROXY_PATH, agentId)
   },
   models: {
     listAll: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.LIST_ALL),

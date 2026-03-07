@@ -9,7 +9,10 @@ export const IPC_CHANNELS = {
     SEND_INPUT: 'agents:send-input',
     RESIZE: 'agents:resize',
     UPDATE_COLOR: 'agents:update-color',
-    UPDATE_MODEL: 'agents:update-model'
+    UPDATE_MODEL: 'agents:update-model',
+    ATTACH_TERMINAL: 'agents:attach-terminal',
+    DETACH_TERMINAL: 'agents:detach-terminal',
+    GET_PROXY_PATH: 'agents:get-proxy-path'
   },
   MODELS: {
     LIST_ALL: 'models:list-all',

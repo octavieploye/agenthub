@@ -25,6 +25,9 @@ export interface AgentHubBridge {
     resize: (agentId: string, cols: number, rows: number) => Promise<IpcResponse<void>>
     updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) => Promise<IpcResponse<void>>
+    attachTerminal: (agentId: string) => Promise<IpcResponse<{ socketPath: string; attachCommand: string }>>
+    detachTerminal: (agentId: string) => Promise<IpcResponse<void>>
+    getProxyPath: (agentId: string) => Promise<IpcResponse<string | null>>
   }
   models: {
     listAll: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>

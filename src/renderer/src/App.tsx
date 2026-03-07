@@ -173,8 +173,14 @@ function AppMain(): React.JSX.Element {
         pendingSounds.delete(agentId)
       }
 
-      // Clean up cached terminal for this agent
+      // Clean up cached terminal and proxy state for this agent
       terminalCache.dispose(agentId)
+      setProxyAgents((prev) => {
+        if (!prev.has(agentId)) return prev
+        const next = new Set(prev)
+        next.delete(agentId)
+        return next
+      })
 
       if (typeof exitCode === 'number' && exitCode !== 0) {
         updateStatus(agentId, 'error', 'confirmed')
@@ -411,6 +417,36 @@ function AppMain(): React.JSX.Element {
       await window.agentHub.windows.createBreakout(agentId)
     } catch (err) {
       console.error('Breakout failed:', err)
+    }
+  }, [])
+
+  const [proxyAgents, setProxyAgents] = useState<Set<string>>(new Set())
+  const [proxyCommand, setProxyCommand] = useState<string | null>(null)
+
+  const handleAttachTerminal = useCallback(async (agentId: string) => {
+    try {
+      const res = await window.agentHub.agents.attachTerminal(agentId)
+      if (res.success) {
+        setProxyAgents((prev) => new Set(prev).add(agentId))
+        setProxyCommand(res.data.attachCommand)
+        // Auto-clear the command toast after 10 seconds
+        setTimeout(() => setProxyCommand(null), 10000)
+      }
+    } catch (err) {
+      console.error('Attach terminal failed:', err)
+    }
+  }, [])
+
+  const handleDetachTerminal = useCallback(async (agentId: string) => {
+    try {
+      await window.agentHub.agents.detachTerminal(agentId)
+      setProxyAgents((prev) => {
+        const next = new Set(prev)
+        next.delete(agentId)
+        return next
+      })
+    } catch (err) {
+      console.error('Detach terminal failed:', err)
     }
   }, [])
 
@@ -664,6 +700,9 @@ function AppMain(): React.JSX.Element {
                     onKill={handleKillRequest}
                     onSpawnWithTask={handleSpawnWithTask}
                     onBreakout={handleBreakout}
+                    onAttachTerminal={handleAttachTerminal}
+                    onDetachTerminal={handleDetachTerminal}
+                    proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
                   />
                   {/* Global inline task input — visible when agent selected */}
                   <InlineTaskInput
@@ -802,6 +841,33 @@ function AppMain(): React.JSX.Element {
 
       {/* Git panel */}
       {gitPanelOpen && <StandaloneGitPanel onClose={() => setGitPanelOpen(false)} />}
+
+      {/* Proxy attach command toast */}
+      {proxyCommand && (
+        <div className="fixed bottom-4 right-4 z-50 panel-glass p-3 rounded-lg shadow-lg max-w-md border border-base-content/10">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-xs font-medium text-success">Terminal Proxy Active</span>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => setProxyCommand(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+          <p className="text-xs text-base-content/60 mb-2">Run this in your external terminal:</p>
+          <div className="flex items-center gap-2">
+            <code className="text-xs bg-base-300 px-2 py-1 rounded flex-1 truncate">{proxyCommand}</code>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => {
+                navigator.clipboard.writeText(proxyCommand).catch(() => {})
+              }}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

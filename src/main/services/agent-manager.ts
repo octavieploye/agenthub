@@ -9,6 +9,7 @@ import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.quer
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
 import { insertTerminalOutput } from '../db/queries/history.queries'
+import { PtyProxy } from './pty-proxy'
 
 interface ManagedAgent {
   state: AgentState
@@ -19,6 +20,11 @@ interface ManagedAgent {
 }
 
 const agents = new Map<string, ManagedAgent>()
+
+const ptyProxy = new PtyProxy({
+  logInfo: (message, meta) => log.info(message, meta),
+  logWarning: (message, meta) => log.warn(message, meta)
+})
 
 function emitToAllRenderers(channel: string, ...args: unknown[]): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -177,6 +183,9 @@ export function killAgent(agentId: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
 
+  // Stop proxy if running
+  ptyProxy.stopProxy(agentId)
+
   // Flush remaining output before kill
   flushOutputBuffer(agentId)
 
@@ -254,7 +263,24 @@ export function updateAgentModel(
   log.debug('Agent model updated', { id: agentId, model, provider, effortLevel })
 }
 
+export function startPtyProxy(agentId: string): { socketPath: string; attachCommand: string } {
+  const managed = agents.get(agentId)
+  if (!managed) throw new Error(`Agent ${agentId} not found`)
+  const socketPath = ptyProxy.startProxy(agentId, managed.ptyProcess)
+  const attachCommand = `socat -,rawer UNIX-CONNECT:${socketPath}`
+  return { socketPath, attachCommand }
+}
+
+export function stopPtyProxy(agentId: string): void {
+  ptyProxy.stopProxy(agentId)
+}
+
+export function getPtyProxyPath(agentId: string): string | null {
+  return ptyProxy.getSocketPath(agentId)
+}
+
 export function cleanupAllAgents(): void {
+  ptyProxy.stopAll()
   for (const [id, managed] of agents) {
     try {
       if (managed.flushTimer) clearTimeout(managed.flushTimer)

@@ -18,6 +18,9 @@ interface AgentDetailPanelProps {
   onKill: (agentId: string) => void
   onSpawnWithTask: (task: string) => void
   onBreakout?: (agentId: string) => void
+  onAttachTerminal?: (agentId: string) => void
+  onDetachTerminal?: (agentId: string) => void
+  proxyActive?: boolean
 }
 
 const tabs: { id: DetailTab; label: string }[] = [
@@ -37,7 +40,10 @@ function AgentDetailPanel({
   onResume,
   onKill,
   onSpawnWithTask,
-  onBreakout
+  onBreakout,
+  onAttachTerminal,
+  onDetachTerminal,
+  proxyActive
 }: AgentDetailPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
 
@@ -86,6 +92,9 @@ function AgentDetailPanel({
             onPause={onPause}
             onResume={onResume}
             onKill={onKill}
+            onAttachTerminal={onAttachTerminal}
+            onDetachTerminal={onDetachTerminal}
+            proxyActive={proxyActive}
           />
         )}
         {activeTab === 'notes' && <NotesTab agent={agent} />}
