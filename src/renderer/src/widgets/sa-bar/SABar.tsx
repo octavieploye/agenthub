@@ -53,6 +53,7 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
               onClick={() => setStatusFilter(key)}
               className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs hover:bg-base-content/10 transition-colors"
               title={`Filter by ${label}`}
+              aria-label={`Filter ${label.toLowerCase()} agents, ${count} currently`}
             >
               <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
               <span className="text-base-content/60">{count}</span>
@@ -70,6 +71,7 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
             key={key}
             data-testid={`view-mode-${key}`}
             onClick={() => setViewMode(key)}
+            aria-label={`Switch to ${label} view`}
             className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${
               viewMode === key
                 ? 'bg-primary text-primary-content'

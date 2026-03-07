@@ -467,6 +467,14 @@ function AppMain(): React.JSX.Element {
 
   return (
     <div className="flex flex-col h-full" data-theme={theme}>
+      {/* Skip to content link for keyboard navigation */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-primary focus:text-primary-content"
+      >
+        Skip to content
+      </a>
+
       {/* SA Bar — persistent status header */}
       <SABar
         agents={agentList}
@@ -477,7 +485,7 @@ function AppMain(): React.JSX.Element {
       />
 
       {/* Main layout: sidebar + content */}
-      <main className="flex-1 flex min-h-0">
+      <main id="main-content" className="flex-1 flex min-h-0">
         <AgentSidebar
           agents={agentList}
           activeAgentId={activeAgentId}

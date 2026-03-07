@@ -48,7 +48,7 @@ function AgentSidebar({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto py-1" role="list" aria-label="Agent list">
         {agents.length === 0 && (
           <div className="px-3 py-6 text-center text-xs text-base-content/40">
             No agents running
@@ -63,6 +63,8 @@ function AgentSidebar({
           return (
             <div
               key={agent.id}
+              role="listitem"
+              aria-label={`${agent.name}, status ${agent.status}`}
               onClick={() => onSelectAgent(agent.id)}
               className={`mx-1 mb-0.5 px-2 py-2 rounded-lg cursor-pointer transition-all ${
                 isActive

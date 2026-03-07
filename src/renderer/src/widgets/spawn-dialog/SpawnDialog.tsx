@@ -115,7 +115,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
 
   if (step === 'model-select') {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Select Model">
         <div className="w-full max-w-md mx-4">
           <ModelPool
             models={AVAILABLE_MODELS}
@@ -141,7 +141,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   if (step === 'pre-launch') {
     const modelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel)
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Pre-launch Review">
         <PreLaunchCard
           repoId={selectedRepoId || 'default'}
           repoName={repoName}
@@ -168,7 +168,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Launch Agent">
       <div className="panel-glass p-6 w-full max-w-md mx-4">
         <h2 className="text-lg font-bold mb-4">Launch Agent</h2>
 
@@ -299,7 +299,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
         </div>
 
         <div className="flex gap-2 mt-5 justify-end">
-          <button onClick={onClose} className="btn btn-sm btn-ghost rounded-full">
+          <button onClick={onClose} className="btn btn-sm btn-ghost rounded-full" aria-label="Close dialog">
             Cancel
           </button>
           <button

@@ -53,12 +53,16 @@ function AgentDetailPanel({
       {/* Tab bar — colored with agent color */}
       <div
         className="flex gap-1 px-3 py-1.5 border-b shrink-0"
+        role="tablist"
+        aria-label="Agent detail tabs"
         style={{ borderBottomColor: `${agent.color}40`, backgroundColor: `${agent.color}08` }}
       >
         {tabs.map((tab) => (
           <button
             key={tab.id}
             data-testid={`tab-${tab.id}`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab.id
@@ -73,7 +77,7 @@ function AgentDetailPanel({
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden" role="tabpanel" aria-label={`${activeTab} tab content`}>
         {activeTab === 'general' && (
           <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
         )}
