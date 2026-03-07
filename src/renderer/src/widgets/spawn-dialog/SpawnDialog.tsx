@@ -1,22 +1,41 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { RepoConfig } from '@shared/types/config.types'
+import type { EffortLevel } from '@shared/types/agent.types'
+import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
+import { CLAUDE_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
 
-const AVAILABLE_MODELS: ModelInfo[] = [
-  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', available: true, contextWindow: 200000 },
-  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic', available: true, contextWindow: 200000 },
-  { id: 'llama3', name: 'Llama 3', provider: 'ollama-local', available: false, contextWindow: 128000, unavailableReason: 'Ollama not detected' }
-]
+function catalogToModelInfo(entry: ModelCatalogEntry): ModelInfo {
+  return {
+    id: entry.id,
+    name: entry.name,
+    provider: entry.provider,
+    category: entry.category,
+    available: entry.available,
+    contextWindow: entry.contextWindow,
+    unavailableReason: entry.unavailableReason,
+    supportsEffort: entry.supportsEffort
+  }
+}
 
 interface SpawnDialogProps {
   open: boolean
   onClose: () => void
-  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string) => void
+  onSpawn: (
+    cwd: string,
+    name: string,
+    repoId: string,
+    model?: string,
+    task?: string,
+    color?: string,
+    provider?: string,
+    effortLevel?: EffortLevel
+  ) => void
 }
 
 type Step = 'configure' | 'pre-launch' | 'model-select'
@@ -32,6 +51,11 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   const [step, setStep] = useState<Step>('configure')
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
   const [selectedColor, setSelectedColor] = useState(AGENT_COLOR_PALETTE[0])
+  const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
+    CLAUDE_MODELS.map(catalogToModelInfo)
+  )
+  const [loadingModels, setLoadingModels] = useState(false)
 
   const plan = useUsageStore((s) => s.plan)
   const totalMessages = useUsageStore((s) => s.totalMessages)
@@ -47,18 +71,34 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
     }
   }, [])
 
+  const loadModels = useCallback(async () => {
+    setLoadingModels(true)
+    try {
+      const response = await window.agentHub.models.listAll()
+      if (response.success && response.data.length > 0) {
+        setAvailableModels(response.data.map(catalogToModelInfo))
+      }
+    } catch {
+      // fall back to built-in Claude models
+    } finally {
+      setLoadingModels(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (open) {
       loadRepos()
+      loadModels()
       setAgentName('')
       setCustomCwd('')
       setSelectedRepoId('')
       setShowAddRepo(false)
       setStep('configure')
       setSelectedModel('claude-sonnet-4-6')
+      setEffortLevel('medium')
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
-  }, [open, loadRepos])
+  }, [open, loadRepos, loadModels])
 
   const handleAddRepo = useCallback(async () => {
     if (!newRepoName.trim() || !newRepoPath.trim()) return
@@ -102,23 +142,29 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
     (task: string) => {
       const name = agentName.trim() || `agent-${Date.now().toString(36).slice(-4)}`
       const repoId = selectedRepoId || 'default'
-      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor)
+      const modelInfo = availableModels.find((m) => m.id === selectedModel)
+      const provider = modelInfo?.provider ?? 'anthropic'
+      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel)
       onClose()
     },
-    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, onSpawn, onClose]
+    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, availableModels, onSpawn, onClose]
   )
 
   if (!open) return null
 
   const limits = PLAN_LIMITS[plan]
   const repoName = selectedRepo?.name ?? resolvedCwd.split('/').pop() ?? 'Project'
+  const currentModelInfo = availableModels.find((m) => m.id === selectedModel)
 
   if (step === 'model-select') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Select Model">
         <div className="w-full max-w-md mx-4">
+          {loadingModels && (
+            <div className="text-center text-xs text-base-content/50 mb-2">Loading models...</div>
+          )}
           <ModelPool
-            models={AVAILABLE_MODELS}
+            models={availableModels}
             quotaPercent={quotaPercent}
             planLabel={limits?.label ?? 'Pro'}
             selectedModelId={selectedModel}
@@ -126,6 +172,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
               setSelectedModel(modelId)
               setStep('pre-launch')
             }}
+            groupByCategory={true}
           />
           <button
             onClick={() => setStep('pre-launch')}
@@ -139,30 +186,60 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   }
 
   if (step === 'pre-launch') {
-    const modelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel)
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Pre-launch Review">
-        <PreLaunchCard
-          repoId={selectedRepoId || 'default'}
-          repoName={repoName}
-          initialTask="Interactive session"
-          recommendedModel={modelInfo?.name ?? selectedModel}
-          modelRationale={
-            selectedModel.includes('opus')
-              ? 'Maximum capability for complex tasks'
-              : selectedModel.includes('sonnet')
-                ? 'Balanced speed and capability for general tasks'
-                : 'Local model — no quota usage'
-          }
-          quotaUsed={totalMessages}
-          quotaLimit={limits?.messageLimit ?? 250}
-          quotaPercent={quotaPercent}
-          burnRate={burnRate}
-          estimatedImpact={selectedModel.includes('opus') ? 25 : 15}
-          onLaunch={handleLaunch}
-          onChangeModel={() => setStep('model-select')}
-          onCancel={() => setStep('configure')}
-        />
+        <div className="w-full max-w-md mx-4 flex flex-col gap-3">
+          <PreLaunchCard
+            repoId={selectedRepoId || 'default'}
+            repoName={repoName}
+            initialTask="Interactive session"
+            recommendedModel={currentModelInfo?.name ?? selectedModel}
+            modelRationale={
+              selectedModel.includes('opus')
+                ? 'Maximum capability for complex tasks'
+                : selectedModel.includes('sonnet')
+                  ? 'Balanced speed and capability for general tasks'
+                  : selectedModel.includes('haiku')
+                    ? 'Fast and efficient for routine tasks'
+                    : 'Local/cloud model — no Anthropic quota usage'
+            }
+            quotaUsed={totalMessages}
+            quotaLimit={limits?.messageLimit ?? 250}
+            quotaPercent={quotaPercent}
+            burnRate={burnRate}
+            estimatedImpact={selectedModel.includes('opus') ? 25 : selectedModel.includes('haiku') ? 5 : 15}
+            onLaunch={handleLaunch}
+            onChangeModel={() => setStep('model-select')}
+            onCancel={() => setStep('configure')}
+          />
+
+          {/* Effort level selector */}
+          {currentModelInfo?.supportsEffort !== false && (
+            <div className="panel-glass p-3 rounded-lg">
+              <span className="text-xs font-bold tracking-wide text-base-content/60 block mb-2">
+                REASONING EFFORT
+              </span>
+              <div className="flex gap-2">
+                {EFFORT_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setEffortLevel(level)}
+                    className={`flex-1 text-xs py-1.5 px-2 rounded-lg border transition-all ${
+                      effortLevel === level
+                        ? 'bg-primary/15 border-primary/30 text-primary'
+                        : 'border-base-content/10 text-base-content/50 hover:border-base-content/20'
+                    }`}
+                  >
+                    <div className="font-medium capitalize">{level}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10px] text-base-content/40 mt-1">
+                {EFFORT_LABELS[effortLevel]}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     )
   }

@@ -11,9 +11,10 @@ vi.mock('@renderer/hooks/useNow', () => ({
 
 // Mock agent store
 const mockUpdateColor = vi.fn()
+const mockUpdateModel = vi.fn()
 vi.mock('@renderer/stores/agent-store', () => ({
   useAgentStore: vi.fn((selector) =>
-    selector({ updateColor: mockUpdateColor })
+    selector({ updateColor: mockUpdateColor, updateModel: mockUpdateModel })
   )
 }))
 
@@ -26,6 +27,7 @@ function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
     confidence: 'confirmed',
     model: 'claude-sonnet-4-6',
     provider: 'anthropic' as ModelProvider,
+    effortLevel: 'medium',
     taskDescription: 'Fix the login bug',
     pid: 1234,
     ptyFd: null,
@@ -50,7 +52,11 @@ describe('GeneralTab', () => {
     vi.clearAllMocks()
     window.agentHub = {
       agents: {
-        updateColor: vi.fn().mockResolvedValue({ success: true, data: undefined })
+        updateColor: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        updateModel: vi.fn().mockResolvedValue({ success: true, data: undefined })
+      },
+      models: {
+        listAll: vi.fn().mockResolvedValue({ success: true, data: [] })
       }
     } as any
   })
@@ -102,9 +108,9 @@ describe('GeneralTab', () => {
       expect(screen.getByTestId('general-status-badge')).toHaveTextContent('busy')
     })
 
-    it('renders model info', () => {
+    it('renders model selector', () => {
       render(<GeneralTab {...defaultProps} />)
-      expect(screen.getByTestId('general-model')).toHaveTextContent('claude-sonnet-4-6')
+      expect(screen.getByTestId('model-select')).toBeInTheDocument()
     })
   })
 

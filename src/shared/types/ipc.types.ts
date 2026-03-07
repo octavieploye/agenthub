@@ -24,6 +24,11 @@ export interface AgentHubBridge {
     sendInput: (agentId: string, data: string) => Promise<IpcResponse<void>>
     resize: (agentId: string, cols: number, rows: number) => Promise<IpcResponse<void>>
     updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
+    updateModel: (agentId: string, model: string, provider: string, effortLevel: string) => Promise<IpcResponse<void>>
+  }
+  models: {
+    listAll: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>
+    fetchOllama: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>
   }
   db: {
     getRepos: () => Promise<IpcResponse<import('./config.types').RepoConfig[]>>

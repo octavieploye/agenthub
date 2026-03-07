@@ -13,6 +13,8 @@ export type StatusConfidence = 'confirmed' | 'inferred' | 'unknown'
 
 export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud'
 
+export type EffortLevel = 'high' | 'medium' | 'low'
+
 export interface AgentState {
   id: string
   repoId: string
@@ -21,6 +23,7 @@ export interface AgentState {
   confidence: StatusConfidence
   model: string
   provider: ModelProvider
+  effortLevel: EffortLevel
   taskDescription: string
   pid: number | null
   ptyFd: number | null
@@ -37,6 +40,7 @@ export interface AgentSpawnOptions {
   cwd: string
   model?: string
   provider?: ModelProvider
+  effortLevel?: EffortLevel
   taskDescription?: string
   envOverrides?: Record<string, string>
   color?: string

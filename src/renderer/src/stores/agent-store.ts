@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentState, AgentLifecycleStatus, StatusConfidence } from '@shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus, StatusConfidence, ModelProvider, EffortLevel } from '@shared/types/agent.types'
 
 interface AgentStore {
   agents: Map<string, AgentState>
@@ -9,6 +9,7 @@ interface AgentStore {
   removeAgent: (id: string) => void
   updateStatus: (id: string, status: AgentLifecycleStatus, confidence: StatusConfidence) => void
   updateColor: (id: string, color: string) => void
+  updateModel: (id: string, model: string, provider: ModelProvider, effortLevel: EffortLevel) => void
   hydrateAgents: (agents: AgentState[]) => void
 }
 
@@ -48,6 +49,15 @@ export const useAgentStore = create<AgentStore>((set) => ({
       if (!agent) return state
       const next = new Map(state.agents)
       next.set(id, { ...agent, color, updatedAt: new Date().toISOString() })
+      return { agents: next }
+    }),
+
+  updateModel: (id, model, provider, effortLevel) =>
+    set((state) => {
+      const agent = state.agents.get(id)
+      if (!agent) return state
+      const next = new Map(state.agents)
+      next.set(id, { ...agent, model, provider, effortLevel, updatedAt: new Date().toISOString() })
       return { agents: next }
     }),
 

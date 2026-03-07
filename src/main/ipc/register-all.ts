@@ -18,6 +18,7 @@ import { registerGitHandlers } from './git.ipc'
 import { registerSkillsHandlers } from './skills.ipc'
 import { registerWindowsHandlers } from './windows.ipc'
 import { registerSettingsHandlers } from './settings.ipc'
+import { registerModelsHandlers } from './models.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -39,5 +40,6 @@ export function registerAllIpcHandlers(): void {
   registerSkillsHandlers()
   registerWindowsHandlers()
   registerSettingsHandlers()
+  registerModelsHandlers()
   log.info('All IPC handlers registered')
 }

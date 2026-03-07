@@ -26,6 +26,7 @@ function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
     confidence: 'confirmed',
     model: 'claude-sonnet-4-6',
     provider: 'anthropic' as ModelProvider,
+    effortLevel: 'medium',
     taskDescription: 'Fix the login bug',
     pid: 1234,
     ptyFd: null,

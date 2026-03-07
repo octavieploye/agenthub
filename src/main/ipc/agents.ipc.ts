@@ -12,8 +12,10 @@ import {
   getAgentState,
   sendInput,
   resizeAgent,
-  updateAgentColor
+  updateAgentColor,
+  updateAgentModel
 } from '../services/agent-manager'
+import { ModelProviderSchema, EffortLevelSchema } from '../../shared/schemas/agent.schemas'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
 import { getDb } from '../db/connection'
 import type { IpcResponse } from '../../shared/types/ipc.types'
@@ -150,6 +152,37 @@ export function registerAgentHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('UPDATE_COLOR_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.UPDATE_MODEL,
+    async (
+      _event,
+      agentId: unknown,
+      model: unknown,
+      provider: unknown,
+      effortLevel: unknown
+    ): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const modelValidation = validateInput(z.string(), model)
+        if (!modelValidation.valid) return modelValidation.response
+        const providerValidation = validateInput(ModelProviderSchema, provider)
+        if (!providerValidation.valid) return providerValidation.response
+        const effortValidation = validateInput(EffortLevelSchema, effortLevel)
+        if (!effortValidation.valid) return effortValidation.response
+        updateAgentModel(
+          idValidation.data,
+          modelValidation.data,
+          providerValidation.data,
+          effortValidation.data
+        )
+        return success(undefined)
+      } catch (err) {
+        return error('UPDATE_MODEL_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

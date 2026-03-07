@@ -15,7 +15,13 @@ const agentHubBridge = {
     resize: (agentId: string, cols: number, rows: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESIZE, agentId, cols, rows),
     updateColor: (agentId: string, color: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color)
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color),
+    updateModel: (agentId: string, model: string, provider: string, effortLevel: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_MODEL, agentId, model, provider, effortLevel)
+  },
+  models: {
+    listAll: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.LIST_ALL),
+    fetchOllama: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.FETCH_OLLAMA)
   },
   db: {
     getRepos: () => ipcRenderer.invoke(IPC_CHANNELS.DB.GET_REPOS),

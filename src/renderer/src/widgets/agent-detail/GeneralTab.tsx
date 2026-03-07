@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
+import { useState, useEffect, useCallback } from 'react'
+import type { AgentState, AgentLifecycleStatus, EffortLevel, ModelProvider } from '@shared/types/agent.types'
+import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { useNow } from '@renderer/hooks/useNow'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
+import { CLAUDE_MODELS, EFFORT_LEVELS, EFFORT_LABELS, CATEGORY_LABELS, CATEGORY_COLORS } from '@shared/constants/model-catalog'
 import { useAgentStore } from '@renderer/stores/agent-store'
 
 interface GeneralTabProps {
@@ -60,7 +62,21 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
   const isTicking = agent.status === 'busy' || agent.status === 'spawning'
   const now = useNow(isTicking ? 1000 : 0)
   const [selectedColor, setSelectedColor] = useState(agent.color)
+  const [availableModels, setAvailableModels] = useState<ModelCatalogEntry[]>(CLAUDE_MODELS)
   const updateColor = useAgentStore((s) => s.updateColor)
+  const updateModel = useAgentStore((s) => s.updateModel)
+
+  const isRunning = ['busy', 'idle', 'spawning', 'locked', 'paused'].includes(agent.status)
+
+  useEffect(() => {
+    let cancelled = false
+    window.agentHub.models.listAll().then((res) => {
+      if (!cancelled && res.success && res.data.length > 0) {
+        setAvailableModels(res.data)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const handleColorChange = async (color: string): Promise<void> => {
     setSelectedColor(color)
@@ -72,10 +88,39 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
     }
   }
 
+  const handleModelChange = useCallback(async (modelId: string) => {
+    const modelInfo = availableModels.find((m) => m.id === modelId)
+    const provider: ModelProvider = modelInfo?.provider ?? 'anthropic'
+    const effort = agent.effortLevel ?? 'medium'
+    updateModel(agent.id, modelId, provider, effort)
+    try {
+      await window.agentHub.agents.updateModel(agent.id, modelId, provider, effort)
+    } catch (err) {
+      console.error('Update model failed:', err)
+    }
+  }, [agent.id, agent.effortLevel, availableModels, updateModel])
+
+  const handleEffortChange = useCallback(async (effort: EffortLevel) => {
+    const provider: ModelProvider = agent.provider ?? 'anthropic'
+    updateModel(agent.id, agent.model, provider, effort)
+    try {
+      await window.agentHub.agents.updateModel(agent.id, agent.model, provider, effort)
+    } catch (err) {
+      console.error('Update effort failed:', err)
+    }
+  }, [agent.id, agent.model, agent.provider, updateModel])
+
   const canPause = agent.status === 'busy' || agent.status === 'idle' || agent.status === 'locked'
   const canResume = agent.status === 'paused'
   const canKill =
     agent.status !== 'completed' && agent.status !== 'interrupted'
+
+  // Group models by provider for the dropdown
+  const anthropicModels = availableModels.filter((m) => m.provider === 'anthropic')
+  const ollamaLocalModels = availableModels.filter((m) => m.provider === 'ollama-local')
+  const ollamaCloudModels = availableModels.filter((m) => m.provider === 'ollama-cloud')
+
+  const currentModelInfo = availableModels.find((m) => m.id === agent.model)
 
   return (
     <div data-testid="general-tab" className="h-full overflow-y-auto p-4 space-y-4">
@@ -95,18 +140,10 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
 
         <div className="grid grid-cols-2 gap-2 text-xs text-base-content/70">
           <div>
-            <span className="text-base-content/40">Model:</span>{' '}
-            <span data-testid="general-model">{agent.model}</span>
-          </div>
-          <div>
             <span className="text-base-content/40">Confidence:</span>{' '}
             <span data-testid="general-confidence">
               {CONFIDENCE_LABELS[agent.confidence] ?? agent.confidence}
             </span>
-          </div>
-          <div>
-            <span className="text-base-content/40">Provider:</span>{' '}
-            <span data-testid="general-provider">{agent.provider}</span>
           </div>
           <div>
             <span className="text-base-content/40">Created:</span>{' '}
@@ -125,6 +162,87 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           <div className="text-xs text-base-content/70">
             <span className="text-base-content/40">Task:</span>{' '}
             <span data-testid="general-task">{agent.taskDescription}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Model selector */}
+      <div data-testid="model-selector-section" className="panel-glass rounded-lg p-4 space-y-3">
+        <h3 className="text-xs font-medium text-base-content/50">AI Model</h3>
+
+        <select
+          data-testid="model-select"
+          value={agent.model}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="select select-bordered select-sm w-full rounded-lg bg-base-200/50 text-sm"
+        >
+          {anthropicModels.length > 0 && (
+            <optgroup label="Anthropic (Claude)">
+              {anthropicModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {ollamaLocalModels.length > 0 && (
+            <optgroup label="Ollama Local">
+              {ollamaLocalModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {ollamaCloudModels.length > 0 && (
+            <optgroup label="Ollama Cloud">
+              {ollamaCloudModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+
+        {currentModelInfo?.category && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-base-content/40">Category:</span>
+            <span className={CATEGORY_COLORS[currentModelInfo.category] ?? ''}>
+              {CATEGORY_LABELS[currentModelInfo.category] ?? currentModelInfo.category}
+            </span>
+          </div>
+        )}
+
+        {/* Effort level */}
+        {agent.provider === 'anthropic' && (
+          <div>
+            <span className="text-xs text-base-content/40 block mb-1.5">Reasoning Effort</span>
+            <div className="flex gap-2">
+              {EFFORT_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  onClick={() => handleEffortChange(level)}
+                  data-testid={`effort-${level}`}
+                  className={`flex-1 text-xs py-1.5 px-2 rounded-lg border transition-all ${
+                    agent.effortLevel === level
+                      ? 'bg-primary/15 border-primary/30 text-primary'
+                      : 'border-base-content/10 text-base-content/50 hover:border-base-content/20'
+                  }`}
+                >
+                  <span className="capitalize">{level}</span>
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] text-base-content/40 mt-1">
+              {EFFORT_LABELS[agent.effortLevel ?? 'medium']}
+            </div>
+          </div>
+        )}
+
+        {isRunning && (
+          <div className="text-[10px] text-base-content/30">
+            Model change sends /model command to the running session
           </div>
         )}
       </div>

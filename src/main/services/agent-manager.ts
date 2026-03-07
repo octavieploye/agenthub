@@ -4,8 +4,9 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.queries'
+import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 
@@ -64,6 +65,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     cwd: options.cwd,
     model: options.model,
     provider: options.provider,
+    effortLevel: options.effortLevel,
     taskDescription: options.taskDescription,
     color: options.color
   })
@@ -139,17 +141,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
+  const modelFlag = agentState.model ? ` --model ${agentState.model}` : ''
   if (task) {
     setTimeout(() => {
-      const cmd = `claude "${task.replace(/"/g, '\\"')}"\n`
+      const cmd = `claude${modelFlag} "${task.replace(/"/g, '\\"')}"\n`
       ptyProcess.write(cmd)
-      log.info('Sent claude command to PTY', { id: agentState.id, task })
+      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, task })
     }, 500)
   } else {
     // Just launch claude in interactive mode
     setTimeout(() => {
-      ptyProcess.write('claude\n')
-      log.info('Sent claude (interactive) to PTY', { id: agentState.id })
+      ptyProcess.write(`claude${modelFlag}\n`)
+      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model })
     }, 500)
   }
 
@@ -228,6 +231,24 @@ export function updateAgentColor(agentId: string, color: string): void {
   }
   dbUpdateAgentColor(getDb(), agentId, color)
   log.debug('Agent color updated', { id: agentId, color })
+}
+
+export function updateAgentModel(
+  agentId: string,
+  model: string,
+  provider: AgentState['provider'],
+  effortLevel: EffortLevel
+): void {
+  const managed = agents.get(agentId)
+  if (managed) {
+    managed.state.model = model
+    managed.state.provider = provider
+    managed.state.effortLevel = effortLevel
+    // Send /model command to running agent to switch model live
+    managed.ptyProcess.write(`/model ${model}\n`)
+  }
+  dbUpdateAgentModel(getDb(), agentId, model, provider, effortLevel)
+  log.debug('Agent model updated', { id: agentId, model, provider, effortLevel })
 }
 
 export function cleanupAllAgents(): void {

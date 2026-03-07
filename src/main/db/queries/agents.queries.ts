@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
-import type { AgentState, AgentLifecycleStatus, StatusConfidence } from '../../../shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel } from '../../../shared/types/agent.types'
 import type Database from 'better-sqlite3'
 
 function mapRow(row: Record<string, unknown>): AgentState {
@@ -12,6 +12,7 @@ function mapRow(row: Record<string, unknown>): AgentState {
     confidence: row.confidence as StatusConfidence,
     model: row.model as string,
     provider: row.provider as AgentState['provider'],
+    effortLevel: (row.effort_level as EffortLevel) ?? 'medium',
     taskDescription: (row.task_description as string) ?? '',
     pid: row.pid as number | null,
     ptyFd: row.pty_fd as number | null,
@@ -43,6 +44,7 @@ export function insertAgent(
     cwd: string
     model?: string
     provider?: AgentState['provider']
+    effortLevel?: EffortLevel
     taskDescription?: string
     color?: string
   }
@@ -50,17 +52,19 @@ export function insertAgent(
   const id = randomUUID()
   const now = new Date().toISOString()
   const color = agent.color ?? '#3B82F6'
+  const effortLevel = agent.effortLevel ?? 'medium'
 
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, task_description, color, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
     agent.name,
     agent.cwd,
-    agent.model ?? 'claude-sonnet-4-20250514',
+    agent.model ?? 'claude-sonnet-4-6',
     agent.provider ?? 'anthropic',
+    effortLevel,
     agent.taskDescription ?? '',
     color,
     now,
@@ -74,8 +78,9 @@ export function insertAgent(
     name: agent.name,
     status: 'spawning',
     confidence: 'unknown',
-    model: agent.model ?? 'claude-sonnet-4-20250514',
+    model: agent.model ?? 'claude-sonnet-4-6',
     provider: agent.provider ?? 'anthropic',
+    effortLevel,
     taskDescription: agent.taskDescription ?? '',
     pid: null,
     ptyFd: null,
@@ -122,6 +127,20 @@ export function updateAgentColor(db: Database.Database, id: string, color: strin
   const now = new Date().toISOString()
   db.prepare('UPDATE agents SET color = ?, updated_at = ? WHERE id = ?').run(color, now, id)
   log.debug('Agent color updated', { id, color })
+}
+
+export function updateAgentModel(
+  db: Database.Database,
+  id: string,
+  model: string,
+  provider: AgentState['provider'],
+  effortLevel: EffortLevel
+): void {
+  const now = new Date().toISOString()
+  db.prepare(
+    'UPDATE agents SET model = ?, provider = ?, effort_level = ?, updated_at = ? WHERE id = ?'
+  ).run(model, provider, effortLevel, now, id)
+  log.debug('Agent model updated', { id, model, provider, effortLevel })
 }
 
 export function deleteAgent(db: Database.Database, id: string): void {

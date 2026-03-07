@@ -245,13 +245,15 @@ function AppMain(): React.JSX.Element {
   }, [setActiveAgent, setFocusedAgent])
 
   const handleSpawn = useCallback(
-    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string) => {
+    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string) => {
       try {
         const response = await window.agentHub.agents.spawn({
           repoId,
           name,
           cwd,
           model,
+          provider: provider as import('@shared/types/agent.types').ModelProvider | undefined,
+          effortLevel: effortLevel as import('@shared/types/agent.types').EffortLevel | undefined,
           taskDescription: task || 'Interactive session',
           color
         })
