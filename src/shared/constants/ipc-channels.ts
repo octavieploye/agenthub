@@ -124,7 +124,8 @@ export const IPC_CHANNELS = {
     GET_APP_VERSION: 'system:get-app-version',
     GET_PLATFORM: 'system:get-platform',
     SHUTDOWN: 'system:shutdown',
-    MINIMIZE_TO_TRAY: 'system:minimize-to-tray'
+    MINIMIZE_TO_TRAY: 'system:minimize-to-tray',
+    OPEN_TERMINAL: 'system:open-terminal'
   }
 } as const
 

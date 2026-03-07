@@ -140,6 +140,7 @@ export interface AgentHubBridge {
     getPlatform: () => Promise<IpcResponse<string>>
     shutdown: () => Promise<IpcResponse<void>>
     minimizeToTray: () => Promise<IpcResponse<void>>
+    openTerminal: (command: string) => Promise<IpcResponse<void>>
   }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void

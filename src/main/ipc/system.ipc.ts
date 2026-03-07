@@ -1,4 +1,5 @@
 import { ipcMain, app, BrowserWindow } from 'electron'
+import { exec } from 'child_process'
 import log from 'electron-log/main'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error } from './ipc-helpers'
@@ -48,6 +49,48 @@ export function registerSystemHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('MINIMIZE_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.SYSTEM.OPEN_TERMINAL,
+    async (_event, command: string): Promise<IpcResponse<void>> => {
+      try {
+        if (!command.startsWith('socat')) {
+          return error('INVALID_COMMAND', 'Only socat commands are allowed')
+        }
+
+        const escapedCommand = command.replace(/'/g, "'\\''")
+        const platform = process.platform
+
+        if (platform === 'darwin') {
+          const script = `tell application "Terminal"
+activate
+do script "${escapedCommand.replace(/"/g, '\\"')}"
+end tell`
+          exec(`osascript -e '${script}'`, (err) => {
+            if (err) log.warn('Failed to open macOS Terminal:', err.message)
+          })
+        } else if (platform === 'linux') {
+          exec(`which x-terminal-emulator`, (err) => {
+            if (!err) {
+              exec(`x-terminal-emulator -e bash -c '${escapedCommand}; exec bash'`, (execErr) => {
+                if (execErr) log.warn('Failed to open x-terminal-emulator:', execErr.message)
+              })
+            } else {
+              exec(`gnome-terminal -- bash -c '${escapedCommand}; exec bash'`, (execErr) => {
+                if (execErr) log.warn('Failed to open gnome-terminal:', execErr.message)
+              })
+            }
+          })
+        } else {
+          return error('UNSUPPORTED_PLATFORM', `Platform ${platform} is not supported for terminal launch`)
+        }
+
+        return success(undefined)
+      } catch (err) {
+        return error('OPEN_TERMINAL_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

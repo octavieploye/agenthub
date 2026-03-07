@@ -4,6 +4,7 @@ import * as path from 'path'
 import type * as pty from 'node-pty'
 
 const MAX_CLIENTS = 3
+// TODO: Windows support — use named pipes (\\.\pipe\agenthub-pty-{id}) instead of Unix sockets
 const SOCKET_DIR = '/tmp/agenthub'
 
 interface ProxyEntry {

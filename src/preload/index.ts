@@ -152,7 +152,9 @@ const agentHubBridge = {
     getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_APP_VERSION),
     getPlatform: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_PLATFORM),
     shutdown: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.SHUTDOWN),
-    minimizeToTray: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.MINIMIZE_TO_TRAY)
+    minimizeToTray: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.MINIMIZE_TO_TRAY),
+    openTerminal: (command: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_TERMINAL, command)
   },
   on: {
     agentStatusChange: (
