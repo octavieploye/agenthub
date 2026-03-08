@@ -53,7 +53,7 @@ function AgentDetailPanel({
   }, [initialTab])
 
   return (
-    <div data-testid="agent-detail-panel" className="flex flex-col h-full w-full">
+    <div data-testid="agent-detail-panel" className="flex flex-col flex-1 min-h-0 w-full">
       {/* Tab bar — colored with agent color */}
       <div
         className="flex gap-1 px-3 py-1.5 border-b shrink-0"

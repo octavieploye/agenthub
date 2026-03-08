@@ -69,7 +69,7 @@ export function registerSystemHandlers(): void {
 
         if (platform === 'darwin') {
           const scriptPath = join(tmpdir(), `agenthub-terminal-${Date.now()}.sh`)
-          writeFileSync(scriptPath, `#!/bin/bash\n${command}\nexec bash`, { encoding: 'utf-8' })
+          writeFileSync(scriptPath, `#!/bin/zsh -l\n${command}\nexec zsh`, { encoding: 'utf-8' })
           chmodSync(scriptPath, 0o755)
           exec(`open -a Terminal "${scriptPath}"`, (err) => {
             if (err) log.warn('Failed to open macOS Terminal:', err.message)
