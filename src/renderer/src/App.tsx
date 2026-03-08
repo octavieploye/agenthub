@@ -28,7 +28,7 @@ import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
-import { terminalCache } from './services/terminal-cache'
+import { outputBuffer } from './services/output-buffer'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -174,7 +174,7 @@ function AppMain(): React.JSX.Element {
       }
 
       // Clean up cached terminal and proxy state for this agent
-      terminalCache.dispose(agentId)
+      outputBuffer.clear(agentId)
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
@@ -218,9 +218,15 @@ function AppMain(): React.JSX.Element {
     return unsub
   }, [setActiveAgent, setFocusedAgent])
 
-  // Clean up all cached terminals on window close
+  // Start output buffer on mount, clean up on unmount
   useEffect(() => {
-    const cleanup = (): void => terminalCache.disposeAll()
+    outputBuffer.start()
+    return () => outputBuffer.stop()
+  }, [])
+
+  // Clean up all output buffers on window close
+  useEffect(() => {
+    const cleanup = (): void => outputBuffer.clearAll()
     window.addEventListener('beforeunload', cleanup)
     return () => window.removeEventListener('beforeunload', cleanup)
   }, [])

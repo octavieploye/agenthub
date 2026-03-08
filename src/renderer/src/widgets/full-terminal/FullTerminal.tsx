@@ -1,7 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
+import { Terminal } from '@xterm/xterm'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useThemeStore } from '@renderer/stores/theme-store'
-import { terminalCache } from '@renderer/services/terminal-cache'
+import { getXtermTheme } from './theme-bridge'
+import { outputBuffer } from '@renderer/services/output-buffer'
 
 interface FullTerminalProps {
   agentId: string
@@ -11,55 +15,125 @@ interface FullTerminalProps {
 
 function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const mountedRef = useRef(false)
+  const writeCallbackRef = useRef<((data: string) => void) | null>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const theme = useThemeStore((s) => s.theme)
 
-  // Attach/detach the cached terminal when agentId or container changes
+  // Stable write callback that guards against writing to a disposed terminal
+  const writeCallback = useCallback((data: string) => {
+    if (mountedRef.current && termRef.current) {
+      termRef.current.write(data)
+    }
+  }, [])
+
+  // Create terminal on mount, dispose on unmount
   useEffect(() => {
     if (!containerRef.current) return
 
-    terminalCache.getOrCreate(agentId)
-    terminalCache.attach(agentId, containerRef.current)
+    mountedRef.current = true
+    writeCallbackRef.current = writeCallback
 
-    // Handle resize
-    const container = containerRef.current
-    const resizeObserver = new ResizeObserver(() => {
-      if (container) {
-        const { cols, rows } = fitTerminal(agentId)
-        window.agentHub.agents.resize(agentId, cols, rows)
-      }
+    // 1. Create terminal
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
+      theme: getXtermTheme(),
+      scrollback: 5000
     })
-    resizeObserver.observe(container)
+    termRef.current = term
 
-    // Initial fit
-    const { cols, rows } = fitTerminal(agentId)
-    window.agentHub.agents.resize(agentId, cols, rows)
+    // 2. Open in the visible container
+    term.open(containerRef.current)
 
-    onReady?.()
-
-    return () => {
-      resizeObserver.disconnect()
-      terminalCache.detach(agentId)
+    // 3. Load WebGL addon
+    try {
+      const webgl = new WebglAddon()
+      term.loadAddon(webgl)
+      webgl.onContextLoss(() => webgl.dispose())
+    } catch {
+      // WebGL not available — falls back to canvas renderer
     }
-  }, [agentId, onReady])
 
-  // Update all cached terminal themes when DaisyUI theme changes
+    // 4. Load FitAddon
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    fitAddonRef.current = fitAddon
+
+    // 5. Initial fit
+    requestAnimationFrame(() => {
+      if (!mountedRef.current) return
+      fitAddon.fit()
+      window.agentHub.agents.resize(agentId, term.cols, term.rows)
+      onReady?.()
+    })
+
+    // 6. Replay buffered output + start passthrough
+    const buffered = outputBuffer.drain(agentId, writeCallback)
+    if (buffered) {
+      term.write(buffered)
+    }
+
+    // 7. Wire keyboard input
+    const inputDisposable = term.onData((data: string) => {
+      window.agentHub.agents.sendInput(agentId, data)
+    })
+
+    // 8. ResizeObserver (debounced 100ms)
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    const observer = new ResizeObserver(() => {
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
+        fitAddonRef.current.fit()
+        window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
+      }, 100)
+    })
+    observer.observe(containerRef.current)
+    resizeObserverRef.current = observer
+
+    // Cleanup on unmount
+    return () => {
+      mountedRef.current = false
+
+      // 1. Stop passthrough
+      outputBuffer.stopPassthrough(agentId, writeCallback)
+
+      // 2. Disconnect resize observer
+      if (resizeTimer) clearTimeout(resizeTimer)
+      observer.disconnect()
+      resizeObserverRef.current = null
+
+      // 3. Clean up input handler
+      inputDisposable.dispose()
+
+      // 4. Dispose terminal (also disposes addons)
+      term.dispose()
+      termRef.current = null
+      fitAddonRef.current = null
+      writeCallbackRef.current = null
+    }
+  }, [agentId, writeCallback, onReady])
+
+  // Theme sync: update terminal theme when DaisyUI theme changes
   useEffect(() => {
-    terminalCache.updateTheme()
+    if (termRef.current) {
+      termRef.current.options.theme = getXtermTheme()
+    }
   }, [theme])
 
   // Re-fit when becoming visible
   useEffect(() => {
-    if (visible && containerRef.current) {
-      const term = terminalCache.get(agentId)
-      if (term) {
-        requestAnimationFrame(() => {
-          if (containerRef.current) {
-            const { cols, rows } = fitTerminal(agentId)
-            window.agentHub.agents.resize(agentId, cols, rows)
-            term.focus()
-          }
-        })
-      }
+    if (visible && termRef.current && fitAddonRef.current) {
+      requestAnimationFrame(() => {
+        if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
+        fitAddonRef.current.fit()
+        window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
+        termRef.current.focus()
+      })
     }
   }, [visible, agentId])
 
@@ -75,14 +149,6 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       />
     </div>
   )
-}
-
-function fitTerminal(agentId: string): { cols: number; rows: number } {
-  const term = terminalCache.get(agentId)
-  const fitAddon = terminalCache.getFitAddon(agentId)
-  if (!term || !fitAddon) return { cols: 80, rows: 24 }
-  fitAddon.fit()
-  return { cols: term.cols, rows: term.rows }
 }
 
 export default FullTerminal
