@@ -37,8 +37,9 @@ function getGlowConfig(status: AgentLifecycleStatus, agentColor: string): GlowCo
     case 'completed':
       return { color: '#1BF707', animation: 'steady' }
     case 'awaiting_approval':
-    case 'idle':
       return { color: '#F7E307', animation: 'blip' }
+    case 'idle':
+      return { color: 'transparent', animation: 'none' }
     case 'looping':
       return { color: '#F70707', animation: 'blip-fast' }
     case 'error':

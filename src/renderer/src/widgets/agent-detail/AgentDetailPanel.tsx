@@ -85,7 +85,7 @@ function AgentDetailPanel({
         {activeTab === 'general' && (
           <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
         )}
-        <div className={`h-full ${activeTab === 'terminal' ? '' : 'hidden'}`}>
+        <div className={`h-full ${activeTab === 'terminal' ? '' : 'invisible'}`}>
           <TerminalTab
             agent={agent}
             visible={activeTab === 'terminal'}

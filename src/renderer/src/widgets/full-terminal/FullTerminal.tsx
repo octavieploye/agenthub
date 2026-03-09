@@ -42,6 +42,8 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   const mountedRef = useRef(false)
   const writeCallbackRef = useRef<((data: string) => void) | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const fixedColsRef = useRef<number | null>(null)
+  const isFittingRef = useRef(false)
   const theme = useThemeStore((s) => s.theme)
 
   // rAF-batched write callback: accumulates IPC chunks and flushes once per
@@ -94,6 +96,8 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
 
       // 4a. Fit terminal to container (sets correct cols/rows)
       fitAddon.fit()
+      // Lock cols after first fit — only rows will change from now on
+      fixedColsRef.current = term.cols
       window.agentHub.agents.resize(agentId, term.cols, term.rows)
 
       // 4b. Load WebGL AFTER sizing is locked in
@@ -128,15 +132,24 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
-        // Skip if still in initial stabilization window
         if (Date.now() < stabilizeAt) return
-        fitAddonRef.current.fit()
-        // Only send resize to PTY if dimensions actually changed
-        const { cols, rows } = termRef.current
-        if (cols !== lastCols || rows !== lastRows) {
-          lastCols = cols
-          lastRows = rows
-          window.agentHub.agents.resize(agentId, cols, rows)
+        if (isFittingRef.current) return // prevent re-entrancy from scrollbar toggle
+        isFittingRef.current = true
+        try {
+          fitAddonRef.current.fit()
+          const { cols, rows } = termRef.current
+          // Strategy 2: lock cols to initial value, only allow rows to change
+          const lockedCols = fixedColsRef.current ?? cols
+          if (cols !== lockedCols) {
+            termRef.current.resize(lockedCols, rows)
+          }
+          if (lockedCols !== lastCols || rows !== lastRows) {
+            lastCols = lockedCols
+            lastRows = rows
+            window.agentHub.agents.resize(agentId, lockedCols, rows)
+          }
+        } finally {
+          isFittingRef.current = false
         }
       }, 150)
     })
@@ -180,15 +193,22 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     }
   }, [theme])
 
-  // Re-fit + force repaint when becoming visible (WebGL canvas needs explicit refresh)
+  // Re-fit rows only + force repaint when becoming visible
   useEffect(() => {
     if (visible && termRef.current && fitAddonRef.current) {
       requestAnimationFrame(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
+        const term = termRef.current
+        // Fit to get correct rows for current container height
         fitAddonRef.current.fit()
-        window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
-        termRef.current.refresh(0, termRef.current.rows - 1)
-        termRef.current.focus()
+        // Lock cols back to fixed value (prevent SIGWINCH cols reflow)
+        const lockedCols = fixedColsRef.current ?? term.cols
+        if (term.cols !== lockedCols) {
+          term.resize(lockedCols, term.rows)
+        }
+        window.agentHub.agents.resize(agentId, lockedCols, term.rows)
+        term.refresh(0, term.rows - 1)
+        term.focus()
       })
     }
   }, [visible, agentId])
@@ -196,7 +216,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   return (
     <div
       className="flex flex-col h-full w-full"
-      style={{ display: visible ? 'flex' : 'none' }}
+      style={{ visibility: visible ? 'visible' : 'hidden' }}
     >
       <div
         ref={containerRef}
