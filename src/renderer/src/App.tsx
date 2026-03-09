@@ -466,12 +466,11 @@ function AppMain(): React.JSX.Element {
 
   const handleSpawnWithTask = useCallback(
     (task: string) => {
-      const agent = activeAgentId ? agents.get(activeAgentId) : null
-      if (agent) {
-        handleSpawn(agent.cwd, `task-${Date.now().toString(36)}`, agent.repoId, undefined, task)
-      }
+      if (!activeAgentId) return
+      // Send task directly to the active agent's terminal instead of spawning a new agent
+      handleSendInput(activeAgentId, task + '\r')
     },
-    [activeAgentId, agents, handleSpawn]
+    [activeAgentId, handleSendInput]
   )
 
   const handleSearchResult = useCallback((result: SearchResult) => {

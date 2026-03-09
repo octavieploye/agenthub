@@ -69,10 +69,14 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   useEffect(() => {
     if (!containerRef.current) return
 
+    // Local flag scoped to THIS effect invocation — survives StrictMode double-mount
+    let active = true
     mountedRef.current = true
     writeCallbackRef.current = writeCallback
+    fixedColsRef.current = null
 
     // 1. Create terminal
+    console.log(`[TERM ${agentId}] 1. Creating terminal instance`)
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
@@ -83,37 +87,49 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     termRef.current = term
 
     // 2. Open in the visible container
+    console.log(`[TERM ${agentId}] 2. Opening in container, visible=${visible}`)
     term.open(containerRef.current)
 
     // 3. Load FitAddon FIRST (before WebGL to avoid canvas size lock-in)
+    console.log(`[TERM ${agentId}] 3. Loading FitAddon`)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
 
     // 4. Initial fit, THEN WebGL, THEN drain+write
     requestAnimationFrame(() => {
-      if (!mountedRef.current) return
+      if (!active) {
+        console.log(`[TERM ${agentId}] 4. rAF skipped — effect was cleaned up (StrictMode)`)
+        return
+      }
 
       // 4a. Fit terminal to container (sets correct cols/rows)
+      const parentEl = term.element?.parentElement
+      console.log(`[TERM ${agentId}] 4a. Pre-fit parent dimensions: ${parentEl?.clientWidth}x${parentEl?.clientHeight}, display=${parentEl ? getComputedStyle(parentEl).display : 'N/A'}, visibility=${parentEl ? getComputedStyle(parentEl).visibility : 'N/A'}`)
       fitAddon.fit()
       // Lock cols after first fit — only rows will change from now on
       fixedColsRef.current = term.cols
+      console.log(`[TERM ${agentId}] 4a. Post-fit: cols=${term.cols}, rows=${term.rows}, fixedCols=${fixedColsRef.current}`)
       window.agentHub.agents.resize(agentId, term.cols, term.rows)
 
       // 4b. Load WebGL AFTER sizing is locked in
+      console.log(`[TERM ${agentId}] 4b. Loading WebGL addon`)
       try {
         const webgl = new WebglAddon()
         term.loadAddon(webgl)
         webgl.onContextLoss(() => webgl.dispose())
-      } catch {
-        // WebGL not available — falls back to canvas renderer
+        console.log(`[TERM ${agentId}] 4b. WebGL loaded OK`)
+      } catch (err) {
+        console.warn(`[TERM ${agentId}] 4b. WebGL failed, using canvas:`, err)
       }
 
       // 4c. Replay buffered output + start passthrough (after fit + WebGL)
       const buffered = outputBuffer.drain(agentId, writeCallback)
+      console.log(`[TERM ${agentId}] 4c. Drain buffer: ${buffered ? buffered.length + ' bytes' : 'empty'}`)
       if (buffered) {
         writeChunked(term, buffered, mountedRef)
       }
+      console.log(`[TERM ${agentId}] 4d. Mount complete, ready`)
       onReady?.()
     })
 
@@ -133,19 +149,24 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       resizeTimer = setTimeout(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
         if (Date.now() < stabilizeAt) return
-        if (isFittingRef.current) return // prevent re-entrancy from scrollbar toggle
+        if (isFittingRef.current) {
+          console.log(`[TERM ${agentId}] ResizeObserver: skipped (isFitting guard)`)
+          return
+        }
         isFittingRef.current = true
         try {
           fitAddonRef.current.fit()
           const { cols, rows } = termRef.current
-          // Strategy 2: lock cols to initial value, only allow rows to change
           const lockedCols = fixedColsRef.current ?? cols
+          console.log(`[TERM ${agentId}] ResizeObserver: fit cols=${cols} rows=${rows}, locked=${lockedCols}, prev=${lastCols}x${lastRows}`)
           if (cols !== lockedCols) {
+            console.log(`[TERM ${agentId}] ResizeObserver: snapping cols ${cols} → ${lockedCols}`)
             termRef.current.resize(lockedCols, rows)
           }
           if (lockedCols !== lastCols || rows !== lastRows) {
             lastCols = lockedCols
             lastRows = rows
+            console.log(`[TERM ${agentId}] ResizeObserver: PTY resize → ${lockedCols}x${rows}`)
             window.agentHub.agents.resize(agentId, lockedCols, rows)
           }
         } finally {
@@ -158,6 +179,8 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
 
     // Cleanup on unmount
     return () => {
+      console.log(`[TERM ${agentId}] Unmounting, disposing terminal`)
+      active = false
       mountedRef.current = false
 
       // 1. Cancel pending rAF write
@@ -195,15 +218,23 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
 
   // Re-fit rows only + force repaint when becoming visible
   useEffect(() => {
+    console.log(`[TERM ${agentId}] Visibility changed: visible=${visible}`)
     if (visible && termRef.current && fitAddonRef.current) {
       requestAnimationFrame(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
         const term = termRef.current
-        // Fit to get correct rows for current container height
+        // Skip if initial mount hasn't completed yet (fixedCols not set)
+        if (fixedColsRef.current === null) {
+          console.log(`[TERM ${agentId}] Visibility rAF: skipped, fixedCols not set yet`)
+          return
+        }
+        const parentEl = term.element?.parentElement
+        console.log(`[TERM ${agentId}] Visibility rAF: parent ${parentEl?.clientWidth}x${parentEl?.clientHeight}, visibility=${parentEl ? getComputedStyle(parentEl).visibility : 'N/A'}`)
         fitAddonRef.current.fit()
-        // Lock cols back to fixed value (prevent SIGWINCH cols reflow)
-        const lockedCols = fixedColsRef.current ?? term.cols
+        const lockedCols = fixedColsRef.current
+        console.log(`[TERM ${agentId}] Visibility fit: cols=${term.cols} rows=${term.rows}, locked=${lockedCols}`)
         if (term.cols !== lockedCols) {
+          console.log(`[TERM ${agentId}] Visibility: snapping cols ${term.cols} → ${lockedCols}`)
           term.resize(lockedCols, term.rows)
         }
         window.agentHub.agents.resize(agentId, lockedCols, term.rows)
