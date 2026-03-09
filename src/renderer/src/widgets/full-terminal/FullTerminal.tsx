@@ -83,27 +83,29 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     // 2. Open in the visible container
     term.open(containerRef.current)
 
-    // 3. Load WebGL addon
-    try {
-      const webgl = new WebglAddon()
-      term.loadAddon(webgl)
-      webgl.onContextLoss(() => webgl.dispose())
-    } catch {
-      // WebGL not available — falls back to canvas renderer
-    }
-
-    // 4. Load FitAddon
+    // 3. Load FitAddon FIRST (before WebGL to avoid canvas size lock-in)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
 
-    // 5. Initial fit THEN drain+write (must write AFTER terminal is sized)
+    // 4. Initial fit, THEN WebGL, THEN drain+write
     requestAnimationFrame(() => {
       if (!mountedRef.current) return
+
+      // 4a. Fit terminal to container (sets correct cols/rows)
       fitAddon.fit()
       window.agentHub.agents.resize(agentId, term.cols, term.rows)
 
-      // 6. Replay buffered output + start passthrough (after fit)
+      // 4b. Load WebGL AFTER sizing is locked in
+      try {
+        const webgl = new WebglAddon()
+        term.loadAddon(webgl)
+        webgl.onContextLoss(() => webgl.dispose())
+      } catch {
+        // WebGL not available — falls back to canvas renderer
+      }
+
+      // 4c. Replay buffered output + start passthrough (after fit + WebGL)
       const buffered = outputBuffer.drain(agentId, writeCallback)
       if (buffered) {
         writeChunked(term, buffered, mountedRef)

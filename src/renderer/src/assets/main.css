@@ -422,7 +422,11 @@ body {
   @apply h-screen w-screen flex flex-col;
 }
 
-/* xterm.js viewport fix — prevents layout glitches from CSS width collisions */
+/* xterm.js layout fixes — prevent Tailwind flex collisions and viewport glitches */
 .xterm-viewport {
   width: initial !important;
+}
+.xterm {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
 }
