@@ -28,7 +28,7 @@ import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
-import { outputBuffer } from './services/output-buffer'
+import { outputBuffer } from '@renderer/services/output-buffer'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -178,12 +178,6 @@ function AppMain(): React.JSX.Element {
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
-        next.delete(agentId)
-        return next
-      })
-      setProxyCommands((prev) => {
-        if (!prev.has(agentId)) return prev
-        const next = new Map(prev)
         next.delete(agentId)
         return next
       })

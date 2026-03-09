@@ -38,7 +38,7 @@ export function ShutdownDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-base-100/80 backdrop-blur-sm"
       data-testid="shutdown-overlay"
     >
-      <div className="panel-glass max-w-[500px] w-full p-6 space-y-5">
+      <div className="panel-glass max-w-125 w-full p-6 space-y-5">
         <div>
           <h2 className="text-base font-semibold" data-testid="shutdown-title">
             {activeAgents.length} agent{activeAgents.length !== 1 ? 's are' : ' is'} still active

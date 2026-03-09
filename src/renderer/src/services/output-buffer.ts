@@ -46,6 +46,11 @@ class OutputBuffer {
    * directly instead of buffered.
    */
   drain(agentId: string, callback: (data: string) => void): string {
+    // Safety: auto-start if not yet subscribed (e.g. breakout window race)
+    if (!this.unsubscribe) {
+      this.start()
+    }
+
     // Gather buffered content
     const chunks = this.buffers.get(agentId)
     const buffered = chunks ? chunks.join('') : ''

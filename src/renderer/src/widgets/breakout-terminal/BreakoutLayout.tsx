@@ -1,12 +1,19 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
+import { outputBuffer } from '@renderer/services/output-buffer'
 import type { AgentState } from '@shared/types/agent.types'
 
 function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const [agent, setAgent] = useState<AgentState | null>(null)
   const [inputValue, setInputValue] = useState('')
+
+  // Start output buffer (breakout windows skip AppMain where start() normally lives)
+  useEffect(() => {
+    outputBuffer.start()
+    return () => outputBuffer.stop()
+  }, [])
 
   // Fetch agent state on mount
   useEffect(() => {
