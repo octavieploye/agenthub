@@ -54,7 +54,13 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const deleteTask = useTaskStore((s) => s.deleteTask)
 
   const [newTitle, setNewTitle] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editPriority, setEditPriority] = useState<TaskPriority>(2)
 
   useEffect(() => {
     fetchTasks()
@@ -68,15 +74,17 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
     await createTask({
       repoId: agent.repoId,
       title,
+      description: newDescription.trim() || undefined,
       priority: newPriority
     })
     setNewTitle('')
+    setNewDescription('')
     setNewPriority(2)
-  }, [newTitle, newPriority, agent.repoId, createTask])
+  }, [newTitle, newDescription, newPriority, agent.repoId, createTask])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         handleAdd()
       }
@@ -108,6 +116,34 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
     [onSpawnWithTask]
   )
 
+  const startEdit = useCallback((task: TaskItem) => {
+    setEditingId(task.id)
+    setEditTitle(task.title)
+    setEditDescription(task.description || '')
+    setEditPriority(task.priority)
+  }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null)
+    setEditTitle('')
+    setEditDescription('')
+    setEditPriority(2)
+  }, [])
+
+  const saveEdit = useCallback(async () => {
+    if (!editingId) return
+    const title = editTitle.trim()
+    if (!title) return
+    await updateTaskRemote(editingId, {
+      title,
+      description: editDescription.trim() || undefined,
+      priority: editPriority
+    })
+    cancelEdit()
+  }, [editingId, editTitle, editDescription, editPriority, updateTaskRemote, cancelEdit])
+
+  const agentColor = agent.color || '#3B82F6'
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-3 pt-3">
@@ -120,72 +156,150 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
         {repoTasks.map((task) => (
           <div
             key={task.id}
-            className={`flex items-center gap-2 px-3 py-2 border-b border-base-content/5 last:border-b-0 hover:bg-base-content/5 transition-colors ${
+            className={`px-3 py-2 border-b border-base-content/5 last:border-b-0 hover:bg-base-content/5 transition-colors ${
               task.status === 'completed' || task.status === 'tested' ? 'opacity-40' : ''
             }`}
           >
-            <span className={`badge badge-xs ${PRIORITY_BADGE[task.priority]}`}>
-              {PRIORITY_LABEL[task.priority]}
-            </span>
-
-            <span className="text-sm flex-1 truncate">{task.title}</span>
-
-            <span className={`badge badge-xs ${STATUS_BADGE[task.status]}`}>
-              {task.status.replace('_', ' ')}
-            </span>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {task.status !== 'completed' && task.status !== 'tested' && (
-                <>
+            {editingId === task.id ? (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="input input-bordered input-sm w-full bg-base-100/50 text-sm text-base-content border-base-content/10 focus:outline-none"
+                  style={{ borderColor: `${agentColor}40`, focusBorderColor: agentColor }}
+                  autoFocus
+                />
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Description (optional)"
+                  rows={2}
+                  className="textarea textarea-bordered textarea-sm w-full bg-base-100/50 text-xs text-base-content border-base-content/10 focus:outline-none resize-none"
+                />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(Number(e.target.value) as TaskPriority)}
+                    className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
+                  >
+                    <option value={1}>P1</option>
+                    <option value={2}>P2</option>
+                    <option value={3}>P3</option>
+                  </select>
+                  <div className="flex-1" />
                   <button
-                    onClick={() => handleSpawn(task)}
+                    onClick={cancelEdit}
                     className="btn-lcars text-[10px] px-2 py-0.5"
-                    title="Launch agent with this task"
                   >
-                    Play
+                    Cancel
                   </button>
                   <button
-                    onClick={() => handleComplete(task.id)}
-                    className="btn btn-ghost btn-xs text-success"
-                    title="Mark completed"
+                    onClick={saveEdit}
+                    className="btn-lcars text-[10px] px-2 py-0.5 text-white"
+                    style={{ backgroundColor: agentColor }}
                   >
-                    Done
+                    Save
                   </button>
-                </>
-              )}
-              <button
-                onClick={() => handleDelete(task.id)}
-                className="btn btn-ghost btn-xs text-error/60"
-                title="Delete task"
-              >
-                Del
-              </button>
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <span className={`badge badge-xs mt-1 ${PRIORITY_BADGE[task.priority]}`}>
+                  {PRIORITY_LABEL[task.priority]}
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm break-words">{task.title}</span>
+                  {task.description && (
+                    <p className="text-xs text-base-content/50 break-words mt-0.5">{task.description}</p>
+                  )}
+                </div>
+
+                <span className={`badge badge-xs shrink-0 mt-1 ${STATUS_BADGE[task.status]}`}>
+                  {task.status.replace('_', ' ')}
+                </span>
+
+                <div className="flex flex-wrap items-center gap-1 shrink-0">
+                  {task.status !== 'completed' && task.status !== 'tested' && (
+                    <>
+                      <button
+                        onClick={() => handleSpawn(task)}
+                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
+                        style={{ backgroundColor: agentColor }}
+                        title="Launch agent with this task"
+                      >
+                        Play
+                      </button>
+                      <button
+                        onClick={() => handleComplete(task.id)}
+                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
+                        style={{ backgroundColor: agentColor }}
+                        title="Mark completed"
+                      >
+                        Done
+                      </button>
+                      <button
+                        onClick={() => startEdit(task)}
+                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
+                        style={{ backgroundColor: agentColor }}
+                        title="Edit task"
+                      >
+                        Edit
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDelete(task.id)}
+                    className="btn-lcars text-[10px] px-2 py-0.5"
+                    style={{ backgroundColor: `${agentColor}30`, color: agentColor }}
+                    title="Delete task"
+                  >
+                    Del
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      <div className="border-t border-base-content/10 p-3 flex items-center gap-2">
-        <input
-          type="text"
-          placeholder="New task title..."
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="input input-bordered input-sm flex-1 bg-base-100/50 text-sm text-base-content placeholder:text-base-content/30 border-base-content/10 focus:border-primary/40 focus:outline-none"
+      <div className="border-t border-base-content/10 p-3 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Task title..."
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="input input-bordered input-sm flex-1 bg-base-100/50 text-sm text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
+            style={{ borderColor: `${agentColor}30` }}
+          />
+          <select
+            value={newPriority}
+            onChange={(e) => setNewPriority(Number(e.target.value) as TaskPriority)}
+            className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
+          >
+            <option value={1}>P1</option>
+            <option value={2}>P2</option>
+            <option value={3}>P3</option>
+          </select>
+          <button
+            onClick={handleAdd}
+            className="btn-lcars text-[10px] px-3 py-1 text-white"
+            style={{ backgroundColor: agentColor }}
+          >
+            Add
+          </button>
+        </div>
+        <textarea
+          placeholder="Description (optional)..."
+          value={newDescription}
+          onChange={(e) => setNewDescription(e.target.value)}
+          rows={2}
+          className="textarea textarea-bordered textarea-sm w-full bg-base-100/50 text-xs text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none resize-none"
+          style={{ borderColor: `${agentColor}30` }}
         />
-        <select
-          value={newPriority}
-          onChange={(e) => setNewPriority(Number(e.target.value) as TaskPriority)}
-          className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
-        >
-          <option value={1}>P1</option>
-          <option value={2}>P2</option>
-          <option value={3}>P3</option>
-        </select>
-        <button onClick={handleAdd} className="btn-lcars text-[10px] px-3 py-1">
-          Add
-        </button>
       </div>
     </div>
   )

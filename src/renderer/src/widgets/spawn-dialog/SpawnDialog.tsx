@@ -192,7 +192,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
           <PreLaunchCard
             repoId={selectedRepoId || 'default'}
             repoName={repoName}
-            initialTask="Interactive session"
+            initialTask=""
             recommendedModel={currentModelInfo?.name ?? selectedModel}
             modelRationale={
               selectedModel.includes('opus')
