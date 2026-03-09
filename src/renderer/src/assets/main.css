@@ -421,3 +421,8 @@ body {
 #root {
   @apply h-screen w-screen flex flex-col;
 }
+
+/* xterm.js viewport fix — prevents layout glitches from CSS width collisions */
+.xterm-viewport {
+  width: initial !important;
+}

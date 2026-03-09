@@ -80,14 +80,15 @@ function AgentDetailPanel({
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — TerminalTab stays mounted (hidden) to preserve xterm instance */}
       <div className="flex-1 min-h-0 overflow-hidden" role="tabpanel" aria-label={`${activeTab} tab content`}>
         {activeTab === 'general' && (
           <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
         )}
-        {activeTab === 'terminal' && (
+        <div className={`h-full ${activeTab === 'terminal' ? '' : 'hidden'}`}>
           <TerminalTab
             agent={agent}
+            visible={activeTab === 'terminal'}
             onBreakout={onBreakout}
             onPause={onPause}
             onResume={onResume}
@@ -96,7 +97,7 @@ function AgentDetailPanel({
             onDetachTerminal={onDetachTerminal}
             proxyActive={proxyActive}
           />
-        )}
+        </div>
         {activeTab === 'notes' && <NotesTab agent={agent} />}
         {activeTab === 'history' && <HistoryTab agent={agent} />}
         {activeTab === 'todo' && <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />}

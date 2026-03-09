@@ -7,6 +7,28 @@ import { useThemeStore } from '@renderer/stores/theme-store'
 import { getXtermTheme } from './theme-bridge'
 import { outputBuffer } from '@renderer/services/output-buffer'
 
+/**
+ * Write large data in 16KB chunks, yielding to the renderer between each
+ * chunk so xterm can repaint and the UI doesn't freeze.
+ */
+function writeChunked(
+  term: Terminal,
+  data: string,
+  guard: React.RefObject<boolean>,
+  chunkSize = 16_384
+): void {
+  let offset = 0
+  function writeNext(): void {
+    if (!guard.current || offset >= data.length) return
+    const end = Math.min(offset + chunkSize, data.length)
+    term.write(data.slice(offset, end), () => {
+      offset = end
+      if (offset < data.length) setTimeout(writeNext, 0)
+    })
+  }
+  writeNext()
+}
+
 interface FullTerminalProps {
   agentId: string
   visible: boolean
@@ -22,10 +44,22 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const theme = useThemeStore((s) => s.theme)
 
-  // Stable write callback that guards against writing to a disposed terminal
+  // rAF-batched write callback: accumulates IPC chunks and flushes once per
+  // animation frame so the renderer doesn't choke on high-frequency PTY output.
+  const pendingRef = useRef('')
+  const rafIdRef = useRef<number | null>(null)
+
   const writeCallback = useCallback((data: string) => {
-    if (mountedRef.current && termRef.current) {
-      termRef.current.write(data)
+    if (!mountedRef.current) return
+    pendingRef.current += data
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null
+        if (mountedRef.current && termRef.current && pendingRef.current) {
+          termRef.current.write(pendingRef.current)
+          pendingRef.current = ''
+        }
+      })
     }
   }, [])
 
@@ -63,19 +97,19 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     term.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
 
-    // 5. Initial fit
+    // 5. Initial fit THEN drain+write (must write AFTER terminal is sized)
     requestAnimationFrame(() => {
       if (!mountedRef.current) return
       fitAddon.fit()
       window.agentHub.agents.resize(agentId, term.cols, term.rows)
+
+      // 6. Replay buffered output + start passthrough (after fit)
+      const buffered = outputBuffer.drain(agentId, writeCallback)
+      if (buffered) {
+        writeChunked(term, buffered, mountedRef)
+      }
       onReady?.()
     })
-
-    // 6. Replay buffered output + start passthrough
-    const buffered = outputBuffer.drain(agentId, writeCallback)
-    if (buffered) {
-      term.write(buffered)
-    }
 
     // 7. Wire keyboard input
     const inputDisposable = term.onData((data: string) => {
@@ -99,18 +133,25 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     return () => {
       mountedRef.current = false
 
-      // 1. Stop passthrough
+      // 1. Cancel pending rAF write
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+      pendingRef.current = ''
+
+      // 2. Stop passthrough
       outputBuffer.stopPassthrough(agentId, writeCallback)
 
-      // 2. Disconnect resize observer
+      // 3. Disconnect resize observer
       if (resizeTimer) clearTimeout(resizeTimer)
       observer.disconnect()
       resizeObserverRef.current = null
 
-      // 3. Clean up input handler
+      // 4. Clean up input handler
       inputDisposable.dispose()
 
-      // 4. Dispose terminal (also disposes addons)
+      // 5. Dispose terminal (also disposes addons)
       term.dispose()
       termRef.current = null
       fitAddonRef.current = null
