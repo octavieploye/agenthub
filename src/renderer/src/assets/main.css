@@ -345,6 +345,23 @@
   box-shadow: 0 0 8px currentColor;
 }
 
+/* Liquid glass glow — agent status */
+.glow-blip {
+  animation: glow-pulse 1s ease-in-out infinite;
+}
+.glow-blip-fast {
+  animation: glow-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px var(--glow-color, transparent), inset 0 0 4px color-mix(in srgb, var(--glow-color, transparent) 10%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--glow-color, transparent), 0 0 60px color-mix(in srgb, var(--glow-color, transparent) 40%, transparent), inset 0 0 12px color-mix(in srgb, var(--glow-color, transparent) 15%, transparent);
+  }
+}
+
 /* Slim progress bar */
 .progress-slim {
   height: 0.25rem;
@@ -391,7 +408,9 @@
   .animate-urgency-pulse,
   .animate-ambient-glow,
   .animate-spatial-zoom,
-  .panel-glass-alert {
+  .panel-glass-alert,
+  .glow-blip,
+  .glow-blip-fast {
     animation: none !important;
   }
   * {

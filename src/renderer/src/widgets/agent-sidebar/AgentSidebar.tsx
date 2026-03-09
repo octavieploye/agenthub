@@ -1,4 +1,5 @@
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
+import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 
 interface AgentSidebarProps {
   agents: AgentState[]
@@ -21,6 +22,163 @@ const STATUS_COLORS: Record<string, string> = {
   paused: 'bg-amber-400',
   interrupted: 'bg-error',
   tray_running: 'bg-success/50'
+}
+
+interface GlowConfig {
+  color: string
+  animation: 'steady' | 'blip' | 'blip-fast' | 'none'
+}
+
+function getGlowConfig(status: AgentLifecycleStatus, agentColor: string): GlowConfig {
+  switch (status) {
+    case 'busy':
+    case 'locked':
+      return { color: agentColor, animation: 'steady' }
+    case 'completed':
+      return { color: '#1BF707', animation: 'steady' }
+    case 'awaiting_approval':
+    case 'idle':
+      return { color: '#F7E307', animation: 'blip' }
+    case 'looping':
+      return { color: '#F70707', animation: 'blip-fast' }
+    case 'error':
+      return { color: '#072FF7', animation: 'blip-fast' }
+    default:
+      return { color: 'transparent', animation: 'none' }
+  }
+}
+
+function AgentCard({
+  agent,
+  isActive,
+  onSelectAgent,
+  onKillAgent,
+  onPauseAgent,
+  onResumeAgent,
+  onOpenGuardrails
+}: {
+  agent: AgentState
+  isActive: boolean
+  onSelectAgent: (id: string) => void
+  onKillAgent: (id: string) => void
+  onPauseAgent: (id: string) => void
+  onResumeAgent: (id: string) => void
+  onOpenGuardrails?: (agentId: string) => void
+}): React.JSX.Element {
+  const settledStatus = useSettledStatus(agent.status)
+  const glow = getGlowConfig(settledStatus, agent.color || '#3B82F6')
+  const isRunning = agent.status === 'busy' || agent.status === 'locked'
+  const isPaused = agent.status === 'paused'
+
+  const glowClass =
+    glow.animation === 'blip'
+      ? 'glow-blip'
+      : glow.animation === 'blip-fast'
+        ? 'glow-blip-fast'
+        : ''
+
+  const glowStyle: React.CSSProperties =
+    glow.animation !== 'none'
+      ? {
+          '--glow-color': glow.color,
+          boxShadow:
+            glow.animation === 'steady'
+              ? `0 0 24px ${glow.color}80, inset 0 0 8px ${glow.color}20`
+              : undefined
+        } as React.CSSProperties
+      : {}
+
+  return (
+    <div
+      key={agent.id}
+      role="listitem"
+      aria-label={`${agent.name}, status ${agent.status}`}
+      onClick={() => onSelectAgent(agent.id)}
+      className={`mx-1 mb-0.5 px-2 py-2 rounded-lg cursor-pointer transition-all ${glowClass} ${
+        isActive ? 'panel-glass-active' : 'hover:bg-base-content/5'
+      }`}
+      style={{
+        ...(isActive ? { backgroundColor: `${agent.color}15` } : {}),
+        ...glowStyle
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-block w-2.5 h-2.5 rounded-full shrink-0 border-2"
+          style={{ backgroundColor: agent.color, borderColor: `${agent.color}80` }}
+        />
+        <span
+          className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+            STATUS_COLORS[agent.status] ?? 'bg-base-content/30'
+          }`}
+        />
+        <span className="text-sm font-medium truncate flex-1">
+          {agent.name}
+        </span>
+      </div>
+
+      <div className="ml-4 mt-1">
+        <span className="text-[10px] text-base-content/40 truncate block">
+          {agent.cwd?.split('/').slice(-2).join('/') ?? 'unknown'}
+        </span>
+        <span className="text-[10px] text-base-content/30 capitalize">
+          {agent.status}
+          {agent.confidence === 'inferred' ? ' ~' : ''}
+        </span>
+      </div>
+
+      {isActive && (
+        <div className="flex gap-1 mt-1.5 ml-4">
+          {isRunning && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onPauseAgent(agent.id)
+              }}
+              className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-warning/20 hover:text-warning"
+              title="Pause agent"
+            >
+              Pause
+            </button>
+          )}
+          {isPaused && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onResumeAgent(agent.id)
+              }}
+              className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-success/20 hover:text-success"
+              title="Resume agent"
+            >
+              Resume
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onKillAgent(agent.id)
+            }}
+            className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-error/20 hover:text-error"
+            title="Kill agent"
+          >
+            Kill
+          </button>
+          {onOpenGuardrails && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenGuardrails(agent.id)
+              }}
+              className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-base-content/20"
+              title="Guardrails settings"
+            >
+              &#9881;
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function AgentSidebar({
@@ -55,102 +213,18 @@ function AgentSidebar({
           </div>
         )}
 
-        {agents.map((agent) => {
-          const isActive = agent.id === activeAgentId
-          const isRunning = agent.status === 'busy' || agent.status === 'locked'
-          const isPaused = agent.status === 'paused'
-
-          return (
-            <div
-              key={agent.id}
-              role="listitem"
-              aria-label={`${agent.name}, status ${agent.status}`}
-              onClick={() => onSelectAgent(agent.id)}
-              className={`mx-1 mb-0.5 px-2 py-2 rounded-lg cursor-pointer transition-all ${
-                isActive
-                  ? 'panel-glass-active'
-                  : 'hover:bg-base-content/5'
-              }`}
-              style={isActive ? { backgroundColor: `${agent.color}15` } : undefined}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0 border-2"
-                  style={{ backgroundColor: agent.color, borderColor: `${agent.color}80` }}
-                />
-                <span
-                  className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                    STATUS_COLORS[agent.status] ?? 'bg-base-content/30'
-                  }`}
-                />
-                <span className="text-sm font-medium truncate flex-1">
-                  {agent.name}
-                </span>
-              </div>
-
-              <div className="ml-4 mt-1">
-                <span className="text-[10px] text-base-content/40 truncate block">
-                  {agent.cwd?.split('/').slice(-2).join('/') ?? 'unknown'}
-                </span>
-                <span className="text-[10px] text-base-content/30 capitalize">
-                  {agent.status}
-                  {agent.confidence === 'inferred' ? ' ~' : ''}
-                </span>
-              </div>
-
-              {isActive && (
-                <div className="flex gap-1 mt-1.5 ml-4">
-                  {isRunning && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onPauseAgent(agent.id)
-                      }}
-                      className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-warning/20 hover:text-warning"
-                      title="Pause agent"
-                    >
-                      Pause
-                    </button>
-                  )}
-                  {isPaused && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onResumeAgent(agent.id)
-                      }}
-                      className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-success/20 hover:text-success"
-                      title="Resume agent"
-                    >
-                      Resume
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onKillAgent(agent.id)
-                    }}
-                    className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-error/20 hover:text-error"
-                    title="Kill agent"
-                  >
-                    Kill
-                  </button>
-                  {onOpenGuardrails && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onOpenGuardrails(agent.id)
-                      }}
-                      className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-base-content/20"
-                      title="Guardrails settings"
-                    >
-                      &#9881;
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {agents.map((agent) => (
+          <AgentCard
+            key={agent.id}
+            agent={agent}
+            isActive={agent.id === activeAgentId}
+            onSelectAgent={onSelectAgent}
+            onKillAgent={onKillAgent}
+            onPauseAgent={onPauseAgent}
+            onResumeAgent={onResumeAgent}
+            onOpenGuardrails={onOpenGuardrails}
+          />
+        ))}
       </div>
 
       <div className="px-3 py-2 border-t border-base-content/10">

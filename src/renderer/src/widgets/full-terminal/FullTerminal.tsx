@@ -50,7 +50,6 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   const rafIdRef = useRef<number | null>(null)
 
   const writeCallback = useCallback((data: string) => {
-    console.log('[FullTerminal] writeCallback', { mounted: mountedRef.current, len: data.length, preview: data.slice(0, 80) })
     if (!mountedRef.current) return
     pendingRef.current += data
     if (rafIdRef.current === null) {
