@@ -40,7 +40,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
   const handleSubmit = useCallback(() => {
     const trimmed = inputValue.trim()
     if (!trimmed) return
-    onSendInput(agent.id, trimmed + '\n')
+    onSendInput(agent.id, trimmed + '\r')
     setInputValue('')
   }, [inputValue, agent.id, onSendInput])
 

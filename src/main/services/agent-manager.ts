@@ -100,6 +100,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const parser = createParser() as ClaudeCliOutputParser
 
   ptyProcess.onData((data: string) => {
+    console.log('[Main PTY→IPC]', { agentId: agentState.id, len: data.length, preview: data.slice(0, 80) })
     emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, data)
 
     // Buffer output for batched DB persistence
@@ -170,7 +171,21 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 export function sendInput(agentId: string, data: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
-  managed.ptyProcess.write(data)
+  console.log('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
+
+  // Claude Code CLI enables bracketed paste mode. When sending bulk text
+  // ending with \r (Enter), the TUI swallows the \r if it arrives in the
+  // same write as the text. Split: send text first, then \r after a tick.
+  if (data.length > 1 && data.endsWith('\r')) {
+    const text = data.slice(0, -1)
+    managed.ptyProcess.write(text)
+    setTimeout(() => {
+      const m = agents.get(agentId)
+      if (m) m.ptyProcess.write('\r')
+    }, 50)
+  } else {
+    managed.ptyProcess.write(data)
+  }
 }
 
 export function resizeAgent(agentId: string, cols: number, rows: number): void {
