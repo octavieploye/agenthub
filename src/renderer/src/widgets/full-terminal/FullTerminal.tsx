@@ -50,6 +50,7 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
   const rafIdRef = useRef<number | null>(null)
 
   const writeCallback = useCallback((data: string) => {
+    console.log('[FullTerminal] writeCallback', { mounted: mountedRef.current, len: data.length, preview: data.slice(0, 80) })
     if (!mountedRef.current) return
     pendingRef.current += data
     if (rafIdRef.current === null) {
@@ -118,15 +119,27 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       window.agentHub.agents.sendInput(agentId, data)
     })
 
-    // 8. ResizeObserver (debounced 100ms)
+    // 8. ResizeObserver — skip resizes during initial stabilization (breakout
+    //    window animation triggers hundreds of resize events), then debounce 150ms.
     let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    let lastCols = term.cols
+    let lastRows = term.rows
+    const stabilizeAt = Date.now() + 800
     const observer = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
+        // Skip if still in initial stabilization window
+        if (Date.now() < stabilizeAt) return
         fitAddonRef.current.fit()
-        window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
-      }, 100)
+        // Only send resize to PTY if dimensions actually changed
+        const { cols, rows } = termRef.current
+        if (cols !== lastCols || rows !== lastRows) {
+          lastCols = cols
+          lastRows = rows
+          window.agentHub.agents.resize(agentId, cols, rows)
+        }
+      }, 150)
     })
     observer.observe(containerRef.current)
     resizeObserverRef.current = observer
@@ -168,13 +181,14 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     }
   }, [theme])
 
-  // Re-fit when becoming visible
+  // Re-fit + force repaint when becoming visible (WebGL canvas needs explicit refresh)
   useEffect(() => {
     if (visible && termRef.current && fitAddonRef.current) {
       requestAnimationFrame(() => {
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
         fitAddonRef.current.fit()
         window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
+        termRef.current.refresh(0, termRef.current.rows - 1)
         termRef.current.focus()
       })
     }

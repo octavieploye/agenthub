@@ -50,7 +50,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   const handleSendInput = useCallback(
     (text: string) => {
       if (!text.trim()) return
-      window.agentHub.agents.sendInput(agentId, text + '\n')
+      window.agentHub.agents.sendInput(agentId, text + '\r')
       setInputValue('')
     },
     [agentId]

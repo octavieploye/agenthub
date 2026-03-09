@@ -114,7 +114,7 @@ describe('BreakoutLayout', () => {
     const input = screen.getByTestId('breakout-input')
     fireEvent.change(input, { target: { value: 'hello' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(window.agentHub.agents.sendInput).toHaveBeenCalledWith('agent-1', 'hello\n')
+    expect(window.agentHub.agents.sendInput).toHaveBeenCalledWith('agent-1', 'hello\r')
   })
 
   it('sends input on Send button click', async () => {
@@ -129,7 +129,7 @@ describe('BreakoutLayout', () => {
     const input = screen.getByTestId('breakout-input')
     fireEvent.change(input, { target: { value: 'test task' } })
     fireEvent.click(screen.getByTestId('breakout-send'))
-    expect(window.agentHub.agents.sendInput).toHaveBeenCalledWith('agent-1', 'test task\n')
+    expect(window.agentHub.agents.sendInput).toHaveBeenCalledWith('agent-1', 'test task\r')
   })
 
   it('shows agent status', async () => {

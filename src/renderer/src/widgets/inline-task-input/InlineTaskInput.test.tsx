@@ -64,12 +64,12 @@ describe('InlineTaskInput', () => {
     expect(screen.getByTestId('inline-input-field')).toBeDisabled()
   })
 
-  it('calls onSendInput with text + newline on Enter', () => {
+  it('calls onSendInput with text + carriage return on Enter', () => {
     render(<InlineTaskInput agent={createMockAgent({ status: 'idle' })} onSendInput={mockOnSendInput} />)
     const input = screen.getByTestId('inline-input-field')
     fireEvent.change(input, { target: { value: 'fix the bug' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(mockOnSendInput).toHaveBeenCalledWith('agent-1', 'fix the bug\n')
+    expect(mockOnSendInput).toHaveBeenCalledWith('agent-1', 'fix the bug\r')
   })
 
   it('calls onSendInput on Send button click', () => {
@@ -77,7 +77,7 @@ describe('InlineTaskInput', () => {
     const input = screen.getByTestId('inline-input-field')
     fireEvent.change(input, { target: { value: 'run tests' } })
     fireEvent.click(screen.getByTestId('inline-send-button'))
-    expect(mockOnSendInput).toHaveBeenCalledWith('agent-1', 'run tests\n')
+    expect(mockOnSendInput).toHaveBeenCalledWith('agent-1', 'run tests\r')
   })
 
   it('clears input after sending', () => {
