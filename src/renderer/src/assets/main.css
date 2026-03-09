@@ -449,3 +449,10 @@ body {
   flex: 1 1 auto !important;
   min-height: 0 !important;
 }
+
+/* Isolate terminal from global CSS that breaks xterm cell metrics */
+.xterm, .xterm * {
+  letter-spacing: 0 !important;
+  font-feature-settings: normal !important;
+  font-variant-ligatures: none !important;
+}

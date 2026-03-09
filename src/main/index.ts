@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -51,6 +51,24 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agenthub')
+
+  // macOS requires an Edit menu for Cmd+C/V/X/A to work
+  const menu = Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    }
+  ])
+  Menu.setApplicationMenu(menu)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
