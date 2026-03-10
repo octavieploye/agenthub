@@ -151,7 +151,8 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     })
 
     // 7b. Wire clipboard: Cmd+C copies selected text, Cmd+V pastes
-    const keyDisposable = term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    // Note: attachCustomKeyEventHandler returns boolean, not a disposable
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
       if (isMeta && e.key === 'c' && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection())
@@ -238,9 +239,8 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       observer.disconnect()
       resizeObserverRef.current = null
 
-      // 4. Clean up input + key handlers
+      // 4. Clean up input handler
       inputDisposable.dispose()
-      keyDisposable.dispose()
 
       // 5. Dispose terminal (also disposes addons)
       term.dispose()
