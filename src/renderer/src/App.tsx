@@ -28,7 +28,7 @@ import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
-import { outputBuffer } from '@renderer/services/output-buffer'
+import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -173,8 +173,8 @@ function AppMain(): React.JSX.Element {
         pendingSounds.delete(agentId)
       }
 
-      // Clean up cached terminal and proxy state for this agent
-      outputBuffer.clear(agentId)
+      // Clean up persistent terminal for this agent
+      import('./widgets/full-terminal/terminal-manager').then(m => m.destroyTerminal(agentId))
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
@@ -212,17 +212,9 @@ function AppMain(): React.JSX.Element {
     return unsub
   }, [setActiveAgent, setFocusedAgent])
 
-  // Start output buffer on mount, clean up on unmount
+  // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
-    outputBuffer.start()
-    return () => outputBuffer.stop()
-  }, [])
-
-  // Clean up all output buffers on window close
-  useEffect(() => {
-    const cleanup = (): void => outputBuffer.clearAll()
-    window.addEventListener('beforeunload', cleanup)
-    return () => window.removeEventListener('beforeunload', cleanup)
+    startIpcListener()
   }, [])
 
   // Fetch usage on mount and periodically (30s)
