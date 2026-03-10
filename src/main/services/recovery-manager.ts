@@ -1,3 +1,5 @@
+import * as fs from 'fs'
+import * as path from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { AgentState } from '../../shared/types/agent.types'
@@ -5,6 +7,7 @@ import type { RecoveryInfo, SBARHandoff } from '../../shared/types/recovery.type
 import { getLatestSnapshot } from '../db/queries/snapshots.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { getAllAgents, updateAgentStatus } from '../db/queries/agents.queries'
+import { SOCKET_DIR } from './pty-proxy'
 
 export function isProcessAlive(pid: number): boolean {
   try {
@@ -16,6 +19,9 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
+  // Clean up stale socket files from previous crashes before recovery
+  cleanupStaleSockets(db)
+
   const lastSnapshot = getLatestSnapshot(db)
   const allAgents = getAllAgents(db)
 
@@ -67,6 +73,56 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
     lastSnapshot,
     recoveredAgents,
     interruptedAgents
+  }
+}
+
+/**
+ * Remove stale Unix socket files from previous crashes.
+ * Cross-references socket filenames with agent PIDs in the DB.
+ */
+export function cleanupStaleSockets(db: Database.Database): void {
+  try {
+    if (!fs.existsSync(SOCKET_DIR)) return
+
+    const files = fs.readdirSync(SOCKET_DIR)
+    const socketFiles = files.filter((f) => f.startsWith('pty-') && f.endsWith('.sock'))
+
+    if (socketFiles.length === 0) return
+
+    const allAgents = getAllAgents(db)
+    // Build a map of short ID (first 8 chars) → agent for cross-referencing
+    const agentByShortId = new Map<string, AgentState>()
+    for (const agent of allAgents) {
+      agentByShortId.set(agent.id.slice(0, 8), agent)
+    }
+
+    let cleaned = 0
+    for (const file of socketFiles) {
+      // Extract short ID from pty-{shortId}.sock
+      const match = file.match(/^pty-(.+)\.sock$/)
+      if (!match) continue
+
+      const shortId = match[1]
+      const agent = agentByShortId.get(shortId)
+      const socketPath = path.join(SOCKET_DIR, file)
+
+      // Delete if: agent doesn't exist in DB, or its PID is dead
+      if (!agent || !agent.pid || !isProcessAlive(agent.pid)) {
+        try {
+          fs.unlinkSync(socketPath)
+          cleaned++
+          log.info('Removed stale socket', { file, reason: agent ? 'dead PID' : 'unknown agent' })
+        } catch (err) {
+          log.warn('Failed to remove stale socket', { file, error: (err as Error).message })
+        }
+      }
+    }
+
+    if (cleaned > 0) {
+      log.info('Stale socket cleanup complete', { cleaned, total: socketFiles.length })
+    }
+  } catch (err) {
+    log.warn('Stale socket cleanup failed', { error: (err as Error).message })
   }
 }
 

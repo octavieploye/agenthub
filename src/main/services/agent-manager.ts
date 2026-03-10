@@ -10,6 +10,8 @@ import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
+import { executeKillHierarchy } from './kill-hierarchy'
+import { getWindowManager } from './service-orchestrator'
 
 interface ManagedAgent {
   state: AgentState
@@ -146,6 +148,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
     emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
     emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
+
+    // Auto-close breakout window for this agent
+    const wm = getWindowManager()
+    if (wm) {
+      wm.closeBreakout(agentState.id)
+    }
+
     agents.delete(agentState.id)
   })
 
@@ -214,13 +223,52 @@ export function killAgent(agentId: string): void {
   // Flush remaining output before kill
   flushOutputBuffer(agentId)
 
-  log.info('Killing agent', { id: agentId })
-  managed.ptyProcess.kill()
+  const pid = managed.ptyProcess.pid
+  log.info('Killing agent via kill hierarchy', { id: agentId, pid })
 
-  const db = getDb()
-  updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
-  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
-  agents.delete(agentId)
+  // Execute graceful kill hierarchy (SIGTSTP → SIGINT → SIGTERM → SIGKILL)
+  executeKillHierarchy(agentId, pid, {
+    sendSignal: (p: number, signal: string) => {
+      try {
+        process.kill(p, signal)
+      } catch (err) {
+        log.warn('Failed to send signal', { pid: p, signal, error: err instanceof Error ? err.message : String(err) })
+      }
+    },
+    updateStatus: (id: string, status: string, confidence: string) => {
+      emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, id, status, confidence)
+    },
+    isProcessAlive: (p: number): boolean => {
+      try {
+        process.kill(p, 0)
+        return true
+      } catch {
+        return false
+      }
+    },
+    onWarning: (id: string, message: string) => {
+      log.warn('Kill hierarchy warning', { id, message })
+    }
+  }).then(() => {
+    // If the onExit handler hasn't already cleaned up, do it now
+    if (agents.has(agentId)) {
+      const db = getDb()
+      updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
+      emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
+      agents.delete(agentId)
+    }
+  }).catch((err) => {
+    log.error('Kill hierarchy failed, forcing kill', { id: agentId, error: err instanceof Error ? err.message : String(err) })
+    try {
+      managed.ptyProcess.kill()
+    } catch { /* already dead */ }
+    if (agents.has(agentId)) {
+      const db = getDb()
+      updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
+      emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
+      agents.delete(agentId)
+    }
+  })
 }
 
 export function pauseAgent(agentId: string): void {

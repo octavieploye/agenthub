@@ -1,3 +1,5 @@
+import { killProcessTree } from './process-tree'
+
 export interface KillHierarchyCallbacks {
   sendSignal: (pid: number, signal: string) => void
   updateStatus: (agentId: string, status: string, confidence: string) => void
@@ -38,8 +40,11 @@ export async function executeKillHierarchy(
   await wait(5000)
   if (!callbacks.isProcessAlive(pid)) return
 
-  // Step 4: SIGKILL — last resort
-  callbacks.onWarning(agentId, 'Sending SIGKILL — work may be lost')
-  callbacks.sendSignal(pid, 'SIGKILL')
+  // Step 4: SIGKILL + tree kill — last resort
+  callbacks.onWarning(agentId, 'Sending SIGKILL + tree kill — work may be lost')
+  await killProcessTree(pid, 'SIGKILL').catch(() => {
+    // Fallback to direct signal if tree kill fails
+    callbacks.sendSignal(pid, 'SIGKILL')
+  })
   callbacks.updateStatus(agentId, 'interrupted', 'confirmed')
 }
