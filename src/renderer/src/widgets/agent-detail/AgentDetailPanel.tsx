@@ -80,12 +80,14 @@ function AgentDetailPanel({
         ))}
       </div>
 
-      {/* Tab content — TerminalTab stays mounted (hidden) to preserve xterm instance */}
-      <div className="flex-1 min-h-0 overflow-hidden relative" role="tabpanel" aria-label={`${activeTab} tab content`}>
+      {/* Tab content — all data tabs stay mounted (absolute overlay) to avoid remount/IPC delays */}
+      <div className="flex-1 min-h-0 overflow-hidden relative bg-base-100" role="tabpanel" aria-label={`${activeTab} tab content`}>
         {activeTab === 'general' && (
-          <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
+          <div className="absolute inset-0">
+            <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
+          </div>
         )}
-        <div className="h-full" style={{ visibility: activeTab === 'terminal' ? 'visible' : 'hidden' }}>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'terminal' ? 'visible' : 'hidden' }}>
           <TerminalTab
             key={agent.id}
             agent={agent}
@@ -99,11 +101,21 @@ function AgentDetailPanel({
             proxyActive={proxyActive}
           />
         </div>
-        {activeTab === 'notes' && <NotesTab agent={agent} />}
-        {activeTab === 'history' && <HistoryTab agent={agent} />}
-        {activeTab === 'todo' && <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />}
-        {activeTab === 'bugs' && <BugsTab agent={agent} />}
-        {activeTab === 'git' && <GitTab agent={agent} />}
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'notes' ? 'visible' : 'hidden' }}>
+          <NotesTab agent={agent} />
+        </div>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'history' ? 'visible' : 'hidden' }}>
+          <HistoryTab agent={agent} />
+        </div>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'todo' ? 'visible' : 'hidden' }}>
+          <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />
+        </div>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'bugs' ? 'visible' : 'hidden' }}>
+          <BugsTab agent={agent} />
+        </div>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'git' ? 'visible' : 'hidden' }}>
+          <GitTab agent={agent} />
+        </div>
       </div>
     </div>
   )
