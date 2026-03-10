@@ -32,6 +32,7 @@ import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 
 function App(): React.JSX.Element {
+  console.log('[DEBUG-RENDER] App render START', performance.now().toFixed(1))
   // Detect breakout mode from URL search params
   const urlParams = new URLSearchParams(window.location.search)
   const isBreakout = urlParams.get('breakout') === 'true'

@@ -58,9 +58,13 @@ function AgentDetailPanel({
 
   // Mount a tab the first time it becomes active
   const handleTabClick = (tabId: DetailTab): void => {
+    const isFirstMount = !mountedTabs.has(tabId)
+    console.log(`[DEBUG-TAB] click "${tabId}" — firstMount=${isFirstMount}`, performance.now().toFixed(1))
     setActiveTab(tabId)
     setMountedTabs((prev) => prev.has(tabId) ? prev : new Set([...prev, tabId]))
   }
+
+  console.log(`[DEBUG-RENDER] AgentDetailPanel render START — activeTab=${activeTab}, mountedTabs=[${[...mountedTabs]}]`, performance.now().toFixed(1))
 
   return (
     <div data-testid="agent-detail-panel" className="flex flex-col flex-1 min-h-0 w-full">

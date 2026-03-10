@@ -21,10 +21,16 @@ export class GitService {
   }
 
   private exec(args: string[], cwd: string): string {
-    return execFileSync('git', args, { cwd, encoding: 'utf-8', timeout: 30_000 }).trim()
+    const label = `[DEBUG-GIT] exec: git ${args.join(' ')}`
+    const start = performance.now()
+    const result = execFileSync('git', args, { cwd, encoding: 'utf-8', timeout: 30_000 }).trim()
+    console.log(`${label} — ${(performance.now() - start).toFixed(1)}ms`)
+    return result
   }
 
   getStatus(repoPath: string): GitRepoStatus {
+    const t0 = performance.now()
+    console.log('[DEBUG-GIT] getStatus START')
     const branch = this.getCurrentBranch(repoPath)
     const { ahead, behind } = this.getAheadBehind(repoPath)
     const staged = this.getStagedFiles(repoPath)
@@ -32,13 +38,17 @@ export class GitService {
     const untracked = this.getUntrackedFiles(repoPath)
     const isDirty = staged.length > 0 || unstaged.length > 0 || untracked.length > 0
 
+    console.log(`[DEBUG-GIT] getStatus END — ${(performance.now() - t0).toFixed(1)}ms`)
     return { repoPath, branch, ahead, behind, staged, unstaged, untracked, isDirty }
   }
 
   getDiff(repoPath: string, staged: boolean = false): GitDiffResult {
+    console.log('[DEBUG-GIT] getDiff START')
+    const t0 = performance.now()
     const args = staged ? ['diff', '--cached'] : ['diff']
     const diff = this.exec(args, repoPath)
     const stats = this.parseDiffStats(repoPath, staged)
+    console.log(`[DEBUG-GIT] getDiff END — ${(performance.now() - t0).toFixed(1)}ms`)
     return { repoPath, diff, stats }
   }
 
@@ -73,6 +83,8 @@ export class GitService {
   }
 
   getLog(repoPath: string, limit: number = 20): GitCommitEntry[] {
+    console.log('[DEBUG-GIT] getLog START')
+    const t0 = performance.now()
     const format = '%H%n%h%n%an%n%aI%n%s'
     const raw = this.exec(['log', `--max-count=${limit}`, `--format=${format}`], repoPath)
     if (!raw) return []
@@ -88,13 +100,17 @@ export class GitService {
         message: lines[i + 4]
       })
     }
+    console.log(`[DEBUG-GIT] getLog END — ${(performance.now() - t0).toFixed(1)}ms`)
     return entries
   }
 
   getBranches(repoPath: string): GitBranchInfo {
+    console.log('[DEBUG-GIT] getBranches START')
+    const t0 = performance.now()
     const current = this.getCurrentBranch(repoPath)
     const raw = this.exec(['branch', '--format=%(refname:short)'], repoPath)
     const branches = raw ? raw.split('\n').filter(Boolean) : []
+    console.log(`[DEBUG-GIT] getBranches END — ${(performance.now() - t0).toFixed(1)}ms`)
     return { current, branches }
   }
 

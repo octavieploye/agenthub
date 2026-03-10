@@ -42,11 +42,15 @@ export function registerGitHandlers(): void {
     IPC_CHANNELS.GIT.GET_STATUS,
     async (_event, repoPath: unknown): Promise<IpcResponse<GitRepoStatus>> => {
       try {
+        console.log('[DEBUG-IPC] GET_STATUS handler START')
+        const t0 = performance.now()
         const v = validateInput(repoPathSchema, repoPath)
         if (!v.valid) return v.response
         const svc = getGitService()
         if (!svc) return error('GIT_SERVICE_UNAVAILABLE', 'Git service not initialized')
-        return success(svc.getStatus(v.data))
+        const result = svc.getStatus(v.data)
+        console.log(`[DEBUG-IPC] GET_STATUS handler END — ${(performance.now() - t0).toFixed(1)}ms`)
+        return success(result)
       } catch (err) {
         log.error('Git GET_STATUS failed', err)
         return error('GIT_STATUS_ERROR', err instanceof Error ? err.message : String(err))

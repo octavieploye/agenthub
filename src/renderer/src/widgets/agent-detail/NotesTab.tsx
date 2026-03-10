@@ -35,6 +35,7 @@ function NoteSection({ label, content, onChange }: NoteSectionProps): React.JSX.
 }
 
 export default function NotesTab({ agent }: NotesTabProps): React.JSX.Element {
+  console.log('[DEBUG-RENDER] NotesTab render', performance.now().toFixed(1))
   const notes = useNoteStore((s) => s.notes)
   const fetchAllNotesOnce = useNoteStore((s) => s.fetchAllNotesOnce)
   const saveNote = useNoteStore((s) => s.saveNote)
@@ -48,6 +49,7 @@ export default function NotesTab({ agent }: NotesTabProps): React.JSX.Element {
   const globalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    console.log('[DEBUG-TAB] NotesTab useEffect MOUNT — calling fetchAllNotesOnce', performance.now().toFixed(1))
     fetchAllNotesOnce(agent.id, agent.cwd)
   }, [agent.id, agent.cwd, fetchAllNotesOnce])
 

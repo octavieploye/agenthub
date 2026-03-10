@@ -43,7 +43,12 @@ export const useGitStore = create<GitStore>((set, get) => ({
 
   fetchGitDataOnce: async (repoPath: string) => {
     const { hasFetchedForRepo } = get()
-    if (hasFetchedForRepo.has(repoPath)) return
+    if (hasFetchedForRepo.has(repoPath)) {
+      console.log('[DEBUG-TAB] fetchGitDataOnce SKIPPED (already fetched)', repoPath)
+      return
+    }
+    console.log('[DEBUG-TAB] fetchGitDataOnce START', repoPath)
+    const t0 = performance.now()
     const newSet = new Set(hasFetchedForRepo)
     newSet.add(repoPath)
     set({ hasFetchedForRepo: newSet })
@@ -52,6 +57,7 @@ export const useGitStore = create<GitStore>((set, get) => ({
       get().fetchLog(repoPath, 20),
       get().fetchBranches(repoPath)
     ])
+    console.log(`[DEBUG-TAB] fetchGitDataOnce END — ${(performance.now() - t0).toFixed(1)}ms`)
   },
 
   resetGitFetchFlag: (repoPath: string) => {
