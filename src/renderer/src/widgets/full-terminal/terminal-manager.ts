@@ -184,13 +184,10 @@ export function attachToContainer(agentId: string, container: HTMLDivElement): v
       window.agentHub.agents.sendInput(agentId, data)
     })
   } else {
-    // Reparent: move xterm DOM element to new container
-    const xtermScreen = container.ownerDocument.querySelector(
-      `.xterm[data-agent-id="${agentId}"]`
-    )
-    if (!xtermScreen) {
-      // Fallback: just re-open (shouldn't happen normally)
-      managed.term.open(container)
+    // Reparent: move xterm .xterm wrapper to new container (if needed)
+    const xtermEl = managed.term.element
+    if (xtermEl && xtermEl.parentElement !== container) {
+      container.appendChild(xtermEl)
     }
     managed.fitAddon.fit()
     window.agentHub.agents.resize(agentId, managed.term.cols, managed.term.rows)

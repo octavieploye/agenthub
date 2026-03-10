@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
-import { outputBuffer } from '@renderer/services/output-buffer'
+import { startIpcListener } from '../full-terminal/terminal-manager'
 import type { AgentState } from '@shared/types/agent.types'
 
 function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
@@ -9,10 +9,9 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   const [agent, setAgent] = useState<AgentState | null>(null)
   const [inputValue, setInputValue] = useState('')
 
-  // Start output buffer (breakout windows skip AppMain where start() normally lives)
+  // Start IPC listener (breakout windows skip AppMain where startIpcListener() normally lives)
   useEffect(() => {
-    outputBuffer.start()
-    return () => outputBuffer.stop()
+    startIpcListener()
   }, [])
 
   // Fetch agent state on mount

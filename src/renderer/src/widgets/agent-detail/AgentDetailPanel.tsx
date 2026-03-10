@@ -87,6 +87,7 @@ function AgentDetailPanel({
         )}
         <div className="h-full" style={{ visibility: activeTab === 'terminal' ? 'visible' : 'hidden' }}>
           <TerminalTab
+            key={agent.id}
             agent={agent}
             visible={activeTab === 'terminal'}
             onBreakout={onBreakout}
