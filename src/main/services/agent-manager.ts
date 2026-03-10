@@ -17,6 +17,8 @@ interface ManagedAgent {
   parser: ClaudeCliOutputParser
   outputBuffer: string
   flushTimer: ReturnType<typeof setTimeout> | null
+  ipcBatchBuffer: string
+  ipcBatchTimer: ReturnType<typeof setTimeout> | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -88,8 +90,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   const ptyProcess = pty.spawn(shell, args, {
     name: 'xterm-256color',
-    cols: 120,
-    rows: 30,
+    cols: options.cols ?? 120,
+    rows: options.rows ?? 30,
     cwd: options.cwd,
     env
   })
@@ -100,12 +102,20 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const parser = createParser() as ClaudeCliOutputParser
 
   ptyProcess.onData((data: string) => {
-    console.log('[Main PTY→IPC]', { agentId: agentState.id, len: data.length, preview: data.slice(0, 80) })
-    emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, data)
-
-    // Buffer output for batched DB persistence
+    // 16ms IPC batching — aligns with 60fps, reduces IPC overhead for large code blocks
     const managed = agents.get(agentState.id)
     if (managed) {
+      managed.ipcBatchBuffer += data
+      if (!managed.ipcBatchTimer) {
+        managed.ipcBatchTimer = setTimeout(() => {
+          const batch = managed.ipcBatchBuffer
+          managed.ipcBatchBuffer = ''
+          managed.ipcBatchTimer = null
+          emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, batch)
+        }, 16)
+      }
+
+      // Buffer output for batched DB persistence
       managed.outputBuffer += data
       if (!managed.flushTimer) {
         managed.flushTimer = setTimeout(() => {
@@ -143,7 +153,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
 
   // Auto-launch claude CLI with the task after shell initializes
@@ -299,6 +309,7 @@ export function cleanupAllAgents(): void {
   for (const [id, managed] of agents) {
     try {
       if (managed.flushTimer) clearTimeout(managed.flushTimer)
+      if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
       flushOutputBuffer(id)
       managed.ptyProcess.kill()
     } catch {

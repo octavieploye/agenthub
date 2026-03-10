@@ -46,4 +46,6 @@ export interface AgentSpawnOptions {
   taskDescription?: string
   envOverrides?: Record<string, string>
   color?: string
+  cols?: number
+  rows?: number
 }

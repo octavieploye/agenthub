@@ -166,7 +166,6 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
     writeCallbackRef.current = currentWriteCallback
 
     // 1. Create terminal
-    console.log(`[TERM ${agentId}] 1. Creating terminal instance`)
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
@@ -224,17 +223,6 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
 
         // 4b. Single fit after WebGL is loaded — avoids metric inconsistency from double-fit
         fitAddon.fit()
-
-        // Feature #5: Use proposeDimensions() (public API) instead of private _core internals
-        const proposed = fitAddon.proposeDimensions()
-        console.log(`[TERM ${agentId}] Post-WebGL fit: cols=${term.cols}, rows=${term.rows}, proposed=${proposed?.cols}x${proposed?.rows}`)
-
-        // DPR diagnostic
-        console.log(`[TERM ${agentId}] DPR=${window.devicePixelRatio}, container=${containerRef.current?.clientWidth}x${containerRef.current?.clientHeight}`)
-        const canvas = containerRef.current?.querySelector('canvas')
-        if (canvas) {
-          console.log(`[TERM ${agentId}] Canvas: CSS=${canvas.style.width}x${canvas.style.height}, backing=${canvas.width}x${canvas.height}`)
-        }
 
         fixedColsRef.current = term.cols
         lastCols = term.cols
@@ -298,7 +286,7 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
     let lastCols = term.cols
     let lastRows = term.rows
     const stabilizeAt = Date.now() + 800
-    const observer = new ResizeObserver((entries) => {
+    const observer = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
         if (!visibleRef.current) return
@@ -309,11 +297,6 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
         try {
           fitAddonRef.current.fit()
           const { cols, rows } = termRef.current
-
-          // Feature #5: Use ResizeObserverEntry + proposeDimensions (public API)
-          const containerWidth = entries[0]?.contentRect?.width ?? 0
-          console.log(`[TERM ${agentId}] ResizeObserver: fit cols=${cols} rows=${rows}, prev=${lastCols}x${lastRows}, container=${Math.round(containerWidth)}`)
-          console.log(`[TERM ${agentId}] ResizeObserver DPR=${window.devicePixelRatio}, containerH=${containerRef.current?.clientHeight}`)
 
           if (fixedColsRef.current !== null && Math.abs(cols - fixedColsRef.current) > 5) {
             fixedColsRef.current = cols
