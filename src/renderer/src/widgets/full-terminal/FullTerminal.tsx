@@ -171,11 +171,14 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
       cursorBlink: true,
       fontSize: 13,
       fontFamily: "'SF Mono', Menlo, monospace",
+      // lineHeight 1.19 matches macOS Terminal visual parity but reduces row count by ~17%.
+      // This is acceptable as long as fit() reports accurate rows to PTY.
       lineHeight: 1.19,
       letterSpacing: 0,
       theme: getXtermTheme(),
       scrollback: 5000,
-      allowProposedApi: true
+      allowProposedApi: true,
+      devicePixelRatio: window.devicePixelRatio
     })
     termRef.current = term
 
@@ -216,18 +219,22 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
       document.fonts.ready.then(() => {
         if (!active) return
 
-        // 4a. Initial fit (DOM renderer)
-        fitAddon.fit()
-
-        // 4b. Load WebGL renderer (Feature #9: with failure tracking)
+        // 4a. Load WebGL renderer first (Feature #9: with failure tracking)
         tryLoadWebGL(term, agentId)
 
-        // 4c. Refit with WebGL metrics
+        // 4b. Single fit after WebGL is loaded — avoids metric inconsistency from double-fit
         fitAddon.fit()
 
         // Feature #5: Use proposeDimensions() (public API) instead of private _core internals
         const proposed = fitAddon.proposeDimensions()
         console.log(`[TERM ${agentId}] Post-WebGL fit: cols=${term.cols}, rows=${term.rows}, proposed=${proposed?.cols}x${proposed?.rows}`)
+
+        // DPR diagnostic
+        console.log(`[TERM ${agentId}] DPR=${window.devicePixelRatio}, container=${containerRef.current?.clientWidth}x${containerRef.current?.clientHeight}`)
+        const canvas = containerRef.current?.querySelector('canvas')
+        if (canvas) {
+          console.log(`[TERM ${agentId}] Canvas: CSS=${canvas.style.width}x${canvas.style.height}, backing=${canvas.width}x${canvas.height}`)
+        }
 
         fixedColsRef.current = term.cols
         lastCols = term.cols
@@ -306,6 +313,7 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
           // Feature #5: Use ResizeObserverEntry + proposeDimensions (public API)
           const containerWidth = entries[0]?.contentRect?.width ?? 0
           console.log(`[TERM ${agentId}] ResizeObserver: fit cols=${cols} rows=${rows}, prev=${lastCols}x${lastRows}, container=${Math.round(containerWidth)}`)
+          console.log(`[TERM ${agentId}] ResizeObserver DPR=${window.devicePixelRatio}, containerH=${containerRef.current?.clientHeight}`)
 
           if (fixedColsRef.current !== null && Math.abs(cols - fixedColsRef.current) > 5) {
             fixedColsRef.current = cols
