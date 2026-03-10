@@ -58,6 +58,8 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
 
+  const [sentTaskId, setSentTaskId] = useState<string | null>(null)
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -113,6 +115,8 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
         ? `${task.title}: ${task.description}`
         : task.title
       onSpawnWithTask?.(prompt)
+      setSentTaskId(task.id)
+      setTimeout(() => setSentTaskId(null), 1500)
     },
     [onSpawnWithTask]
   )
@@ -226,24 +230,39 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
                     <>
                       <button
                         onClick={() => handleSpawn(task)}
-                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
-                        style={{ backgroundColor: agentColor }}
+                        className="btn btn-ghost btn-xs active:scale-90 relative overflow-hidden transition-all duration-200 ease-in-out text-primary/70 hover:text-primary hover:brightness-125"
                         title="Launch agent with this task"
+                        style={{ minWidth: '2.5rem' }}
                       >
-                        Play
+                        <span
+                          className="inline-block text-primary/70"
+                          style={{
+                            transition: 'opacity 800ms cubic-bezier(0.4, 0, 0.2, 1)',
+                            opacity: sentTaskId === task.id ? 0 : 1
+                          }}
+                        >
+                          Play
+                        </span>
+                        <span
+                          className="absolute inset-0 flex items-center justify-center text-success"
+                          style={{
+                            transition: 'opacity 800ms cubic-bezier(0.4, 0, 0.2, 1)',
+                            opacity: sentTaskId === task.id ? 1 : 0
+                          }}
+                        >
+                          Sent!
+                        </span>
                       </button>
                       <button
                         onClick={() => handleComplete(task.id)}
-                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
-                        style={{ backgroundColor: agentColor }}
+                        className="btn btn-ghost btn-xs text-success/70 hover:text-success hover:brightness-125 active:scale-90 transition-all duration-200 ease-in-out"
                         title="Mark completed"
                       >
                         Done
                       </button>
                       <button
                         onClick={() => startEdit(task)}
-                        className="btn-lcars text-[10px] px-2 py-0.5 text-white"
-                        style={{ backgroundColor: agentColor }}
+                        className="btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/70 active:scale-90 transition-all duration-200 ease-in-out"
                         title="Edit task"
                       >
                         Edit
@@ -252,8 +271,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
                   )}
                   <button
                     onClick={() => handleDelete(task.id)}
-                    className="btn-lcars text-[10px] px-2 py-0.5"
-                    style={{ backgroundColor: `${agentColor}30`, color: agentColor }}
+                    className="btn btn-ghost btn-xs text-error/50 hover:text-error hover:brightness-110 active:scale-90 transition-all duration-200 ease-in-out"
                     title="Delete task"
                   >
                     Del
