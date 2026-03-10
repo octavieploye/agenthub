@@ -46,7 +46,7 @@ function FileRow({
 }
 
 export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
-  console.log('[DEBUG-RENDER] GitTab render', performance.now().toFixed(1))
+
   const repoPath = agent.cwd
   const {
     status,
@@ -75,7 +75,6 @@ export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
   const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
-    console.log('[DEBUG-TAB] GitTab useEffect MOUNT — calling fetchGitDataOnce', performance.now().toFixed(1))
     fetchGitDataOnce(repoPath)
   }, [repoPath, fetchGitDataOnce])
 

@@ -167,7 +167,7 @@ function generatePlainTextExport(entries: HistoryEntry[]): string {
 export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Element {
   const entries = useHistoryStore((s) => s.entries)
   const loading = useHistoryStore((s) => s.loading)
-  console.log('[DEBUG-RENDER] HistoryTab render', performance.now().toFixed(1))
+
   const fetchHistoryOnce = useHistoryStore((s) => s.fetchHistoryOnce)
   const searchHistory = useHistoryStore((s) => s.searchHistory)
   const fetchHistory = useHistoryStore((s) => s.fetchHistory)
@@ -177,7 +177,6 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    console.log('[DEBUG-TAB] HistoryTab useEffect MOUNT — calling fetchHistoryOnce', performance.now().toFixed(1))
     fetchHistoryOnce(agent.id)
   }, [agent.id, fetchHistoryOnce])
 

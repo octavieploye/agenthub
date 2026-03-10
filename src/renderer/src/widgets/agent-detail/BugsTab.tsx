@@ -45,7 +45,7 @@ function truncatePath(filePath: string, maxLength: number = 50): string {
 }
 
 export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
-  console.log('[DEBUG-RENDER] BugsTab render', performance.now().toFixed(1))
+
   const bugs = useBugStore((s) => s.bugs)
   const fetchBugsOnce = useBugStore((s) => s.fetchBugsOnce)
   const loading = useBugStore((s) => s.loading)
@@ -53,7 +53,6 @@ export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
   const deleteBug = useBugStore((s) => s.deleteBug)
 
   useEffect(() => {
-    console.log('[DEBUG-TAB] BugsTab useEffect MOUNT — calling fetchBugsOnce', performance.now().toFixed(1))
     fetchBugsOnce()
   }, [fetchBugsOnce])
 

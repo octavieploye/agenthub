@@ -217,7 +217,6 @@ export function attachToContainer(agentId: string, container: HTMLDivElement): v
  * Refresh terminal when it becomes visible.
  */
 export function setVisible(agentId: string, visible: boolean): void {
-  const t0 = performance.now()
   const managed = terminals.get(agentId)
   if (!managed || !managed.opened) return
 
@@ -233,7 +232,6 @@ export function setVisible(agentId: string, visible: boolean): void {
   }
   // WebGL addon stays alive across visibility toggles — disposing it blocks the
   // renderer thread for 3-5 seconds and causes the tab-switch delay.
-  console.log(`[DEBUG-TERMINAL] setVisible(${agentId.slice(0,8)}, ${visible}) — ${(performance.now() - t0).toFixed(1)}ms`)
 }
 
 /**
