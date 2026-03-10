@@ -47,10 +47,20 @@ function AgentDetailPanel({
 }: AgentDetailPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
 
+  // Track which tabs have been visited — mount on first visit, keep mounted after
+  const [mountedTabs, setMountedTabs] = useState<Set<DetailTab>>(() => new Set([initialTab, 'terminal']))
+
   // Sync tab when initialTab prop changes (e.g., switching to terminal view mode)
   useEffect(() => {
     setActiveTab(initialTab)
+    setMountedTabs((prev) => prev.has(initialTab) ? prev : new Set([...prev, initialTab]))
   }, [initialTab])
+
+  // Mount a tab the first time it becomes active
+  const handleTabClick = (tabId: DetailTab): void => {
+    setActiveTab(tabId)
+    setMountedTabs((prev) => prev.has(tabId) ? prev : new Set([...prev, tabId]))
+  }
 
   return (
     <div data-testid="agent-detail-panel" className="flex flex-col flex-1 min-h-0 w-full">
@@ -67,7 +77,7 @@ function AgentDetailPanel({
             data-testid={`tab-${tab.id}`}
             role="tab"
             aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabClick(tab.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab.id
                 ? 'text-white'
@@ -101,21 +111,31 @@ function AgentDetailPanel({
             proxyActive={proxyActive}
           />
         </div>
-        <div className="absolute inset-0" style={{ visibility: activeTab === 'notes' ? 'visible' : 'hidden' }}>
-          <NotesTab agent={agent} />
-        </div>
-        <div className="absolute inset-0" style={{ visibility: activeTab === 'history' ? 'visible' : 'hidden' }}>
-          <HistoryTab agent={agent} />
-        </div>
-        <div className="absolute inset-0" style={{ visibility: activeTab === 'todo' ? 'visible' : 'hidden' }}>
-          <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />
-        </div>
-        <div className="absolute inset-0" style={{ visibility: activeTab === 'bugs' ? 'visible' : 'hidden' }}>
-          <BugsTab agent={agent} />
-        </div>
-        <div className="absolute inset-0" style={{ visibility: activeTab === 'git' ? 'visible' : 'hidden' }}>
-          <GitTab agent={agent} />
-        </div>
+        {mountedTabs.has('notes') && (
+          <div className="absolute inset-0" style={{ visibility: activeTab === 'notes' ? 'visible' : 'hidden' }}>
+            <NotesTab agent={agent} />
+          </div>
+        )}
+        {mountedTabs.has('history') && (
+          <div className="absolute inset-0" style={{ visibility: activeTab === 'history' ? 'visible' : 'hidden' }}>
+            <HistoryTab agent={agent} />
+          </div>
+        )}
+        {mountedTabs.has('todo') && (
+          <div className="absolute inset-0" style={{ visibility: activeTab === 'todo' ? 'visible' : 'hidden' }}>
+            <TodoTab agent={agent} onSpawnWithTask={onSpawnWithTask} />
+          </div>
+        )}
+        {mountedTabs.has('bugs') && (
+          <div className="absolute inset-0" style={{ visibility: activeTab === 'bugs' ? 'visible' : 'hidden' }}>
+            <BugsTab agent={agent} />
+          </div>
+        )}
+        {mountedTabs.has('git') && (
+          <div className="absolute inset-0" style={{ visibility: activeTab === 'git' ? 'visible' : 'hidden' }}>
+            <GitTab agent={agent} />
+          </div>
+        )}
       </div>
     </div>
   )
