@@ -226,15 +226,29 @@ describe('Model Dispatcher', () => {
 
     // ── ollama-cloud provider ──
 
-    it('sets ANTHROPIC_BASE_URL to custom URL for ollama-cloud', () => {
-      const customUrl = 'https://ollama.example.com:11434'
-      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-cloud', customUrl)
-      expect(result.ANTHROPIC_BASE_URL).toBe(customUrl)
+    it('sets ANTHROPIC_BASE_URL to localhost for ollama-cloud (proxied through local Ollama)', () => {
+      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-cloud')
+      expect(result.ANTHROPIC_BASE_URL).toBe('http://localhost:11434')
     })
 
     it('sets ANTHROPIC_AUTH_TOKEN to ollama for ollama-cloud', () => {
-      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-cloud', 'https://ollama.example.com:11434')
+      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-cloud')
       expect(result.ANTHROPIC_AUTH_TOKEN).toBe('ollama')
+    })
+
+    it('sets ANTHROPIC_API_KEY to empty string for ollama-cloud', () => {
+      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-cloud')
+      expect(result.ANTHROPIC_API_KEY).toBe('')
+    })
+
+    it('sets ANTHROPIC_API_KEY to empty string for ollama-local', () => {
+      const result: SpawnEnv = buildSpawnEnv('llama3', 'ollama-local')
+      expect(result.ANTHROPIC_API_KEY).toBe('')
+    })
+
+    it('does not set ANTHROPIC_API_KEY for anthropic provider', () => {
+      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
+      expect(result.ANTHROPIC_API_KEY).toBeUndefined()
     })
   })
 })

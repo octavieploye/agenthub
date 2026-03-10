@@ -15,6 +15,7 @@ export interface ModelRecommendation {
 export interface SpawnEnv {
   ANTHROPIC_BASE_URL?: string
   ANTHROPIC_AUTH_TOKEN?: string
+  ANTHROPIC_API_KEY?: string
   modelFlag: string
 }
 
@@ -110,18 +111,18 @@ export function recommend(
 
 export function buildSpawnEnv(
   model: string,
-  provider: ModelProvider,
-  ollamaBaseUrl?: string
+  provider: ModelProvider
 ): SpawnEnv {
   if (provider === 'anthropic') {
     return { modelFlag: model }
   }
 
-  const baseUrl = provider === 'ollama-local' ? OLLAMA_LOCAL_URL : ollamaBaseUrl!
-
+  // Both ollama-local and ollama-cloud route through the local Ollama instance.
+  // Cloud models are proxied by the local Ollama server — Claude CLI always talks to localhost.
   return {
-    ANTHROPIC_BASE_URL: baseUrl,
+    ANTHROPIC_BASE_URL: OLLAMA_LOCAL_URL,
     ANTHROPIC_AUTH_TOKEN: 'ollama',
+    ANTHROPIC_API_KEY: '',
     modelFlag: model
   }
 }
