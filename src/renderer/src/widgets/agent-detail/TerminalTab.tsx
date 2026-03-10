@@ -31,7 +31,7 @@ function TerminalTab({ agent, onBreakout, onPause, onResume, onKill, onAttachTer
 
       {/* Terminal area */}
       <div className="flex-1 min-h-0">
-        <FullTerminal agentId={agent.id} visible={visible} />
+        <FullTerminal agentId={agent.id} agentColor={agent.color} visible={visible} />
       </div>
     </div>
   )

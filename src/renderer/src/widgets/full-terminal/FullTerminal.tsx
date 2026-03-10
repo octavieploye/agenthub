@@ -15,13 +15,14 @@ import {
 
 interface FullTerminalProps {
   agentId: string
+  agentColor?: string
   visible: boolean
   onReady?: () => void
   onTitleChange?: (agentId: string, title: string) => void
   onSerialize?: (agentId: string, serialize: () => string) => void
 }
 
-function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
+function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef(visible)
   const theme = useThemeStore((s) => s.theme)
@@ -78,7 +79,7 @@ function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }:
   useEffect(() => {
     if (!containerRef.current) return
 
-    const managed = getOrCreateTerminal(agentId)
+    const managed = getOrCreateTerminal(agentId, agentColor)
 
     // Attach to DOM
     attachToContainer(agentId, containerRef.current)

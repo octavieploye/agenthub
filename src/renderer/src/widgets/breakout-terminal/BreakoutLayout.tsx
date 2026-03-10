@@ -100,7 +100,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
 
       {/* Terminal */}
       <div className="flex-1 min-h-0">
-        <FullTerminal agentId={agentId} visible={true} />
+        <FullTerminal agentId={agentId} agentColor={agent?.color} visible={true} />
       </div>
 
       {/* Inline input */}

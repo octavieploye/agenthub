@@ -29,6 +29,22 @@ interface ManagedTerminal {
 
 const terminals = new Map<string, ManagedTerminal>()
 
+/**
+ * Blend an agent hex color into the dark background at a given ratio.
+ * Returns a hex color string.
+ */
+function tintBackground(base: string, agentColor: string, ratio = 0.12): string {
+  const parse = (hex: string): [number, number, number] => {
+    const h = hex.replace('#', '')
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+  }
+  const [br, bg, bb] = parse(base)
+  const [ar, ag, ab] = parse(agentColor)
+  const mix = (b: number, a: number): number => Math.round(b * (1 - ratio) + a * ratio)
+  const toHex = (n: number): string => n.toString(16).padStart(2, '0')
+  return `#${toHex(mix(br, ar))}${toHex(mix(bg, ag))}${toHex(mix(bb, ab))}`
+}
+
 // Global IPC subscription — routes data to the correct terminal
 let ipcUnsubscribe: (() => void) | null = null
 
@@ -84,13 +100,16 @@ function tryLoadWebGL(term: Terminal): WebglAddon | null {
  * NOTE: Addons are loaded AFTER open() in attachToContainer — matching Phase 5 mock.
  * Only the Terminal instance is created here.
  */
-export function getOrCreateTerminal(agentId: string): ManagedTerminal {
+export function getOrCreateTerminal(agentId: string, agentColor?: string): ManagedTerminal {
   const existing = terminals.get(agentId)
   if (existing) return existing
 
   ensureIpcSubscription()
 
-  // Hardcoded Catppuccin Mocha theme — identical to working Phase 5 mock
+  const BASE_BG = '#1e1e2e'
+  const bg = agentColor ? tintBackground(BASE_BG, agentColor, 0.12) : BASE_BG
+
+  // Hardcoded Catppuccin Mocha theme — tinted with agent color
   const term = new Terminal({
     cursorBlink: true,
     fontSize: 13,
@@ -98,7 +117,7 @@ export function getOrCreateTerminal(agentId: string): ManagedTerminal {
     lineHeight: 1.19,
     letterSpacing: 0,
     theme: {
-      background: '#1e1e2e',
+      background: bg,
       foreground: '#cdd6f4',
       cursor: '#f5e0dc',
       selectionBackground: '#585b70',
