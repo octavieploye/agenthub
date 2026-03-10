@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import type { HistoryEntry } from '@shared/types/history.types'
+import { useHistoryStore } from '../../stores/history-store'
 
 const ITEM_HEIGHT = 60
 const BUFFER = 5
@@ -164,27 +165,19 @@ function generatePlainTextExport(entries: HistoryEntry[]): string {
 }
 
 export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Element {
-  const [entries, setEntries] = useState<HistoryEntry[]>([])
+  const entries = useHistoryStore((s) => s.entries)
+  const loading = useHistoryStore((s) => s.loading)
+  const fetchHistoryOnce = useHistoryStore((s) => s.fetchHistoryOnce)
+  const searchHistory = useHistoryStore((s) => s.searchHistory)
+  const fetchHistory = useHistoryStore((s) => s.fetchHistory)
   const [searchQuery, setSearchQuery] = useState('')
-  const [loading, setLoading] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
   const [copyFeedback, setCopyFeedback] = useState(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    window.agentHub.history.get(agent.id).then((response) => {
-      if (cancelled) return
-      if (response.success) {
-        setEntries(response.data)
-      }
-      setLoading(false)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [agent.id])
+    fetchHistoryOnce(agent.id)
+  }, [agent.id, fetchHistoryOnce])
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -192,28 +185,15 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
 
       if (!query.trim()) {
-        window.agentHub.history.get(agent.id).then((response) => {
-          if (response.success) setEntries(response.data)
-        })
+        fetchHistory(agent.id)
         return
       }
 
       searchTimerRef.current = setTimeout(() => {
-        window.agentHub.history.search(agent.id, query).then((response) => {
-          if (response.success) {
-            setEntries(
-              response.data.map((r) => ({
-                id: r.id,
-                agentId: r.agentId,
-                content: r.content,
-                createdAt: r.createdAt
-              }))
-            )
-          }
-        })
+        searchHistory(agent.id, query)
       }, 300)
     },
-    [agent.id]
+    [agent.id, fetchHistory, searchHistory]
   )
 
   useEffect(() => {

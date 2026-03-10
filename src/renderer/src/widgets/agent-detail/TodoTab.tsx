@@ -48,7 +48,7 @@ function groupAndSort(tasks: TaskItem[]): TaskItem[] {
 
 export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React.JSX.Element {
   const tasks = useTaskStore((s) => s.tasks)
-  const fetchTasks = useTaskStore((s) => s.fetchTasks)
+  const fetchTasksOnce = useTaskStore((s) => s.fetchTasksOnce)
   const createTask = useTaskStore((s) => s.createTask)
   const updateTaskRemote = useTaskStore((s) => s.updateTaskRemote)
   const deleteTask = useTaskStore((s) => s.deleteTask)
@@ -63,8 +63,8 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const [editPriority, setEditPriority] = useState<TaskPriority>(2)
 
   useEffect(() => {
-    fetchTasks()
-  }, [fetchTasks])
+    fetchTasksOnce()
+  }, [fetchTasksOnce])
 
   const repoTasks = groupAndSort(tasks.filter((t) => t.repoId === agent.repoId))
 

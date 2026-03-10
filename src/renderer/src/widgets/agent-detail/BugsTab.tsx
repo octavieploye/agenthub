@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useBugStore } from '../../stores/bug-store'
 import type { AgentState } from '@shared/types/agent.types'
 import type { BugEntry, BugSeverity } from '@shared/types/bug-radar.types'
@@ -46,15 +46,14 @@ function truncatePath(filePath: string, maxLength: number = 50): string {
 
 export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
   const bugs = useBugStore((s) => s.bugs)
-  const fetchBugs = useBugStore((s) => s.fetchBugs)
+  const fetchBugsOnce = useBugStore((s) => s.fetchBugsOnce)
+  const loading = useBugStore((s) => s.loading)
   const resolveBug = useBugStore((s) => s.resolveBug)
   const deleteBug = useBugStore((s) => s.deleteBug)
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    fetchBugs().finally(() => setLoading(false))
-  }, [fetchBugs])
+    fetchBugsOnce()
+  }, [fetchBugsOnce])
 
   const repoBugs = sortBugs(bugs.filter((b) => b.repoId === agent.repoId))
 

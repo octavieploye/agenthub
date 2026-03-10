@@ -5,16 +5,26 @@ interface BugStore {
   bugs: BugEntry[]
   loading: boolean
   error: string | null
+  hasFetched: boolean
 
   fetchBugs: () => Promise<void>
+  fetchBugsOnce: () => Promise<void>
   resolveBug: (id: string) => Promise<boolean>
   deleteBug: (id: string) => Promise<boolean>
 }
 
-export const useBugStore = create<BugStore>((set) => ({
+export const useBugStore = create<BugStore>((set, get) => ({
   bugs: [],
   loading: false,
   error: null,
+  hasFetched: false,
+
+  fetchBugsOnce: async () => {
+    const state = get()
+    if (state.hasFetched) return
+    set({ hasFetched: true })
+    await state.fetchBugs()
+  },
 
   fetchBugs: async () => {
     set({ loading: true, error: null })
@@ -37,7 +47,8 @@ export const useBugStore = create<BugStore>((set) => ({
         set((s) => ({
           bugs: s.bugs.map((b) =>
             b.id === id ? { ...b, resolvedAt: new Date().toISOString() } : b
-          )
+          ),
+          hasFetched: false
         }))
         return true
       }
@@ -53,7 +64,7 @@ export const useBugStore = create<BugStore>((set) => ({
     try {
       const response = await window.agentHub.bugs.delete(id)
       if (response.success) {
-        set((s) => ({ bugs: s.bugs.filter((b) => b.id !== id) }))
+        set((s) => ({ bugs: s.bugs.filter((b) => b.id !== id), hasFetched: false }))
         return true
       }
       set({ error: response.error.message })

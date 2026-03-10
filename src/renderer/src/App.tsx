@@ -29,6 +29,7 @@ import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
+import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -50,6 +51,7 @@ function AppMain(): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const setFocusedAgent = useViewStore((s) => s.setFocusedAgent)
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
+  const prefetchAgentData = usePrefetchAgentData()
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [pausedAgentAnomalies, setPausedAgentAnomalies] = useState<HealthAnomaly[]>([])
@@ -325,7 +327,11 @@ function AppMain(): React.JSX.Element {
   const handleSelectAgent = useCallback((agentId: string) => {
     setActiveAgent(agentId)
     setFocusedAgent(agentId)
-  }, [setActiveAgent, setFocusedAgent])
+    const agent = agents.get(agentId)
+    if (agent) {
+      prefetchAgentData(agentId, agent.cwd)
+    }
+  }, [setActiveAgent, setFocusedAgent, agents, prefetchAgentData])
 
   const handleSpawn = useCallback(
     async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string) => {

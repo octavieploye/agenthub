@@ -6,6 +6,7 @@ interface TaskStore {
   tasks: TaskItem[]
   loading: boolean
   error: string | null
+  hasFetched: boolean
 
   setTasks: (tasks: TaskItem[]) => void
   addTask: (task: TaskItem) => void
@@ -15,6 +16,7 @@ interface TaskStore {
   setError: (error: string | null) => void
 
   fetchTasks: () => Promise<void>
+  fetchTasksOnce: () => Promise<void>
   createTask: (input: CreateTaskInput) => Promise<TaskItem | null>
   updateTaskRemote: (id: string, input: UpdateTaskInput) => Promise<boolean>
   deleteTask: (id: string) => Promise<boolean>
@@ -24,6 +26,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   loading: false,
   error: null,
+  hasFetched: false,
 
   setTasks: (tasks) => set({ tasks }),
   addTask: (task) => set((s) => ({ tasks: [...s.tasks, task] })),
@@ -47,6 +50,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
 
+  fetchTasksOnce: async () => {
+    if (get().hasFetched) return
+    set({ hasFetched: true })
+    await get().fetchTasks()
+  },
+
   fetchTasks: async () => {
     set({ loading: true, error: null })
     try {
@@ -66,6 +75,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.create(input)
       if (response.success) {
         get().addTask(response.data)
+        set({ hasFetched: false })
         return response.data
       }
       set({ error: response.error.message })
@@ -81,6 +91,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.update(id, input)
       if (response.success) {
         get().updateTaskLocal(id, input)
+        set({ hasFetched: false })
         return true
       }
       set({ error: response.error.message })
@@ -96,6 +107,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.delete(id)
       if (response.success) {
         get().removeTask(id)
+        set({ hasFetched: false })
         return true
       }
       set({ error: response.error.message })

@@ -36,9 +36,7 @@ function NoteSection({ label, content, onChange }: NoteSectionProps): React.JSX.
 
 export default function NotesTab({ agent }: NotesTabProps): React.JSX.Element {
   const notes = useNoteStore((s) => s.notes)
-  const fetchScratchNotes = useNoteStore((s) => s.fetchScratchNotes)
-  const fetchRepoNotes = useNoteStore((s) => s.fetchRepoNotes)
-  const fetchGlobalNotes = useNoteStore((s) => s.fetchGlobalNotes)
+  const fetchAllNotesOnce = useNoteStore((s) => s.fetchAllNotesOnce)
   const saveNote = useNoteStore((s) => s.saveNote)
 
   const [scratchContent, setScratchContent] = useState('')
@@ -50,10 +48,8 @@ export default function NotesTab({ agent }: NotesTabProps): React.JSX.Element {
   const globalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    fetchScratchNotes(agent.id)
-    fetchRepoNotes(agent.cwd)
-    fetchGlobalNotes()
-  }, [agent.id, agent.cwd, fetchScratchNotes, fetchRepoNotes, fetchGlobalNotes])
+    fetchAllNotesOnce(agent.id, agent.cwd)
+  }, [agent.id, agent.cwd, fetchAllNotesOnce])
 
   useEffect(() => {
     const scratch = selectScratchNotes(notes, agent.id)[0]?.content ?? ''

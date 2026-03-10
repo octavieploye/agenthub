@@ -5,6 +5,7 @@ interface NoteStore {
   notes: NoteItem[]
   loading: boolean
   error: string | null
+  hasFetchedForAgent: Set<string>
 
   setNotes: (notes: NoteItem[]) => void
   setLoading: (loading: boolean) => void
@@ -13,6 +14,8 @@ interface NoteStore {
   fetchScratchNotes: (agentId: string) => Promise<void>
   fetchRepoNotes: (repoPath: string) => Promise<void>
   fetchGlobalNotes: () => Promise<void>
+  fetchAllNotesOnce: (agentId: string, repoPath: string) => Promise<void>
+  resetNoteFetchFlag: (agentId: string, repoPath: string) => void
   saveNote: (input: CreateNoteInput) => Promise<NoteItem | null>
   deleteNote: (id: number) => Promise<boolean>
 }
@@ -21,10 +24,32 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   loading: false,
   error: null,
+  hasFetchedForAgent: new Set<string>(),
 
   setNotes: (notes) => set({ notes }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+
+  fetchAllNotesOnce: async (agentId: string, repoPath: string) => {
+    const key = `${agentId}:${repoPath}`
+    const { hasFetchedForAgent } = get()
+    if (hasFetchedForAgent.has(key)) return
+    const newSet = new Set(hasFetchedForAgent)
+    newSet.add(key)
+    set({ hasFetchedForAgent: newSet })
+    await Promise.all([
+      get().fetchScratchNotes(agentId),
+      get().fetchRepoNotes(repoPath),
+      get().fetchGlobalNotes()
+    ])
+  },
+
+  resetNoteFetchFlag: (agentId: string, repoPath: string) => {
+    const key = `${agentId}:${repoPath}`
+    const newSet = new Set(get().hasFetchedForAgent)
+    newSet.delete(key)
+    set({ hasFetchedForAgent: newSet })
+  },
 
   fetchScratchNotes: async (agentId) => {
     set({ loading: true, error: null })
@@ -92,6 +117,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         } else {
           set({ notes: [...existing, saved] })
         }
+        set({ hasFetchedForAgent: new Set<string>() })
         return saved
       }
       set({ error: response.error.message })

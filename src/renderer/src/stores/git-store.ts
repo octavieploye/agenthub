@@ -14,11 +14,14 @@ interface GitStore {
   suggestedMessage: string
   loading: boolean
   error: string | null
+  hasFetchedForRepo: Set<string>
 
   fetchStatus: (repoPath: string) => Promise<void>
   fetchDiff: (repoPath: string, staged?: boolean) => Promise<void>
   fetchLog: (repoPath: string, limit?: number) => Promise<void>
   fetchBranches: (repoPath: string) => Promise<void>
+  fetchGitDataOnce: (repoPath: string) => Promise<void>
+  resetGitFetchFlag: (repoPath: string) => void
   fetchSuggestedMessage: (repoPath: string) => Promise<void>
   stageFiles: (repoPath: string, files: string[]) => Promise<boolean>
   unstageFiles: (repoPath: string, files: string[]) => Promise<boolean>
@@ -28,7 +31,7 @@ interface GitStore {
   clearError: () => void
 }
 
-export const useGitStore = create<GitStore>((set) => ({
+export const useGitStore = create<GitStore>((set, get) => ({
   status: null,
   diff: null,
   log: [],
@@ -36,6 +39,26 @@ export const useGitStore = create<GitStore>((set) => ({
   suggestedMessage: '',
   loading: false,
   error: null,
+  hasFetchedForRepo: new Set<string>(),
+
+  fetchGitDataOnce: async (repoPath: string) => {
+    const { hasFetchedForRepo } = get()
+    if (hasFetchedForRepo.has(repoPath)) return
+    const newSet = new Set(hasFetchedForRepo)
+    newSet.add(repoPath)
+    set({ hasFetchedForRepo: newSet })
+    await Promise.all([
+      get().fetchStatus(repoPath),
+      get().fetchLog(repoPath, 20),
+      get().fetchBranches(repoPath)
+    ])
+  },
+
+  resetGitFetchFlag: (repoPath: string) => {
+    const newSet = new Set(get().hasFetchedForRepo)
+    newSet.delete(repoPath)
+    set({ hasFetchedForRepo: newSet })
+  },
 
   fetchStatus: async (repoPath: string) => {
     set({ loading: true, error: null })
@@ -117,6 +140,9 @@ export const useGitStore = create<GitStore>((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await window.agentHub.git.commit({ repoPath, message })
+      if (res.success) {
+        get().resetGitFetchFlag(repoPath)
+      }
       set({ loading: false })
       return res.success
     } catch (err) {
@@ -129,6 +155,9 @@ export const useGitStore = create<GitStore>((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await window.agentHub.git.push({ repoPath, branch })
+      if (res.success) {
+        get().resetGitFetchFlag(repoPath)
+      }
       set({ loading: false })
       return res.success
     } catch (err) {
@@ -141,6 +170,9 @@ export const useGitStore = create<GitStore>((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await window.agentHub.git.pull(repoPath)
+      if (res.success) {
+        get().resetGitFetchFlag(repoPath)
+      }
       set({ loading: false })
       return res.success
     } catch (err) {
