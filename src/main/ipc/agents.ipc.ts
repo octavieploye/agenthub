@@ -109,36 +109,35 @@ export function registerAgentHandlers(): void {
     }
   )
 
-  ipcMain.handle(
+  // Feature #4: Fire-and-forget IPC — no response needed for high-frequency operations
+  ipcMain.on(
     IPC_CHANNELS.AGENTS.SEND_INPUT,
-    async (_event, agentId: unknown, data: unknown): Promise<IpcResponse<void>> => {
+    (_event, agentId: unknown, data: unknown) => {
       try {
         const idValidation = validateInput(z.string(), agentId)
-        if (!idValidation.valid) return idValidation.response
+        if (!idValidation.valid) return
         const dataValidation = validateInput(z.string(), data)
-        if (!dataValidation.valid) return dataValidation.response
+        if (!dataValidation.valid) return
         sendInput(idValidation.data, dataValidation.data)
-        return success(undefined)
       } catch (err) {
-        return error('SEND_INPUT_ERROR', err instanceof Error ? err.message : String(err))
+        console.error('SEND_INPUT_ERROR', err)
       }
     }
   )
 
-  ipcMain.handle(
+  ipcMain.on(
     IPC_CHANNELS.AGENTS.RESIZE,
-    async (_event, agentId: unknown, cols: unknown, rows: unknown): Promise<IpcResponse<void>> => {
+    (_event, agentId: unknown, cols: unknown, rows: unknown) => {
       try {
         const idValidation = validateInput(z.string(), agentId)
-        if (!idValidation.valid) return idValidation.response
+        if (!idValidation.valid) return
         const colsValidation = validateInput(z.number().int().positive(), cols)
-        if (!colsValidation.valid) return colsValidation.response
+        if (!colsValidation.valid) return
         const rowsValidation = validateInput(z.number().int().positive(), rows)
-        if (!rowsValidation.valid) return rowsValidation.response
+        if (!rowsValidation.valid) return
         resizeAgent(idValidation.data, colsValidation.data, rowsValidation.data)
-        return success(undefined)
       } catch (err) {
-        return error('RESIZE_ERROR', err instanceof Error ? err.message : String(err))
+        console.error('RESIZE_ERROR', err)
       }
     }
   )

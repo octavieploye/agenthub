@@ -410,12 +410,8 @@ function AppMain(): React.JSX.Element {
     }
   }, [])
 
-  const handleSendInput = useCallback(async (agentId: string, data: string) => {
-    try {
-      await window.agentHub.agents.sendInput(agentId, data)
-    } catch (err) {
-      console.error('Send input failed:', err)
-    }
+  const handleSendInput = useCallback((agentId: string, data: string) => {
+    window.agentHub.agents.sendInput(agentId, data)
   }, [])
 
   const handleBreakout = useCallback(async (agentId: string) => {

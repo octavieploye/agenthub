@@ -21,8 +21,8 @@ export interface AgentHubBridge {
     resume: (agentId: string) => Promise<IpcResponse<void>>
     list: () => Promise<IpcResponse<import('./agent.types').AgentState[]>>
     getState: (agentId: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
-    sendInput: (agentId: string, data: string) => Promise<IpcResponse<void>>
-    resize: (agentId: string, cols: number, rows: number) => Promise<IpcResponse<void>>
+    sendInput: (agentId: string, data: string) => void
+    resize: (agentId: string, cols: number, rows: number) => void
     updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) => Promise<IpcResponse<void>>
     attachTerminal: (agentId: string) => Promise<IpcResponse<{ socketPath: string; attachCommand: string }>>
@@ -134,6 +134,10 @@ export interface AgentHubBridge {
     set: (key: string, value: string) => Promise<IpcResponse<void>>
     export: () => Promise<IpcResponse<import('./settings.types').SettingsExport>>
     import: (data: import('./settings.types').SettingsExport) => Promise<IpcResponse<void>>
+  }
+  clipboard: {
+    writeText: (text: string) => void
+    readText: () => string
   }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, clipboard } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC_CHANNELS, IPC_EVENTS } from '../shared/constants/ipc-channels'
 
@@ -10,10 +10,12 @@ const agentHubBridge = {
     resume: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESUME, agentId),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.LIST),
     getState: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_STATE, agentId),
-    sendInput: (agentId: string, data: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.SEND_INPUT, agentId, data),
-    resize: (agentId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESIZE, agentId, cols, rows),
+    sendInput: (agentId: string, data: string) => {
+      ipcRenderer.send(IPC_CHANNELS.AGENTS.SEND_INPUT, agentId, data)
+    },
+    resize: (agentId: string, cols: number, rows: number) => {
+      ipcRenderer.send(IPC_CHANNELS.AGENTS.RESIZE, agentId, cols, rows)
+    },
     updateColor: (agentId: string, color: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color),
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) =>
@@ -147,6 +149,10 @@ const agentHubBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.SET, key, value),
     export: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.EXPORT),
     import: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.IMPORT, data)
+  },
+  clipboard: {
+    writeText: (text: string) => clipboard.writeText(text),
+    readText: () => clipboard.readText()
   },
   system: {
     getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_APP_VERSION),

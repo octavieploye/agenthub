@@ -1,11 +1,16 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import { useThemeStore } from '@renderer/stores/theme-store'
 import { getXtermTheme } from './theme-bridge'
 import { outputBuffer } from '@renderer/services/output-buffer'
+import TerminalContextMenu from './TerminalContextMenu'
 
 /**
  * Write large data in 16KB chunks, yielding to the renderer between each
@@ -29,26 +34,51 @@ function writeChunked(
   writeNext()
 }
 
+// Feature #9: Track WebGL failures across instances to decide when to give up
+let webglFailureCount = 0
+const MAX_WEBGL_FAILURES = 3
+
 interface FullTerminalProps {
   agentId: string
   visible: boolean
   onReady?: () => void
+  onTitleChange?: (agentId: string, title: string) => void
+  onSerialize?: (agentId: string, serialize: () => string) => void
 }
 
-function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.JSX.Element {
+function FullTerminal({ agentId, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const webglAddonRef = useRef<WebglAddon | null>(null)
+  const searchAddonRef = useRef<SearchAddon | null>(null)
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
   const mountedRef = useRef(false)
   const writeCallbackRef = useRef<((data: string) => void) | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const visibleRef = useRef(visible)
 
   const isFittingRef = useRef(false)
   const fixedColsRef = useRef<number | null>(null)
   const theme = useThemeStore((s) => s.theme)
 
-  // rAF-batched write callback: accumulates IPC chunks and flushes once per
-  // animation frame so the renderer doesn't choke on high-frequency PTY output.
+  // Feature #1: Search state
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Feature #3: Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+
+  const handleContextMenu = useCallback((e: MouseEvent) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }, [])
+
+  // Keep visibleRef in sync so the ResizeObserver closure can read it
+  visibleRef.current = visible
+
+  // rAF-batched write callback
   const pendingRef = useRef('')
   const rafIdRef = useRef<number | null>(null)
 
@@ -66,15 +96,75 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
     }
   }, [])
 
+  // Stable refs for callbacks that shouldn't trigger effect re-runs
+  const writeCallbackStableRef = useRef(writeCallback)
+  writeCallbackStableRef.current = writeCallback
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
+  const onTitleChangeRef = useRef(onTitleChange)
+  onTitleChangeRef.current = onTitleChange
+  const onSerializeRef = useRef(onSerialize)
+  onSerializeRef.current = onSerialize
+
+  // Feature #1: Search handlers
+  const handleSearchNext = useCallback(() => {
+    if (searchAddonRef.current && searchQuery) {
+      searchAddonRef.current.findNext(searchQuery)
+    }
+  }, [searchQuery])
+
+  const handleSearchPrev = useCallback(() => {
+    if (searchAddonRef.current && searchQuery) {
+      searchAddonRef.current.findPrevious(searchQuery)
+    }
+  }, [searchQuery])
+
+  const handleSearchClose = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    searchAddonRef.current?.clearDecorations()
+    termRef.current?.focus()
+  }, [])
+
+  // Live search as user types
+  useEffect(() => {
+    if (searchOpen && searchQuery && searchAddonRef.current) {
+      searchAddonRef.current.findNext(searchQuery)
+    }
+  }, [searchQuery, searchOpen])
+
+  // Feature #9: Try loading WebGL, track failures for permanent fallback
+  function tryLoadWebGL(term: Terminal, id: string): void {
+    if (webglFailureCount >= MAX_WEBGL_FAILURES) {
+      console.warn(`[TERM ${id}] WebGL permanently disabled after ${MAX_WEBGL_FAILURES} failures, using canvas`)
+      return
+    }
+    try {
+      const webgl = new WebglAddon()
+      term.loadAddon(webgl)
+      webgl.onContextLoss(() => {
+        console.warn(`[TERM ${id}] WebGL context lost, disposing addon`)
+        webgl.dispose()
+        webglAddonRef.current = null
+        webglFailureCount++
+      })
+      webglAddonRef.current = webgl
+    } catch (err) {
+      console.warn(`[TERM ${id}] WebGL failed, using canvas:`, err)
+      webglFailureCount++
+    }
+  }
+
   // Create terminal on mount, dispose on unmount
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Local flag scoped to THIS effect invocation — survives StrictMode double-mount
     let active = true
     mountedRef.current = true
     fixedColsRef.current = null
-    writeCallbackRef.current = writeCallback
+    const currentWriteCallback = writeCallbackStableRef.current
+    writeCallbackRef.current = currentWriteCallback
+
     // 1. Create terminal
     console.log(`[TERM ${agentId}] 1. Creating terminal instance`)
     const term = new Terminal({
@@ -84,202 +174,294 @@ function FullTerminal({ agentId, visible, onReady }: FullTerminalProps): React.J
       lineHeight: 1.19,
       letterSpacing: 0,
       theme: getXtermTheme(),
-      scrollback: 5000
+      scrollback: 5000,
+      allowProposedApi: true
     })
     termRef.current = term
 
     // 2. Open in the visible container
-    console.log(`[TERM ${agentId}] 2. Opening in container, visible=${visible}`)
     term.open(containerRef.current)
 
-    // 3. Load FitAddon FIRST (before WebGL to avoid canvas size lock-in)
-    console.log(`[TERM ${agentId}] 3. Loading FitAddon`)
+    // 3. Load addons — FitAddon first (before WebGL to avoid canvas size lock-in)
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
 
+    // Feature #1: SearchAddon
+    const searchAddon = new SearchAddon()
+    term.loadAddon(searchAddon)
+    searchAddonRef.current = searchAddon
+
+    // Feature #2: WebLinksAddon — clickable URLs in terminal output
+    const webLinksAddon = new WebLinksAddon()
+    term.loadAddon(webLinksAddon)
+
+    // Feature #6: Unicode11Addon — proper emoji/CJK character width
+    const unicode11Addon = new Unicode11Addon()
+    term.loadAddon(unicode11Addon)
+    term.unicode.activeVersion = '11'
+
+    // Feature #7: SerializeAddon — export terminal buffer
+    const serializeAddon = new SerializeAddon()
+    term.loadAddon(serializeAddon)
+    serializeAddonRef.current = serializeAddon
+
+    // Expose serialize function to parent
+    onSerializeRef.current?.(agentId, () => serializeAddon.serialize())
+
     // 4. Initial fit, THEN WebGL, THEN drain+write
     requestAnimationFrame(() => {
-      if (!active) {
-        console.log(`[TERM ${agentId}] 4. rAF skipped — effect was cleaned up (StrictMode)`)
-        return
-      }
+      if (!active) return
 
-      // Wait for fonts to be ready before measuring
       document.fonts.ready.then(() => {
         if (!active) return
 
-        // 4a. Initial fit (DOM renderer) — needed before WebGL to avoid canvas lock-in
+        // 4a. Initial fit (DOM renderer)
         fitAddon.fit()
-        console.log(`[TERM ${agentId}] 4a. Pre-WebGL fit: cols=${term.cols}, rows=${term.rows}`)
 
-        // 4b. Load WebGL renderer
-        console.log(`[TERM ${agentId}] 4b. Loading WebGL addon`)
-        try {
-          const webgl = new WebglAddon()
-          term.loadAddon(webgl)
-          webgl.onContextLoss(() => webgl.dispose())
-          console.log(`[TERM ${agentId}] 4b. WebGL loaded OK`)
-        } catch (err) {
-          console.warn(`[TERM ${agentId}] 4b. WebGL failed, using canvas:`, err)
-        }
+        // 4b. Load WebGL renderer (Feature #9: with failure tracking)
+        tryLoadWebGL(term, agentId)
 
-        // 4c. Refit with WebGL metrics (cell width changes after WebGL) — this is the source of truth
+        // 4c. Refit with WebGL metrics
         fitAddon.fit()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dims = (term as any)._core?._renderService?.dimensions
-        console.log(`[TERM ${agentId}] 4c. Post-WebGL fit: cols=${term.cols}, rows=${term.rows}, cellW=${dims?.css?.cell?.width?.toFixed(2)}, cellH=${dims?.css?.cell?.height?.toFixed(2)}`)
+
+        // Feature #5: Use proposeDimensions() (public API) instead of private _core internals
+        const proposed = fitAddon.proposeDimensions()
+        console.log(`[TERM ${agentId}] Post-WebGL fit: cols=${term.cols}, rows=${term.rows}, proposed=${proposed?.cols}x${proposed?.rows}`)
+
         fixedColsRef.current = term.cols
         lastCols = term.cols
         lastRows = term.rows
         window.agentHub.agents.resize(agentId, term.cols, term.rows)
 
-        // 4c. Replay buffered output + start passthrough (after fit + WebGL)
-        const buffered = outputBuffer.drain(agentId, writeCallback)
-        console.log(`[TERM ${agentId}] 4c. Drain buffer: ${buffered ? buffered.length + ' bytes' : 'empty'}`)
+        // 4d. Replay buffered output + start passthrough
+        const buffered = outputBuffer.drain(agentId, currentWriteCallback)
         if (buffered) {
           writeChunked(term, buffered, mountedRef)
         }
-        console.log(`[TERM ${agentId}] 4d. Mount complete, ready`)
-        onReady?.()
+        onReadyRef.current?.()
       })
     })
 
-    // 7. Wire keyboard input
+    // 5. Wire keyboard input
     const inputDisposable = term.onData((data: string) => {
       window.agentHub.agents.sendInput(agentId, data)
     })
 
-    // 7b. Wire clipboard: Cmd+C copies selected text, Cmd+V pastes
-    // Note: attachCustomKeyEventHandler returns boolean, not a disposable
+    // 6. Wire clipboard + search shortcut
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== 'keydown') return true
       const isMeta = e.metaKey || e.ctrlKey
+
+      // Cmd+C with selection → copy
       if (isMeta && e.key === 'c' && term.hasSelection()) {
-        navigator.clipboard.writeText(term.getSelection())
-        return false // prevent sending ^C to PTY
+        window.agentHub.clipboard.writeText(term.getSelection())
+        return false
       }
+      // Cmd+V → paste
       if (isMeta && e.key === 'v') {
-        navigator.clipboard.readText().then((text) => {
-          if (text) window.agentHub.agents.sendInput(agentId, text)
-        })
+        const text = window.agentHub.clipboard.readText()
+        if (text) window.agentHub.agents.sendInput(agentId, text)
+        return false
+      }
+      // Feature #1: Cmd+F → open search
+      if (isMeta && e.key === 'f') {
+        setSearchOpen(true)
+        setTimeout(() => searchInputRef.current?.focus(), 50)
+        return false
+      }
+      // Escape → close search
+      if (e.key === 'Escape' && searchAddonRef.current) {
+        setSearchOpen(false)
+        setSearchQuery('')
+        searchAddonRef.current.clearDecorations()
+        term.focus()
         return false
       }
       return true
     })
 
-    // 8. ResizeObserver — skip resizes during initial stabilization (breakout
-    //    window animation triggers hundreds of resize events), then debounce 150ms.
+    // Feature #8: onTitleChange — shells set terminal title via escape codes
+    const titleDisposable = term.onTitleChange((title: string) => {
+      onTitleChangeRef.current?.(agentId, title)
+    })
+
+    // 7. ResizeObserver
     let resizeTimer: ReturnType<typeof setTimeout> | null = null
     let lastCols = term.cols
     let lastRows = term.rows
     const stabilizeAt = Date.now() + 800
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
+        if (!visibleRef.current) return
         if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
         if (Date.now() < stabilizeAt) return
-        if (isFittingRef.current) {
-          console.log(`[TERM ${agentId}] ResizeObserver: skipped (isFitting guard)`)
-          return
-        }
+        if (isFittingRef.current) return
         isFittingRef.current = true
         try {
           fitAddonRef.current.fit()
           const { cols, rows } = termRef.current
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const rDims = (termRef.current as any)._core?._renderService?.dimensions
-          console.log(`[TERM ${agentId}] ResizeObserver: fit cols=${cols} rows=${rows}, prev=${lastCols}x${lastRows}, cellW=${rDims?.css?.cell?.width?.toFixed(2)}, container=${termRef.current.element?.parentElement?.clientWidth}`)
+
+          // Feature #5: Use ResizeObserverEntry + proposeDimensions (public API)
+          const containerWidth = entries[0]?.contentRect?.width ?? 0
+          console.log(`[TERM ${agentId}] ResizeObserver: fit cols=${cols} rows=${rows}, prev=${lastCols}x${lastRows}, container=${Math.round(containerWidth)}`)
+
           if (fixedColsRef.current !== null && Math.abs(cols - fixedColsRef.current) > 5) {
-            // Genuine resize — update locked cols
             fixedColsRef.current = cols
             lastCols = cols
             lastRows = rows
-            console.log(`[TERM ${agentId}] ResizeObserver: PTY resize → ${cols}x${rows}`)
             window.agentHub.agents.resize(agentId, cols, rows)
           } else if (fixedColsRef.current !== null) {
-            // Micro-jitter — snap cols back to locked value
             termRef.current.resize(fixedColsRef.current, rows)
             if (rows !== lastRows) {
               lastRows = rows
-              console.log(`[TERM ${agentId}] ResizeObserver: PTY resize (rows only) → ${fixedColsRef.current}x${rows}`)
               window.agentHub.agents.resize(agentId, fixedColsRef.current, rows)
             }
           } else if (cols !== lastCols || rows !== lastRows) {
             lastCols = cols
             lastRows = rows
-            console.log(`[TERM ${agentId}] ResizeObserver: PTY resize → ${cols}x${rows}`)
             window.agentHub.agents.resize(agentId, cols, rows)
           }
         } finally {
           isFittingRef.current = false
         }
-      }, 150)
+      }, 300)
     })
     observer.observe(containerRef.current)
     resizeObserverRef.current = observer
 
     // Cleanup on unmount
     return () => {
-      console.log(`[TERM ${agentId}] Unmounting, disposing terminal`)
       active = false
       mountedRef.current = false
 
-      // 1. Cancel pending rAF write
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
       }
       pendingRef.current = ''
 
-      // 2. Stop passthrough
-      outputBuffer.stopPassthrough(agentId, writeCallback)
+      outputBuffer.stopPassthrough(agentId, currentWriteCallback)
 
-      // 3. Disconnect resize observer
       if (resizeTimer) clearTimeout(resizeTimer)
       observer.disconnect()
       resizeObserverRef.current = null
 
-      // 4. Clean up input handler
       inputDisposable.dispose()
+      titleDisposable.dispose()
 
-      // 5. Dispose terminal (also disposes addons)
+      webglAddonRef.current = null
+      searchAddonRef.current = null
+      serializeAddonRef.current = null
       term.dispose()
       termRef.current = null
       fitAddonRef.current = null
       writeCallbackRef.current = null
     }
-  }, [agentId, writeCallback, onReady])
+  }, [agentId])
 
-  // Theme sync: update terminal theme when DaisyUI theme changes
+  // Theme sync
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.theme = getXtermTheme()
     }
   }, [theme])
 
-  // Re-fit rows only + force repaint when becoming visible
+  // WebGL lifecycle on visibility change
   useEffect(() => {
-    console.log(`[TERM ${agentId}] Visibility changed: visible=${visible}`)
-    if (visible && termRef.current && fitAddonRef.current && fixedColsRef.current !== null) {
-      requestAnimationFrame(() => {
-        if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
-        const term = termRef.current
-        const parentEl = term.element?.parentElement
-        console.log(`[TERM ${agentId}] Visibility rAF: parent ${parentEl?.clientWidth}x${parentEl?.clientHeight}`)
-        fitAddonRef.current.fit()
-        console.log(`[TERM ${agentId}] Visibility fit: cols=${term.cols} rows=${term.rows}`)
-        window.agentHub.agents.resize(agentId, term.cols, term.rows)
-        term.refresh(0, term.rows - 1)
-        term.focus()
-      })
+    if (!termRef.current || !fitAddonRef.current) return
+
+    if (visible) {
+      // Reload WebGL if it was disposed when hidden (and not permanently disabled)
+      if (!webglAddonRef.current && webglFailureCount < MAX_WEBGL_FAILURES) {
+        tryLoadWebGL(termRef.current, agentId)
+      }
+
+      if (fixedColsRef.current !== null) {
+        requestAnimationFrame(() => {
+          if (!mountedRef.current || !fitAddonRef.current || !termRef.current) return
+          fitAddonRef.current.fit()
+          const { cols, rows } = termRef.current
+          window.agentHub.agents.resize(agentId, cols, rows)
+          termRef.current.refresh(0, rows - 1)
+          termRef.current.focus()
+        })
+      }
+    } else {
+      if (webglAddonRef.current) {
+        try {
+          webglAddonRef.current.dispose()
+          webglAddonRef.current = null
+        } catch {
+          webglAddonRef.current = null
+        }
+      }
     }
   }, [visible, agentId])
 
   return (
     <div
-      className="flex flex-col h-full w-full"
+      className="flex flex-col h-full w-full relative"
       style={{ visibility: visible ? 'visible' : 'hidden' }}
+      onContextMenu={handleContextMenu}
     >
+      {/* Feature #1: Search bar */}
+      {searchOpen && (
+        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 bg-base-300 border border-base-content/20 rounded-md px-2 py-1 shadow-lg">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.shiftKey ? handleSearchPrev() : handleSearchNext()
+              }
+              if (e.key === 'Escape') {
+                handleSearchClose()
+              }
+            }}
+            placeholder="Search..."
+            className="input input-xs input-bordered w-48 bg-base-100 text-sm"
+            autoFocus
+          />
+          <button onClick={handleSearchPrev} className="btn btn-xs btn-ghost" title="Previous (Shift+Enter)">
+            ▲
+          </button>
+          <button onClick={handleSearchNext} className="btn btn-xs btn-ghost" title="Next (Enter)">
+            ▼
+          </button>
+          <button onClick={handleSearchClose} className="btn btn-xs btn-ghost" title="Close (Esc)">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Feature #3: Right-click context menu */}
+      {contextMenu && (
+        <TerminalContextMenu
+          position={contextMenu}
+          hasSelection={termRef.current?.hasSelection() ?? false}
+          onCopy={() => {
+            if (termRef.current?.hasSelection()) {
+              window.agentHub.clipboard.writeText(termRef.current.getSelection())
+            }
+          }}
+          onPaste={() => {
+            const text = window.agentHub.clipboard.readText()
+            if (text) window.agentHub.agents.sendInput(agentId, text)
+          }}
+          onSearch={() => {
+            setSearchOpen(true)
+            setTimeout(() => searchInputRef.current?.focus(), 50)
+          }}
+          onClear={() => termRef.current?.clear()}
+          onSelectAll={() => termRef.current?.selectAll()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
       <div
         ref={containerRef}
         className="flex-1 min-h-0"

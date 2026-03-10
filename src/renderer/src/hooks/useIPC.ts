@@ -26,11 +26,11 @@ export function useIPC() {
     getState: useCallback(async (agentId: string) => {
       return unwrap(await window.agentHub.agents.getState(agentId))
     }, []),
-    sendInput: useCallback(async (agentId: string, data: string) => {
-      return unwrap(await window.agentHub.agents.sendInput(agentId, data))
+    sendInput: useCallback((agentId: string, data: string) => {
+      window.agentHub.agents.sendInput(agentId, data)
     }, []),
-    resize: useCallback(async (agentId: string, cols: number, rows: number) => {
-      return unwrap(await window.agentHub.agents.resize(agentId, cols, rows))
+    resize: useCallback((agentId: string, cols: number, rows: number) => {
+      window.agentHub.agents.resize(agentId, cols, rows)
     }, [])
   }
 

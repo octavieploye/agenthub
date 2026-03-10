@@ -4,16 +4,25 @@ import { useThemeStore } from '@renderer/stores/theme-store'
 
 /* ---------- Mock xterm ---------- */
 const mockOnDataDisposable = { dispose: vi.fn() }
+const mockOnTitleChangeDisposable = { dispose: vi.fn() }
 const mockTerminalInstance = {
   open: vi.fn(),
   loadAddon: vi.fn(),
   write: vi.fn(),
   resize: vi.fn(),
   focus: vi.fn(),
+  refresh: vi.fn(),
+  clear: vi.fn(),
+  selectAll: vi.fn(),
   onData: vi.fn(() => mockOnDataDisposable),
+  onTitleChange: vi.fn(() => mockOnTitleChangeDisposable),
+  attachCustomKeyEventHandler: vi.fn(),
+  hasSelection: vi.fn(() => false),
+  getSelection: vi.fn(() => ''),
   dispose: vi.fn(),
   element: document.createElement('div'),
   options: {} as Record<string, unknown>,
+  unicode: { activeVersion: '6' },
   cols: 80,
   rows: 24
 }
@@ -34,12 +43,40 @@ vi.mock('@xterm/addon-webgl', () => {
   return { WebglAddon: MockWebglAddon }
 })
 
-const mockFitAddonInstance = { fit: vi.fn(), dispose: vi.fn() }
+const mockFitAddonInstance = { fit: vi.fn(), dispose: vi.fn(), proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })) }
 vi.mock('@xterm/addon-fit', () => {
   const MockFitAddon = vi.fn(function () {
     return mockFitAddonInstance
   })
   return { FitAddon: MockFitAddon }
+})
+
+vi.mock('@xterm/addon-search', () => {
+  const MockSearchAddon = vi.fn(function () {
+    return { findNext: vi.fn(), findPrevious: vi.fn(), clearDecorations: vi.fn(), dispose: vi.fn() }
+  })
+  return { SearchAddon: MockSearchAddon }
+})
+
+vi.mock('@xterm/addon-web-links', () => {
+  const MockWebLinksAddon = vi.fn(function () {
+    return { dispose: vi.fn() }
+  })
+  return { WebLinksAddon: MockWebLinksAddon }
+})
+
+vi.mock('@xterm/addon-serialize', () => {
+  const MockSerializeAddon = vi.fn(function () {
+    return { serialize: vi.fn(() => ''), dispose: vi.fn() }
+  })
+  return { SerializeAddon: MockSerializeAddon }
+})
+
+vi.mock('@xterm/addon-unicode11', () => {
+  const MockUnicode11Addon = vi.fn(function () {
+    return { dispose: vi.fn() }
+  })
+  return { Unicode11Addon: MockUnicode11Addon }
 })
 
 /* ---------- Mock output-buffer ---------- */
@@ -67,6 +104,10 @@ vi.mock('./theme-bridge', () => ({
   getXtermTheme: vi.fn(() => ({ ...mockTheme }))
 }))
 
+vi.mock('./TerminalContextMenu', () => ({
+  default: () => null
+}))
+
 /* ---------- Mock ResizeObserver (not in jsdom) ---------- */
 let resizeObserverCallback: (() => void) | null = null
 class MockResizeObserver {
@@ -85,8 +126,13 @@ const mockAgents = {
   resize: vi.fn()
 }
 
+const mockClipboard = {
+  writeText: vi.fn(),
+  readText: vi.fn(() => '')
+}
+
 Object.defineProperty(window, 'agentHub', {
-  value: { on: { agentOutput: vi.fn(() => vi.fn()) }, agents: mockAgents },
+  value: { on: { agentOutput: vi.fn(() => vi.fn()) }, agents: mockAgents, clipboard: mockClipboard },
   writable: true
 })
 
@@ -103,6 +149,20 @@ function flushRaf(): void {
   rafCallbacks = []
   cbs.forEach((cb) => cb())
 }
+
+/** Flush rAF + document.fonts.ready microtask chain */
+async function flushRafAndFonts(): Promise<void> {
+  flushRaf()
+  // document.fonts.ready is a resolved promise — flush its .then() microtask
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+/* ---------- Mock document.fonts (not in jsdom) ---------- */
+Object.defineProperty(document, 'fonts', {
+  value: { ready: Promise.resolve() },
+  writable: true
+})
 
 describe('FullTerminal', () => {
   beforeEach(() => {
@@ -142,9 +202,10 @@ describe('FullTerminal', () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
+    await act(() => flushRafAndFonts())
 
     expect(mockOutputBuffer.drain).toHaveBeenCalledWith('agent-1', expect.any(Function))
-    expect(mockTerminalInstance.write).toHaveBeenCalledWith('buffered-data-here')
+    expect(mockTerminalInstance.write).toHaveBeenCalledWith('buffered-data-here', expect.any(Function))
   })
 
   it('does not write empty buffer on mount', async () => {
@@ -169,7 +230,7 @@ describe('FullTerminal', () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
-    flushRaf()
+    await act(() => flushRafAndFonts())
 
     expect(mockFitAddonInstance.fit).toHaveBeenCalled()
     expect(mockAgents.resize).toHaveBeenCalledWith('agent-1', 80, 24)
@@ -179,10 +240,11 @@ describe('FullTerminal', () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { rerender } = render(<FullTerminal agentId="agent-1" visible={false} />)
+    await act(() => flushRafAndFonts())
 
     vi.clearAllMocks()
     rerender(<FullTerminal agentId="agent-1" visible={true} />)
-    flushRaf()
+    await act(() => flushRafAndFonts())
 
     expect(mockFitAddonInstance.fit).toHaveBeenCalled()
     expect(mockTerminalInstance.focus).toHaveBeenCalled()
@@ -205,11 +267,13 @@ describe('FullTerminal', () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { rerender } = render(<FullTerminal agentId="agent-1" visible={true} />)
+    await act(() => flushRafAndFonts())
 
     // First mount creates terminal
     expect(mockTerminalInstance.open).toHaveBeenCalledTimes(1)
 
     rerender(<FullTerminal agentId="agent-2" visible={true} />)
+    await act(() => flushRafAndFonts())
 
     // Old terminal disposed, new one created
     expect(mockTerminalInstance.dispose).toHaveBeenCalled()
