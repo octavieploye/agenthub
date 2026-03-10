@@ -24,7 +24,7 @@ const mockTerminalInstance = {
   options: {} as Record<string, unknown>,
   unicode: { activeVersion: '6' },
   cols: 80,
-  rows: 24
+  rows: 30
 }
 
 vi.mock('@xterm/xterm', () => {
@@ -43,7 +43,7 @@ vi.mock('@xterm/addon-webgl', () => {
   return { WebglAddon: MockWebglAddon }
 })
 
-const mockFitAddonInstance = { fit: vi.fn(), dispose: vi.fn(), proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })) }
+const mockFitAddonInstance = { fit: vi.fn(), dispose: vi.fn(), proposeDimensions: vi.fn(() => ({ cols: 80, rows: 30 })) }
 vi.mock('@xterm/addon-fit', () => {
   const MockFitAddon = vi.fn(function () {
     return mockFitAddonInstance
