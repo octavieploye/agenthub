@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
+import { useViewStore } from '../../stores/view-store'
+import { useNotificationStore } from '../../stores/notification-store'
 import type { SettingsExport } from '@shared/types/settings.types'
 
 interface SettingsPanelProps {
@@ -11,6 +13,14 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
+  const soundEnabled = useViewStore((s) => s.soundEnabled)
+  const toggleSound = useViewStore((s) => s.toggleSound)
+  const voiceEnabled = useViewStore((s) => s.voiceEnabled)
+  const ttsVolume = useViewStore((s) => s.ttsVolume)
+  const toggleVoice = useViewStore((s) => s.toggleVoice)
+  const setTtsVolume = useViewStore((s) => s.setTtsVolume)
+  const desktopNotificationsEnabled = useNotificationStore((s) => s.desktopNotificationsEnabled)
+  const toggleDesktopNotifications = useNotificationStore((s) => s.toggleDesktopNotifications)
 
   const themes = [
     'deep-space',
@@ -105,6 +115,60 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
           >
             X
           </button>
+        </div>
+
+        {/* Notifications — unified section for all alert layers */}
+        <div className="form-control gap-3 mb-6">
+          <label className="label">
+            <span className="label-text font-semibold">Notifications</span>
+          </label>
+
+          {/* Layer 3: Sound — high+ priority events */}
+          <label className="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              className="toggle toggle-sm"
+              checked={soundEnabled}
+              onChange={() => toggleSound()}
+            />
+            <span className="label-text text-sm">Sound alerts (high+ priority)</span>
+          </label>
+
+          {/* Layer 2: Desktop — medium+ priority events */}
+          <label className="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              className="toggle toggle-sm"
+              checked={desktopNotificationsEnabled}
+              onChange={() => toggleDesktopNotifications()}
+            />
+            <span className="label-text text-sm">Desktop notifications (medium+ priority)</span>
+          </label>
+
+          {/* Layer 4: Voice TTS — critical events only */}
+          <label className="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              className="toggle toggle-sm"
+              checked={voiceEnabled}
+              onChange={() => toggleVoice()}
+            />
+            <span className="label-text text-sm">Voice TTS (critical only, off by default)</span>
+          </label>
+          {voiceEnabled && (
+            <label className="label flex-col items-start gap-1">
+              <span className="label-text text-xs text-base-content/60">TTS Volume</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={ttsVolume}
+                onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
+                className="range range-xs w-full"
+              />
+            </label>
+          )}
         </div>
 
         {/* Theme selector */}

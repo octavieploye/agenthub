@@ -27,7 +27,13 @@ import type { RecoveryInfo } from '@shared/types/recovery.types'
 import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
-import { playAgentSound, createSoundAlertDeps } from './services/sound-alert'
+import { playAgentSound, createSoundAlertDeps, statusToSoundEvent } from './services/sound-alert'
+import { speakTriageEvent } from './services/voice-tts'
+import type { VoiceTtsDeps } from './services/voice-tts'
+import type { RoutingResult } from '@shared/types/notification.types'
+import { useNotificationStore } from './stores/notification-store'
+import { buildToastFromTriageEvent } from './helpers/triage-toast'
+import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 
@@ -42,6 +48,14 @@ function App(): React.JSX.Element {
   }
 
   return <AppMain />
+}
+
+function sendDesktopNotificationFromRenderer(event: TriageEvent): void {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  new Notification(`AgentHub — ${event.agentName}`, {
+    body: `${event.repoName}: ${event.reason}`,
+    silent: true, // sound is handled by Layer 3
+  })
 }
 
 function AppMain(): React.JSX.Element {
@@ -97,17 +111,14 @@ function AppMain(): React.JSX.Element {
   const knownAgentIds = useRef(new Set<string>())
 
   // Subscribe to IPC events
-  // ── Sound logic: only 3 sounds ──────────────────────────────────────────
-  // 1. agent_spawned   — on first status change for a new agent
-  // 2. user_approval   — AI stopped processing and it's NOT completion
-  // 3. agent_completed — AI stopped processing and it IS completion
-  //
-  // Trigger = status transitions FROM "busy" to anything else.
-  // "completed" → bridge-deep.  Anything else → user-approval.
-  // Everything between spawn and the next "AI stopped" = silent.
+  // ── Status change listener ───────────────────────────────────────────────
+  // Responsibilities:
+  //   - Update Zustand agent state on every status change
+  //   - Play mission_complete sound (requires cross-agent context triage cannot provide)
+  // Sounds for individual agent events (spawned, completed, locked, etc.)
+  // are now handled by the agentTriaged subscriber below.
   useEffect(() => {
-    const pendingSounds = new Map<string, ReturnType<typeof setTimeout>>()
-    const lastStatus = new Map<string, AgentLifecycleStatus>()
+    const pendingMissionComplete = new Map<string, ReturnType<typeof setTimeout>>()
 
     const unsubStatus = window.agentHub.on.agentStatusChange((agentId, status, confidence) => {
       updateStatus(
@@ -118,33 +129,15 @@ function AppMain(): React.JSX.Element {
 
       const lifecycleStatus = status as AgentLifecycleStatus
 
-      // Detect first status change for a new agent -> agent_spawned sound
+      // Track known agents (used by agentTriaged handler for spawned detection)
       if (!knownAgentIds.current.has(agentId)) {
         knownAgentIds.current.add(agentId)
-        playAgentSound('agent_spawned', soundDeps.current)
-        lastStatus.set(agentId, lifecycleStatus)
-        return
       }
 
-      const prev = lastStatus.get(agentId)
-      lastStatus.set(agentId, lifecycleStatus)
-
-      // Only trigger sounds when AI STOPS processing: busy → non-busy
-      if (prev !== 'busy') return
-
-      // Cancel any pending sound for this agent
-      const pending = pendingSounds.get(agentId)
-      if (pending !== undefined) {
-        clearTimeout(pending)
-        pendingSounds.delete(agentId)
-      }
-
+      // mission_complete: all agents done AND more than 1 agent — needs cross-agent context
       if (lifecycleStatus === 'completed') {
-        // Delay completion sound — Claude CLI TUI keeps animating after Done!
         const timer = setTimeout(() => {
-          pendingSounds.delete(agentId)
-          playAgentSound('agent_completed', soundDeps.current)
-          // Check mission_complete: all agents done AND more than 1 agent
+          pendingMissionComplete.delete(agentId)
           const currentAgents = useAgentStore.getState().agents
           if (currentAgents.size > 1) {
             const allDone = Array.from(currentAgents.values()).every(
@@ -154,25 +147,17 @@ function AppMain(): React.JSX.Element {
               playAgentSound('mission_complete', soundDeps.current)
             }
           }
-        }, 1500)
-        pendingSounds.set(agentId, timer)
-      } else {
-        // AI stopped for any other reason → needs user attention
-        // Small delay to let TUI settle and avoid false triggers
-        const timer = setTimeout(() => {
-          pendingSounds.delete(agentId)
-          playAgentSound('user_approval', soundDeps.current)
-        }, 800)
-        pendingSounds.set(agentId, timer)
+        }, 1800)
+        pendingMissionComplete.set(agentId, timer)
       }
     })
 
     const unsubExit = window.agentHub.on.agentExit((agentId, exitCode) => {
-      // Cancel any pending sound
-      const pending = pendingSounds.get(agentId)
+      // Cancel any pending mission_complete check for this agent
+      const pending = pendingMissionComplete.get(agentId)
       if (pending !== undefined) {
         clearTimeout(pending)
-        pendingSounds.delete(agentId)
+        pendingMissionComplete.delete(agentId)
       }
 
       // Clean up persistent terminal for this agent
@@ -186,20 +171,66 @@ function AppMain(): React.JSX.Element {
 
       if (typeof exitCode === 'number' && exitCode !== 0) {
         updateStatus(agentId, 'error', 'confirmed')
+        // code_blue: abnormal exit — always play regardless of triage (process-level event)
         playAgentSound('code_blue', soundDeps.current)
       } else {
         updateStatus(agentId, 'completed', 'confirmed')
-        playAgentSound('agent_completed', soundDeps.current)
+      }
+    })
+
+    // ── Unified notification routing (agentTriaged) ───────────────────────
+    // Layer 1: Toast     — always fires for all triage events
+    // Layer 2: Desktop   — medium+ events, gated by desktopNotificationsEnabled
+    // Layer 3: Sound     — high+ events, gated by soundEnabled
+    // Layer 4: Voice TTS — critical events, gated by voiceEnabled
+
+    const voiceDeps: VoiceTtsDeps = {
+      speak: ({ text, volume }) => {
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.volume = volume
+        window.speechSynthesis.speak(utterance)
+      },
+      isVoiceEnabled: () => useViewStore.getState().voiceEnabled,
+      isFocused: (agentId) => useViewStore.getState().focusedAgentId === agentId,
+    }
+
+    const agentTriagedHandler = (window.agentHub.on as Record<string, unknown>)['agentTriaged'] as
+      | ((callback: (routingResult: RoutingResult) => void) => () => void)
+      | undefined
+
+    const unsubTriaged = agentTriagedHandler?.((routingResult: RoutingResult) => {
+      const { layers, triageEvent } = routingResult
+
+      // Layer 1: Toast — always on, no toggle
+      useNotificationStore.getState().addToast(buildToastFromTriageEvent(triageEvent))
+
+      // Layer 2: Desktop — medium+ events, gated by toggle
+      if (layers.includes('desktop') && useNotificationStore.getState().desktopNotificationsEnabled) {
+        sendDesktopNotificationFromRenderer(triageEvent)
+      }
+
+      // Layer 3: Sound — high+ events, gated by soundEnabled
+      if (layers.includes('sound')) {
+        const soundEvent = statusToSoundEvent(triageEvent.currentStatus)
+        if (soundEvent) {
+          playAgentSound(soundEvent, soundDeps.current)
+        }
+      }
+
+      // Layer 4: Voice TTS — critical events, gated by voiceEnabled
+      if (layers.includes('voice')) {
+        speakTriageEvent(triageEvent, voiceDeps, useViewStore.getState().ttsVolume)
       }
     })
 
     return () => {
-      for (const timer of pendingSounds.values()) {
+      for (const timer of pendingMissionComplete.values()) {
         clearTimeout(timer)
       }
-      pendingSounds.clear()
+      pendingMissionComplete.clear()
       unsubStatus()
       unsubExit()
+      unsubTriaged?.()
     }
   }, [updateStatus])
 
@@ -217,6 +248,13 @@ function AppMain(): React.JSX.Element {
   // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
     startIpcListener()
+  }, [])
+
+  // Request desktop notification permission once on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
   }, [])
 
   // Fetch usage on mount and periodically (30s)

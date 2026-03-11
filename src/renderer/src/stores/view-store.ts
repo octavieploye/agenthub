@@ -5,6 +5,8 @@ import type { ViewMode } from '@shared/types/recovery.types'
 export type { ViewMode }
 
 const SOUND_KEY = 'agenthub:soundEnabled'
+const VOICE_KEY = 'agenthub:voiceEnabled'
+const TTS_VOLUME_KEY = 'agenthub:ttsVolume'
 
 function loadSoundEnabled(): boolean {
   try {
@@ -15,15 +17,39 @@ function loadSoundEnabled(): boolean {
   }
 }
 
+function loadVoiceEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem(VOICE_KEY)
+    return stored === null ? false : stored === 'true'
+  } catch {
+    return false
+  }
+}
+
+function loadTtsVolume(): number {
+  try {
+    const stored = localStorage.getItem(TTS_VOLUME_KEY)
+    if (stored === null) return 0.7
+    const parsed = parseFloat(stored)
+    return isNaN(parsed) ? 0.7 : Math.min(1, Math.max(0, parsed))
+  } catch {
+    return 0.7
+  }
+}
+
 interface ViewStore {
   viewMode: ViewMode
   focusedAgentId: string | null
   statusFilter: AgentLifecycleStatus | null
   soundEnabled: boolean
+  voiceEnabled: boolean
+  ttsVolume: number
   setViewMode: (mode: ViewMode) => void
   setFocusedAgent: (id: string | null) => void
   setStatusFilter: (status: AgentLifecycleStatus | null) => void
   toggleSound: () => void
+  toggleVoice: () => void
+  setTtsVolume: (volume: number) => void
 }
 
 export const useViewStore = create<ViewStore>((set) => ({
@@ -31,6 +57,8 @@ export const useViewStore = create<ViewStore>((set) => ({
   focusedAgentId: null,
   statusFilter: null,
   soundEnabled: loadSoundEnabled(),
+  voiceEnabled: loadVoiceEnabled(),
+  ttsVolume: loadTtsVolume(),
 
   setViewMode: (mode) => set({ viewMode: mode }),
   setFocusedAgent: (id) => set({ focusedAgentId: id }),
@@ -44,5 +72,25 @@ export const useViewStore = create<ViewStore>((set) => ({
         // ignore
       }
       return { soundEnabled: next }
+    }),
+  toggleVoice: () =>
+    set((state) => {
+      const next = !state.voiceEnabled
+      try {
+        localStorage.setItem(VOICE_KEY, String(next))
+      } catch {
+        // ignore
+      }
+      return { voiceEnabled: next }
+    }),
+  setTtsVolume: (volume) =>
+    set(() => {
+      const clamped = Math.min(1, Math.max(0, volume))
+      try {
+        localStorage.setItem(TTS_VOLUME_KEY, String(clamped))
+      } catch {
+        // ignore
+      }
+      return { ttsVolume: clamped }
     })
 }))

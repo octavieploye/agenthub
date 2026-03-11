@@ -1,5 +1,6 @@
 import { Howl } from 'howler'
 import type { AgentSoundEvent } from '@shared/types/notification.types'
+import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
 export interface SoundAlertDeps {
   playSound: (src: string, volume: number) => void
@@ -14,6 +15,18 @@ export const SOUND_MAP: Record<AgentSoundEvent, { src: string; volume: number }>
   code_blue: { src: 'sounds/code-blue.mp3', volume: 1.0 },
   mission_complete: { src: 'sounds/mission-complete.wav', volume: 0.6 },
   user_approval: { src: 'sounds/user-approval.mp3', volume: 0.7 }
+}
+
+export function statusToSoundEvent(status: AgentLifecycleStatus): AgentSoundEvent | null {
+  const map: Partial<Record<AgentLifecycleStatus, AgentSoundEvent>> = {
+    completed: 'agent_completed',
+    locked: 'agent_locked',
+    looping: 'agent_looping',
+    awaiting_approval: 'user_approval',
+    error: 'code_blue',
+    spawning: 'agent_spawned',
+  }
+  return map[status] ?? null
 }
 
 export function playAgentSound(event: AgentSoundEvent, deps: SoundAlertDeps): boolean {
