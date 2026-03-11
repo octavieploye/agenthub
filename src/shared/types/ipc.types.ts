@@ -152,5 +152,6 @@ export interface AgentHubBridge {
     agentExit: (callback: (agentId: string, exitCode: number) => void) => () => void
     breakoutClosed: (callback: (agentId: string) => void) => () => void
     snapshotSaved: (callback: () => void) => () => void
+    agentTriaged: (callback: (result: import('./notification.types').RoutingResult) => void) => () => void
   }
 }

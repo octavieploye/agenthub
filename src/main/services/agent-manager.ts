@@ -13,6 +13,10 @@ import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
+import { triageAgentEvent } from './auto-triage'
+import { routeNotification } from './notification-router'
+import type { NotificationRouterConfig } from '../../shared/types/notification.types'
+import type { TriageInput } from '../../shared/types/triage.types'
 
 interface ManagedAgent {
   state: AgentState
@@ -37,6 +41,29 @@ function emitToAllRenderers(channel: string, ...args: unknown[]): void {
       win.webContents.send(channel, ...args)
     }
   }
+}
+
+function getNotificationConfig(): NotificationRouterConfig {
+  return {
+    desktopEnabled: true,
+    soundEnabled: true,
+    voiceEnabled: false,
+    telegramEnabled: false
+  }
+}
+
+function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatus): void {
+  const triageInput: TriageInput = {
+    agentId: agent.id,
+    agentName: agent.name,
+    repoName: agent.cwd.split('/').pop() ?? agent.cwd,
+    taskDescription: agent.taskDescription ?? '',
+    previousStatus,
+    currentStatus: agent.status
+  }
+  const triageEvent = triageAgentEvent(triageInput)
+  const routingResult = routeNotification(triageEvent, getNotificationConfig())
+  emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 }
 
 function flushOutputBuffer(agentId: string): void {
@@ -139,11 +166,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     if (parsed) {
       const mgd = agents.get(agentState.id)
       if (mgd && mgd.state.status !== parsed.status) {
+        const previousStatus = mgd.state.status
         const newStatus = parsed.status as AgentLifecycleStatus
         mgd.state.status = newStatus
         mgd.state.confidence = parsed.confidence
         updateAgentStatus(db, agentState.id, newStatus, parsed.confidence)
         emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed.confidence)
+        emitTriageResult(mgd.state, previousStatus)
         log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed.confidence })
       }
     }
@@ -154,9 +183,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     flushOutputBuffer(agentState.id)
 
     log.info('Agent exited', { id: agentState.id, exitCode })
+    const previousStatusOnExit = agentState.status
     updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
+    agentState.status = 'completed'
+    agentState.confidence = 'confirmed'
     emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
     emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
+    emitTriageResult(agentState, previousStatusOnExit)
 
     // Auto-close breakout window for this agent
     const wm = getWindowManager()
@@ -167,12 +200,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     agents.delete(agentState.id)
   })
 
+  const previousStatusOnSpawn = agentState.status
   updateAgentStatus(db, agentState.id, 'busy', 'inferred')
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
   agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
+  emitTriageResult(agentState, previousStatusOnSpawn)
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
@@ -270,9 +305,14 @@ export function killAgent(agentId: string): void {
   }).then(() => {
     // If the onExit handler hasn't already cleaned up, do it now
     if (agents.has(agentId)) {
+      const mgd = agents.get(agentId)!
+      const previousStatusOnKill = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
+      mgd.state.status = 'interrupted'
+      mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
+      emitTriageResult(mgd.state, previousStatusOnKill)
       agents.delete(agentId)
     }
   }).catch((err) => {
@@ -281,9 +321,14 @@ export function killAgent(agentId: string): void {
       managed.ptyProcess.kill()
     } catch { /* already dead */ }
     if (agents.has(agentId)) {
+      const mgd = agents.get(agentId)!
+      const previousStatusOnKillCatch = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
+      mgd.state.status = 'interrupted'
+      mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
+      emitTriageResult(mgd.state, previousStatusOnKillCatch)
       agents.delete(agentId)
     }
   })
@@ -296,10 +341,12 @@ export function pauseAgent(agentId: string): void {
   log.info('Pausing agent', { id: agentId })
   process.kill(managed.ptyProcess.pid, 'SIGTSTP')
 
+  const previousStatusOnPause = managed.state.status
   const db = getDb()
   updateAgentStatus(db, agentId, 'paused', 'confirmed')
   managed.state.status = 'paused'
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'paused', 'confirmed')
+  emitTriageResult(managed.state, previousStatusOnPause)
 }
 
 export function resumeAgent(agentId: string): void {
@@ -309,10 +356,12 @@ export function resumeAgent(agentId: string): void {
   log.info('Resuming agent', { id: agentId })
   process.kill(managed.ptyProcess.pid, 'SIGCONT')
 
+  const previousStatusOnResume = managed.state.status
   const db = getDb()
   updateAgentStatus(db, agentId, 'busy', 'inferred')
   managed.state.status = 'busy'
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'busy', 'inferred')
+  emitTriageResult(managed.state, previousStatusOnResume)
 }
 
 export function getAgentState(agentId: string): AgentState | null {

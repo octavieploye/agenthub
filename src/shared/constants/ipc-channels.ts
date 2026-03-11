@@ -135,6 +135,9 @@ export const IPC_EVENTS = {
     OUTPUT: 'on-agents:output',
     EXIT: 'on-agents:exit'
   },
+  NOTIFICATIONS: {
+    TRIAGED: 'on-agents:triaged'
+  },
   WINDOWS: {
     BREAKOUT_CLOSED: 'on-windows:breakout-closed'
   },

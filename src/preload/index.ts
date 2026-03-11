@@ -205,6 +205,14 @@ const agentHubBridge = {
       const handler = (): void => callback()
       ipcRenderer.on(IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.RECOVERY.SNAPSHOT_SAVED, handler)
+    },
+    agentTriaged: (callback: (result: import('../shared/types/notification.types').RoutingResult) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        result: import('../shared/types/notification.types').RoutingResult
+      ): void => callback(result)
+      ipcRenderer.on(IPC_EVENTS.NOTIFICATIONS.TRIAGED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.NOTIFICATIONS.TRIAGED, handler)
     }
   }
 }
