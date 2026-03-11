@@ -50,7 +50,7 @@ export default function ToastManager() {
                 className="text-base-content/50 hover:text-base-content text-sm leading-none"
                 aria-label="Dismiss notification"
               >
-                x
+                ×
               </button>
             </div>
             {toast.actions && toast.actions.length > 0 && (

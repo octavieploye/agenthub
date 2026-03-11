@@ -373,6 +373,17 @@
   50% { opacity: 0.6; }
 }
 
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 @keyframes urgency-pulse {
   0%, 100% { box-shadow: 0 0 12px color-mix(in oklch, var(--color-error) 15%, transparent); }
   50% { box-shadow: 0 0 24px color-mix(in oklch, var(--color-error) 35%, transparent); }
@@ -391,6 +402,10 @@
 /* Utility classes */
 .animate-breathe {
   animation: breathe var(--breathe-speed) ease-in-out infinite;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out forwards;
 }
 .animate-urgency-pulse {
   animation: urgency-pulse var(--breathe-speed) ease-in-out infinite;
