@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import log from 'electron-log/main'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error } from './ipc-helpers'
-import { listAllModels, fetchOllamaCloudModels } from '../services/model-service'
+import { listAllModels, fetchOllamaModels, fetchOllamaCloudCatalog } from '../services/model-service'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { ModelCatalogEntry } from '../../shared/types/model.types'
 
@@ -24,8 +24,9 @@ export function registerModelsHandlers(): void {
     IPC_CHANNELS.MODELS.FETCH_OLLAMA,
     async (): Promise<IpcResponse<ModelCatalogEntry[]>> => {
       try {
-        const models = await fetchOllamaCloudModels()
-        return success(models)
+        const { local, cloud } = await fetchOllamaModels()
+        const catalog = await fetchOllamaCloudCatalog()
+        return success([...local, ...cloud, ...catalog])
       } catch (err) {
         log.error('Failed to fetch Ollama models', err)
         return error('OLLAMA_FETCH_ERROR', err instanceof Error ? err.message : String(err))
