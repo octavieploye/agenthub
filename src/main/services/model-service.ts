@@ -46,12 +46,7 @@ const OLLAMA_FAMILY_HINTS: Array<{ pattern: string; family: string }> = [
   { pattern: 'vicuna', family: 'Vicuna' },
   { pattern: 'falcon', family: 'Falcon' },
   { pattern: 'orca', family: 'Orca' },
-  { pattern: 'nous', family: 'Nous' },
-  { pattern: 'cogito', family: 'Cogito' },
-  { pattern: 'nemotron', family: 'Nemotron' },
-  { pattern: 'gpt-oss', family: 'GPT-OSS' },
-  { pattern: 'kimi', family: 'Kimi' },
-  { pattern: 'rnj', family: 'RNJ' }
+  { pattern: 'nous', family: 'Nous' }
 ]
 
 function categorizeOllamaModel(name: string): ModelCategory {
@@ -70,22 +65,27 @@ function detectOllamaFamily(name: string): string {
   return 'Other'
 }
 
-interface OllamaApiModel {
-  name: string
-  size?: number
-  remote_model?: string
-  remote_host?: string
-  details?: { parameter_size?: string }
+function parseOllamaModels(
+  data: { models?: Array<{ name: string; size?: number; details?: { parameter_size?: string } }> },
+  provider: 'ollama-local' | 'ollama-cloud'
+): ModelCatalogEntry[] {
+  if (!data.models || !Array.isArray(data.models)) return []
+
+  return data.models.map((m) => {
+    const name = m.name ?? 'unknown'
+    return {
+      id: `${provider}:${name}`,
+      name,
+      provider,
+      category: categorizeOllamaModel(name),
+      family: detectOllamaFamily(name),
+      contextWindow: 128000,
+      available: true
+    }
+  })
 }
 
-/**
- * Fetches models from the local Ollama instance and splits them into
- * local (pulled) and cloud (proxied) based on the `remote_model` field.
- */
-export async function fetchOllamaModels(): Promise<{
-  local: ModelCatalogEntry[]
-  cloud: ModelCatalogEntry[]
-}> {
+export async function fetchOllamaLocalModels(): Promise<ModelCatalogEntry[]> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
@@ -94,51 +94,18 @@ export async function fetchOllamaModels(): Promise<{
     })
     clearTimeout(timeout)
 
-    if (!response.ok) return { local: [], cloud: [] }
-    const data: { models?: OllamaApiModel[] } = await response.json()
-    if (!data.models || !Array.isArray(data.models)) return { local: [], cloud: [] }
-
-    const local: ModelCatalogEntry[] = []
-    const cloud: ModelCatalogEntry[] = []
-
-    for (const m of data.models) {
-      const name = m.name ?? 'unknown'
-      const isCloud = !!m.remote_model
-      const provider = isCloud ? 'ollama-cloud' : 'ollama-local'
-
-      const entry: ModelCatalogEntry = {
-        id: `${provider}:${name}`,
-        name,
-        provider,
-        category: categorizeOllamaModel(name),
-        family: detectOllamaFamily(name),
-        contextWindow: 128000,
-        available: true
-      }
-
-      if (isCloud) {
-        cloud.push(entry)
-      } else {
-        local.push(entry)
-      }
-    }
-
-    log.debug('Ollama models discovered', { local: local.length, cloud: cloud.length })
-    return { local, cloud }
+    if (!response.ok) return []
+    const data = await response.json()
+    return parseOllamaModels(data, 'ollama-local')
   } catch (err) {
-    log.debug('Ollama not available', { error: err instanceof Error ? err.message : String(err) })
-    return { local: [], cloud: [] }
+    log.debug('Ollama local not available', { error: err instanceof Error ? err.message : String(err) })
+    return []
   }
 }
 
-/**
- * Fetches the full cloud model catalog from ollama.com.
- * These are all cloud models available to the user's subscription.
- * Models already registered locally are deduplicated in listAllModels().
- */
-export async function fetchOllamaCloudCatalog(): Promise<ModelCatalogEntry[]> {
+export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
   if (!OLLAMA_CLOUD_KEY) {
-    log.debug('No OLLAMA_CLOUD_KEY set, skipping cloud catalog')
+    log.debug('No OLLAMA_CLOUD_KEY set, skipping cloud models')
     return []
   }
 
@@ -154,48 +121,22 @@ export async function fetchOllamaCloudCatalog(): Promise<ModelCatalogEntry[]> {
     clearTimeout(timeout)
 
     if (!response.ok) {
-      log.warn('Ollama cloud catalog returned', response.status)
+      log.warn('Ollama cloud API returned', response.status)
       return []
     }
-    const data: { models?: OllamaApiModel[] } = await response.json()
-    if (!data.models || !Array.isArray(data.models)) return []
-
-    return data.models.map((m) => {
-      const name = m.name ?? 'unknown'
-      return {
-        id: `ollama-cloud:${name}`,
-        name,
-        provider: 'ollama-cloud' as const,
-        category: categorizeOllamaModel(name),
-        family: detectOllamaFamily(name),
-        contextWindow: 128000,
-        available: true
-      }
-    })
+    const data = await response.json()
+    return parseOllamaModels(data, 'ollama-cloud')
   } catch (err) {
-    log.debug('Ollama cloud catalog not available', { error: err instanceof Error ? err.message : String(err) })
+    log.debug('Ollama cloud not available', { error: err instanceof Error ? err.message : String(err) })
     return []
   }
 }
 
 export async function listAllModels(): Promise<ModelCatalogEntry[]> {
-  const [ollamaResult, cloudCatalog] = await Promise.all([
-    fetchOllamaModels(),
-    fetchOllamaCloudCatalog()
+  const [localModels, cloudModels] = await Promise.all([
+    fetchOllamaLocalModels(),
+    fetchOllamaCloudModels()
   ])
 
-  const { local, cloud: registeredCloud } = ollamaResult
-
-  // Merge cloud catalog with registered cloud models — registered ones take priority
-  const registeredNames = new Set(registeredCloud.map((m) => m.name))
-  const unregisteredCloud = cloudCatalog.filter((m) => !registeredNames.has(m.name))
-
-  log.debug('Model list built', {
-    claude: CLAUDE_MODELS.length,
-    ollamaLocal: local.length,
-    ollamaCloudRegistered: registeredCloud.length,
-    ollamaCloudCatalog: unregisteredCloud.length
-  })
-
-  return [...CLAUDE_MODELS, ...local, ...registeredCloud, ...unregisteredCloud]
+  return [...CLAUDE_MODELS, ...localModels, ...cloudModels]
 }

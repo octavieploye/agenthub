@@ -101,13 +101,6 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
     }
   }, [open, loadRepos, loadModels])
 
-  // Poll for model changes while on the model-select step (picks up ollama pull/rm)
-  useEffect(() => {
-    if (!open || step !== 'model-select') return
-    const interval = setInterval(loadModels, 30000)
-    return () => clearInterval(interval)
-  }, [open, step, loadModels])
-
   const handleAddRepo = useCallback(async () => {
     if (!newRepoName.trim() || !newRepoPath.trim()) return
     try {
