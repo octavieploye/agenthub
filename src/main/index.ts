@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu } from 'electron'
+import { app, shell, BrowserWindow, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -87,6 +87,12 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Set app icon for macOS dock
+  if (process.platform === 'darwin') {
+    const nativeIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+    app.dock.setIcon(nativeIcon)
+  }
 
   // Initialize database
   const dbPath = join(app.getPath('userData'), 'agenthub.db')
