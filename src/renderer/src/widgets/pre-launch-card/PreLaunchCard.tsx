@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 
 interface PreLaunchCardProps {
   repoId: string
@@ -38,6 +39,7 @@ function PreLaunchCard({
 }: PreLaunchCardProps): React.JSX.Element {
   const [task, setTask] = useState(initialTask ?? '')
   const cardRef = useRef<HTMLDivElement>(null)
+  const taskInputRef = useRef<HTMLInputElement>(null)
 
   const handleLaunch = useCallback(() => {
     if (task.trim()) onLaunch(task)
@@ -79,14 +81,18 @@ function PreLaunchCard({
 
         <div>
           <label className="text-xs text-base-content/50 mb-1 block">Task</label>
-          <input
-            data-testid="pre-launch-task-input"
-            type="text"
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            placeholder="Describe the task..."
-            className="input input-bordered w-full rounded-xl bg-base-200/50 text-sm"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              ref={taskInputRef}
+              data-testid="pre-launch-task-input"
+              type="text"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              placeholder="Describe the task..."
+              className="input input-bordered flex-1 rounded-xl bg-base-200/50 text-sm"
+            />
+            <VoiceInputButton inputRef={taskInputRef} />
+          </div>
         </div>
 
         <div className="panel-glass p-3 rounded-lg">
