@@ -1,28 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useRef, useState, type RefObject } from 'react'
 import { AudioRecorderService } from '../services/audio-recorder'
 
 export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>) {
   const [isListening, setIsListening] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const recorderRef = useRef<AudioRecorderService | null>(null)
-  const keyDownTimeRef = useRef<number>(0)
+  const isListeningRef = useRef(false)
 
   const startListening = useCallback(async () => {
-    if (isListening || isProcessing) return
+    if (isListeningRef.current || isProcessing) return
     const recorder = new AudioRecorderService()
     recorderRef.current = recorder
     try {
       await recorder.startRecording()
+      isListeningRef.current = true
       setIsListening(true)
     } catch (err) {
       console.error('Failed to start recording:', err)
     }
-  }, [isListening, isProcessing])
+  }, [isProcessing])
 
   const stopListening = useCallback(async () => {
     const recorder = recorderRef.current
-    if (!recorder || !isListening) return
+    if (!recorder || !isListeningRef.current) return
 
+    isListeningRef.current = false
     setIsListening(false)
     setIsProcessing(true)
 
@@ -54,42 +56,13 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
       setIsProcessing(false)
       recorderRef.current = null
     }
-  }, [isListening, inputRef])
+  }, [inputRef])
 
   const toggleListening = useCallback(() => {
-    if (isListening) {
+    if (isListeningRef.current) {
       stopListening()
     } else {
       startListening()
-    }
-  }, [isListening, startListening, stopListening])
-
-  // Keyboard shortcut: Cmd+Shift+V
-  useEffect(() => {
-    const HOLD_THRESHOLD_MS = 300
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.shiftKey && e.key === 'e' && !e.repeat) {
-        e.preventDefault()
-        keyDownTimeRef.current = Date.now()
-        startListening()
-      }
-    }
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'e' || e.key === 'E') {
-        const held = Date.now() - keyDownTimeRef.current
-        if (held >= HOLD_THRESHOLD_MS) {
-          stopListening()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
     }
   }, [startListening, stopListening])
 

@@ -1,5 +1,6 @@
-import { type RefObject } from 'react'
+import { type RefObject, useId, useEffect } from 'react'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
+import { useVoiceInputContext } from '../../contexts/VoiceInputContext'
 
 interface VoiceInputButtonProps {
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -7,7 +8,14 @@ interface VoiceInputButtonProps {
 }
 
 export function VoiceInputButton({ inputRef, className = '' }: VoiceInputButtonProps) {
+  const id = useId()
   const { isListening, isProcessing, toggleListening } = useVoiceInput(inputRef)
+  const { register, unregister } = useVoiceInputContext()
+
+  useEffect(() => {
+    register(id, inputRef, toggleListening)
+    return () => unregister(id)
+  }, [id, inputRef, toggleListening, register, unregister])
 
   const title = isProcessing
     ? 'Transcribing...'

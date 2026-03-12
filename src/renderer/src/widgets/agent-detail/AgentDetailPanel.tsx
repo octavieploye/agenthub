@@ -8,7 +8,7 @@ import TodoTab from './TodoTab'
 import BugsTab from './BugsTab'
 import GitTab from './GitTab'
 
-type DetailTab = 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs' | 'git'
+export type DetailTab = 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs' | 'git'
 
 interface AgentDetailPanelProps {
   agent: AgentState
@@ -21,6 +21,7 @@ interface AgentDetailPanelProps {
   onAttachTerminal?: (agentId: string) => void
   onDetachTerminal?: (agentId: string) => void
   proxyActive?: boolean
+  onTabChange?: (tab: string) => void
 }
 
 const tabs: { id: DetailTab; label: string }[] = [
@@ -43,7 +44,8 @@ function AgentDetailPanel({
   onBreakout,
   onAttachTerminal,
   onDetachTerminal,
-  proxyActive
+  proxyActive,
+  onTabChange
 }: AgentDetailPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
 
@@ -53,12 +55,14 @@ function AgentDetailPanel({
   // Sync tab when initialTab prop changes (e.g., switching to terminal view mode)
   useEffect(() => {
     setActiveTab(initialTab)
+    onTabChange?.(initialTab)
     setMountedTabs((prev) => prev.has(initialTab) ? prev : new Set([...prev, initialTab]))
   }, [initialTab])
 
   // Mount a tab the first time it becomes active
   const handleTabClick = (tabId: DetailTab): void => {
     setActiveTab(tabId)
+    onTabChange?.(tabId)
     setMountedTabs((prev) => prev.has(tabId) ? prev : new Set([...prev, tabId]))
   }
 

@@ -36,6 +36,7 @@ import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
+import { VoiceInputProvider } from './contexts/VoiceInputContext'
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -101,6 +102,9 @@ function AppMain(): React.JSX.Element {
 
   // Git panel
   const [gitPanelOpen, setGitPanelOpen] = useState(false)
+
+  // Active detail tab tracking
+  const [activeDetailTab, setActiveDetailTab] = useState('terminal')
 
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
@@ -620,6 +624,7 @@ function AppMain(): React.JSX.Element {
   }
 
   return (
+    <VoiceInputProvider>
     <div className="flex flex-col h-full" data-theme={theme}>
       {/* Skip to content link for keyboard navigation */}
       <a
@@ -740,12 +745,15 @@ function AppMain(): React.JSX.Element {
                     onAttachTerminal={handleAttachTerminal}
                     onDetachTerminal={handleDetachTerminal}
                     proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
+                    onTabChange={setActiveDetailTab}
                   />
                   {/* Global inline task input — visible when agent selected */}
-                  <InlineTaskInput
-                    agent={agents.get(activeAgentId)!}
-                    onSendInput={handleSendInput}
-                  />
+                  {activeDetailTab === 'terminal' && (
+                    <InlineTaskInput
+                      agent={agents.get(activeAgentId)!}
+                      onSendInput={handleSendInput}
+                    />
+                  )}
                 </div>
               ) : viewMode === 'terminal' ? (
                 /* Terminal mode with no agent selected — show welcome */
@@ -880,6 +888,7 @@ function AppMain(): React.JSX.Element {
       {gitPanelOpen && <StandaloneGitPanel onClose={() => setGitPanelOpen(false)} />}
 
     </div>
+    </VoiceInputProvider>
   )
 }
 
