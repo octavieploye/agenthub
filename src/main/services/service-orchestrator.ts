@@ -180,7 +180,9 @@ export function initializeServices(db: Database.Database): void {
     logInfo: (message: string, meta?: Record<string, unknown>) => {
       log.info(message, meta)
     },
-    binaryPath: require('path').join(process.resourcesPath, 'bin', 'whisper-cli'),
+    binaryPath: app.isPackaged
+      ? require('path').join(process.resourcesPath, 'bin', 'whisper-cli')
+      : require('path').join(process.cwd(), 'resources', 'bin', 'whisper-cli'),
     modelPath: require('path').join(app.getPath('userData'), 'models', 'ggml-small.bin'),
     getMicStatus: () => {
       const { systemPreferences } = require('electron')

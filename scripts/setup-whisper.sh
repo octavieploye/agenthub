@@ -29,11 +29,12 @@ else
     git clone --depth 1 https://github.com/ggerganov/whisper.cpp "$WHISPER_TMP"
   fi
 
-  echo "  Compiling (Metal-accelerated)..."
-  make -C "$WHISPER_TMP" -j "$(sysctl -n hw.ncpu)" clean main 2>&1 | tail -3
+  echo "  Compiling (Metal-accelerated via CMake)..."
+  cmake -B "$WHISPER_TMP/build" -S "$WHISPER_TMP" -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
+  cmake --build "$WHISPER_TMP/build" --config Release -j "$(sysctl -n hw.ncpu)" 2>&1 | tail -5
 
   mkdir -p "$RESOURCES_BIN"
-  cp "$WHISPER_TMP/main" "$RESOURCES_BIN/whisper-cli"
+  cp "$WHISPER_TMP/build/bin/whisper-cli" "$RESOURCES_BIN/whisper-cli"
   chmod +x "$RESOURCES_BIN/whisper-cli"
 
   echo "[OK] whisper-cli built and copied to $RESOURCES_BIN/whisper-cli"
@@ -53,4 +54,4 @@ fi
 
 echo ""
 echo "=== Setup complete ==="
-echo "Relaunch AgentHub and voice input (Cmd+Shift+V) is ready."
+echo "Relaunch AgentHub and voice input (Cmd+E) is ready."
