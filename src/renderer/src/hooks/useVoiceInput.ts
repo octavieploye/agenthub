@@ -69,7 +69,7 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
     const HOLD_THRESHOLD_MS = 300
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey && e.shiftKey && e.key === 'v' && !e.repeat) {
+      if (e.metaKey && !e.shiftKey && e.key === 'e' && !e.repeat) {
         e.preventDefault()
         keyDownTimeRef.current = Date.now()
         startListening()
@@ -77,7 +77,7 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'v' || e.key === 'V') {
+      if (e.key === 'e' || e.key === 'E') {
         const held = Date.now() - keyDownTimeRef.current
         if (held >= HOLD_THRESHOLD_MS) {
           stopListening()

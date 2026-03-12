@@ -200,7 +200,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
                 window.agentHub.settings.set('voice.enabled', String(e.target.checked))
               }}
             />
-            <span className="label-text text-sm">Enable voice input (Cmd+Shift+V)</span>
+            <span className="label-text text-sm">Enable voice input (Cmd+E)</span>
           </label>
           {voiceStatus?.status === 'unavailable' && voiceStatus.reason === 'model-missing' && (
             <p className="text-xs text-warning">

@@ -12,8 +12,8 @@ export function VoiceInputButton({ inputRef, className = '' }: VoiceInputButtonP
   const title = isProcessing
     ? 'Transcribing...'
     : isListening
-      ? 'Listening — click or Cmd+Shift+V to stop'
-      : 'Voice input (Cmd+Shift+V)'
+      ? 'Listening — click or Cmd+E to stop'
+      : 'Voice input (Cmd+E)'
 
   return (
     <button
