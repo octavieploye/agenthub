@@ -139,6 +139,11 @@ export interface AgentHubBridge {
     writeText: (text: string) => void
     readText: () => string
   }
+  voice: {
+    transcribe: (audioBuffer: ArrayBuffer) => Promise<IpcResponse<import('./voice.types').VoiceTranscribeResult>>
+    status: () => Promise<IpcResponse<import('./voice.types').VoiceStatusResult>>
+    cancel: () => Promise<IpcResponse<void>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>

@@ -19,6 +19,7 @@ import { registerSkillsHandlers } from './skills.ipc'
 import { registerWindowsHandlers } from './windows.ipc'
 import { registerSettingsHandlers } from './settings.ipc'
 import { registerModelsHandlers } from './models.ipc'
+import { registerVoiceHandlers } from './voice.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -41,5 +42,6 @@ export function registerAllIpcHandlers(): void {
   registerWindowsHandlers()
   registerSettingsHandlers()
   registerModelsHandlers()
+  registerVoiceHandlers()
   log.info('All IPC handlers registered')
 }

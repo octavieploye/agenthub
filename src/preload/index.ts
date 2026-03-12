@@ -162,6 +162,12 @@ const agentHubBridge = {
     openTerminal: (command: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_TERMINAL, command)
   },
+  voice: {
+    transcribe: (audioBuffer: ArrayBuffer) =>
+      ipcRenderer.invoke(IPC_CHANNELS.VOICE.TRANSCRIBE, audioBuffer),
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.STATUS),
+    cancel: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.CANCEL)
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void

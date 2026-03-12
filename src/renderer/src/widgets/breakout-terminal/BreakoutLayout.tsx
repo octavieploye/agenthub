@@ -1,13 +1,15 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
 import { startIpcListener } from '../full-terminal/terminal-manager'
 import type { AgentState } from '@shared/types/agent.types'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 
 function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const [agent, setAgent] = useState<AgentState | null>(null)
   const [inputValue, setInputValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Start IPC listener (breakout windows skip AppMain where startIpcListener() normally lives)
   useEffect(() => {
@@ -107,6 +109,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
       <div className="px-3 py-2 shrink-0 border-t border-base-content/10">
         <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             data-testid="breakout-input"
             type="text"
             value={inputValue}
@@ -127,6 +130,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
             className="input input-sm input-bordered flex-1 bg-base-200/50 text-sm"
             style={{ borderColor: `${agent?.color ?? '#3B82F6'}40` }}
           />
+          <VoiceInputButton inputRef={inputRef} />
           <button
             data-testid="breakout-send"
             onClick={() => handleSendInput(inputValue)}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import {
   useNoteStore,
   selectScratchNotes,
@@ -19,12 +20,17 @@ interface NoteSectionProps {
 }
 
 function NoteSection({ label, content, onChange }: NoteSectionProps): React.JSX.Element {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-1">
-      <label className="text-xs font-semibold text-base-content/50 uppercase tracking-widest">
-        {label}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-base-content/50 uppercase tracking-widest">
+          {label}
+        </label>
+        <VoiceInputButton inputRef={textareaRef} />
+      </div>
       <textarea
+        ref={textareaRef}
         value={content}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Write notes here..."

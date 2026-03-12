@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 
 interface InlineTaskInputProps {
   agent: AgentState
@@ -87,6 +88,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"
       />
+      <VoiceInputButton inputRef={inputRef} />
       <button
         data-testid="inline-send-button"
         className="btn btn-sm text-white text-xs"

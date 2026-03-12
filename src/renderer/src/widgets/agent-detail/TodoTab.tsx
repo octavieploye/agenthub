@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTaskStore } from '../../stores/task-store'
 import type { AgentState } from '@shared/types/agent.types'
 import type { TaskItem, TaskPriority, TaskStatus } from '@shared/types/task.types'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 
 interface TodoTabProps {
   agent: AgentState
@@ -55,6 +56,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const deleteTask = useTaskStore((s) => s.deleteTask)
 
   const [newTitle, setNewTitle] = useState('')
+  const todoInputRef = useRef<HTMLInputElement>(null)
   const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
 
@@ -286,6 +288,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
       <div className="border-t border-base-content/10 p-3 flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <input
+            ref={todoInputRef}
             type="text"
             placeholder="Task title..."
             value={newTitle}
@@ -294,6 +297,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
             className="input input-bordered input-sm flex-1 bg-base-100/50 text-sm text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
             style={{ borderColor: `${agentColor}30` }}
           />
+          <VoiceInputButton inputRef={todoInputRef} />
           <select
             value={newPriority}
             onChange={(e) => setNewPriority(Number(e.target.value) as TaskPriority)}

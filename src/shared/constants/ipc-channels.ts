@@ -126,6 +126,11 @@ export const IPC_CHANNELS = {
     SHUTDOWN: 'system:shutdown',
     MINIMIZE_TO_TRAY: 'system:minimize-to-tray',
     OPEN_TERMINAL: 'system:open-terminal'
+  },
+  VOICE: {
+    TRANSCRIBE: 'voice:transcribe',
+    STATUS: 'voice:status',
+    CANCEL: 'voice:cancel'
   }
 } as const
 

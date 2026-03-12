@@ -13,6 +13,7 @@ import { GitService } from './git-service'
 import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
+import { VoiceService } from './voice-service'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -28,6 +29,7 @@ let gitService: GitService | null = null
 let skillsService: SkillsService | null = null
 let windowManager: WindowManager | null = null
 let settingsService: SettingsService | null = null
+let voiceService: VoiceService | null = null
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -173,6 +175,19 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 11. VoiceService — speech-to-text sidecar manager, no deps
+  voiceService = new VoiceService({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    binaryPath: require('path').join(process.resourcesPath, 'bin', 'whisper-cli'),
+    modelPath: require('path').join(app.getPath('userData'), 'models', 'ggml-small.bin'),
+    getMicStatus: () => {
+      const { systemPreferences } = require('electron')
+      return systemPreferences.getMediaAccessStatus('microphone')
+    }
+  })
+
   log.info('All services initialized')
 }
 
@@ -191,6 +206,7 @@ export function stopServices(): void {
   autoPauseService?.stopReminderTimer()
   windowManager?.closeAll()
   trayManager?.destroy()
+  voiceService?.dispose()
   log.info('All services stopped')
 }
 
@@ -224,4 +240,8 @@ export function getWindowManager(): WindowManager | null {
 
 export function getSettingsService(): SettingsService | null {
   return settingsService
+}
+
+export function getVoiceService(): VoiceService | null {
+  return voiceService
 }

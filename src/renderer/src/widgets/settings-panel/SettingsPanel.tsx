@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import type { VoiceStatusResult } from '@shared/types/voice.types'
 import { useThemeStore } from '../../stores/theme-store'
 import { useViewStore } from '../../stores/view-store'
 import { useNotificationStore } from '../../stores/notification-store'
@@ -11,6 +12,19 @@ interface SettingsPanelProps {
 function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [voiceInputEnabled, setVoiceInputEnabled] = useState(false)
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatusResult | null>(null)
+
+  useEffect(() => {
+    window.agentHub.voice.status().then((res) => {
+      if (res.success) setVoiceStatus(res.data)
+    })
+    window.agentHub.settings.getAll().then((res) => {
+      if (res.success && res.data['voice.enabled'] === 'true') {
+        setVoiceInputEnabled(true)
+      }
+    })
+  }, [])
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
@@ -168,6 +182,40 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
                 className="range range-xs w-full"
               />
             </label>
+          )}
+        </div>
+
+        {/* Voice Input */}
+        <div className="form-control gap-3 mb-6">
+          <label className="label">
+            <span className="label-text font-semibold">Voice Input</span>
+          </label>
+          <label className="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              className="toggle toggle-sm"
+              checked={voiceInputEnabled}
+              onChange={(e) => {
+                setVoiceInputEnabled(e.target.checked)
+                window.agentHub.settings.set('voice.enabled', String(e.target.checked))
+              }}
+            />
+            <span className="label-text text-sm">Enable voice input (Cmd+Shift+V)</span>
+          </label>
+          {voiceStatus?.status === 'unavailable' && voiceStatus.reason === 'model-missing' && (
+            <p className="text-xs text-warning">
+              Whisper model not found. Place ggml-small.bin in app data models/ directory.
+            </p>
+          )}
+          {voiceStatus?.status === 'unavailable' && voiceStatus.reason === 'binary-missing' && (
+            <p className="text-xs text-error">
+              whisper-cli binary not found in resources/bin/
+            </p>
+          )}
+          {voiceStatus?.status === 'unavailable' && voiceStatus.reason === 'mic-denied' && (
+            <p className="text-xs text-error">
+              Mic access denied — enable in System Preferences &gt; Privacy &gt; Microphone
+            </p>
           )}
         </div>
 
