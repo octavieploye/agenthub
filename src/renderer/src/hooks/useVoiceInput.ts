@@ -35,11 +35,9 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
       if (response.success && response.data.transcript) {
         const el = inputRef.current
         if (el) {
-          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLInputElement.prototype, 'value'
-          )?.set || Object.getOwnPropertyDescriptor(
-            window.HTMLTextAreaElement.prototype, 'value'
-          )?.set
+          const nativeInputValueSetter = el instanceof HTMLTextAreaElement
+            ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+            : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
           const currentVal = el.value
           const newVal = currentVal
             ? `${currentVal} ${response.data.transcript}`
