@@ -2,7 +2,6 @@ import { app, shell, BrowserWindow, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
-import icon from '../../resources/icon.png?asset'
 import { APP_DEFAULTS } from '../shared/constants/defaults'
 import { getDb, closeDb } from './db/connection'
 import { registerAllIpcHandlers } from './ipc/register-all'
@@ -14,6 +13,9 @@ log.transports.file.level = 'info'
 log.transports.console.level = is.dev ? 'debug' : 'warn'
 
 function createWindow(): void {
+  const iconPath = process.platform === 'win32' ? join(__dirname, '../../build/icon.ico') : join(__dirname, '../../build/icon.png')
+  const icon = nativeImage.createFromPath(iconPath)
+
   const mainWindow = new BrowserWindow({
     width: APP_DEFAULTS.WINDOW_WIDTH,
     height: APP_DEFAULTS.WINDOW_HEIGHT,
@@ -22,7 +24,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' || process.platform === 'darwin' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -90,7 +92,7 @@ app.whenReady().then(() => {
 
   // Set app icon for macOS dock
   if (process.platform === 'darwin') {
-    const nativeIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+    const nativeIcon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
     app.dock.setIcon(nativeIcon)
   }
 
