@@ -1,10 +1,13 @@
-import { useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBugStore } from '../../stores/bug-store'
+import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
+import { parseBugVoice } from '../../helpers/parse-voice-fields'
 import type { AgentState } from '@shared/types/agent.types'
 import type { BugEntry, BugSeverity } from '@shared/types/bug-radar.types'
 
 interface BugsTabProps {
   agent: AgentState
+  onSendToAgent?: (task: string) => void
 }
 
 const SEVERITY_BADGE: Record<BugSeverity, string> = {
@@ -13,6 +16,15 @@ const SEVERITY_BADGE: Record<BugSeverity, string> = {
   medium: 'badge-info',
   low: 'badge-ghost'
 }
+
+const ERROR_TYPES = [
+  'test_failure',
+  'compile_error',
+  'runtime_error',
+  'lint_error',
+  'type_error',
+  'other'
+] as const
 
 function sortBugs(bugs: BugEntry[]): BugEntry[] {
   const severityOrder: Record<BugSeverity, number> = {
@@ -44,19 +56,69 @@ function truncatePath(filePath: string, maxLength: number = 50): string {
   return result
 }
 
-export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
+export default function BugsTab({ agent, onSendToAgent }: BugsTabProps): React.JSX.Element {
 
   const bugs = useBugStore((s) => s.bugs)
   const fetchBugsOnce = useBugStore((s) => s.fetchBugsOnce)
   const loading = useBugStore((s) => s.loading)
+  const createBug = useBugStore((s) => s.createBug)
   const resolveBug = useBugStore((s) => s.resolveBug)
   const deleteBug = useBugStore((s) => s.deleteBug)
+
+  const [newMessage, setNewMessage] = useState('')
+  const [newFilePath, setNewFilePath] = useState('')
+  const [newErrorType, setNewErrorType] = useState<string>('runtime_error')
+  const [newSeverity, setNewSeverity] = useState<BugSeverity>('medium')
+  const bugInputRef = useRef<HTMLInputElement>(null)
+  const voiceParsedRef = useRef(false)
 
   useEffect(() => {
     fetchBugsOnce()
   }, [fetchBugsOnce])
 
+  useEffect(() => {
+    if (voiceParsedRef.current || !newMessage) return
+    const hasMarkers = /\b(?:description|message|bug|severity|file\s*path?|type)\s*[:.]?\s/i.test(newMessage)
+    if (!hasMarkers) return
+    voiceParsedRef.current = true
+    const parsed = parseBugVoice(newMessage)
+    setNewMessage(parsed.message)
+    if (parsed.severity !== 'medium' || /\b(?:medium)\b/i.test(newMessage)) setNewSeverity(parsed.severity)
+    if (parsed.filePath) setNewFilePath(parsed.filePath)
+    if (parsed.errorType !== 'runtime_error') setNewErrorType(parsed.errorType)
+  }, [newMessage])
+
   const repoBugs = sortBugs(bugs.filter((b) => b.repoId === agent.repoId))
+
+  const handleAdd = useCallback(async () => {
+    const message = newMessage.trim()
+    if (!message) return
+    await createBug({
+      agentId: agent.id,
+      agentName: agent.name,
+      repoId: agent.repoId,
+      repoName: agent.cwd.split('/').pop() || agent.repoId,
+      errorType: newErrorType,
+      filePath: newFilePath.trim() || 'unknown',
+      message,
+      severity: newSeverity
+    })
+    setNewMessage('')
+    setNewFilePath('')
+    setNewErrorType('runtime_error')
+    setNewSeverity('medium')
+    voiceParsedRef.current = false
+  }, [newMessage, newFilePath, newErrorType, newSeverity, agent, createBug])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        handleAdd()
+      }
+    },
+    [handleAdd]
+  )
 
   const handleResolve = useCallback(
     (id: string) => {
@@ -71,6 +133,8 @@ export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
     },
     [deleteBug]
   )
+
+  const agentColor = agent.color || '#3B82F6'
 
   return (
     <div className="flex flex-col h-full">
@@ -110,13 +174,26 @@ export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
 
                 <div className="flex items-center gap-1 shrink-0 ml-2">
                   {!bug.resolvedAt && (
-                    <button
-                      onClick={() => handleResolve(bug.id)}
-                      className="btn btn-ghost btn-xs text-success"
-                      title="Resolve bug"
-                    >
-                      Fix
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          const prompt = `Fix bug: ${bug.message}${bug.filePath !== 'unknown' ? ` in ${bug.filePath}` : ''} (${bug.errorType}, ${bug.severity})`
+                          onSendToAgent?.(prompt)
+                          handleResolve(bug.id)
+                        }}
+                        className="btn btn-ghost btn-xs text-success"
+                        title="Send to agent & resolve"
+                      >
+                        Fix
+                      </button>
+                      <button
+                        onClick={() => handleResolve(bug.id)}
+                        className="btn btn-ghost btn-xs text-success/50"
+                        title="Mark resolved without sending to agent"
+                      >
+                        ✓
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => handleDelete(bug.id)}
@@ -131,6 +208,60 @@ export default function BugsTab({ agent }: BugsTabProps): React.JSX.Element {
               <p className="text-xs text-base-content/50 truncate">{bug.message}</p>
             </div>
           ))}
+      </div>
+
+      <div className="border-t border-base-content/10 p-3 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <input
+            ref={bugInputRef}
+            type="text"
+            placeholder="Bug description (voice: 'severity high file path src/foo.ts ...')"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="input input-bordered input-sm flex-1 bg-base-100/50 text-sm text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
+            style={{ borderColor: `${agentColor}30` }}
+          />
+          <VoiceInputButton inputRef={bugInputRef} />
+          <select
+            value={newSeverity}
+            onChange={(e) => setNewSeverity(e.target.value as BugSeverity)}
+            className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
+          >
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button
+            onClick={handleAdd}
+            className="btn-lcars text-[10px] px-3 py-1 text-white"
+            style={{ backgroundColor: agentColor }}
+          >
+            Add
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="File path (optional)..."
+            value={newFilePath}
+            onChange={(e) => setNewFilePath(e.target.value)}
+            className="input input-bordered input-sm flex-1 bg-base-100/50 text-xs text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
+            style={{ borderColor: `${agentColor}30` }}
+          />
+          <select
+            value={newErrorType}
+            onChange={(e) => setNewErrorType(e.target.value)}
+            className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
+          >
+            {ERROR_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t.replace('_', ' ')}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   )

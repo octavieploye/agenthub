@@ -1,5 +1,16 @@
 import { create } from 'zustand'
-import type { BugEntry } from '@shared/types/bug-radar.types'
+import type { BugEntry, BugSeverity } from '@shared/types/bug-radar.types'
+
+export interface CreateBugInput {
+  agentId: string
+  agentName: string
+  repoId: string
+  repoName: string
+  errorType: string
+  filePath: string
+  message: string
+  severity: BugSeverity
+}
 
 interface BugStore {
   bugs: BugEntry[]
@@ -9,6 +20,7 @@ interface BugStore {
 
   fetchBugs: () => Promise<void>
   fetchBugsOnce: () => Promise<void>
+  createBug: (input: CreateBugInput) => Promise<boolean>
   resolveBug: (id: string) => Promise<boolean>
   deleteBug: (id: string) => Promise<boolean>
 }
@@ -37,6 +49,21 @@ export const useBugStore = create<BugStore>((set, get) => ({
       }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err), loading: false })
+    }
+  },
+
+  createBug: async (input) => {
+    try {
+      const response = await window.agentHub.bugs.create(input)
+      if (response.success) {
+        set((s) => ({ bugs: [...s.bugs, response.data], hasFetched: false }))
+        return true
+      }
+      set({ error: response.error.message })
+      return false
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
+      return false
     }
   },
 

@@ -132,7 +132,7 @@ function AgentDetailPanel({
         )}
         {mountedTabs.has('bugs') && (
           <div className="absolute inset-0" style={{ visibility: activeTab === 'bugs' ? 'visible' : 'hidden' }}>
-            <BugsTab agent={agent} />
+            <BugsTab agent={agent} onSendToAgent={onSpawnWithTask} />
           </div>
         )}
         {mountedTabs.has('git') && (

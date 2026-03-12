@@ -3,6 +3,7 @@ import { useTaskStore } from '../../stores/task-store'
 import type { AgentState } from '@shared/types/agent.types'
 import type { TaskItem, TaskPriority, TaskStatus } from '@shared/types/task.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
+import { parseTaskVoice } from '../../helpers/parse-voice-fields'
 
 interface TodoTabProps {
   agent: AgentState
@@ -57,6 +58,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
 
   const [newTitle, setNewTitle] = useState('')
   const todoInputRef = useRef<HTMLInputElement>(null)
+  const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
 
@@ -70,6 +72,20 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   useEffect(() => {
     fetchTasksOnce()
   }, [fetchTasksOnce])
+
+  const voiceParsedRef = useRef(false)
+
+  // Auto-parse voice input with structured markers
+  useEffect(() => {
+    if (voiceParsedRef.current || !newDescription) return
+    const hasMarkers = /\btitle\s*[:.]?\s/i.test(newDescription)
+    if (!hasMarkers) return
+    voiceParsedRef.current = true
+    const parsed = parseTaskVoice(newDescription)
+    if (parsed.title) setNewTitle(parsed.title)
+    setNewPriority(parsed.priority)
+    setNewDescription(parsed.description)
+  }, [newDescription])
 
   const repoTasks = groupAndSort(tasks.filter((t) => t.repoId === agent.repoId))
 
@@ -85,6 +101,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
     setNewTitle('')
     setNewDescription('')
     setNewPriority(2)
+    voiceParsedRef.current = false
   }, [newTitle, newDescription, newPriority, agent.repoId, createTask])
 
   const handleKeyDown = useCallback(
@@ -297,7 +314,6 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
             className="input input-bordered input-sm flex-1 bg-base-100/50 text-sm text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
             style={{ borderColor: `${agentColor}30` }}
           />
-          <VoiceInputButton inputRef={todoInputRef} />
           <select
             value={newPriority}
             onChange={(e) => setNewPriority(Number(e.target.value) as TaskPriority)}
@@ -315,14 +331,18 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
             Add
           </button>
         </div>
-        <textarea
-          placeholder="Description (optional)..."
-          value={newDescription}
-          onChange={(e) => setNewDescription(e.target.value)}
-          rows={2}
-          className="textarea textarea-bordered textarea-sm w-full bg-base-100/50 text-xs text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none resize-none"
-          style={{ borderColor: `${agentColor}30` }}
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            ref={descriptionRef}
+            placeholder="Description (voice: 'Title: ... Priority P1 Description: ...')"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            rows={2}
+            className="textarea textarea-bordered textarea-sm flex-1 bg-base-100/50 text-xs text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none resize-none"
+            style={{ borderColor: `${agentColor}30` }}
+          />
+          <VoiceInputButton inputRef={descriptionRef} />
+        </div>
       </div>
     </div>
   )
