@@ -212,15 +212,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
 
-  // For Ollama providers, inline env vars before the command so they survive .zshrc overrides
-  const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
-  const envPrefix = isOllama
-    ? 'ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama '
-    : ''
-
   // Strip provider prefix from dynamically-fetched Ollama model IDs.
   // model-service.ts stores them as "ollama-cloud:devstral-2:123b" or "ollama-local:devstral-2:123b"
   // but Claude CLI only accepts the bare Ollama tag, e.g. "devstral-2:123b".
+  const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
   const rawModel = agentState.model ?? ''
   const modelName = isOllama
     ? rawModel.replace(/^(ollama-cloud:|ollama-local:)/, '')
@@ -229,17 +224,36 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
+  // Ollama providers use `ollama launch claude` which wires env vars and /v1/messages internally.
+  // The app binary at /Applications/Ollama.app has the `launch` command; the Homebrew binary may not.
+  const ollamaBin = '/Applications/Ollama.app/Contents/Resources/ollama'
+  // Fallback: inline env vars + claude directly (for systems without Ollama.app)
+  const ollamaEnvPrefix = 'ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama '
+
   if (task) {
     setTimeout(() => {
-      const cmd = `${envPrefix}claude${modelFlag}${effortFlag}${permFlag} "${task.replace(/"/g, '\\"')}"\n`
+      const escapedTask = task.replace(/"/g, '\\"')
+      let cmd: string
+      if (isOllama) {
+        cmd = `${ollamaBin} launch claude${modelFlag} --${permFlag} "${escapedTask}" || ${ollamaEnvPrefix}claude${modelFlag}${permFlag} "${escapedTask}"\n`
+      } else {
+        cmd = `claude${modelFlag}${effortFlag}${permFlag} "${escapedTask}"\n`
+      }
       ptyProcess.write(cmd)
-      log.info('Sent claude command to PTY', { id: agentState.id, model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task, envPrefix: envPrefix.trim() })
+      log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
-    // Just launch claude in interactive mode
     setTimeout(() => {
-      ptyProcess.write(`${envPrefix}claude${modelFlag}${effortFlag}${permFlag}\n`)
-      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, envPrefix: envPrefix.trim() })
+      let cmd: string
+      if (isOllama) {
+        cmd = permFlag
+          ? `${ollamaBin} launch claude${modelFlag} --${permFlag} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag}\n`
+          : `${ollamaBin} launch claude${modelFlag} || ${ollamaEnvPrefix}claude${modelFlag}\n`
+      } else {
+        cmd = `claude${modelFlag}${effortFlag}${permFlag}\n`
+      }
+      ptyProcess.write(cmd)
+      log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
   }
 
