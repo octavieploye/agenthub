@@ -5,8 +5,7 @@ import { useAgentStore } from '@renderer/stores/agent-store'
 export interface KeyboardNavCallbacks {
   onSpawnDialog: () => void
   onCommandPalette: () => void
-  onBriefingToggle: () => void
-  onEscape: () => void
+onEscape: () => void
   onExpandFocused: () => void
   onContextMenuFocused: () => void
   onDeleteFocused: () => void
@@ -45,11 +44,6 @@ export function useKeyboardNav(callbacks: KeyboardNavCallbacks): void {
       }
       if (meta && e.key === '2') {
         e.preventDefault()
-        setViewModeRef.current('channel')
-        return
-      }
-      if (meta && e.key === '3') {
-        e.preventDefault()
         setViewModeRef.current('terminal')
         return
       }
@@ -65,13 +59,6 @@ export function useKeyboardNav(callbacks: KeyboardNavCallbacks): void {
       if (meta && e.key === 'k') {
         e.preventDefault()
         callbacksRef.current.onCommandPalette()
-        return
-      }
-
-      // Cmd+B — briefing toggle
-      if (meta && e.key === 'b') {
-        e.preventDefault()
-        callbacksRef.current.onBriefingToggle()
         return
       }
 

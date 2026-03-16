@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
     SEND_INPUT: 'agents:send-input',
     RESIZE: 'agents:resize',
     UPDATE_COLOR: 'agents:update-color',
+    UPDATE_TASK_DESCRIPTION: 'agents:update-task-description',
     UPDATE_MODEL: 'agents:update-model',
     ATTACH_TERMINAL: 'agents:attach-terminal',
     DETACH_TERMINAL: 'agents:detach-terminal',

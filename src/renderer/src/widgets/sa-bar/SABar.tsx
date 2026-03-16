@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
+import type { AgentState } from '@shared/types/agent.types'
 import type { DockerStatus } from '@shared/types/docker.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import ThemeSwitcher from '../theme-switcher/ThemeSwitcher'
 import CodeBlueButton from '../code-blue/CodeBlueButton'
 import SkillsDropdown from '../skills-dropdown/SkillsDropdown'
+import RepoSwitcher from '../repo-switcher/RepoSwitcher'
+import type { RepoSwitcherHandle } from '../repo-switcher/RepoSwitcher'
+import HelpPopover from '../help-popover/HelpPopover'
 
 interface SABarProps {
   agents: AgentState[]
@@ -12,25 +15,18 @@ interface SABarProps {
   selectedAgentRepoPath?: string
   onOpenSettings?: () => void
   onOpenGit?: () => void
+  onOpenHelp?: () => void
+  repoSwitcherRef?: React.RefObject<RepoSwitcherHandle>
 }
-
-const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
-  { key: 'busy', label: 'Active', dotClass: 'bg-success' },
-  { key: 'locked', label: 'Locked', dotClass: 'bg-warning animate-breathe' },
-  { key: 'paused', label: 'Paused', dotClass: 'bg-amber-400' },
-  { key: 'completed', label: 'Done', dotClass: 'bg-info' }
-]
 
 const VIEW_MODES = [
   { key: 'raid' as const, label: 'Raid' },
-  { key: 'channel' as const, label: 'Channel' },
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit, onOpenHelp: _onOpenHelp, repoSwitcherRef }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
-  const setStatusFilter = useViewStore((s) => s.setStatusFilter)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
   const toggleSound = useViewStore((s) => s.toggleSound)
   const [skillsOpen, setSkillsOpen] = useState(false)
@@ -51,29 +47,9 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
   return (
     <header
       data-testid="sa-bar"
-      className="h-12 flex items-center gap-3 px-4 panel-glass border-b border-base-content/10 shrink-0"
+      className="h-14 flex items-center gap-3 px-4 panel-glass border-b border-base-content/10 shrink-0"
     >
-      <h1 className="text-sm font-bold text-primary tracking-wide">AgentHub</h1>
-
-      {/* Status counters */}
-      <div className="flex items-center gap-2 ml-3">
-        {STATUS_COUNTERS.map(({ key, label, dotClass }) => {
-          const count = agents.filter((a) => a.status === key).length
-          return (
-            <button
-              key={key}
-              data-testid={`status-counter-${key}`}
-              onClick={() => setStatusFilter(key)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs hover:bg-base-content/10 transition-colors"
-              title={`Filter by ${label}`}
-              aria-label={`Filter ${label.toLowerCase()} agents, ${count} currently`}
-            >
-              <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
-              <span className="text-base-content/60">{count}</span>
-            </button>
-          )
-        })}
-      </div>
+      <h1 className="text-sm font-mono font-semibold text-primary tracking-wide">AgentHub</h1>
 
       <div className="flex-1" />
 
@@ -119,6 +95,9 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
         />
       </div>
 
+      {/* Repo switcher */}
+      <RepoSwitcher ref={repoSwitcherRef} />
+
       {/* Sound toggle */}
       <button
         data-testid="sound-toggle"
@@ -136,7 +115,7 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
       {onOpenGit && (
         <button
           data-testid="sa-git"
-          className="btn btn-xs btn-ghost"
+          className="btn-hub btn-ghost btn-xs"
           onClick={onOpenGit}
           title="Git Overview"
         >
@@ -173,13 +152,16 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
       {onOpenSettings && (
         <button
           data-testid="sa-settings"
-          className="btn btn-xs btn-ghost"
+          className="btn-hub btn-ghost btn-xs"
           onClick={onOpenSettings}
           title="Settings"
         >
           Settings
         </button>
       )}
+
+      {/* Help popover */}
+      <HelpPopover />
     </header>
   )
 }

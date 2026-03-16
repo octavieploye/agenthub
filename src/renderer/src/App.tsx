@@ -4,10 +4,10 @@ import { useViewStore } from './stores/view-store'
 import { useThemeStore } from './stores/theme-store'
 import { useUsageStore } from './stores/usage-store'
 import AgentSidebar from './widgets/agent-sidebar/AgentSidebar'
+import RepoSidebar from './widgets/repo-sidebar/RepoSidebar'
 import SABar from './widgets/sa-bar/SABar'
 import SpawnDialog from './widgets/spawn-dialog/SpawnDialog'
 import UnifiedView from './widgets/unified-view/UnifiedView'
-import BriefingView from './widgets/briefing-view/BriefingView'
 import CommandPalette from './widgets/command-palette/CommandPalette'
 import EvidencePanel from './widgets/evidence-panel/EvidencePanel'
 import CodeBluePanel from './widgets/code-blue/CodeBluePanel'
@@ -22,6 +22,7 @@ import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
+import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -64,6 +65,9 @@ function AppMain(): React.JSX.Element {
   const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, updateColor, removeAgent } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
+  const selectedRepoId = useViewStore((s) => s.selectedRepoId)
+  const setSelectedRepoId = useViewStore((s) => s.setSelectedRepoId)
+  const focusedAgentId = useViewStore((s) => s.focusedAgentId)
   const theme = useThemeStore((s) => s.theme)
   const setFocusedAgent = useViewStore((s) => s.setFocusedAgent)
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
@@ -117,6 +121,9 @@ function AppMain(): React.JSX.Element {
   const soundDeps = useRef(
     createSoundAlertDeps(() => useViewStore.getState().soundEnabled)
   )
+
+  // Ref to imperative handle on RepoSwitcher (for Cmd+E)
+  const repoSwitcherRef = useRef<RepoSwitcherHandle>(null)
 
   // Track known agent IDs to detect first spawn
   const knownAgentIds = useRef(new Set<string>())
@@ -319,9 +326,6 @@ function AppMain(): React.JSX.Element {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Track previous view mode for Cmd+B toggle
-  const [previousViewMode, setPreviousViewMode] = useState<'raid' | 'channel' | 'terminal'>('raid')
-
   // Shutdown handler (must be before keyboard shortcuts)
   const handleShutdownRequest = useCallback(() => {
     const activeAgents = Array.from(agents.values()).filter(
@@ -366,30 +370,92 @@ function AppMain(): React.JSX.Element {
       if (e.metaKey || e.ctrlKey) {
         const store = useViewStore.getState()
         if (e.key === '1') { e.preventDefault(); store.setViewMode('raid') }
-        if (e.key === '2') { e.preventDefault(); store.setViewMode('channel') }
-        if (e.key === '3') { e.preventDefault(); store.setViewMode('terminal') }
+        if (e.key === '2') { e.preventDefault(); store.setViewMode('terminal') }
         if (e.key === 'k') {
           e.preventDefault()
           setCommandPaletteOpen((prev) => !prev)
-        }
-        if (e.key === 'b') {
-          e.preventDefault()
-          if (store.viewMode === 'briefing') {
-            store.setViewMode(previousViewMode)
-          } else {
-            setPreviousViewMode(store.viewMode as 'raid' | 'channel' | 'terminal')
-            store.setViewMode('briefing')
-          }
         }
         if (e.key === 'q') {
           e.preventDefault()
           handleShutdownRequest()
         }
+        if (e.key === 'e') {
+          e.preventDefault()
+          repoSwitcherRef.current?.focus()
+        }
+        if (e.key === 'n') {
+          e.preventDefault()
+          setSpawnDialogOpen(true)
+        }
+
+        // Cmd+Shift+↑/↓ — navigate repo list (raid view only)
+        if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && store.viewMode === 'raid') {
+          e.preventDefault()
+          const allAgents = Array.from(useAgentStore.getState().agents.values())
+          // Derive sorted repos — same logic as RepoSidebar
+          const ATTENTION_STATUSES_NAV = new Set(['locked', 'awaiting_approval', 'error', 'looping'])
+          const repoMap = new Map<string, { repoId: string; hasAttention: boolean }>()
+          for (const agent of allAgents) {
+            const existing = repoMap.get(agent.repoId)
+            const hasAttention = ATTENTION_STATUSES_NAV.has(agent.status)
+            if (existing) {
+              if (hasAttention) existing.hasAttention = true
+            } else {
+              repoMap.set(agent.repoId, { repoId: agent.repoId, hasAttention })
+            }
+          }
+          const sortedRepos = Array.from(repoMap.values()).sort((a, b) => {
+            if (a.hasAttention !== b.hasAttention) return a.hasAttention ? -1 : 1
+            return a.repoId.localeCompare(b.repoId)
+          })
+          if (sortedRepos.length < 2) return
+          const currentRepoId = store.selectedRepoId
+          const currentRepoIndex = sortedRepos.findIndex((r) => r.repoId === currentRepoId)
+          const nextRepoIndex =
+            e.key === 'ArrowDown'
+              ? (currentRepoIndex + 1) % sortedRepos.length
+              : (currentRepoIndex - 1 + sortedRepos.length) % sortedRepos.length
+          const nextRepo = sortedRepos[nextRepoIndex]
+          if (nextRepo) store.setSelectedRepoId(nextRepo.repoId)
+        }
+      }
+
+      // Tab — cycle focus through agents in raid view
+      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const store = useViewStore.getState()
+        if (store.viewMode !== 'raid') return
+        e.preventDefault()
+        const allAgents = Array.from(useAgentStore.getState().agents.values())
+        const currentRaidAgents = store.selectedRepoId
+          ? allAgents.filter((a) => a.repoId === store.selectedRepoId)
+          : allAgents
+        if (currentRaidAgents.length === 0) return
+        const currentFocused = store.focusedAgentId
+        if (currentFocused === null) {
+          const first = currentRaidAgents[0]
+          if (first) store.setFocusedAgent(first.id)
+        } else {
+          const currentIdx = currentRaidAgents.findIndex((a) => a.id === currentFocused)
+          const nextIdx = (currentIdx + 1) % currentRaidAgents.length
+          const next = currentRaidAgents[nextIdx]
+          if (next) store.setFocusedAgent(next.id)
+        }
+      }
+
+      // Enter — prevent default form submission when an agent is focused
+      if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const store = useViewStore.getState()
+        if (store.focusedAgentId !== null) {
+          const target = e.target as HTMLElement
+          if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
+            e.preventDefault()
+          }
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [previousViewMode, handleShutdownRequest])
+  }, [handleShutdownRequest])
 
   // Close context menu on any click outside
   useEffect(() => {
@@ -414,7 +480,13 @@ function AppMain(): React.JSX.Element {
   useEffect(() => {
     const handleAgentNav = (e: KeyboardEvent): void => {
       if (!e.altKey || e.metaKey || e.ctrlKey) return
-      const currentAgents = Array.from(useAgentStore.getState().agents.values())
+      const viewStore = useViewStore.getState()
+      const allAgents = Array.from(useAgentStore.getState().agents.values())
+      // In raid view, navigate only within the selected repo's agents
+      const currentAgents =
+        viewStore.viewMode === 'raid' && viewStore.selectedRepoId
+          ? allAgents.filter((a) => a.repoId === viewStore.selectedRepoId)
+          : allAgents
       if (currentAgents.length < 2) return
 
       const currentId = useAgentStore.getState().activeAgentId
@@ -592,18 +664,14 @@ function AppMain(): React.JSX.Element {
       handleSelectAgent(result.id)
       useViewStore.getState().setViewMode('terminal')
     } else if (result.type === 'task') {
-      useViewStore.getState().setViewMode('briefing')
+      useViewStore.getState().setViewMode('raid')
     } else if (result.type === 'repo') {
-      useViewStore.getState().setViewMode('briefing')
+      useViewStore.getState().setViewMode('raid')
     } else if (result.type === 'terminal') {
       handleSelectAgent(result.id)
       useViewStore.getState().setViewMode('terminal')
     }
   }, [handleSelectAgent])
-
-  const handleStartWorking = useCallback(() => {
-    useViewStore.getState().setViewMode(previousViewMode)
-  }, [previousViewMode])
 
   // Code Blue handlers
   const handleCodeBlueActivate = useCallback(() => {
@@ -676,6 +744,32 @@ function AppMain(): React.JSX.Element {
   }, [guardrailsTarget])
 
   const agentList = Array.from(agents.values())
+  const terminalSidebarAgents =
+    viewMode === 'terminal' && selectedRepoId
+      ? agentList.filter((a) => a.repoId === selectedRepoId)
+      : agentList
+
+  // Auto-select first repo when none selected
+  useEffect(() => {
+    if (selectedRepoId === null && agentList.length > 0) {
+      const firstAgent = agentList[0]
+      if (firstAgent) setSelectedRepoId(firstAgent.repoId)
+    }
+  }, [agentList, selectedRepoId, setSelectedRepoId])
+
+  // Clear selectedRepoId if selected repo no longer has agents
+  useEffect(() => {
+    if (selectedRepoId === null) return
+    const stillExists = agentList.some((a) => a.repoId === selectedRepoId)
+    if (!stillExists) {
+      const next = agentList.length > 0 ? agentList[0].repoId : null
+      setSelectedRepoId(next ?? null)
+    }
+  }, [agentList, selectedRepoId, setSelectedRepoId])
+
+  const raidAgents = selectedRepoId
+    ? agentList.filter((a) => a.repoId === selectedRepoId)
+    : agentList
 
   // Show recovery screen if needed
   if (showRecovery && recoveryInfo) {
@@ -745,69 +839,124 @@ function AppMain(): React.JSX.Element {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenGit={() => setGitPanelOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
+        repoSwitcherRef={repoSwitcherRef}
       />
 
       {/* Main layout: sidebar + content */}
       <main id="main-content" className="flex-1 flex min-h-0">
-        <AgentSidebar
-          agents={agentList}
-          activeAgentId={activeAgentId}
-          onSelectAgent={handleSelectAgent}
-          onKillAgent={handleKillRequest}
-          onPauseAgent={handlePause}
-          onResumeAgent={handleResume}
-          onSpawnAgent={() => setSpawnDialogOpen(true)}
-          onOpenGuardrails={handleOpenGuardrails}
-        />
+        {/* Agent sidebar — only shown outside raid view */}
+        {viewMode !== 'raid' && (
+          <AgentSidebar
+            agents={terminalSidebarAgents}
+            activeAgentId={activeAgentId}
+            onSelectAgent={handleSelectAgent}
+            onKillAgent={handleKillRequest}
+            onPauseAgent={handlePause}
+            onResumeAgent={handleResume}
+            onSpawnAgent={() => setSpawnDialogOpen(true)}
+            onOpenGuardrails={handleOpenGuardrails}
+          />
+        )}
 
         {/* Content area switches based on view mode */}
         <div className="flex-1 flex flex-col min-h-0">
-          {viewMode === 'briefing' ? (
-            <BriefingView
-              agents={agentList}
-              onStartWorking={handleStartWorking}
-              onViewAgent={handleSelectAgent}
-              onResumeAgent={handleResume}
-              onKillAgent={handleKillRequest}
-              onSpawnTester={() => {}}
-            />
-          ) : (
-            /* Workspace view — master-detail layout */
-            <div className="flex-1 flex min-h-0 bg-base-100">
-              {/* Overview panel (raid/channel grid) — only in raid/channel modes */}
-              {(viewMode === 'raid' || viewMode === 'channel') && (
-                <div
-                  className={`min-h-0 overflow-y-auto ${
-                    activeAgentId && agents.get(activeAgentId)
-                      ? 'w-[320px] shrink-0 border-r border-base-content/10'
-                      : 'flex-1'
-                  }`}
-                >
-                  {agentList.length === 0 ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="panel-glass p-8 text-center max-w-md">
-                        <h2 className="text-2xl font-bold mb-3">Welcome to AgentHub</h2>
-                        <p className="text-base-content/70 mb-5 text-sm">
-                          Command & Control center for AI coding agents.
-                        </p>
-                        <button
-                          onClick={() => setSpawnDialogOpen(true)}
-                          className="btn-lcars btn-primary w-full"
-                        >
-                          Launch First Agent
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <UnifiedView
-                      agents={agentList}
-                      onSelectAgent={handleSelectAgent}
-                      onContextMenu={(agentId, pos) => setContextMenu({ agentId, position: pos })}
+          {viewMode === 'raid' ? (
+            /* Raid view — 3-column layout: RepoSidebar + AgentList + DetailPanel */
+            <div className="flex h-full overflow-x-auto">
+              <RepoSidebar onAddRepo={() => setSpawnDialogOpen(true)} />
+              <div className="w-56 flex-shrink-0 h-full overflow-y-auto border-r border-base-content/10">
+                {agentList.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-base-content/40 text-sm h-full">
+                    Add a repo to get started
+                  </div>
+                ) : raidAgents.length === 0 ? (
+                  <div className="flex items-center justify-center text-base-content/40 text-sm h-full">
+                    No agents in this repo. Click + to add one.
+                  </div>
+                ) : (
+                  <AgentSidebar
+                    agents={raidAgents}
+                    activeAgentId={focusedAgentId}
+                    onSelectAgent={handleSelectAgent}
+                    onKillAgent={handleKillRequest}
+                    onPauseAgent={handlePause}
+                    onResumeAgent={handleResume}
+                    onSpawnAgent={() => setSpawnDialogOpen(true)}
+                    onOpenGuardrails={handleOpenGuardrails}
+                  />
+                )}
+              </div>
+              <div className="flex-1 min-w-[280px] h-full overflow-hidden">
+                {activeAgentId && agents.get(activeAgentId) ? (
+                  <div className="h-full flex flex-col">
+                    {/* Evidence panel for paused agents */}
+                    {agents.get(activeAgentId)?.status === 'paused' &&
+                      pausedAgentAnomalies.length > 0 && (
+                        <div className="px-4 py-2 shrink-0">
+                          <EvidencePanel
+                            agentId={activeAgentId}
+                            agentName={agents.get(activeAgentId)?.name ?? ''}
+                            anomalies={pausedAgentAnomalies}
+                            pausedAt={pausedAt}
+                            onResume={() => handleResume(activeAgentId)}
+                            onKill={() => handleKillRequest(activeAgentId)}
+                            onRestart={(_prompt) => {
+                              handleKillDirect(activeAgentId).then(() => {
+                                const agent = agents.get(activeAgentId)
+                                if (agent) {
+                                  handleSpawn(agent.cwd, agent.name + '-retry', agent.repoId)
+                                }
+                              })
+                            }}
+                            onDismiss={(anomalyId) => {
+                              setPausedAgentAnomalies((prev) =>
+                                prev.filter((a) => a.id !== anomalyId)
+                              )
+                            }}
+                          />
+                        </div>
+                      )}
+                    <AgentDetailPanel
+                      agent={agents.get(activeAgentId)!}
+                      initialTab="general"
+                      onPause={handlePause}
+                      onResume={handleResume}
+                      onKill={handleKillRequest}
+                      onSpawnWithTask={handleSpawnWithTask}
+                      onBreakout={handleBreakout}
+                      onAttachTerminal={handleAttachTerminal}
+                      onDetachTerminal={handleDetachTerminal}
+                      proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
+                      onTabChange={setActiveDetailTab}
                     />
-                  )}
-                </div>
-              )}
-
+                    {activeDetailTab === 'terminal' && (
+                      <InlineTaskInput
+                        agent={agents.get(activeAgentId)!}
+                        onSendInput={handleSendInput}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="panel-glass p-8 text-center max-w-md">
+                      <h2 className="text-2xl font-bold mb-3">Welcome to AgentHub</h2>
+                      <p className="text-base-content/70 mb-5 text-sm">
+                        Command &amp; Control center for AI coding agents.
+                      </p>
+                      <button
+                        onClick={() => setSpawnDialogOpen(true)}
+                        className="btn-lcars btn-primary w-full"
+                      >
+                        Launch First Agent
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Terminal/other workspace view — master-detail layout */
+            <div className="flex-1 flex min-h-0 bg-base-100">
               {/* Agent Detail Panel — shows when agent is selected */}
               {activeAgentId && agents.get(activeAgentId) ? (
                 <div className="flex-1 min-h-0 flex flex-col">
@@ -860,19 +1009,10 @@ function AppMain(): React.JSX.Element {
                   )}
                 </div>
               ) : viewMode === 'terminal' ? (
-                /* Terminal mode with no agent selected — show welcome */
+                /* Terminal mode with no agent selected */
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="panel-glass p-8 text-center max-w-md">
-                    <h2 className="text-2xl font-bold mb-3">No Agent Selected</h2>
-                    <p className="text-base-content/70 mb-5 text-sm">
-                      Select an agent from the sidebar or launch a new one.
-                    </p>
-                    <button
-                      onClick={() => setSpawnDialogOpen(true)}
-                      className="btn-lcars btn-primary w-full"
-                    >
-                      Launch Agent
-                    </button>
+                  <div className="text-base-content/40 text-sm">
+                    Select an agent from the sidebar.
                   </div>
                 </div>
               ) : null}
@@ -885,6 +1025,7 @@ function AppMain(): React.JSX.Element {
         open={spawnDialogOpen}
         onClose={() => setSpawnDialogOpen(false)}
         onSpawn={handleSpawn}
+        prefilledRepoId={selectedRepoId ?? undefined}
       />
 
       <CommandPalette

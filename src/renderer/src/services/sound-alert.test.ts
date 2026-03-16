@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   playAgentSound,
   SOUND_MAP,
+  statusToSoundEvent,
   type SoundAlertDeps
 } from './sound-alert'
 import type { AgentSoundEvent } from '@shared/types/notification.types'
+import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -233,6 +235,63 @@ describe('Sound Alert Service', () => {
 
       expect(deps.isSoundEnabled).toHaveBeenCalled()
       expect(deps.playSound).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── statusToSoundEvent mapping ───────────────────────────────────────────
+
+  describe('statusToSoundEvent', () => {
+    it('returns agent_spawned for spawning status', () => {
+      expect(statusToSoundEvent('spawning')).toBe('agent_spawned')
+    })
+
+    it('returns agent_completed for completed status', () => {
+      expect(statusToSoundEvent('completed')).toBe('agent_completed')
+    })
+
+    it('returns agent_locked for locked status', () => {
+      expect(statusToSoundEvent('locked')).toBe('agent_locked')
+    })
+
+    it('returns agent_looping for looping status', () => {
+      expect(statusToSoundEvent('looping')).toBe('agent_looping')
+    })
+
+    it('returns user_approval for awaiting_approval status', () => {
+      expect(statusToSoundEvent('awaiting_approval')).toBe('user_approval')
+    })
+
+    it('returns code_blue for error status', () => {
+      expect(statusToSoundEvent('error')).toBe('code_blue')
+    })
+
+    it('returns null for busy status (no sound)', () => {
+      expect(statusToSoundEvent('busy')).toBeNull()
+    })
+
+    it('returns null for paused status (no sound)', () => {
+      expect(statusToSoundEvent('paused')).toBeNull()
+    })
+
+    it('returns null for interrupted status (no sound)', () => {
+      expect(statusToSoundEvent('interrupted')).toBeNull()
+    })
+
+    it('returns null for idle status (no sound)', () => {
+      expect(statusToSoundEvent('idle')).toBeNull()
+    })
+
+    it('returns null for tray_running status (no sound)', () => {
+      expect(statusToSoundEvent('tray_running')).toBeNull()
+    })
+
+    it('all 6 mapped statuses return a non-null sound event', () => {
+      const mappedStatuses: AgentLifecycleStatus[] = [
+        'spawning', 'completed', 'locked', 'looping', 'awaiting_approval', 'error'
+      ]
+      for (const status of mappedStatuses) {
+        expect(statusToSoundEvent(status)).not.toBeNull()
+      }
     })
   })
 

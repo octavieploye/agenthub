@@ -100,7 +100,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
     <div
       ref={dropdownRef}
       data-testid="skills-dropdown"
-      className="absolute top-full right-0 mt-1 w-80 max-h-[400px] flex flex-col panel-glass backdrop-blur-md border border-base-content/10 rounded-lg shadow-lg z-50 overflow-hidden"
+      className="absolute top-full right-0 mt-1 w-80 flex flex-col dropdown-panel overflow-hidden"
     >
       {/* Search */}
       <div className="p-3 pb-2 shrink-0">
@@ -146,7 +146,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
                   data-testid={`skill-${skill.id}`}
                   onClick={() => handleExecute(skill.id)}
                   disabled={executing !== null}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-base-content/5 transition-colors disabled:opacity-50"
+                  className="dropdown-item w-full text-left disabled:opacity-50"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-base-content/80 font-medium flex-1 truncate">

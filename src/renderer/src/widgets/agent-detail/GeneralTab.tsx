@@ -66,8 +66,15 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
   const [selectedColor, setSelectedColor] = useState(agent.color)
   const [availableModels, setAvailableModels] = useState<ModelCatalogEntry[]>(CLAUDE_MODELS)
   const [containerOp, setContainerOp] = useState<'idle' | 'stopping' | 'destroying'>('idle')
+  const [editingTask, setEditingTask] = useState(false)
+  const [taskValue, setTaskValue] = useState(agent.taskDescription)
   const updateColor = useAgentStore((s) => s.updateColor)
   const updateModel = useAgentStore((s) => s.updateModel)
+  const updateTaskDescription = useAgentStore((s) => s.updateTaskDescription)
+
+  useEffect(() => {
+    setTaskValue(agent.taskDescription)
+  }, [agent.taskDescription])
 
   const isRunning = ['busy', 'idle', 'spawning', 'locked', 'paused'].includes(agent.status)
 
@@ -178,12 +185,43 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           </span>
         </div>
 
-        {agent.taskDescription && (
-          <div className="text-xs text-base-content/70">
-            <span className="text-base-content/40">Task:</span>{' '}
-            <span data-testid="general-task">{agent.taskDescription}</span>
-          </div>
-        )}
+        <div className="text-xs text-base-content/70">
+          <span className="text-base-content/40">Task:</span>{' '}
+          {editingTask ? (
+            <input
+              autoFocus
+              className="text-xs bg-transparent border-b border-primary/50 outline-none w-full text-base-content"
+              value={taskValue}
+              onChange={(e) => setTaskValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  updateTaskDescription(agent.id, taskValue)
+                  window.agentHub.agents.updateTaskDescription(agent.id, taskValue).catch(console.error)
+                  setEditingTask(false)
+                }
+                if (e.key === 'Escape') {
+                  setTaskValue(agent.taskDescription)
+                  setEditingTask(false)
+                }
+              }}
+              onBlur={() => {
+                updateTaskDescription(agent.id, taskValue)
+                window.agentHub.agents.updateTaskDescription(agent.id, taskValue).catch(console.error)
+                setEditingTask(false)
+              }}
+            />
+          ) : (
+            <span
+              data-testid="general-task"
+              className="cursor-text hover:text-base-content transition-colors"
+              onClick={() => setEditingTask(true)}
+              title="Click to edit task"
+            >
+              {agent.taskDescription || '(no task)'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Model selector */}

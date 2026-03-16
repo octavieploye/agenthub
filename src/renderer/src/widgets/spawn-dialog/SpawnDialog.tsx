@@ -39,11 +39,12 @@ interface SpawnDialogProps {
     effortLevel?: EffortLevel,
     skipPermissions?: boolean
   ) => Promise<string | null>
+  prefilledRepoId?: string
 }
 
 type Step = 'configure' | 'pre-launch' | 'model-select'
 
-function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.Element | null {
+function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogProps): React.JSX.Element | null {
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [selectedRepoId, setSelectedRepoId] = useState<string>('')
   const [customCwd, setCustomCwd] = useState('')
@@ -97,7 +98,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
       loadModels()
       setAgentName('')
       setCustomCwd('')
-      setSelectedRepoId('')
+      setSelectedRepoId(prefilledRepoId ?? '')
       setShowAddRepo(false)
       setStep('configure')
       setSelectedModel('claude-sonnet-4-6')
@@ -105,7 +106,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
       setSkipPermissions(false)
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
-  }, [open, loadRepos, loadModels])
+  }, [open, loadRepos, loadModels, prefilledRepoId])
 
   useEffect(() => {
     if (!skipPermissions) { setDockerStatus(null); return }
