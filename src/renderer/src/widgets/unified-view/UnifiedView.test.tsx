@@ -39,7 +39,7 @@ vi.mock('@renderer/widgets/full-terminal/FullTerminal', () => ({
 }))
 
 // Mock view store - default viewMode will be overridden per test
-let mockViewMode: 'raid' | 'channel' | 'terminal' = 'raid'
+let mockViewMode: 'raid' | 'terminal' = 'raid'
 
 vi.mock('@renderer/stores/view-store', () => ({
   useViewStore: vi.fn((selector) => {
@@ -76,12 +76,6 @@ describe('UnifiedView', () => {
       mockViewMode = 'raid'
       render(<UnifiedView agents={mockAgents} />)
       expect(screen.getByTestId('raid-frame-grid')).toBeInTheDocument()
-    })
-
-    it('renders channel strip layout when viewMode is channel', () => {
-      mockViewMode = 'channel'
-      render(<UnifiedView agents={mockAgents} />)
-      expect(screen.getByTestId('channel-strip-layout')).toBeInTheDocument()
     })
 
     it('renders FullTerminal when viewMode is terminal', () => {

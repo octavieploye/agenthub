@@ -172,8 +172,8 @@ describe('FullTerminal', () => {
     mockTerminalInstance.options = {}
     mockTerminalInstance.cols = 80
     mockTerminalInstance.rows = 24
-    useThemeStore.setState({ theme: 'deep-space' })
-    document.documentElement.setAttribute('data-theme', 'deep-space')
+    useThemeStore.setState({ theme: 'mocha' })
+    document.documentElement.setAttribute('data-theme', 'mocha')
   })
 
   afterEach(() => {
@@ -256,7 +256,7 @@ describe('FullTerminal', () => {
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
     act(() => {
-      useThemeStore.getState().setTheme('ember')
+      useThemeStore.getState().setTheme('neon-noir')
     })
 
     // The theme effect should have set options.theme

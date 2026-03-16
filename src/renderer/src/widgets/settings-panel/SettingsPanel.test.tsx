@@ -6,7 +6,19 @@ import SettingsPanel from './SettingsPanel'
 const mockSetTheme = vi.fn()
 vi.mock('../../stores/theme-store', () => ({
   useThemeStore: vi.fn((selector) =>
-    selector({ theme: 'deep-space', setTheme: mockSetTheme })
+    selector({ theme: 'mocha', themes: ['mocha', 'neon-noir', 'solarized-dusk', 'rose-pine', 'latte'], setTheme: mockSetTheme })
+  )
+}))
+
+// Mock view store (used by AdvancedTab)
+vi.mock('../../stores/view-store', () => ({
+  useViewStore: vi.fn((selector) =>
+    selector({
+      soundEnabled: true,
+      toggleSound: vi.fn(),
+      voiceEnabled: false,
+      toggleVoice: vi.fn()
+    })
   )
 }))
 
@@ -21,7 +33,7 @@ describe('SettingsPanel', () => {
         set: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         export: vi.fn().mockResolvedValue({
           success: true,
-          data: { version: '1.0.0', exportedAt: '2026-03-07', settings: { theme: 'deep-space' } }
+          data: { version: '1.0.0', exportedAt: '2026-03-07', settings: { theme: 'mocha' } }
         }),
         import: vi.fn().mockResolvedValue({ success: true, data: undefined })
       },
@@ -32,6 +44,9 @@ describe('SettingsPanel', () => {
         status: vi.fn().mockResolvedValue({ success: true, data: { available: false, imageReady: false, imageTag: 'agenthub-cli:latest', activeContainerCount: 0 } }),
         rebuild: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         onBuildProgress: vi.fn().mockReturnValue(vi.fn())
+      },
+      system: {
+        openPath: vi.fn().mockResolvedValue(undefined)
       }
     } as any
     // Mock URL methods
@@ -51,9 +66,9 @@ describe('SettingsPanel', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('renders all 7 theme buttons', () => {
+  it('renders all 5 theme buttons', () => {
     render(<SettingsPanel onClose={onClose} />)
-    const themes = ['deep-space', 'ember', 'matrix', 'arctic', 'twilight', 'jade', 'carbon']
+    const themes = ['mocha', 'neon-noir', 'solarized-dusk', 'rose-pine', 'latte']
     for (const t of themes) {
       expect(screen.getByTestId(`theme-${t}`)).toBeInTheDocument()
     }
@@ -61,22 +76,25 @@ describe('SettingsPanel', () => {
 
   it('calls setTheme when theme button clicked', () => {
     render(<SettingsPanel onClose={onClose} />)
-    fireEvent.click(screen.getByTestId('theme-ember'))
-    expect(mockSetTheme).toHaveBeenCalledWith('ember')
+    fireEvent.click(screen.getByTestId('theme-neon-noir'))
+    expect(mockSetTheme).toHaveBeenCalledWith('neon-noir')
   })
 
-  it('renders export button', () => {
+  it('renders export button in advanced tab', () => {
     render(<SettingsPanel onClose={onClose} />)
+    fireEvent.click(screen.getByText('advanced'))
     expect(screen.getByTestId('settings-export')).toBeInTheDocument()
   })
 
-  it('renders import button', () => {
+  it('renders import button in advanced tab', () => {
     render(<SettingsPanel onClose={onClose} />)
+    fireEvent.click(screen.getByText('advanced'))
     expect(screen.getByTestId('settings-import')).toBeInTheDocument()
   })
 
   it('calls settings.export on export click', async () => {
     render(<SettingsPanel onClose={onClose} />)
+    fireEvent.click(screen.getByText('advanced'))
     fireEvent.click(screen.getByTestId('settings-export'))
     await waitFor(() => {
       expect(window.agentHub.settings.export).toHaveBeenCalled()
@@ -85,14 +103,16 @@ describe('SettingsPanel', () => {
 
   it('shows success feedback after export', async () => {
     render(<SettingsPanel onClose={onClose} />)
+    fireEvent.click(screen.getByText('advanced'))
     fireEvent.click(screen.getByTestId('settings-export'))
     await waitFor(() => {
       expect(screen.getByText('Exported!')).toBeInTheDocument()
     })
   })
 
-  it('displays CLAUDE.md path', () => {
+  it('displays CLAUDE.md path in advanced tab', () => {
     render(<SettingsPanel onClose={onClose} />)
+    fireEvent.click(screen.getByText('advanced'))
     expect(screen.getByText('~/.claude/CLAUDE.md')).toBeInTheDocument()
   })
 })

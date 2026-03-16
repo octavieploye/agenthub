@@ -7,6 +7,7 @@ describe('useViewStore', () => {
     useViewStore.setState({
       viewMode: 'raid',
       focusedAgentId: null,
+      selectedRepoId: null,
       statusFilter: null,
       soundEnabled: true
     })
@@ -16,11 +17,6 @@ describe('useViewStore', () => {
     it('defaults to raid', () => {
       const { viewMode } = useViewStore.getState()
       expect(viewMode).toBe('raid')
-    })
-
-    it('setViewMode changes the mode to channel', () => {
-      useViewStore.getState().setViewMode('channel')
-      expect(useViewStore.getState().viewMode).toBe('channel')
     })
 
     it('setViewMode changes the mode to terminal', () => {
@@ -44,6 +40,24 @@ describe('useViewStore', () => {
       useViewStore.getState().setFocusedAgent('agent-42')
       useViewStore.getState().setFocusedAgent(null)
       expect(useViewStore.getState().focusedAgentId).toBeNull()
+    })
+  })
+
+  describe('selectedRepoId', () => {
+    it('defaults to null', () => {
+      const { selectedRepoId } = useViewStore.getState()
+      expect(selectedRepoId).toBeNull()
+    })
+
+    it('setSelectedRepoId updates selectedRepoId', () => {
+      useViewStore.getState().setSelectedRepoId('repo-abc')
+      expect(useViewStore.getState().selectedRepoId).toBe('repo-abc')
+    })
+
+    it('setSelectedRepoId(null) clears selectedRepoId', () => {
+      useViewStore.getState().setSelectedRepoId('repo-abc')
+      useViewStore.getState().setSelectedRepoId(null)
+      expect(useViewStore.getState().selectedRepoId).toBeNull()
     })
   })
 

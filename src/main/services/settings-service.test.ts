@@ -126,17 +126,17 @@ describe('SettingsService', () => {
 
   describe('exportSettings', () => {
     it('returns settings export with version and timestamp', () => {
-      svc.set('theme', 'ember')
+      svc.set('theme', 'mocha')
 
       const exported = svc.exportSettings()
       expect(exported.version).toBe('1.0.0')
       expect(exported.exportedAt).toBeDefined()
       expect(typeof exported.exportedAt).toBe('string')
-      expect(exported.settings.theme).toBe('ember')
+      expect(exported.settings.theme).toBe('mocha')
     })
 
     it('includes all current settings', () => {
-      svc.set('theme', 'matrix')
+      svc.set('theme', 'neon-noir')
       svc.set('sound', 'false')
       svc.set('lang', 'en')
 
@@ -162,10 +162,10 @@ describe('SettingsService', () => {
       svc.importSettings({
         version: '1.0.0',
         exportedAt: new Date().toISOString(),
-        settings: { theme: 'matrix', sound: 'false' }
+        settings: { theme: 'neon-noir', sound: 'false' }
       })
 
-      expect(svc.get('theme')).toBe('matrix')
+      expect(svc.get('theme')).toBe('neon-noir')
       expect(svc.get('sound')).toBe('false')
     })
 

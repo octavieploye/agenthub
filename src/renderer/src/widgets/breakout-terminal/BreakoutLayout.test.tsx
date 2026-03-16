@@ -13,8 +13,13 @@ vi.mock('../full-terminal/FullTerminal', () => ({
 // Mock theme store
 vi.mock('../../stores/theme-store', () => ({
   useThemeStore: vi.fn((selector) =>
-    selector({ theme: 'deep-space', setTheme: vi.fn() })
+    selector({ theme: 'mocha', setTheme: vi.fn() })
   )
+}))
+
+// Mock VoiceInputButton (requires VoiceInputProvider context)
+vi.mock('../voice-input-button/VoiceInputButton', () => ({
+  VoiceInputButton: () => <div data-testid="voice-input-button" />
 }))
 
 function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
