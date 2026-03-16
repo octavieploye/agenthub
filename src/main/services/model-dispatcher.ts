@@ -119,10 +119,11 @@ export function buildSpawnEnv(
 
   // Both ollama-local and ollama-cloud route through the local Ollama instance.
   // Cloud models are proxied by the local Ollama server — Claude CLI always talks to localhost.
+  // ANTHROPIC_API_KEY must be a non-empty string — the Anthropic SDK rejects empty keys.
+  // ANTHROPIC_AUTH_TOKEN is not recognized by the SDK; ANTHROPIC_API_KEY is the correct var.
   return {
     ANTHROPIC_BASE_URL: OLLAMA_LOCAL_URL,
-    ANTHROPIC_AUTH_TOKEN: 'ollama',
-    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_API_KEY: 'ollama',
     modelFlag: model
   }
 }

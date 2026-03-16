@@ -215,7 +215,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // For Ollama providers, inline env vars before the command so they survive .zshrc overrides
   const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
   const envPrefix = isOllama
-    ? 'ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY="" '
+    ? 'ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama '
     : ''
 
   // Strip provider prefix from dynamically-fetched Ollama model IDs.
