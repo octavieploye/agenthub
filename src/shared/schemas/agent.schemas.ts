@@ -46,5 +46,6 @@ export const AgentSpawnOptionsSchema = z.object({
   effortLevel: EffortLevelSchema.optional(),
   taskDescription: z.string().optional(),
   envOverrides: z.record(z.string(), z.string()).optional(),
-  color: z.string().optional()
+  color: z.string().optional(),
+  skipPermissions: z.boolean().optional()
 })

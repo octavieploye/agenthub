@@ -35,7 +35,8 @@ interface SpawnDialogProps {
     task?: string,
     color?: string,
     provider?: string,
-    effortLevel?: EffortLevel
+    effortLevel?: EffortLevel,
+    skipPermissions?: boolean
   ) => void
 }
 
@@ -57,6 +58,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
     CLAUDE_MODELS.map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
+  const [skipPermissions, setSkipPermissions] = useState(false)
 
   const plan = useUsageStore((s) => s.plan)
   const totalMessages = useUsageStore((s) => s.totalMessages)
@@ -145,10 +147,10 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
       const repoId = selectedRepoId || 'default'
       const modelInfo = availableModels.find((m) => m.id === selectedModel)
       const provider = modelInfo?.provider ?? 'anthropic'
-      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel)
+      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel, skipPermissions)
       onClose()
     },
-    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, availableModels, onSpawn, onClose]
+    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, skipPermissions, availableModels, onSpawn, onClose]
   )
 
   if (!open) return null
@@ -239,6 +241,26 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
               </div>
             </div>
           )}
+
+          {/* Skip permissions toggle */}
+          <div className="panel-glass p-3 rounded-lg">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <span className="text-xs font-bold tracking-wide text-base-content/60 block">
+                  AUTONOMOUS MODE
+                </span>
+                <span className="text-[10px] text-base-content/40">
+                  Skip permission prompts (--dangerously-skip-permissions)
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={skipPermissions}
+                onChange={(e) => setSkipPermissions(e.target.checked)}
+                className="toggle toggle-sm toggle-warning"
+              />
+            </label>
+          </div>
         </div>
       </div>
     )
