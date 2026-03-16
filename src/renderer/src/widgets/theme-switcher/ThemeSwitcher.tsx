@@ -2,13 +2,11 @@ import { useThemeStore } from '../../stores/theme-store'
 import type { Theme } from '../../stores/theme-store'
 
 const THEME_LABELS: Record<Theme, string> = {
-  'deep-space': 'Deep Space',
-  ember: 'Ember',
-  matrix: 'Matrix',
-  arctic: 'Arctic',
-  twilight: 'Twilight',
-  jade: 'Jade',
-  carbon: 'Carbon'
+  mocha: 'Catppuccin Mocha',
+  'neon-noir': 'Neon Noir',
+  'solarized-dusk': 'Solarized Dusk',
+  'rose-pine': 'Rosé Pine',
+  latte: 'Catppuccin Latte'
 }
 
 function ThemeSwitcher(): React.JSX.Element {

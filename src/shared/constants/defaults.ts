@@ -1,5 +1,5 @@
 export const APP_DEFAULTS = {
-  THEME: 'deep-space',
+  THEME: 'mocha',
   WINDOW_WIDTH: 1400,
   WINDOW_HEIGHT: 900,
   MIN_WIDTH: 720,
@@ -9,14 +9,16 @@ export const APP_DEFAULTS = {
 } as const
 
 export const AGENT_COLOR_PALETTE = [
-  '#3B82F6', // blue
-  '#10B981', // emerald
-  '#F59E0B', // amber
-  '#EF4444', // red
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#F97316', // orange
-  '#14B8A6', // teal
-  '#6366F1'  // indigo
+  '#89b4fa',  // Blue — most distinct on dark
+  '#a6e3a1',  // Green
+  '#fab387',  // Peach
+  '#cba6f7',  // Mauve
+  '#f38ba8',  // Pink
+  '#94e2d5',  // Teal
+  '#f9e2af',  // Yellow
+  '#89dceb',  // Sky
+  '#f5c2e7',  // Rose
+  '#74c7ec',  // Sapphire
+  '#b4befe',  // Lavender
+  '#f2cdcd',  // Flamingo
 ] as const
