@@ -375,8 +375,46 @@ function AppMain(): React.JSX.Element {
     }
   }, [setActiveAgent, setFocusedAgent, agents, prefetchAgentData])
 
+  // Agent navigation — Option+Arrow (Mac: Option key = e.altKey)
+  // Option+↑/↓ selects prev/next agent from any view.
+  // Option+←/→ switches agent terminals in terminal view only.
+  useEffect(() => {
+    const handleAgentNav = (e: KeyboardEvent): void => {
+      if (!e.altKey || e.metaKey || e.ctrlKey) return
+      const currentAgents = Array.from(useAgentStore.getState().agents.values())
+      if (currentAgents.length < 2) return
+
+      const currentId = useAgentStore.getState().activeAgentId
+      const currentIndex = currentAgents.findIndex((a) => a.id === currentId)
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const nextIndex =
+          e.key === 'ArrowDown'
+            ? (currentIndex + 1) % currentAgents.length
+            : (currentIndex - 1 + currentAgents.length) % currentAgents.length
+        handleSelectAgent(currentAgents[nextIndex].id)
+        return
+      }
+
+      if (
+        (e.key === 'ArrowRight' || e.key === 'ArrowLeft') &&
+        useViewStore.getState().viewMode === 'terminal'
+      ) {
+        e.preventDefault()
+        const nextIndex =
+          e.key === 'ArrowRight'
+            ? (currentIndex + 1) % currentAgents.length
+            : (currentIndex - 1 + currentAgents.length) % currentAgents.length
+        handleSelectAgent(currentAgents[nextIndex].id)
+      }
+    }
+    window.addEventListener('keydown', handleAgentNav)
+    return () => window.removeEventListener('keydown', handleAgentNav)
+  }, [handleSelectAgent])
+
   const handleSpawn = useCallback(
-    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string) => {
+    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string, skipPermissions?: boolean) => {
       try {
         const response = await window.agentHub.agents.spawn({
           repoId,
@@ -386,7 +424,8 @@ function AppMain(): React.JSX.Element {
           provider: provider as import('@shared/types/agent.types').ModelProvider | undefined,
           effortLevel: effortLevel as import('@shared/types/agent.types').EffortLevel | undefined,
           taskDescription: task || 'Interactive session',
-          color
+          color,
+          skipPermissions
         })
         if (response.success && response.data) {
           addAgent(response.data)
