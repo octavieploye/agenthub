@@ -20,6 +20,7 @@ import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
+import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
@@ -102,6 +103,9 @@ function AppMain(): React.JSX.Element {
 
   // Git panel
   const [gitPanelOpen, setGitPanelOpen] = useState(false)
+
+  // Help modal
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // Active detail tab tracking
   const [activeDetailTab, setActiveDetailTab] = useState('terminal')
@@ -680,6 +684,7 @@ function AppMain(): React.JSX.Element {
         selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenGit={() => setGitPanelOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
 
       {/* Main layout: sidebar + content */}
@@ -925,6 +930,9 @@ function AppMain(): React.JSX.Element {
 
       {/* Git panel */}
       {gitPanelOpen && <StandaloneGitPanel onClose={() => setGitPanelOpen(false)} />}
+
+      {/* Help modal */}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
 
     </div>
     </VoiceInputProvider>

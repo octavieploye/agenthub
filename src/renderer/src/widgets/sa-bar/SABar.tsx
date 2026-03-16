@@ -11,6 +11,7 @@ interface SABarProps {
   selectedAgentRepoPath?: string
   onOpenSettings?: () => void
   onOpenGit?: () => void
+  onOpenHelp?: () => void
 }
 
 const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
@@ -26,7 +27,7 @@ const VIEW_MODES = [
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit, onOpenHelp }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
@@ -140,6 +141,19 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
           title="Settings"
         >
           Settings
+        </button>
+      )}
+
+      {/* Help button */}
+      {onOpenHelp && (
+        <button
+          data-testid="sa-help"
+          className="btn btn-xs btn-ghost font-bold"
+          onClick={onOpenHelp}
+          title="Help & Keyboard Shortcuts"
+          aria-label="Open help"
+        >
+          ?
         </button>
       )}
     </header>
