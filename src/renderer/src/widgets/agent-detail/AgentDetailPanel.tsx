@@ -1,5 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
+
+/** Returns true if the hex color is "light" (needs dark text for contrast) */
+function isLightColor(hex: string): boolean {
+  const c = hex.replace('#', '')
+  const r = parseInt(c.substring(0, 2), 16)
+  const g = parseInt(c.substring(2, 4), 16)
+  const b = parseInt(c.substring(4, 6), 16)
+  // W3C relative luminance formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.55
+}
 import GeneralTab from './GeneralTab'
 import TerminalTab from './TerminalTab'
 import NotesTab from './NotesTab'
@@ -84,10 +95,13 @@ function AgentDetailPanel({
             onClick={() => handleTabClick(tab.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab.id
-                ? 'text-white'
+                ? ''
                 : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'
             }`}
-            style={activeTab === tab.id ? { backgroundColor: agent.color } : undefined}
+            style={activeTab === tab.id ? {
+              backgroundColor: agent.color,
+              color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff'
+            } : undefined}
           >
             {tab.label}
           </button>

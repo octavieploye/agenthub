@@ -401,7 +401,7 @@ function AppMain(): React.JSX.Element {
           e.preventDefault()
           handleShutdownRequest()
         }
-        if (e.key === 'e') {
+        if (e.key === 'r') {
           e.preventDefault()
           repoSwitcherRef.current?.open()
         }

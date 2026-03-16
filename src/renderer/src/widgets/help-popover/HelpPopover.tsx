@@ -1,19 +1,63 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const KEYBOARD_SHORTCUTS = [
+const NAVIGATION_SHORTCUTS = [
+  { shortcut: 'Tab', action: 'Cycle through agents' },
+  { shortcut: 'Shift+Tab', action: 'Cycle agents (reverse)' },
+  { shortcut: 'Enter', action: 'Expand focused agent' },
+  { shortcut: 'Escape', action: 'Close panel / deselect' }
+]
+
+const VIEW_SHORTCUTS = [
   { shortcut: 'Cmd+1', action: 'Raid view' },
-  { shortcut: 'Cmd+2', action: 'Terminal view' },
-  { shortcut: 'Cmd+E', action: 'Switch repo' },
-  { shortcut: 'Cmd+N', action: 'New agent' },
+  { shortcut: 'Cmd+2', action: 'Terminal view' }
+]
+
+const ACTION_SHORTCUTS = [
+  { shortcut: 'Cmd+N', action: 'Spawn new agent' },
   { shortcut: 'Cmd+K', action: 'Command palette' },
-  { shortcut: 'Opt+↑/↓', action: 'Navigate agents' }
+  { shortcut: 'Cmd+R', action: 'Repo switcher' },
+  { shortcut: 'Cmd+E', action: 'Voice input (hold = push-to-talk)' },
+  { shortcut: 'Cmd+Q', action: 'Quit / shutdown' },
+  { shortcut: 'Delete / Backspace', action: 'Kill focused agent' },
+  { shortcut: 'Space', action: 'Context menu for focused agent' },
+  { shortcut: 'Cmd+Shift+Up/Down', action: 'Navigate repo list (raid view)' }
 ]
 
 const TIPS = [
   'Click agent name to edit task description',
   'Click color dot to change agent color',
-  'Drag agent card to reorder'
+  'Hold Cmd+E to use push-to-talk voice input',
+  'Use Cmd+K to quickly search commands and agents'
 ]
+
+interface ShortcutSectionProps {
+  title: string
+  shortcuts: { shortcut: string; action: string }[]
+}
+
+function ShortcutSection({ title, shortcuts }: ShortcutSectionProps): React.JSX.Element {
+  return (
+    <div className="px-3 py-2">
+      <p className="text-[10px] uppercase tracking-widest text-base-content/40 font-semibold mb-2">
+        {title}
+      </p>
+      <table className="w-full border-collapse">
+        <tbody>
+          {shortcuts.map(({ shortcut, action }) => (
+            <tr key={shortcut} className="align-middle">
+              <td className="py-0.5 pr-3 whitespace-nowrap">
+                <kbd className="bg-base-content/10 px-1 rounded text-[10px] font-mono">
+                  {shortcut}
+                </kbd>
+              </td>
+              <td className="py-0.5 text-xs text-base-content/70">{action}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 function HelpPopover(): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -63,30 +107,16 @@ function HelpPopover(): React.JSX.Element {
       {open && (
         <div
           data-testid="help-popover-panel"
-          className="dropdown-panel absolute right-0 top-7 min-w-[280px] z-50"
-          style={{ maxHeight: 'none' }}
+          className="dropdown-panel absolute right-0 top-7 min-w-[320px] z-50 bg-base-200 border border-base-content/10 rounded-lg shadow-xl"
+          style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
-          {/* Keyboard shortcuts */}
-          <div className="px-3 pt-3 pb-2">
-            <p className="text-[10px] uppercase tracking-widest text-base-content/40 font-semibold mb-2">
-              Keyboard Shortcuts
-            </p>
-            <table className="w-full border-collapse">
-              <tbody>
-                {KEYBOARD_SHORTCUTS.map(({ shortcut, action }) => (
-                  <tr key={shortcut} className="align-middle">
-                    <td className="py-0.5 pr-3 whitespace-nowrap">
-                      <kbd className="bg-base-content/10 px-1 rounded text-[10px] font-mono">
-                        {shortcut}
-                      </kbd>
-                    </td>
-                    <td className="py-0.5 text-xs text-base-content/70">{action}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ShortcutSection title="Navigation" shortcuts={NAVIGATION_SHORTCUTS} />
+          <div className="mx-3 border-t border-base-content/10" />
 
+          <ShortcutSection title="Views" shortcuts={VIEW_SHORTCUTS} />
+          <div className="mx-3 border-t border-base-content/10" />
+
+          <ShortcutSection title="Actions" shortcuts={ACTION_SHORTCUTS} />
           <div className="mx-3 border-t border-base-content/10" />
 
           {/* Tips */}

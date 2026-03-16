@@ -2,6 +2,7 @@ import type { AgentState } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import RepoSwitcher from '../repo-switcher/RepoSwitcher'
 import type { RepoSwitcherHandle } from '../repo-switcher/RepoSwitcher'
+import HelpPopover from '../help-popover/HelpPopover'
 
 interface SABarProps {
   agents: AgentState[]
@@ -136,6 +137,9 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
             <SettingsIcon />
           </button>
         )}
+
+        {/* Help */}
+        <HelpPopover />
       </div>
     </header>
   )
