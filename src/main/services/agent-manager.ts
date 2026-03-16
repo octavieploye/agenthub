@@ -108,8 +108,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     color: options.color
   })
 
-  // Build provider-specific env vars (Anthropic only — Ollama env is handled by `ollama launch claude`)
-  const isOllamaProvider = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
+  // Build provider-specific env vars (Ollama needs ANTHROPIC_BASE_URL, AUTH_TOKEN, empty API_KEY)
   const spawnEnv = buildSpawnEnv(
     agentState.model || '',
     agentState.provider || 'anthropic'
@@ -118,8 +117,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
-    // Don't inject Ollama env vars here — `ollama launch claude` manages its own env
-    ...(isOllamaProvider ? {} : providerEnv),
+    ...providerEnv,
     ...(options.envOverrides ?? {})
   }
   // Remove CLAUDECODE env var so spawned claude CLI doesn't think it's nested
@@ -219,22 +217,23 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
-  // Ollama models use `ollama launch claude` which handles env vars and cloud routing automatically.
-  // Both local and cloud Ollama models use this launcher — the :cloud suffix in the model name
-  // tells the Ollama daemon whether to serve locally or proxy to the remote provider.
-  const launcher = isOllamaProvider ? 'ollama launch claude' : 'claude'
+  // For Ollama providers, inline env vars before the command so they survive .zshrc overrides
+  const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
+  const envPrefix = isOllama
+    ? 'ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY="" '
+    : ''
 
   if (task) {
     setTimeout(() => {
-      const cmd = `${launcher}${modelFlag}${effortFlag}${permFlag} "${task.replace(/"/g, '\\"')}"\n`
+      const cmd = `${envPrefix}claude${modelFlag}${effortFlag}${permFlag} "${task.replace(/"/g, '\\"')}"\n`
       ptyProcess.write(cmd)
-      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, task, launcher })
+      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, task, envPrefix: envPrefix.trim() })
     }, 500)
   } else {
     // Just launch claude in interactive mode
     setTimeout(() => {
-      ptyProcess.write(`${launcher}${modelFlag}${effortFlag}${permFlag}\n`)
-      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, launcher })
+      ptyProcess.write(`${envPrefix}claude${modelFlag}${effortFlag}${permFlag}\n`)
+      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, envPrefix: envPrefix.trim() })
     }, 500)
   }
 
