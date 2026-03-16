@@ -9,6 +9,7 @@ interface RepoSidebarProps {
 
 interface RepoDerived {
   repoId: string
+  repoName: string
   agentCount: number
   hasAttention: boolean
 }
@@ -19,9 +20,6 @@ const ATTENTION_STATUSES = new Set<AgentLifecycleStatus>([
   'error',
   'looping'
 ])
-
-const getRepoName = (repoId: string): string =>
-  repoId.split('/').filter(Boolean).pop() ?? repoId
 
 function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
   const agents = useAgentStore((s) => s.agents)
@@ -37,7 +35,8 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
         existing.agentCount += 1
         if (hasAttention) existing.hasAttention = true
       } else {
-        map.set(agent.repoId, { repoId: agent.repoId, agentCount: 1, hasAttention })
+        const repoName = agent.cwd.split('/').filter(Boolean).pop() ?? agent.repoId
+        map.set(agent.repoId, { repoId: agent.repoId, repoName, agentCount: 1, hasAttention })
       }
     }
     return Array.from(map.values()).sort((a, b) => {
@@ -65,7 +64,7 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
           <div
             key={repo.repoId}
             role="button"
-            aria-label={`Repo ${getRepoName(repo.repoId)}`}
+            aria-label={`Repo ${repo.repoName}`}
             onClick={() => setSelectedRepoId(repo.repoId)}
             className={`card-elevated mx-1 mb-0.5 px-2 py-2 cursor-pointer${
               selectedRepoId === repo.repoId ? ' card-active' : ''
@@ -79,7 +78,7 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
                 <span className="inline-block w-2 h-2 rounded-full bg-transparent shrink-0" />
               )}
               <span className="text-sm font-medium truncate flex-1">
-                {getRepoName(repo.repoId)}
+                {repo.repoName}
               </span>
               <span className="text-[11px] bg-base-content/15 text-base-content/60 rounded px-1 shrink-0">
                 {repo.agentCount}
