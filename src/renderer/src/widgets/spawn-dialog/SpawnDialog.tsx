@@ -5,7 +5,7 @@ import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
-import { CLAUDE_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
+import { CLAUDE_MODELS, ALL_OLLAMA_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
@@ -55,7 +55,7 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   const [selectedColor, setSelectedColor] = useState(AGENT_COLOR_PALETTE[0])
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
-    CLAUDE_MODELS.map(catalogToModelInfo)
+    [...CLAUDE_MODELS, ...ALL_OLLAMA_MODELS].map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
   const [skipPermissions, setSkipPermissions] = useState(false)

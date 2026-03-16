@@ -211,9 +211,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
-  // Model IDs use format "provider:name" (e.g. "ollama-cloud:minimax-m2") — strip prefix for CLI
-  const modelName = agentState.model?.includes(':') ? agentState.model.split(':').slice(1).join(':') : agentState.model
-  const modelFlag = modelName ? ` --model ${modelName}` : ''
+  const modelFlag = agentState.model ? ` --model ${agentState.model}` : ''
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
