@@ -1,0 +1,16 @@
+ ollama launch claude --model kimi-k2-thinking:cloud 
+ ollama launch claude --model kimi-k2.5:cloud
+ollama launch claude --model kimi-k2:1t-cloud
+ollama launch claude --model mistral-large-3:675b-cloud
+ollama launch claude --model devstral-2
+ollama launch claude --model ministral-3
+ollama launch claude --model gpt-oss
+ollama launch claude --model qwen3-coder
+ollama launch claude --model qwen3-coder-next
+ollama launch claude --model qwen3-vl
+ollama launch claude --model qwen3.5
+ollama launch claude --model minimax-m2.5:cloud
+ollama launch claude --model glm-5:cloud
+ollama launch claude --model nemotron-3-super
+ollama launch claude --model glm-4.7:cloud
+ollama launch claude --model deepseek-v3.2:cloud
