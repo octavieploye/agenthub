@@ -218,46 +218,58 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // Static catalog entries (e.g. "glm-5:cloud") have no prefix and pass through unchanged.
   const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
   const rawModel = agentState.model ?? ''
-  const modelName = isOllama
+  let modelName = isOllama
     ? rawModel.replace(/^(ollama-cloud:|ollama-local:)/, '')
     : rawModel
+  // Ollama cloud models require a :cloud or -cloud tag suffix.
+  // If the provider is ollama-cloud but the tag lacks a cloud suffix,
+  // append :cloud so `ollama launch claude` routes to the cloud endpoint
+  // instead of attempting a multi-GB local model pull.
+  if (agentState.provider === 'ollama-cloud' && modelName && !/cloud/i.test(modelName)) {
+    log.warn('Cloud model missing cloud suffix, appending :cloud', { modelName })
+    modelName = `${modelName}-cloud`
+  }
   const modelFlag = modelName ? ` --model ${modelName}` : ''
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
-  // Ollama providers use `ollama launch claude` which wires env vars and /v1/messages internally.
-  // The app binary at /Applications/Ollama.app has the `launch` command; the Homebrew binary may not.
+  // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
+  // env vars and model routing internally. Claude CLI rejects unknown model names,
+  // so the env-var-only approach does NOT work.
+  // The Ollama tag must be exact — cloud models need the :cloud suffix (e.g. devstral-2:123b-cloud).
   const ollamaBin = '/Applications/Ollama.app/Contents/Resources/ollama'
-  // Fallback: inline env vars + claude directly (for systems without Ollama.app)
-  const ollamaEnvPrefix = 'ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama '
 
-  if (task) {
+  // For Ollama models: launch claude interactively via `ollama launch claude`,
+  // then send the task as user input once the session is ready.
+  // `-p` flag causes print-mode (non-interactive) which exits after one response.
+  if (isOllama) {
+    const extraArgs = permFlag.trim()
+    const cmd = extraArgs
+      ? `${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs}\n`
+      : `${ollamaBin} launch claude -y${modelFlag}\n`
+
+    setTimeout(() => {
+      ptyProcess.write(cmd)
+      log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider })
+
+      // Send task as input after claude session initializes
+      if (task) {
+        setTimeout(() => {
+          ptyProcess.write(task + '\n')
+          log.info('Sent task to Ollama agent', { id: agentState.id, task })
+        }, 3000)
+      }
+    }, 500)
+  } else if (task) {
     setTimeout(() => {
       const escapedTask = task.replace(/"/g, '\\"')
-      let cmd: string
-      if (isOllama) {
-        // ollama launch claude uses `-- EXTRA_ARGS` to pass flags/prompt to claude CLI.
-        // -p sends the prompt in print mode; permFlag goes before -p.
-        const extraArgs = `${permFlag} -p "${escapedTask}"`.trim()
-        cmd = `${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag} -p "${escapedTask}"\n`
-      } else {
-        cmd = `claude${modelFlag}${effortFlag}${permFlag} -p "${escapedTask}"\n`
-      }
+      const cmd = `claude${modelFlag}${effortFlag}${permFlag} -p "${escapedTask}"\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     setTimeout(() => {
-      let cmd: string
-      if (isOllama) {
-        // Interactive mode: no task prompt, just launch claude via ollama.
-        const extraArgs = permFlag.trim()
-        cmd = extraArgs
-          ? `${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag}\n`
-          : `${ollamaBin} launch claude -y${modelFlag} || ${ollamaEnvPrefix}claude${modelFlag}\n`
-      } else {
-        cmd = `claude${modelFlag}${effortFlag}${permFlag}\n`
-      }
+      const cmd = `claude${modelFlag}${effortFlag}${permFlag}\n`
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
