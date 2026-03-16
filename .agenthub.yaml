@@ -1,0 +1,5 @@
+maxDurationMinutes: 15
+maxFilesChanged: 1
+maxConsecutiveErrors: 3
+maxTokensPerSession: 100000
+protectedPaths: []
