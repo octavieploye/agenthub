@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 import { useBranchName } from '@renderer/hooks/useBranchName'
@@ -19,7 +19,7 @@ interface AgentSidebarProps {
 const STATUS_COLORS: Record<string, string> = {
   spawning: 'bg-info animate-pulse',
   busy: 'bg-success',
-  idle: 'bg-base-content/40',
+  idle: 'bg-base-content/60',
   locked: 'bg-warning animate-breathe',
   completed: 'bg-info',
   looping: 'bg-error animate-urgency-pulse',
@@ -28,28 +28,49 @@ const STATUS_COLORS: Record<string, string> = {
   tray_running: 'bg-success/50'
 }
 
-function getGlowConfig(agent: AgentState): { boxShadow: string; cssVar: string } | null {
+interface GlowResult {
+  boxShadow: string
+  cssVar: string
+  glowClass: string
+}
+
+function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | null {
   const c = agent.color
 
   switch (agent.status) {
+    case 'busy':
+    case 'idle':
+    case 'paused':
+    case 'completed':
+      return null
+
     case 'locked':
     case 'awaiting_approval': {
+      if (isEscalated) {
+        const warmColor = 'oklch(0.72 0.18 65)'
+        return {
+          boxShadow: `0 0 18px ${warmColor}, 0 0 40px color-mix(in srgb, ${warmColor} 40%, transparent)`,
+          cssVar: warmColor,
+          glowClass: '',
+        }
+      }
       return {
         boxShadow: `0 0 0 1px ${c}60`,
         cssVar: c,
+        glowClass: 'glow-blip',
       }
     }
-    case 'completed': {
-      return null
-    }
+
     case 'error':
     case 'looping': {
       const errorColor = 'oklch(0.62 0.16 15)'
       return {
         boxShadow: `0 0 0 1px ${errorColor}60`,
         cssVar: errorColor,
+        glowClass: 'glow-blip-fast',
       }
     }
+
     default:
       return null
   }
@@ -86,6 +107,50 @@ function AgentCard({
   const [editingTask, setEditingTask] = useState(false)
   const [editingValue, setEditingValue] = useState('')
 
+  // Track when agent entered awaiting_approval/locked for 30s escalation
+  const awaitingSinceRef = useRef<number | null>(null)
+  const [isEscalated, setIsEscalated] = useState(false)
+
+  useEffect(() => {
+    const isAwaiting = agent.status === 'locked' || agent.status === 'awaiting_approval'
+    if (isAwaiting) {
+      if (awaitingSinceRef.current === null) {
+        awaitingSinceRef.current = Date.now()
+      }
+      const elapsed = Date.now() - awaitingSinceRef.current
+      if (elapsed >= 30_000) {
+        setIsEscalated(true)
+        return
+      }
+      const remaining = 30_000 - elapsed
+      const timer = setTimeout(() => setIsEscalated(true), remaining)
+      return () => clearTimeout(timer)
+    } else {
+      awaitingSinceRef.current = null
+      setIsEscalated(false)
+    }
+  }, [agent.status])
+
+  // Shimmer: add class on completed, remove after animation
+  const [showShimmer, setShowShimmer] = useState(false)
+  const prevStatusRef = useRef(agent.status)
+
+  useEffect(() => {
+    if (agent.status === 'completed' && prevStatusRef.current !== 'completed') {
+      setShowShimmer(true)
+      const timer = setTimeout(() => setShowShimmer(false), 650)
+      return () => clearTimeout(timer)
+    }
+    if (agent.status !== 'completed') {
+      setShowShimmer(false)
+    }
+    prevStatusRef.current = agent.status
+  }, [agent.status])
+
+  const handleAnimationEnd = useCallback(() => {
+    setShowShimmer(false)
+  }, [])
+
   useEffect(() => {
     if (!paletteOpen) return
     function handlePointerDown(e: PointerEvent): void {
@@ -97,16 +162,10 @@ function AgentCard({
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [paletteOpen])
   const isPaused = agent.status === 'paused'
-  const isCompleted = settledStatus === 'completed'
 
-  const glow = getGlowConfig(agent)
+  const glow = getGlowConfig(agent, isEscalated)
 
-  const glowClass =
-    agent.status === 'locked' || agent.status === 'awaiting_approval'
-      ? 'glow-blip'
-      : agent.status === 'error' || agent.status === 'looping'
-        ? 'glow-blip-fast'
-        : ''
+  const glowClass = glow?.glowClass ?? ''
 
   const glowStyle: React.CSSProperties = glow
     ? ({
@@ -131,7 +190,8 @@ function AgentCard({
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
       onClick={() => onSelectAgent(agent.id)}
-      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${isCompleted ? 'card-shimmer' : ''}`}
+      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${showShimmer ? 'card-shimmer' : ''}`}
+      onAnimationEnd={handleAnimationEnd}
       style={{
         ...colorWashStyle,
         ...glowStyle,
@@ -142,7 +202,7 @@ function AgentCard({
         {/* S2.8 / S4.3 — Monogram avatar with color palette popover */}
         <div className="relative" ref={paletteRef}>
           <div
-            className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold text-white select-none cursor-pointer"
+            className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold text-white select-none cursor-pointer"
             style={{ backgroundColor: agent.color }}
             onClick={(e) => {
               e.stopPropagation()
@@ -292,22 +352,33 @@ function AgentCard({
       {/* S2.7 — Status progress bar */}
       <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-[0.75rem] overflow-hidden">
         <div
-          className={`h-full transition-all duration-300 ${
-            agent.status === 'error' || agent.status === 'looping'
-              ? 'bg-error'
-              : agent.status === 'awaiting_approval'
-              ? 'bg-warning animate-breathe'
-              : agent.status === 'busy'
-              ? ''
-              : 'opacity-20'
+          className={`h-full transition-all duration-300 ease${
+            agent.status === 'awaiting_approval' || agent.status === 'locked'
+              ? ' animate-breathe'
+              : agent.status === 'completed'
+              ? ' progress-bar-fade'
+              : ''
           }`}
           style={{
-            width: '100%',
+            width:
+              agent.status === 'busy' ? `${Math.max(2, Math.min(100, agent.progress))}%` :
+              agent.status === 'error' || agent.status === 'looping' ? '100%' :
+              agent.status === 'awaiting_approval' || agent.status === 'locked' ? '100%' :
+              agent.status === 'completed' ? '100%' :
+              '100%',
             backgroundColor:
-              agent.status === 'error' || agent.status === 'looping' ? undefined :
-              agent.status === 'awaiting_approval' ? undefined :
-              agent.status === 'busy' || agent.status === 'completed' ? agent.color :
-              `${agent.color}33`,
+              agent.status === 'error' || agent.status === 'looping'
+                ? 'var(--color-error)'
+                : agent.status === 'completed'
+                ? 'var(--color-success, #22c55e)'
+                : agent.status === 'idle' || agent.status === 'paused'
+                ? undefined
+                : agent.color,
+            opacity:
+              agent.status === 'idle' || agent.status === 'paused' ? 0.2 : undefined,
+            ...(agent.status === 'idle' || agent.status === 'paused'
+              ? { backgroundColor: agent.color }
+              : {}),
           }}
         />
       </div>
@@ -342,7 +413,7 @@ function AgentSidebar({
 
       <div className="flex-1 overflow-y-auto py-1" role="list" aria-label="Agent list">
         {agents.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-base-content/40">
+          <div className="px-3 py-6 text-center text-xs text-base-content/60">
             No agents running
           </div>
         )}

@@ -564,6 +564,16 @@ h1, h2, h3, .agent-name {
   animation: breathe var(--breathe-speed) ease-in-out infinite;
 }
 
+/* S2.7 — completed bar: hold green then fade out */
+@keyframes progress-fade {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.progress-bar-fade {
+  animation: progress-fade 1.5s ease-out forwards;
+}
+
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out forwards;
 }

@@ -156,7 +156,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
                       <span className="loading loading-spinner loading-xs text-primary" />
                     )}
                     <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                      className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
                         skill.source === 'global'
                           ? 'bg-info/10 text-info'
                           : 'bg-success/10 text-success'
@@ -181,7 +181,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
         <div className="px-3 py-2 border-t border-base-content/10 shrink-0">
           <div className="flex items-center gap-2 mb-1">
             <span
-              className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${
+              className={`text-[11px] px-1.5 py-0.5 rounded font-mono font-bold ${
                 lastResult.exitCode === 0
                   ? 'bg-success/20 text-success'
                   : 'bg-error/20 text-error'

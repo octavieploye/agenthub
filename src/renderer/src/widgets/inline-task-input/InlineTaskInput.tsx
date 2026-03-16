@@ -98,7 +98,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
       >
         Send
       </button>
-      <span className="text-[9px] text-base-content/30 hidden sm:inline">
+      <span className="text-[11px] text-base-content/60 hidden sm:inline">
         {disabled ? '' : 'Enter'}
       </span>
     </div>

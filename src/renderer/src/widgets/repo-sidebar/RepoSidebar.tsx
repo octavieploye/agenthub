@@ -56,7 +56,7 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
 
       <div className="flex-1 overflow-y-auto py-1">
         {repos.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-base-content/40">
+          <div className="px-3 py-6 text-center text-xs text-base-content/60">
             No repos yet
           </div>
         )}
@@ -81,7 +81,7 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
               <span className="text-sm font-medium truncate flex-1">
                 {getRepoName(repo.repoId)}
               </span>
-              <span className="text-[10px] bg-base-content/10 text-base-content/50 rounded px-1 shrink-0">
+              <span className="text-[11px] bg-base-content/15 text-base-content/60 rounded px-1 shrink-0">
                 {repo.agentCount}
               </span>
             </div>
