@@ -107,6 +107,9 @@ function AppMain(): React.JSX.Element {
   // Help modal
   const [helpOpen, setHelpOpen] = useState(false)
 
+  // CLI version mismatch banner
+  const [cliVersionBanner, setCliVersionBanner] = useState<{ hostVersion: string; imageVersion: string } | null>(null)
+
   // Active detail tab tracking
   const [activeDetailTab, setActiveDetailTab] = useState('terminal')
 
@@ -331,6 +334,32 @@ function AppMain(): React.JSX.Element {
     }
   }, [agents])
 
+  // CLI version check — runs once on mount after a 3s delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.agentHub.docker.checkCliVersion()
+        .then((res) => {
+          if (res.success && res.data.mismatch) {
+            setCliVersionBanner({
+              hostVersion: res.data.hostVersion as string,
+              imageVersion: res.data.imageVersion as string
+            })
+          }
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleRebuildImage = useCallback(async () => {
+    setCliVersionBanner(null)
+    try {
+      await window.agentHub.docker.rebuild()
+    } catch (err) {
+      console.error('Rebuild failed:', err)
+    }
+  }, [])
+
   // Keyboard shortcuts for view mode switching
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -418,7 +447,7 @@ function AppMain(): React.JSX.Element {
   }, [handleSelectAgent])
 
   const handleSpawn = useCallback(
-    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string, skipPermissions?: boolean) => {
+    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string, skipPermissions?: boolean): Promise<string | null> => {
       try {
         const response = await window.agentHub.agents.spawn({
           repoId,
@@ -436,9 +465,15 @@ function AppMain(): React.JSX.Element {
           setActiveAgent(response.data.id)
           setFocusedAgent(response.data.id)
           useViewStore.getState().setViewMode('terminal')
+          return null
         }
+        const errMsg = !response.success ? response.error.message : 'Spawn returned no agent data'
+        console.error('Spawn failed:', errMsg)
+        return errMsg
       } catch (err) {
-        console.error('Spawn failed:', err)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        console.error('Spawn failed:', errMsg)
+        return errMsg
       }
     },
     [addAgent]
@@ -669,6 +704,31 @@ function AppMain(): React.JSX.Element {
   return (
     <VoiceInputProvider>
     <div className="flex flex-col h-full" data-theme={theme}>
+      {/* CLI version mismatch banner */}
+      {cliVersionBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-between gap-3 px-4 py-2 bg-warning/20 border-b border-warning/40 text-warning-content text-xs">
+          <span>
+            Claude CLI updated: host <code className="font-mono">{cliVersionBanner.hostVersion}</code>
+            {' '}→ image <code className="font-mono">{cliVersionBanner.imageVersion}</code>.
+            {' '}Rebuild the Docker image to use the latest CLI.
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              className="btn btn-xs btn-warning"
+              onClick={handleRebuildImage}
+            >
+              Rebuild Image
+            </button>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => setCliVersionBanner(null)}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {/* Skip to content link for keyboard navigation */}
       <a
         href="#main-content"

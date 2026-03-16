@@ -22,7 +22,9 @@ const STATUS_BADGE_CLASSES: Record<AgentLifecycleStatus, string> = {
   looping: 'badge-error',
   paused: 'badge-info',
   interrupted: 'badge-error',
-  tray_running: 'badge-success'
+  tray_running: 'badge-success',
+  error: 'badge-error',
+  awaiting_approval: 'badge-warning'
 }
 
 const CONFIDENCE_LABELS: Record<string, string> = {
@@ -63,6 +65,7 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
   const now = useNow(isTicking ? 1000 : 0)
   const [selectedColor, setSelectedColor] = useState(agent.color)
   const [availableModels, setAvailableModels] = useState<ModelCatalogEntry[]>(CLAUDE_MODELS)
+  const [containerOp, setContainerOp] = useState<'idle' | 'stopping' | 'destroying'>('idle')
   const updateColor = useAgentStore((s) => s.updateColor)
   const updateModel = useAgentStore((s) => s.updateModel)
 
@@ -142,12 +145,17 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           <h2 data-testid="general-agent-name" className="text-lg font-semibold text-base-content">
             {agent.name}
           </h2>
-          <span
-            data-testid="general-status-badge"
-            className={`badge badge-sm ${STATUS_BADGE_CLASSES[agent.status] ?? 'badge-ghost'}`}
-          >
-            {agent.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              data-testid="general-status-badge"
+              className={`badge badge-sm ${STATUS_BADGE_CLASSES[agent.status] ?? 'badge-ghost'}`}
+            >
+              {agent.status}
+            </span>
+            {agent.executionMode === 'docker' && (
+              <span className="badge badge-xs badge-outline text-[10px]">Docker</span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs text-base-content/70">
@@ -319,6 +327,42 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           )}
         </div>
       </div>
+
+      {/* Container lifecycle controls (Docker agents only) */}
+      {agent.executionMode === 'docker' && (
+        <div className="panel-glass rounded-lg p-4">
+          <h3 className="text-xs font-medium text-base-content/50 mb-3">Container</h3>
+          <div className="flex gap-2">
+            <button
+              data-testid="container-stop-btn"
+              className="btn-lcars btn btn-sm btn-warning"
+              disabled={containerOp !== 'idle'}
+              onClick={async () => {
+                setContainerOp('stopping')
+                try { await window.agentHub.containers.stop(agent.repoId) } catch {}
+                setContainerOp('idle')
+              }}
+            >
+              {containerOp === 'stopping' ? 'Stopping...' : 'Stop Container'}
+            </button>
+            <button
+              data-testid="container-destroy-btn"
+              className="btn-lcars btn btn-sm btn-error"
+              disabled={containerOp !== 'idle'}
+              onClick={async () => {
+                setContainerOp('destroying')
+                try { await window.agentHub.containers.destroy(agent.repoId) } catch {}
+                setContainerOp('idle')
+              }}
+            >
+              {containerOp === 'destroying' ? 'Destroying...' : 'Destroy Container'}
+            </button>
+          </div>
+          <p className="text-[10px] text-base-content/30 mt-2">
+            Container is shared by all agents on this repo. Destroy removes all cached layers.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

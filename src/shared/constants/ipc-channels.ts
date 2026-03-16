@@ -131,7 +131,19 @@ export const IPC_CHANNELS = {
     TRANSCRIBE: 'voice:transcribe',
     STATUS: 'voice:status',
     CANCEL: 'voice:cancel'
-  }
+  },
+  DOCKER: {
+    STATUS: 'docker:status',
+    BUILD: 'docker:build',
+    REBUILD: 'docker:rebuild',
+    CHECK_CLI_VERSION: 'docker:check-cli-version'
+  },
+  CONTAINERS: {
+    LIST: 'containers:list',
+    STOP: 'containers:stop',
+    DESTROY: 'containers:destroy',
+    STOP_ALL: 'containers:stop-all'
+  },
 } as const
 
 export const IPC_EVENTS = {
@@ -148,5 +160,9 @@ export const IPC_EVENTS = {
   },
   RECOVERY: {
     SNAPSHOT_SAVED: 'on-recovery:snapshot-saved'
-  }
+  },
+  DOCKER: {
+    BUILD_PROGRESS: 'on-docker:build-progress',
+    STATUS_CHANGE: 'on-docker:status-change'
+  },
 } as const

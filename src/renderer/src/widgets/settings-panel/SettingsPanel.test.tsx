@@ -24,6 +24,14 @@ describe('SettingsPanel', () => {
           data: { version: '1.0.0', exportedAt: '2026-03-07', settings: { theme: 'deep-space' } }
         }),
         import: vi.fn().mockResolvedValue({ success: true, data: undefined })
+      },
+      voice: {
+        status: vi.fn().mockResolvedValue({ success: true, data: { status: 'ready' } })
+      },
+      docker: {
+        status: vi.fn().mockResolvedValue({ success: true, data: { available: false, imageReady: false, imageTag: 'agenthub-cli:latest', activeContainerCount: 0 } }),
+        rebuild: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+        onBuildProgress: vi.fn().mockReturnValue(vi.fn())
       }
     } as any
     // Mock URL methods

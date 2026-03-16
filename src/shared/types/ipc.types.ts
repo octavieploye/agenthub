@@ -144,6 +144,19 @@ export interface AgentHubBridge {
     status: () => Promise<IpcResponse<import('./voice.types').VoiceStatusResult>>
     cancel: () => Promise<IpcResponse<void>>
   }
+  docker: {
+    status: () => Promise<IpcResponse<import('./docker.types').DockerStatus>>
+    build: () => Promise<IpcResponse<void>>
+    rebuild: () => Promise<IpcResponse<void>>
+    checkCliVersion: () => Promise<IpcResponse<{ hostVersion: string | null; imageVersion: string | null; mismatch: boolean }>>
+    onBuildProgress: (callback: (line: string) => void) => () => void
+  }
+  containers: {
+    list: () => Promise<IpcResponse<import('./docker.types').ContainerInfo[]>>
+    stop: (repoId: string) => Promise<IpcResponse<void>>
+    destroy: (repoId: string) => Promise<IpcResponse<void>>
+    stopAll: () => Promise<IpcResponse<void>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>
@@ -158,5 +171,6 @@ export interface AgentHubBridge {
     breakoutClosed: (callback: (agentId: string) => void) => () => void
     snapshotSaved: (callback: () => void) => () => void
     agentTriaged: (callback: (result: import('./notification.types').RoutingResult) => void) => () => void
+    dockerStatusChange: (callback: () => void) => () => void
   }
 }

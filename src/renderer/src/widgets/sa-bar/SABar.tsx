@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
+import type { DockerStatus } from '@shared/types/docker.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import ThemeSwitcher from '../theme-switcher/ThemeSwitcher'
 import CodeBlueButton from '../code-blue/CodeBlueButton'
@@ -11,7 +12,6 @@ interface SABarProps {
   selectedAgentRepoPath?: string
   onOpenSettings?: () => void
   onOpenGit?: () => void
-  onOpenHelp?: () => void
 }
 
 const STATUS_COUNTERS: { key: AgentLifecycleStatus; label: string; dotClass: string }[] = [
@@ -27,7 +27,7 @@ const VIEW_MODES = [
   { key: 'terminal' as const, label: 'Terminal' }
 ]
 
-function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit, onOpenHelp }: SABarProps): React.JSX.Element {
+function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOpenGit }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
@@ -35,6 +35,18 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
   const toggleSound = useViewStore((s) => s.toggleSound)
   const [skillsOpen, setSkillsOpen] = useState(false)
   const skillsBtnRef = useRef<HTMLButtonElement>(null)
+  const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
+
+  useEffect(() => {
+    const fetchStatus = (): void => {
+      window.agentHub.docker.status().then((res) => {
+        if (res.success) setDockerStatus(res.data)
+      }).catch(() => {})
+    }
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <header
@@ -132,6 +144,31 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
         </button>
       )}
 
+      {/* Docker status indicator */}
+      <button
+        data-testid="docker-status-indicator"
+        onClick={onOpenSettings}
+        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+        title={
+          dockerStatus === null
+            ? 'Docker status unknown'
+            : dockerStatus.available
+              ? `Docker ${dockerStatus.version ?? ''} — ${dockerStatus.activeContainerCount} container(s) active`
+              : 'Docker not available'
+        }
+      >
+        <span
+          className={`w-2 h-2 rounded-full ${
+            dockerStatus === null
+              ? 'bg-base-content/20'
+              : dockerStatus.available
+                ? 'bg-success'
+                : 'bg-error'
+          }`}
+        />
+        <span>Docker</span>
+      </button>
+
       {/* Settings button */}
       {onOpenSettings && (
         <button
@@ -141,19 +178,6 @@ function SABar({ agents, onCodeBlue, selectedAgentRepoPath, onOpenSettings, onOp
           title="Settings"
         >
           Settings
-        </button>
-      )}
-
-      {/* Help button */}
-      {onOpenHelp && (
-        <button
-          data-testid="sa-help"
-          className="btn btn-xs btn-ghost font-bold"
-          onClick={onOpenHelp}
-          title="Help & Keyboard Shortcuts"
-          aria-label="Open help"
-        >
-          ?
         </button>
       )}
     </header>

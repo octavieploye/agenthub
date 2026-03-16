@@ -1,3 +1,5 @@
+export type ExecutionMode = 'native' | 'docker'
+
 export type AgentLifecycleStatus =
   | 'spawning'
   | 'busy'
@@ -34,6 +36,7 @@ export interface AgentState {
   updatedAt: string
   progress: number
   color: string
+  executionMode: ExecutionMode
 }
 
 export interface AgentSpawnOptions {
@@ -46,7 +49,8 @@ export interface AgentSpawnOptions {
   taskDescription?: string
   envOverrides?: Record<string, string>
   color?: string
-  skipPermissions?: boolean
   cols?: number
   rows?: number
+  skipPermissions?: boolean
+  isLeadAgent?: boolean
 }

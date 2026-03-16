@@ -56,6 +56,11 @@ describe('SABar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    window.agentHub = {
+      docker: {
+        status: vi.fn().mockResolvedValue({ success: true, data: { available: true, version: '24.0', imageReady: true, imageTag: 'agenthub-cli:latest', activeContainerCount: 0 } })
+      }
+    } as any
   })
 
   describe('agent status counters', () => {

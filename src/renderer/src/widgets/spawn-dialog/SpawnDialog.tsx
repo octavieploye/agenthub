@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { RepoConfig } from '@shared/types/config.types'
 import type { EffortLevel } from '@shared/types/agent.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
+import type { DockerStatus } from '@shared/types/docker.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
@@ -37,7 +38,7 @@ interface SpawnDialogProps {
     provider?: string,
     effortLevel?: EffortLevel,
     skipPermissions?: boolean
-  ) => void
+  ) => Promise<string | null>
 }
 
 type Step = 'configure' | 'pre-launch' | 'model-select'
@@ -54,11 +55,13 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
   const [selectedColor, setSelectedColor] = useState(AGENT_COLOR_PALETTE[0])
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
+  const [skipPermissions, setSkipPermissions] = useState(false)
+  const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
+  const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
     [...CLAUDE_MODELS, ...ALL_OLLAMA_MODELS].map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
-  const [skipPermissions, setSkipPermissions] = useState(false)
 
   const plan = useUsageStore((s) => s.plan)
   const totalMessages = useUsageStore((s) => s.totalMessages)
@@ -99,9 +102,17 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
       setStep('configure')
       setSelectedModel('claude-sonnet-4-6')
       setEffortLevel('medium')
+      setSkipPermissions(false)
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
   }, [open, loadRepos, loadModels])
+
+  useEffect(() => {
+    if (!skipPermissions) { setDockerStatus(null); return }
+    window.agentHub.docker.status().then((res) => {
+      if (res.success) setDockerStatus(res.data)
+    }).catch(() => {})
+  }, [skipPermissions])
 
   const handleAddRepo = useCallback(async () => {
     if (!newRepoName.trim() || !newRepoPath.trim()) return
@@ -142,13 +153,18 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
   }, [canProceed])
 
   const handleLaunch = useCallback(
-    (task: string) => {
+    async (task: string) => {
       const name = agentName.trim() || `agent-${Date.now().toString(36).slice(-4)}`
       const repoId = selectedRepoId || 'default'
       const modelInfo = availableModels.find((m) => m.id === selectedModel)
       const provider = modelInfo?.provider ?? 'anthropic'
-      onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel, skipPermissions)
-      onClose()
+      setSpawnError(null)
+      const err = await onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel, skipPermissions)
+      if (err) {
+        setSpawnError(err)
+      } else {
+        onClose()
+      }
     },
     [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, skipPermissions, availableModels, onSpawn, onClose]
   )
@@ -239,6 +255,14 @@ function SpawnDialog({ open, onClose, onSpawn }: SpawnDialogProps): React.JSX.El
               <div className="text-[10px] text-base-content/40 mt-1">
                 {EFFORT_LABELS[effortLevel]}
               </div>
+            </div>
+          )}
+
+          {/* Spawn error */}
+          {spawnError && (
+            <div className="panel-glass p-3 rounded-lg border border-error/30 bg-error/10">
+              <span className="text-xs font-bold text-error block mb-1">SPAWN FAILED</span>
+              <span className="text-[10px] text-error/80 break-all">{spawnError}</span>
             </div>
           )}
 

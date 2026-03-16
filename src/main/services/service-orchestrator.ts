@@ -14,6 +14,8 @@ import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
 import { VoiceService } from './voice-service'
+import { DockerService } from './docker-service'
+import { ContainerManager } from './container-manager'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -30,6 +32,8 @@ let skillsService: SkillsService | null = null
 let windowManager: WindowManager | null = null
 let settingsService: SettingsService | null = null
 let voiceService: VoiceService | null = null
+let dockerService: DockerService | null = null
+let containerManager: ContainerManager | null = null
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -190,6 +194,27 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 12. DockerService — Docker availability detection and image management
+  dockerService = new DockerService({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    logWarning: (message: string, meta?: Record<string, unknown>) => {
+      log.warn(message, meta)
+    }
+  })
+
+  // 13. ContainerManager — per-repo Docker container lifecycle + TTL cleanup
+  containerManager = new ContainerManager({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    logWarning: (message: string, meta?: Record<string, unknown>) => {
+      log.warn(message, meta)
+    }
+  })
+  containerManager.init(db).catch((err) => log.error('ContainerManager init failed', err))
+
   log.info('All services initialized')
 }
 
@@ -209,6 +234,7 @@ export function stopServices(): void {
   windowManager?.closeAll()
   trayManager?.destroy()
   voiceService?.dispose()
+  containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   log.info('All services stopped')
 }
 
@@ -246,4 +272,12 @@ export function getSettingsService(): SettingsService | null {
 
 export function getVoiceService(): VoiceService | null {
   return voiceService
+}
+
+export function getDockerService(): DockerService | null {
+  return dockerService
+}
+
+export function getContainerManager(): ContainerManager | null {
+  return containerManager
 }

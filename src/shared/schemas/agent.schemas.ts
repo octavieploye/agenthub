@@ -9,7 +9,9 @@ export const AgentLifecycleStatusSchema = z.enum([
   'looping',
   'paused',
   'interrupted',
-  'tray_running'
+  'tray_running',
+  'error',
+  'awaiting_approval'
 ])
 
 export const StatusConfidenceSchema = z.enum(['confirmed', 'inferred', 'unknown'])
@@ -34,7 +36,8 @@ export const AgentStateSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   progress: z.number().min(0).max(100),
-  color: z.string()
+  color: z.string(),
+  executionMode: z.enum(['native', 'docker']).default('native')
 })
 
 export const AgentSpawnOptionsSchema = z.object({
@@ -47,5 +50,8 @@ export const AgentSpawnOptionsSchema = z.object({
   taskDescription: z.string().optional(),
   envOverrides: z.record(z.string(), z.string()).optional(),
   color: z.string().optional(),
-  skipPermissions: z.boolean().optional()
+  skipPermissions: z.boolean().optional(),
+  cols: z.number().int().positive().optional(),
+  rows: z.number().int().positive().optional(),
+  isLeadAgent: z.boolean().optional()
 })

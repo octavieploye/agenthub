@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
-import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel } from '../../../shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel, ExecutionMode } from '../../../shared/types/agent.types'
 import type Database from 'better-sqlite3'
 
 function mapRow(row: Record<string, unknown>): AgentState {
@@ -20,7 +20,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     progress: (row.progress as number) ?? 0,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
-    color: (row.color as string) ?? '#3B82F6'
+    color: (row.color as string) ?? '#3B82F6',
+    executionMode: (row.execution_mode as ExecutionMode) ?? 'native'
   }
 }
 
@@ -47,6 +48,7 @@ export function insertAgent(
     effortLevel?: EffortLevel
     taskDescription?: string
     color?: string
+    executionMode?: ExecutionMode
   }
 ): AgentState {
   const id = randomUUID()
@@ -55,8 +57,8 @@ export function insertAgent(
   const effortLevel = agent.effortLevel ?? 'medium'
 
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
@@ -67,6 +69,7 @@ export function insertAgent(
     effortLevel,
     agent.taskDescription ?? '',
     color,
+    agent.executionMode ?? 'native',
     now,
     now
   )
@@ -88,7 +91,8 @@ export function insertAgent(
     progress: 0,
     createdAt: now,
     updatedAt: now,
-    color
+    color,
+    executionMode: agent.executionMode ?? 'native'
   }
 }
 
@@ -146,4 +150,13 @@ export function updateAgentModel(
 export function deleteAgent(db: Database.Database, id: string): void {
   db.prepare('DELETE FROM agents WHERE id = ?').run(id)
   log.info('Agent deleted', { id })
+}
+
+export function updateAgentExecutionMode(
+  db: Database.Database,
+  id: string,
+  executionMode: ExecutionMode
+): void {
+  db.prepare('UPDATE agents SET execution_mode = ?, updated_at = ? WHERE id = ?')
+    .run(executionMode, new Date().toISOString(), id)
 }

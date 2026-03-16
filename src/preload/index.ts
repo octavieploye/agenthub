@@ -168,6 +168,23 @@ const agentHubBridge = {
     status: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.STATUS),
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.CANCEL)
   },
+  docker: {
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.DOCKER.STATUS),
+    build: () => ipcRenderer.invoke(IPC_CHANNELS.DOCKER.BUILD),
+    rebuild: () => ipcRenderer.invoke(IPC_CHANNELS.DOCKER.REBUILD),
+    checkCliVersion: () => ipcRenderer.invoke(IPC_CHANNELS.DOCKER.CHECK_CLI_VERSION),
+    onBuildProgress: (callback: (line: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, line: string): void => callback(line)
+      ipcRenderer.on(IPC_EVENTS.DOCKER.BUILD_PROGRESS, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.DOCKER.BUILD_PROGRESS, handler) }
+    }
+  },
+  containers: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.LIST),
+    stop: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.STOP, repoId),
+    destroy: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.DESTROY, repoId),
+    stopAll: () => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.STOP_ALL)
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void
@@ -219,6 +236,11 @@ const agentHubBridge = {
       ): void => callback(result)
       ipcRenderer.on(IPC_EVENTS.NOTIFICATIONS.TRIAGED, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.NOTIFICATIONS.TRIAGED, handler)
+    },
+    dockerStatusChange: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.DOCKER.STATUS_CHANGE, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.DOCKER.STATUS_CHANGE, handler)
     }
   }
 }

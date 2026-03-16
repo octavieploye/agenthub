@@ -32,7 +32,7 @@ export function registerAgentHandlers(): void {
       try {
         const validation = validateInput(AgentSpawnOptionsSchema, options)
         if (!validation.valid) return validation.response
-        const agent = spawnAgent(validation.data)
+        const agent = await spawnAgent(validation.data)
         return success(agent)
       } catch (err) {
         log.error('Agent spawn failed', err)

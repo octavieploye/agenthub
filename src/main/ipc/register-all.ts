@@ -20,6 +20,8 @@ import { registerWindowsHandlers } from './windows.ipc'
 import { registerSettingsHandlers } from './settings.ipc'
 import { registerModelsHandlers } from './models.ipc'
 import { registerVoiceHandlers } from './voice.ipc'
+import { registerDockerHandlers } from './docker.ipc'
+import { registerContainersHandlers } from './containers.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -43,5 +45,7 @@ export function registerAllIpcHandlers(): void {
   registerSettingsHandlers()
   registerModelsHandlers()
   registerVoiceHandlers()
+  registerDockerHandlers()
+  registerContainersHandlers()
   log.info('All IPC handlers registered')
 }
