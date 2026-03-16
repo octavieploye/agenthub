@@ -213,8 +213,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const task = options.taskDescription?.trim()
 
   // Strip provider prefix from dynamically-fetched Ollama model IDs.
-  // model-service.ts stores them as "ollama-cloud:devstral-2:123b" or "ollama-local:devstral-2:123b"
-  // but Claude CLI only accepts the bare Ollama tag, e.g. "devstral-2:123b".
+  // model-service.ts stores them as "ollama-cloud:devstral-2:123b-cloud" or "ollama-local:devstral-2"
+  // but Claude CLI / ollama launch only accepts the bare Ollama tag, e.g. "devstral-2:123b-cloud".
+  // Static catalog entries (e.g. "glm-5:cloud") have no prefix and pass through unchanged.
   const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
   const rawModel = agentState.model ?? ''
   const modelName = isOllama
@@ -235,9 +236,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = task.replace(/"/g, '\\"')
       let cmd: string
       if (isOllama) {
-        cmd = `${ollamaBin} launch claude${modelFlag} --${permFlag} "${escapedTask}" || ${ollamaEnvPrefix}claude${modelFlag}${permFlag} "${escapedTask}"\n`
+        // ollama launch claude uses `-- EXTRA_ARGS` to pass flags/prompt to claude CLI.
+        // -p sends the prompt in print mode; permFlag goes before -p.
+        const extraArgs = `${permFlag} -p "${escapedTask}"`.trim()
+        cmd = `${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag} -p "${escapedTask}"\n`
       } else {
-        cmd = `claude${modelFlag}${effortFlag}${permFlag} "${escapedTask}"\n`
+        cmd = `claude${modelFlag}${effortFlag}${permFlag} -p "${escapedTask}"\n`
       }
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
@@ -246,9 +250,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     setTimeout(() => {
       let cmd: string
       if (isOllama) {
-        cmd = permFlag
-          ? `${ollamaBin} launch claude${modelFlag} --${permFlag} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag}\n`
-          : `${ollamaBin} launch claude${modelFlag} || ${ollamaEnvPrefix}claude${modelFlag}\n`
+        // Interactive mode: no task prompt, just launch claude via ollama.
+        const extraArgs = permFlag.trim()
+        cmd = extraArgs
+          ? `${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs} || ${ollamaEnvPrefix}claude${modelFlag}${permFlag}\n`
+          : `${ollamaBin} launch claude -y${modelFlag} || ${ollamaEnvPrefix}claude${modelFlag}\n`
       } else {
         cmd = `claude${modelFlag}${effortFlag}${permFlag}\n`
       }
