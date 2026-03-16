@@ -211,9 +211,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
-  const modelFlag = agentState.model ? ` --model ${agentState.model}` : ''
-  const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
-  const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
   // For Ollama providers, inline env vars before the command so they survive .zshrc overrides
   const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
@@ -221,17 +218,28 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ? 'ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY="" '
     : ''
 
+  // Strip provider prefix from dynamically-fetched Ollama model IDs.
+  // model-service.ts stores them as "ollama-cloud:devstral-2:123b" or "ollama-local:devstral-2:123b"
+  // but Claude CLI only accepts the bare Ollama tag, e.g. "devstral-2:123b".
+  const rawModel = agentState.model ?? ''
+  const modelName = isOllama
+    ? rawModel.replace(/^(ollama-cloud:|ollama-local:)/, '')
+    : rawModel
+  const modelFlag = modelName ? ` --model ${modelName}` : ''
+  const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
+  const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
+
   if (task) {
     setTimeout(() => {
       const cmd = `${envPrefix}claude${modelFlag}${effortFlag}${permFlag} "${task.replace(/"/g, '\\"')}"\n`
       ptyProcess.write(cmd)
-      log.info('Sent claude command to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, task, envPrefix: envPrefix.trim() })
+      log.info('Sent claude command to PTY', { id: agentState.id, model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task, envPrefix: envPrefix.trim() })
     }, 500)
   } else {
     // Just launch claude in interactive mode
     setTimeout(() => {
       ptyProcess.write(`${envPrefix}claude${modelFlag}${effortFlag}${permFlag}\n`)
-      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: agentState.model, provider: agentState.provider, effort: agentState.effortLevel, envPrefix: envPrefix.trim() })
+      log.info('Sent claude (interactive) to PTY', { id: agentState.id, model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, envPrefix: envPrefix.trim() })
     }, 500)
   }
 
