@@ -4,6 +4,7 @@ import FullTerminal from '../full-terminal/FullTerminal'
 import { startIpcListener } from '../full-terminal/terminal-manager'
 import type { AgentState } from '@shared/types/agent.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
+import { isLightColor } from '../agent-detail/color-utils'
 
 function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
@@ -135,8 +136,8 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
             data-testid="breakout-send"
             onClick={() => handleSendInput(inputValue)}
             disabled={!canSendInput || !inputValue.trim()}
-            className="btn btn-sm text-white"
-            style={{ backgroundColor: agent?.color ?? '#3B82F6' }}
+            className="btn btn-sm"
+            style={{ backgroundColor: agent?.color ?? '#3B82F6', color: isLightColor(agent?.color ?? '#3B82F6') ? '#1e1e2e' : '#ffffff' }}
           >
             Send
           </button>

@@ -4,6 +4,7 @@ import type { AgentState } from '@shared/types/agent.types'
 import type { TaskItem, TaskPriority, TaskStatus } from '@shared/types/task.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { parseTaskVoice } from '../../helpers/parse-voice-fields'
+import { isLightColor } from './color-utils'
 
 interface TodoTabProps {
   agent: AgentState
@@ -325,8 +326,8 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
           </select>
           <button
             onClick={handleAdd}
-            className="btn-lcars text-[10px] px-3 py-1 text-white"
-            style={{ backgroundColor: agentColor }}
+            className="btn-lcars text-[10px] px-3 py-1"
+            style={{ backgroundColor: agentColor, color: isLightColor(agentColor) ? '#1e1e2e' : '#ffffff' }}
           >
             Add
           </button>
