@@ -214,24 +214,40 @@ function AgentCard({
           </div>
 
           {paletteOpen && (
-            <div className="dropdown-panel absolute left-0 top-8 z-50 p-2 grid grid-cols-3 gap-1 min-w-[80px]">
-              {AGENT_COLOR_PALETTE.slice(0, 6).map((color) => (
-                <button
-                  key={color}
-                  className="w-5 h-5 rounded cursor-pointer border-2 hover:scale-110 transition-transform"
-                  style={{
-                    backgroundColor: color,
-                    borderColor: agent.color === color ? 'white' : 'transparent',
+            <div className="dropdown-panel absolute left-0 top-8 z-50 p-2 min-w-[80px]">
+              <div className="grid grid-cols-3 gap-1">
+                {AGENT_COLOR_PALETTE.slice(0, 6).map((color) => (
+                  <button
+                    key={color}
+                    className="w-5 h-5 rounded cursor-pointer border-2 hover:scale-110 transition-transform"
+                    style={{
+                      backgroundColor: color,
+                      borderColor: agent.color === color ? 'white' : 'transparent',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateColor(agent.id, color)
+                      window.agentHub.agents.updateColor(agent.id, color).catch(console.error)
+                      setPaletteOpen(false)
+                    }}
+                    title={color}
+                  />
+                ))}
+              </div>
+              <label className="flex items-center gap-1 mt-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="color"
+                  value={agent.color}
+                  className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
+                  onChange={(e) => {
+                    const c = e.target.value
+                    updateColor(agent.id, c)
+                    window.agentHub.agents.updateColor(agent.id, c).catch(console.error)
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    updateColor(agent.id, color)
-                    window.agentHub.agents.updateColor(agent.id, color).catch(console.error)
-                    setPaletteOpen(false)
-                  }}
-                  title={color}
+                  title="Custom color"
                 />
-              ))}
+                <span className="text-[10px] text-base-content/60">Custom</span>
+              </label>
             </div>
           )}
         </div>

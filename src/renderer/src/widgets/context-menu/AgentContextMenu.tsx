@@ -41,13 +41,13 @@ function AgentContextMenu({
   return (
     <div
       data-testid="context-menu"
-      className="panel-glass rounded-lg shadow-lg py-1 min-w-[160px] z-50 fixed"
+      className="dropdown-panel min-w-[160px] fixed"
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
     >
       {canPause && (
         <button
           data-testid="context-menu-pause"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onPause)}
         >
           Pause
@@ -57,7 +57,7 @@ function AgentContextMenu({
       {canResume && (
         <button
           data-testid="context-menu-resume"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onResume)}
         >
           Resume
@@ -66,7 +66,7 @@ function AgentContextMenu({
 
       <button
         data-testid="context-menu-view-output"
-        className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+        className="dropdown-item w-full text-left text-xs"
         onClick={() => handleAction(onViewOutput)}
       >
         View Output
@@ -75,7 +75,7 @@ function AgentContextMenu({
       {onSendTask && canSendTask && (
         <button
           data-testid="context-menu-send-task"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onSendTask)}
         >
           Send Task
@@ -85,7 +85,7 @@ function AgentContextMenu({
       {onViewNotes && (
         <button
           data-testid="context-menu-view-notes"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onViewNotes)}
         >
           View Notes
@@ -95,7 +95,7 @@ function AgentContextMenu({
       {onBreakout && (
         <button
           data-testid="context-menu-breakout"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onBreakout)}
         >
           Breakout Terminal
@@ -104,7 +104,7 @@ function AgentContextMenu({
 
       <button
         data-testid="context-menu-copy-id"
-        className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+        className="dropdown-item w-full text-left text-xs"
         onClick={() => handleAction(onCopyId)}
       >
         Copy Agent ID
@@ -113,7 +113,7 @@ function AgentContextMenu({
       {onChangeColor && (
         <button
           data-testid="context-menu-change-color"
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-base-content/10 transition-colors"
+          className="dropdown-item w-full text-left text-xs"
           onClick={() => handleAction(onChangeColor)}
         >
           Change Color
@@ -124,7 +124,7 @@ function AgentContextMenu({
 
       <button
         data-testid="context-menu-kill"
-        className="w-full text-left px-3 py-1.5 text-xs text-error hover:bg-error/10 transition-colors"
+        className="dropdown-item w-full text-left text-xs text-error"
         onClick={() => handleAction(onKill)}
       >
         Kill
