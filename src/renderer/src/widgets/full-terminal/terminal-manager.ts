@@ -107,7 +107,7 @@ export function getOrCreateTerminal(agentId: string, agentColor?: string): Manag
   ensureIpcSubscription()
 
   const BASE_BG = '#1e1e2e'
-  const bg = agentColor ? tintBackground(BASE_BG, agentColor, 0.12) : BASE_BG
+  const bg = agentColor ? tintBackground(BASE_BG, agentColor, 0.25) : BASE_BG
 
   // Hardcoded Catppuccin Mocha theme — tinted with agent color
   const term = new Terminal({
