@@ -56,8 +56,8 @@ function RepoSidebar({ onAddRepo }: RepoSidebarProps): React.JSX.Element {
 
       <div className="flex-1 overflow-y-auto py-1">
         {repos.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-base-content/60">
-            No repos yet
+          <div className="px-3 py-6 text-center text-xs text-base-content/40">
+            Add a repo to get started
           </div>
         )}
 

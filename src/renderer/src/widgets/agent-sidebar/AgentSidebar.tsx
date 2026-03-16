@@ -4,6 +4,7 @@ import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 import { useBranchName } from '@renderer/hooks/useBranchName'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
+import { useViewStore } from '@renderer/stores/view-store'
 
 interface AgentSidebarProps {
   agents: AgentState[]
@@ -402,6 +403,20 @@ function AgentCard({
   )
 }
 
+function EmptyAgentMessage(): React.JSX.Element {
+  const selectedRepoId = useViewStore((s) => s.selectedRepoId)
+  const repoName = selectedRepoId
+    ? selectedRepoId.split('/').filter(Boolean).pop() ?? selectedRepoId
+    : null
+  return (
+    <span>
+      {repoName
+        ? `No agents in ${repoName}. Click + to add one.`
+        : 'Select a repo to see agents.'}
+    </span>
+  )
+}
+
 function AgentSidebar({
   agents,
   activeAgentId,
@@ -429,8 +444,8 @@ function AgentSidebar({
 
       <div className="flex-1 overflow-y-auto py-1" role="list" aria-label="Agent list">
         {agents.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-base-content/60">
-            No agents running
+          <div className="px-3 py-6 text-center text-xs text-base-content/40">
+            <EmptyAgentMessage />
           </div>
         )}
 

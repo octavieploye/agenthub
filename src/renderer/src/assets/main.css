@@ -539,10 +539,6 @@ h1, h2, h3, .agent-name {
   50% { opacity: 1; }
 }
 
-@keyframes spatial-zoom {
-  from { transform: scale(0.95); opacity: 0.8; }
-  to { transform: scale(1); opacity: 1; }
-}
 
 @keyframes card-shimmer {
   0% { transform: translateX(-100%); }
@@ -583,18 +579,6 @@ h1, h2, h3, .agent-name {
 .animate-ambient-glow {
   animation: ambient-glow 3s ease-in-out infinite;
 }
-.animate-spatial-zoom {
-  animation: spatial-zoom 200ms ease-out;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.animate-fade-in {
-  animation: fade-in 200ms ease-out forwards;
-}
 
 @keyframes slide-in-up {
   from {
@@ -630,8 +614,6 @@ h1, h2, h3, .agent-name {
   .animate-breathe,
   .animate-urgency-pulse,
   .animate-ambient-glow,
-  .animate-spatial-zoom,
-  .animate-fade-in,
   .agent-card,
   .agent-card[data-exiting="true"],
   .panel-glass-alert,

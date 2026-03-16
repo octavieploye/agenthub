@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import RaidFrameGrid from '@renderer/widgets/raid-frame/RaidFrameGrid'
@@ -24,14 +25,31 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu, onSoloAgent, onMute
   const focusedAgentId = useViewStore((s) => s.focusedAgentId)
   const reducedMotion = useReducedMotion()
 
+  const [visible, setVisible] = useState(true)
+  const prevViewMode = useRef(viewMode)
+
+  useEffect(() => {
+    if (viewMode !== prevViewMode.current) {
+      if (reducedMotion) {
+        prevViewMode.current = viewMode
+        return
+      }
+      setVisible(false)
+      const timer = setTimeout(() => {
+        setVisible(true)
+        prevViewMode.current = viewMode
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [viewMode, reducedMotion])
+
   return (
     <div
       data-testid="unified-view"
       className="flex-1 min-h-0"
     >
       <div
-        key={viewMode}
-        className={`flex-1 h-full ${!reducedMotion ? 'animate-fade-in' : ''}`}
+        className={`flex-1 h-full transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
       >
       {viewMode === 'raid' && (
         <RaidFrameGrid
@@ -47,7 +65,7 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu, onSoloAgent, onMute
 
       {viewMode === 'terminal' && !focusedAgentId && (
         <div className="flex items-center justify-center h-full">
-          <span className="text-sm text-base-content/40">Select an agent to view terminal</span>
+          <span className="text-sm text-base-content/40">Select an agent from the sidebar.</span>
         </div>
       )}
       </div>

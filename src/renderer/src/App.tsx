@@ -23,6 +23,7 @@ import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
+import { useWindowSize } from './hooks/useWindowSize'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -38,6 +39,7 @@ import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
+import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { VoiceInputProvider } from './contexts/VoiceInputContext'
 
 function App(): React.JSX.Element {
@@ -72,6 +74,8 @@ function AppMain(): React.JSX.Element {
   const setFocusedAgent = useViewStore((s) => s.setFocusedAgent)
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
   const prefetchAgentData = usePrefetchAgentData()
+  const { width: windowWidth } = useWindowSize()
+  const isNarrowWindow = windowWidth < 728
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [pausedAgentAnomalies, setPausedAgentAnomalies] = useState<HealthAnomaly[]>([])
@@ -364,17 +368,35 @@ function AppMain(): React.JSX.Element {
     }
   }, [])
 
-  // Keyboard shortcuts for view mode switching
+  // Wire useKeyboardNav hook — handles Cmd+1/2, Cmd+N, Cmd+K, Escape, Tab, Enter, Space, Delete
+  useKeyboardNav({
+    onSpawnDialog: () => setSpawnDialogOpen(true),
+    onCommandPalette: () => setCommandPaletteOpen((prev) => !prev),
+    onEscape: () => {
+      setCommandPaletteOpen(false)
+      setContextMenu(null)
+      setFocusedAgent(null)
+    },
+    onExpandFocused: () => {
+      const focused = useViewStore.getState().focusedAgentId
+      if (focused) handleSelectAgent(focused)
+    },
+    onContextMenuFocused: () => {
+      const focused = useViewStore.getState().focusedAgentId
+      if (!focused) return
+      // Position context menu at the center of the screen as a fallback
+      setContextMenu({ agentId: focused, position: { x: window.innerWidth / 2, y: window.innerHeight / 2 } })
+    },
+    onDeleteFocused: () => {
+      const focused = useViewStore.getState().focusedAgentId
+      if (focused) handleKillRequest(focused)
+    }
+  })
+
+  // Keyboard shortcuts — only keys NOT handled by useKeyboardNav
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.metaKey || e.ctrlKey) {
-        const store = useViewStore.getState()
-        if (e.key === '1') { e.preventDefault(); store.setViewMode('raid') }
-        if (e.key === '2') { e.preventDefault(); store.setViewMode('terminal') }
-        if (e.key === 'k') {
-          e.preventDefault()
-          setCommandPaletteOpen((prev) => !prev)
-        }
         if (e.key === 'q') {
           e.preventDefault()
           handleShutdownRequest()
@@ -383,16 +405,12 @@ function AppMain(): React.JSX.Element {
           e.preventDefault()
           repoSwitcherRef.current?.open()
         }
-        if (e.key === 'n') {
-          e.preventDefault()
-          setSpawnDialogOpen(true)
-        }
 
         // Cmd+Shift+↑/↓ — navigate repo list (raid view only)
+        const store = useViewStore.getState()
         if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && store.viewMode === 'raid') {
           e.preventDefault()
           const allAgents = Array.from(useAgentStore.getState().agents.values())
-          // Derive sorted repos — same logic as RepoSidebar
           const ATTENTION_STATUSES_NAV = new Set(['locked', 'awaiting_approval', 'error', 'looping'])
           const repoMap = new Map<string, { repoId: string; hasAttention: boolean }>()
           for (const agent of allAgents) {
@@ -420,10 +438,15 @@ function AppMain(): React.JSX.Element {
         }
       }
 
-      // Tab — cycle focus through agents in raid view
-      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Plain Arrow ↑/↓ — cycle focused agent in raid view (no modifier keys)
+      if (
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+        !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+      ) {
         const store = useViewStore.getState()
         if (store.viewMode !== 'raid') return
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
         e.preventDefault()
         const allAgents = Array.from(useAgentStore.getState().agents.values())
         const currentRaidAgents = store.selectedRepoId
@@ -436,20 +459,12 @@ function AppMain(): React.JSX.Element {
           if (first) store.setFocusedAgent(first.id)
         } else {
           const currentIdx = currentRaidAgents.findIndex((a) => a.id === currentFocused)
-          const nextIdx = (currentIdx + 1) % currentRaidAgents.length
+          const nextIdx =
+            e.key === 'ArrowDown'
+              ? (currentIdx + 1) % currentRaidAgents.length
+              : (currentIdx - 1 + currentRaidAgents.length) % currentRaidAgents.length
           const next = currentRaidAgents[nextIdx]
           if (next) store.setFocusedAgent(next.id)
-        }
-      }
-
-      // Enter — prevent default form submission when an agent is focused
-      if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const store = useViewStore.getState()
-        if (store.focusedAgentId !== null) {
-          const target = e.target as HTMLElement
-          if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
-            e.preventDefault()
-          }
         }
       }
     }
@@ -887,7 +902,11 @@ function AppMain(): React.JSX.Element {
                 )}
               </div>
               <div className="flex-1 min-w-[280px] h-full overflow-hidden">
-                {activeAgentId && agents.get(activeAgentId) ? (
+                {isNarrowWindow ? (
+                  <div className="flex items-center justify-center h-full text-base-content/40 text-sm px-4 text-center">
+                    Expand window to see details
+                  </div>
+                ) : activeAgentId && agents.get(activeAgentId) ? (
                   <div className="h-full flex flex-col">
                     {/* Evidence panel for paused agents */}
                     {agents.get(activeAgentId)?.status === 'paused' &&
