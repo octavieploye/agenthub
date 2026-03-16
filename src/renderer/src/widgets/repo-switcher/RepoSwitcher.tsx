@@ -5,6 +5,7 @@ import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
 export interface RepoSwitcherHandle {
   focus: () => void
+  open: () => void
 }
 
 interface RepoSwitcherProps {
@@ -38,7 +39,11 @@ const RepoSwitcher = forwardRef<RepoSwitcherHandle, RepoSwitcherProps>(
     const containerRef = useRef<HTMLDivElement>(null)
 
     useImperativeHandle(ref, () => ({
-      focus: () => triggerRef.current?.focus()
+      focus: () => triggerRef.current?.focus(),
+      open: () => {
+        setOpen(true)
+        triggerRef.current?.focus()
+      }
     }))
 
     const repos = useMemo<RepoDerived[]>(() => {

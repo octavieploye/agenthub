@@ -381,7 +381,7 @@ function AppMain(): React.JSX.Element {
         }
         if (e.key === 'e') {
           e.preventDefault()
-          repoSwitcherRef.current?.focus()
+          repoSwitcherRef.current?.open()
         }
         if (e.key === 'n') {
           e.preventDefault()
