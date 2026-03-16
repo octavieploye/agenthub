@@ -68,7 +68,7 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
   return (
     <header
       data-testid="sa-bar"
-      className="h-14 flex items-center px-4 panel-glass border-b border-base-content/10 shrink-0"
+      className="h-14 flex items-center px-4 panel-glass border-b border-base-content/10 shrink-0 relative z-[100]"
     >
       {/* LEFT zone: wordmark + repo badge */}
       <div className="flex items-center gap-3">

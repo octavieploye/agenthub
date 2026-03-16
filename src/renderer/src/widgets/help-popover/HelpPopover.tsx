@@ -107,7 +107,7 @@ function HelpPopover(): React.JSX.Element {
       {open && (
         <div
           data-testid="help-popover-panel"
-          className="dropdown-panel absolute right-0 top-7 min-w-[320px] z-50 bg-base-200 border border-base-content/10 rounded-lg shadow-xl"
+          className="dropdown-panel absolute right-0 top-7 min-w-[320px] z-[9999] bg-base-200 border border-base-content/10 rounded-lg shadow-xl"
           style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
           <ShortcutSection title="Navigation" shortcuts={NAVIGATION_SHORTCUTS} />
