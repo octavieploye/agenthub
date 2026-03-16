@@ -551,6 +551,7 @@ function AppMain(): React.JSX.Element {
           addAgent(response.data)
           setActiveAgent(response.data.id)
           setFocusedAgent(response.data.id)
+          setSelectedRepoId(response.data.repoId)
           useViewStore.getState().setViewMode('terminal')
           return null
         }
@@ -759,10 +760,7 @@ function AppMain(): React.JSX.Element {
   }, [guardrailsTarget])
 
   const agentList = Array.from(agents.values())
-  const terminalSidebarAgents =
-    viewMode === 'terminal' && selectedRepoId
-      ? agentList.filter((a) => a.repoId === selectedRepoId)
-      : agentList
+  const terminalSidebarAgents = agentList
 
   // Auto-select first repo when none selected
   useEffect(() => {
