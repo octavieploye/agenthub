@@ -489,45 +489,31 @@ function AppMain(): React.JSX.Element {
     }
   }, [setActiveAgent, setFocusedAgent, agents, prefetchAgentData])
 
-  // Agent navigation — Option+Arrow (Mac: Option key = e.altKey)
-  // Option+↑/↓ selects prev/next agent from any view.
-  // Option+←/→ switches agent terminals in terminal view only.
+  // Agent navigation — Cmd+←/→ switches agents in terminal view
   useEffect(() => {
     const handleAgentNav = (e: KeyboardEvent): void => {
-      if (!e.altKey || e.metaKey || e.ctrlKey) return
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      if (e.shiftKey || e.altKey) return
+
       const viewStore = useViewStore.getState()
+      if (viewStore.viewMode !== 'terminal') return
+
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
       const allAgents = Array.from(useAgentStore.getState().agents.values())
-      // In raid view, navigate only within the selected repo's agents
-      const currentAgents =
-        viewStore.viewMode === 'raid' && viewStore.selectedRepoId
-          ? allAgents.filter((a) => a.repoId === viewStore.selectedRepoId)
-          : allAgents
-      if (currentAgents.length < 2) return
+      if (allAgents.length < 2) return
 
       const currentId = useAgentStore.getState().activeAgentId
-      const currentIndex = currentAgents.findIndex((a) => a.id === currentId)
+      const currentIndex = allAgents.findIndex((a) => a.id === currentId)
 
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault()
-        const nextIndex =
-          e.key === 'ArrowDown'
-            ? (currentIndex + 1) % currentAgents.length
-            : (currentIndex - 1 + currentAgents.length) % currentAgents.length
-        handleSelectAgent(currentAgents[nextIndex].id)
-        return
-      }
-
-      if (
-        (e.key === 'ArrowRight' || e.key === 'ArrowLeft') &&
-        useViewStore.getState().viewMode === 'terminal'
-      ) {
-        e.preventDefault()
-        const nextIndex =
-          e.key === 'ArrowRight'
-            ? (currentIndex + 1) % currentAgents.length
-            : (currentIndex - 1 + currentAgents.length) % currentAgents.length
-        handleSelectAgent(currentAgents[nextIndex].id)
-      }
+      e.preventDefault()
+      const nextIndex =
+        e.key === 'ArrowRight'
+          ? (currentIndex + 1) % allAgents.length
+          : (currentIndex - 1 + allAgents.length) % allAgents.length
+      handleSelectAgent(allAgents[nextIndex].id)
     }
     window.addEventListener('keydown', handleAgentNav)
     return () => window.removeEventListener('keydown', handleAgentNav)

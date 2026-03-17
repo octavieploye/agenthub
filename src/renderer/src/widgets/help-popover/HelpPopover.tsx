@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 const NAVIGATION_SHORTCUTS = [
   { shortcut: 'Tab', action: 'Cycle through agents' },
   { shortcut: 'Shift+Tab', action: 'Cycle agents (reverse)' },
+  { shortcut: 'Up/Down', action: 'Focus prev/next agent (raid view)' },
+  { shortcut: 'Cmd+Left/Right', action: 'Switch agent (terminal view)' },
   { shortcut: 'Enter', action: 'Expand focused agent' },
   { shortcut: 'Escape', action: 'Close panel / deselect' }
 ]
