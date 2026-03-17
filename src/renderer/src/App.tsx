@@ -20,6 +20,7 @@ import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
+import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
@@ -105,6 +106,9 @@ function AppMain(): React.JSX.Element {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ agentId: string; position: { x: number; y: number } } | null>(null)
+
+  // Terminal search
+  const [terminalSearchOpen, setTerminalSearchOpen] = useState(false)
 
   // Settings panel
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -838,6 +842,7 @@ function AppMain(): React.JSX.Element {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenGit={() => setGitPanelOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
+        onOpenSearch={() => setTerminalSearchOpen(true)}
         repoSwitcherRef={repoSwitcherRef}
       />
 
@@ -1126,6 +1131,14 @@ function AppMain(): React.JSX.Element {
           }}
           onBreakout={handleBreakout}
           onChangeColor={handleColorChange}
+        />
+      )}
+
+      {/* Terminal search */}
+      {terminalSearchOpen && (
+        <TerminalSearchPanel
+          onClose={() => setTerminalSearchOpen(false)}
+          onSelectAgent={handleSelectAgent}
         />
       )}
 
