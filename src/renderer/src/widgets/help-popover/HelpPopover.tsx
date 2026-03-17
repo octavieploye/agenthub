@@ -29,7 +29,10 @@ const TIPS = [
   'Click agent name to edit task description',
   'Click color dot to change agent color',
   'Hold Cmd+E to use push-to-talk voice input',
-  'Use Cmd+K to quickly search commands and agents'
+  'Use Cmd+K to quickly search commands and agents',
+  'Search icon searches text across all terminal output',
+  'Search results are grouped by agent — click to jump to that agent',
+  'Search highlights matched text in each line'
 ]
 
 interface ShortcutSectionProps {
