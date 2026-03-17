@@ -10,6 +10,8 @@ import { CLAUDE_MODELS, ALL_OLLAMA_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
+import RepoSelectDropdown from './RepoSelectDropdown'
+import { useNotificationStore } from '@renderer/stores/notification-store'
 
 function catalogToModelInfo(entry: ModelCatalogEntry): ModelInfo {
   return {
@@ -169,6 +171,50 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
     },
     [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, skipPermissions, availableModels, onSpawn, onClose]
   )
+
+  const handleRemoveRepo = useCallback(async (repoId: string) => {
+    const repo = repos.find((r) => r.id === repoId)
+    if (!repo) return
+
+    // Optimistic removal
+    setRepos((prev) => prev.filter((r) => r.id !== repoId))
+    if (selectedRepoId === repoId) setSelectedRepoId('')
+
+    const { addToast, dismissToast } = useNotificationStore.getState()
+    let undone = false
+    const toastId = `undo-remove-${repoId}`
+
+    addToast({
+      id: toastId,
+      severity: 'warning',
+      title: 'Repository removed',
+      message: `${repo.name} removed from list`,
+      createdAt: Date.now(),
+      actions: [{
+        label: 'Undo',
+        onClick: () => {
+          undone = true
+          dismissToast(toastId)
+          setRepos((prev) => [...prev, repo].sort((a, b) => a.name.localeCompare(b.name)))
+        }
+      }]
+    })
+
+    setTimeout(async () => {
+      if (!undone) {
+        try {
+          await window.agentHub.db.removeRepo(repoId)
+        } catch { /* already removed from UI */ }
+      }
+    }, 5000)
+  }, [repos, selectedRepoId])
+
+  const handleRepoColorChange = useCallback(async (repoId: string, color: string) => {
+    setRepos((prev) => prev.map((r) => r.id === repoId ? { ...r, glowColor: color } : r))
+    try {
+      await window.agentHub.db.updateRepoColor(repoId, color)
+    } catch { /* UI already updated */ }
+  }, [])
 
   if (!open) return null
 
@@ -336,26 +382,20 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
             </div>
           </div>
 
-          {repos.length > 0 && (
-            <div>
-              <label className="text-xs text-base-content/50 mb-1 block">Select Repository</label>
-              <select
-                value={selectedRepoId}
-                onChange={(e) => {
-                  setSelectedRepoId(e.target.value)
-                  if (e.target.value) setCustomCwd('')
-                }}
-                className="select select-bordered w-full rounded-xl bg-base-200/50 text-sm"
-              >
-                <option value="">-- Custom path --</option>
-                {repos.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
-                    {repo.name} — {repo.path}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="text-xs text-base-content/50 mb-1 block">Select Repository</label>
+            <RepoSelectDropdown
+              repos={repos}
+              selectedRepoId={selectedRepoId}
+              onSelect={(repoId) => {
+                setSelectedRepoId(repoId)
+                if (repoId) setCustomCwd('')
+              }}
+              onRemove={handleRemoveRepo}
+              onColorChange={handleRepoColorChange}
+              onCustomPath={() => setSelectedRepoId('')}
+            />
+          </div>
 
           {!selectedRepoId && (
             <div>

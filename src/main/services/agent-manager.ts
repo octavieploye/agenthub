@@ -5,7 +5,7 @@ import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, getAgentById, getAllAgents } from '../db/queries/agents.queries'
-import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.queries'
+import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
 import { insertTerminalOutput } from '../db/queries/history.queries'
@@ -107,6 +107,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     taskDescription: options.taskDescription,
     color: options.color
   })
+
+  // Track last-used repo for dropdown ordering
+  updateRepoLastUsed(db, repoId)
 
   // Build provider-specific env vars (Ollama needs ANTHROPIC_BASE_URL, AUTH_TOKEN, empty API_KEY)
   const spawnEnv = buildSpawnEnv(

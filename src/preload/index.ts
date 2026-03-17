@@ -38,7 +38,8 @@ const agentHubBridge = {
   db: {
     getRepos: () => ipcRenderer.invoke(IPC_CHANNELS.DB.GET_REPOS),
     addRepo: (repo: unknown) => ipcRenderer.invoke(IPC_CHANNELS.DB.ADD_REPO, repo),
-    removeRepo: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.DB.REMOVE_REPO, repoId)
+    removeRepo: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.DB.REMOVE_REPO, repoId),
+    updateRepoColor: (repoId: string, color: string) => ipcRenderer.invoke(IPC_CHANNELS.DB.UPDATE_REPO_COLOR, repoId, color)
   },
   search: {
     query: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH.QUERY, query)

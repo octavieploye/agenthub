@@ -4,6 +4,7 @@ export interface RepoConfig {
   path: string
   glowColor?: string
   createdAt: string
+  lastUsedAt?: string
 }
 
 export interface GuardrailConfig {

@@ -3,7 +3,7 @@ import log from 'electron-log/main'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error, validateInput } from './ipc-helpers'
 import { getDb } from '../db/connection'
-import { getAllRepos, insertRepo, deleteRepo } from '../db/queries/repos.queries'
+import { getAllRepos, insertRepo, deleteRepo, updateRepoGlowColor } from '../db/queries/repos.queries'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { RepoConfig } from '../../shared/types/config.types'
 import { z } from 'zod/v4'
@@ -49,6 +49,22 @@ export function registerDbHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('REMOVE_REPO_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.DB.UPDATE_REPO_COLOR,
+    async (_event, repoId: unknown, color: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), repoId)
+        if (!idValidation.valid) return idValidation.response
+        const colorValidation = validateInput(z.string(), color)
+        if (!colorValidation.valid) return colorValidation.response
+        updateRepoGlowColor(getDb(), idValidation.data, colorValidation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('UPDATE_REPO_COLOR_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )
