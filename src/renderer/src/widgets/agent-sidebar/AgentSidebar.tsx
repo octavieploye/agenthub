@@ -5,6 +5,7 @@ import { useBranchName } from '@renderer/hooks/useBranchName'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useViewStore } from '@renderer/stores/view-store'
+import { getShortModelName } from '@renderer/utils/model-utils'
 
 interface AgentSidebarProps {
   agents: AgentState[]
@@ -105,8 +106,11 @@ function AgentCard({
   const paletteRef = useRef<HTMLDivElement>(null)
   const updateColor = useAgentStore((s) => s.updateColor)
   const updateTaskDescription = useAgentStore((s) => s.updateTaskDescription)
+  const renameAgent = useAgentStore((s) => s.renameAgent)
   const [editingTask, setEditingTask] = useState(false)
   const [editingValue, setEditingValue] = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState('')
 
   // Track when agent entered awaiting_approval/locked for 30s escalation
   const awaitingSinceRef = useRef<number | null>(null)
@@ -181,9 +185,11 @@ function AgentCard({
 
   const opacityStyle: React.CSSProperties = isPaused ? { opacity: 0.6 } : {}
 
+  const shortModel = getShortModelName(agent.model)
+  const repoName = agent.cwd?.split('/').filter(Boolean).pop() ?? 'unknown'
   const modelLine = branchName
-    ? `${agent.model} · ${truncateBranch(branchName)}`
-    : agent.model
+    ? `${shortModel} · ${truncateBranch(branchName)}`
+    : shortModel
 
   return (
     <div
@@ -257,15 +263,47 @@ function AgentCard({
             STATUS_COLORS[agent.status] ?? 'bg-base-content/60'
           }`}
         />
-        <span className="text-sm font-medium truncate flex-1">
-          {agent.name}
-        </span>
+        {editingName ? (
+          <input
+            autoFocus
+            className="text-sm font-medium bg-transparent border-b border-primary/50 outline-none flex-1 text-base-content"
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                renameAgent(agent.id, nameValue)
+                window.agentHub.agents.rename(agent.id, nameValue).catch(console.error)
+                setEditingName(false)
+              }
+              if (e.key === 'Escape') setEditingName(false)
+            }}
+            onBlur={() => {
+              renameAgent(agent.id, nameValue)
+              window.agentHub.agents.rename(agent.id, nameValue).catch(console.error)
+              setEditingName(false)
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span
+            className="text-sm font-medium truncate flex-1 cursor-text"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditingName(true)
+              setNameValue(agent.name)
+            }}
+            title="Click to rename"
+          >
+            {agent.name}
+          </span>
+        )}
       </div>
 
       <div className="ml-8 mt-1">
         {/* S2.3 — text-[11px] and /60 opacity minimum */}
         <span className="text-[11px] text-base-content/60 truncate block">
-          {agent.cwd?.split('/').slice(-2).join('/') ?? 'unknown'}
+          {repoName}
         </span>
         {/* S2.4 — model · branch line */}
         <span className="text-[11px] text-base-content/60 truncate block">

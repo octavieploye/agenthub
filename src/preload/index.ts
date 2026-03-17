@@ -20,6 +20,8 @@ const agentHubBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_COLOR, agentId, color),
     updateTaskDescription: (agentId: string, taskDescription: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_TASK_DESCRIPTION, agentId, taskDescription),
+    rename: (agentId: string, name: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RENAME, agentId, name),
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_MODEL, agentId, model, provider, effortLevel),
     attachTerminal: (agentId: string) =>

@@ -133,6 +133,12 @@ export function updateAgentColor(db: Database.Database, id: string, color: strin
   log.debug('Agent color updated', { id, color })
 }
 
+export function updateAgentName(db: Database.Database, id: string, name: string): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE agents SET name = ?, updated_at = ? WHERE id = ?').run(name, now, id)
+  log.debug('Agent name updated', { id, name })
+}
+
 export function updateAgentTaskDescription(db: Database.Database, id: string, taskDescription: string): void {
   const now = new Date().toISOString()
   db.prepare('UPDATE agents SET task_description = ?, updated_at = ? WHERE id = ?').run(taskDescription, now, id)

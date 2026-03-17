@@ -4,7 +4,7 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
@@ -431,6 +431,15 @@ export function updateAgentTaskDescription(agentId: string, taskDescription: str
   }
   dbUpdateAgentTaskDescription(getDb(), agentId, taskDescription)
   log.debug('Agent task description updated', { id: agentId, taskDescription })
+}
+
+export function renameAgent(agentId: string, name: string): void {
+  const managed = agents.get(agentId)
+  if (managed) {
+    managed.state.name = name
+  }
+  dbUpdateAgentName(getDb(), agentId, name)
+  log.debug('Agent renamed', { id: agentId, name })
 }
 
 export function updateAgentModel(

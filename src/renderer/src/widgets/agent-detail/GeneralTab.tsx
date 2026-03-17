@@ -68,13 +68,20 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
   const [containerOp, setContainerOp] = useState<'idle' | 'stopping' | 'destroying'>('idle')
   const [editingTask, setEditingTask] = useState(false)
   const [taskValue, setTaskValue] = useState(agent.taskDescription)
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState(agent.name)
   const updateColor = useAgentStore((s) => s.updateColor)
   const updateModel = useAgentStore((s) => s.updateModel)
   const updateTaskDescription = useAgentStore((s) => s.updateTaskDescription)
+  const renameAgent = useAgentStore((s) => s.renameAgent)
 
   useEffect(() => {
     setTaskValue(agent.taskDescription)
   }, [agent.taskDescription])
+
+  useEffect(() => {
+    setNameValue(agent.name)
+  }, [agent.name])
 
   const isRunning = ['busy', 'idle', 'spawning', 'locked', 'paused'].includes(agent.status)
 
@@ -149,9 +156,44 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
       {/* Agent identity + status */}
       <div className="panel-glass rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 data-testid="general-agent-name" className="text-lg font-semibold text-base-content">
-            {agent.name}
-          </h2>
+          {editingName ? (
+            <input
+              autoFocus
+              data-testid="general-agent-name-input"
+              className="text-lg font-semibold bg-transparent border-b border-primary/50 outline-none text-base-content"
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  renameAgent(agent.id, nameValue)
+                  window.agentHub.agents.rename(agent.id, nameValue).catch(console.error)
+                  setEditingName(false)
+                }
+                if (e.key === 'Escape') {
+                  setNameValue(agent.name)
+                  setEditingName(false)
+                }
+              }}
+              onBlur={() => {
+                renameAgent(agent.id, nameValue)
+                window.agentHub.agents.rename(agent.id, nameValue).catch(console.error)
+                setEditingName(false)
+              }}
+            />
+          ) : (
+            <h2
+              data-testid="general-agent-name"
+              className="text-lg font-semibold text-base-content cursor-text hover:text-primary/80 transition-colors"
+              onClick={() => {
+                setEditingName(true)
+                setNameValue(agent.name)
+              }}
+              title="Click to rename"
+            >
+              {agent.name}
+            </h2>
+          )}
           <div className="flex items-center gap-2">
             <span
               data-testid="general-status-badge"

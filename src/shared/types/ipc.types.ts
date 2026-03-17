@@ -24,6 +24,8 @@ export interface AgentHubBridge {
     sendInput: (agentId: string, data: string) => void
     resize: (agentId: string, cols: number, rows: number) => void
     updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
+    rename: (agentId: string, name: string) => Promise<IpcResponse<void>>
+    updateTaskDescription: (agentId: string, taskDescription: string) => Promise<IpcResponse<void>>
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) => Promise<IpcResponse<void>>
     attachTerminal: (agentId: string) => Promise<IpcResponse<{ socketPath: string; attachCommand: string }>>
     detachTerminal: (agentId: string) => Promise<IpcResponse<void>>
