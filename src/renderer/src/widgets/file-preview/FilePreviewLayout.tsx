@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
+import Editor, { loader } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import { useThemeStore } from '../../stores/theme-store'
 import { getFileIcon } from '../repo-file-tree/file-icons'
 import type { ReadFileResult } from '@shared/types/fs.types'
+
+// Use local monaco-editor bundle instead of CDN (critical for Electron performance)
+loader.config({ monaco })
 
 interface FilePreviewLayoutProps {
   filePath: string
@@ -15,6 +20,11 @@ if (urlTheme) {
   document.documentElement.setAttribute('data-theme', urlTheme)
 }
 
+/** Map DaisyUI theme to Monaco built-in theme */
+function getMonacoBuiltinTheme(theme: string): string {
+  return theme === 'latte' ? 'vs' : 'vs-dark'
+}
+
 function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutProps): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const [file, setFile] = useState<ReadFileResult | null>(null)
@@ -24,6 +34,7 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
 
   const fileName = filePath.split('/').pop() ?? filePath
   const icon = getFileIcon(fileName, 'file')
+  const activeTheme = urlTheme ?? theme
 
   // Keep theme in sync if store changes
   useEffect(() => {
@@ -65,9 +76,10 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
   }
 
   const lineCount = file?.content.split('\n').length ?? 0
+  const monacoLanguage = file?.language === 'plaintext' ? 'text' : (file?.language ?? 'text')
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-base-300" data-theme={urlTheme ?? theme}>
+    <div className="flex flex-col h-screen w-screen bg-base-300" data-theme={activeTheme}>
       {/* Header breadcrumb */}
       <div className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b border-base-content/15 bg-base-200/50">
         <span className="text-base">{icon}</span>
@@ -105,16 +117,16 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
       </div>
 
       {/* Code viewer */}
-      <div className="flex-1 min-h-0 overflow-auto bg-base-300">
+      <div className="flex-1 min-h-0">
         {loading && (
-          <div className="flex items-center gap-2 p-4 text-sm text-base-content/50">
+          <div className="flex items-center gap-2 p-4 text-sm text-base-content/50 bg-base-300">
             <span className="inline-block w-4 h-4 border-2 border-base-content/30 border-t-transparent rounded-full animate-spin" />
             Loading file...
           </div>
         )}
 
         {error && (
-          <div className="p-4 text-sm text-error/70">{error}</div>
+          <div className="p-4 text-sm text-error/70 bg-base-300">{error}</div>
         )}
 
         {file && !loading && (
@@ -124,18 +136,53 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
                 File truncated — showing first 1 MB of {formatSize(file.size)}
               </div>
             )}
-            <div className="flex text-[12px] font-mono leading-5">
-              {/* Line numbers */}
-              <div className="select-none text-right pr-3 pl-3 py-3 text-base-content/25 border-r border-base-content/10 shrink-0 bg-base-300">
-                {file.content.split('\n').map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
+            {file.language === 'binary' ? (
+              <div className="p-4 text-sm text-base-content/50 bg-base-300">
+                [Binary file — {formatSize(file.size)}]
               </div>
-              {/* Code */}
-              <pre className="py-3 px-4 flex-1 overflow-x-auto whitespace-pre text-base-content/80">
-                {file.content}
-              </pre>
-            </div>
+            ) : (
+              <Editor
+                height="100%"
+                language={monacoLanguage}
+                value={file.content}
+                theme={getMonacoBuiltinTheme(activeTheme)}
+                loading={
+                  <div className="flex items-center gap-2 p-4 text-sm text-base-content/50 bg-base-300">
+                    <span className="inline-block w-4 h-4 border-2 border-base-content/30 border-t-transparent rounded-full animate-spin" />
+                    Loading editor...
+                  </div>
+                }
+                options={{
+                  readOnly: true,
+                  domReadOnly: true,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  fontSize: 12,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  lineNumbers: 'on',
+                  glyphMargin: false,
+                  folding: true,
+                  automaticLayout: true,
+                  renderLineHighlight: 'line',
+                  smoothScrolling: true,
+                  contextmenu: false,
+                  quickSuggestions: false,
+                  parameterHints: { enabled: false },
+                  suggestOnTriggerCharacters: false,
+                  selectionHighlight: false,
+                  occurrencesHighlight: 'off',
+                  renderWhitespace: 'none',
+                  overviewRulerLanes: 0,
+                  hideCursorInOverviewRuler: true,
+                  overviewRulerBorder: false,
+                  scrollbar: {
+                    verticalScrollbarSize: 8,
+                    horizontalScrollbarSize: 8,
+                  },
+                }}
+              />
+            )}
           </>
         )}
       </div>
