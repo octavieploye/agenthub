@@ -31,6 +31,11 @@ h1, h2, h3, .agent-name {
   letter-spacing: -0.01em;
 }
 
+/* Apple-style toggle: white knob, colored track when ON */
+.toggle::before {
+  background-color: white !important;
+}
+
 /* Catppuccin Mocha theme (default) */
 [data-theme="mocha"] {
   color-scheme: dark;

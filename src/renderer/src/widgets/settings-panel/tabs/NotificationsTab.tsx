@@ -46,7 +46,7 @@ export function NotificationsTab(): React.JSX.Element {
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-sm"
+              className="toggle toggle-sm toggle-primary"
               checked={soundEnabled}
               onChange={() => toggleSound()}
             />
@@ -67,7 +67,7 @@ export function NotificationsTab(): React.JSX.Element {
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-sm"
+              className="toggle toggle-sm toggle-primary"
               checked={desktopNotificationsEnabled}
               onChange={() => toggleDesktopNotifications()}
             />
@@ -88,7 +88,7 @@ export function NotificationsTab(): React.JSX.Element {
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-sm"
+              className="toggle toggle-sm toggle-primary"
               checked={voiceEnabled}
               onChange={() => toggleVoice()}
             />
@@ -122,7 +122,7 @@ export function NotificationsTab(): React.JSX.Element {
         <div className="flex items-center gap-3">
           <input
             type="checkbox"
-            className="toggle toggle-sm"
+            className="toggle toggle-sm toggle-primary"
             checked={atmosphereEnabled}
             onChange={(e) => handleToggleAtmosphere(e.target.checked)}
           />

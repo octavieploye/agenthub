@@ -129,7 +129,7 @@ export function DockerTab(): React.JSX.Element {
           <label className="label cursor-pointer justify-start gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-xs"
+              className="toggle toggle-xs toggle-primary"
               checked={dockerNetworkMode === 'none'}
               onChange={(e) => {
                 const v = e.target.checked ? 'none' : 'host'
