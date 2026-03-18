@@ -1,5 +1,5 @@
 import log from 'electron-log/main'
-import { CLAUDE_MODELS } from '../../shared/constants/model-catalog'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS } from '../../shared/constants/model-catalog'
 import type { ModelCatalogEntry, ModelCategory } from '../../shared/types/model.types'
 
 const OLLAMA_LOCAL_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434'
@@ -133,10 +133,7 @@ export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
 }
 
 export async function listAllModels(): Promise<ModelCatalogEntry[]> {
-  const [localModels, cloudModels] = await Promise.all([
-    fetchOllamaLocalModels(),
-    fetchOllamaCloudModels()
-  ])
+  const localModels = await fetchOllamaLocalModels()
 
-  return [...CLAUDE_MODELS, ...localModels, ...cloudModels]
+  return [...OLLAMA_CLOUD_MODELS, ...localModels, ...CLAUDE_MODELS]
 }

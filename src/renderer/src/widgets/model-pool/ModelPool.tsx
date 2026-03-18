@@ -80,21 +80,28 @@ function ModelPool({
   selectedModelId,
   onSelectModel
 }: ModelPoolProps): React.JSX.Element {
+  const cloudModels = models.filter((m) => m.provider === 'ollama-cloud')
+  const localModels = models.filter((m) => m.provider === 'ollama-local')
   const claudeModels = models.filter((m) => m.provider === 'anthropic')
-  const ollamaModels = models.filter((m) => m.provider !== 'anthropic')
 
-  // Group Ollama models by family
-  const ollamaFamilies: Record<string, ModelInfo[]> = {}
-  for (const model of ollamaModels) {
-    const family = model.family ?? 'Other'
-    if (!ollamaFamilies[family]) ollamaFamilies[family] = []
-    ollamaFamilies[family].push(model)
+  // Group by family helper
+  function groupByFamily(list: ModelInfo[]): { families: Record<string, ModelInfo[]>; sorted: string[] } {
+    const families: Record<string, ModelInfo[]> = {}
+    for (const model of list) {
+      const family = model.family ?? 'Other'
+      if (!families[family]) families[family] = []
+      families[family].push(model)
+    }
+    const sorted = Object.keys(families).sort((a, b) => {
+      if (a === 'Other') return 1
+      if (b === 'Other') return -1
+      return a.localeCompare(b)
+    })
+    return { families, sorted }
   }
-  const sortedFamilies = Object.keys(ollamaFamilies).sort((a, b) => {
-    if (a === 'Other') return 1
-    if (b === 'Other') return -1
-    return a.localeCompare(b)
-  })
+
+  const cloudGrouped = groupByFamily(cloudModels)
+  const localGrouped = groupByFamily(localModels)
 
   return (
     <div data-testid="model-pool" className="panel-glass p-4 rounded-xl max-h-[70vh] overflow-y-auto">
@@ -111,6 +118,62 @@ function ModelPool({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
+          {/* OLLAMA CLOUD section */}
+          {cloudModels.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-cyan-400">
+                OLLAMA CLOUD
+              </div>
+              <div className="flex flex-col gap-2 ml-1">
+                {cloudGrouped.sorted.map((family) => (
+                  <div key={family}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide mb-1 text-base-content/40 pl-1">
+                      {family}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {cloudGrouped.families[family].map((model) => (
+                        <ModelRow
+                          key={model.id}
+                          model={model}
+                          isSelected={model.id === selectedModelId}
+                          onSelect={() => onSelectModel(model.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* OLLAMA LOCAL section */}
+          {localModels.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-teal-400">
+                OLLAMA LOCAL
+              </div>
+              <div className="flex flex-col gap-2 ml-1">
+                {localGrouped.sorted.map((family) => (
+                  <div key={family}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide mb-1 text-base-content/40 pl-1">
+                      {family}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {localGrouped.families[family].map((model) => (
+                        <ModelRow
+                          key={model.id}
+                          model={model}
+                          isSelected={model.id === selectedModelId}
+                          onSelect={() => onSelectModel(model.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* CLAUDE section */}
           {claudeModels.length > 0 && (
             <div>
@@ -125,34 +188,6 @@ function ModelPool({
                     isSelected={model.id === selectedModelId}
                     onSelect={() => onSelectModel(model.id)}
                   />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* OLLAMA section with family subcategories */}
-          {ollamaModels.length > 0 && (
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-cyan-400">
-                OLLAMA
-              </div>
-              <div className="flex flex-col gap-2 ml-1">
-                {sortedFamilies.map((family) => (
-                  <div key={family}>
-                    <div className="text-[10px] font-semibold uppercase tracking-wide mb-1 text-base-content/40 pl-1">
-                      {family}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {ollamaFamilies[family].map((model) => (
-                        <ModelRow
-                          key={model.id}
-                          model={model}
-                          isSelected={model.id === selectedModelId}
-                          onSelect={() => onSelectModel(model.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
                 ))}
               </div>
             </div>

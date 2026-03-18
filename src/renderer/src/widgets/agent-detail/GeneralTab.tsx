@@ -133,21 +133,28 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
     agent.status !== 'completed' && agent.status !== 'interrupted'
 
   // Group models by provider for the dropdown
+  const cloudModels = availableModels.filter((m) => m.provider === 'ollama-cloud')
+  const localModels = availableModels.filter((m) => m.provider === 'ollama-local')
   const claudeModels = availableModels.filter((m) => m.provider === 'anthropic')
-  const ollamaModels = availableModels.filter((m) => m.provider !== 'anthropic')
 
-  // Group Ollama models by family
-  const ollamaFamilies: Record<string, ModelCatalogEntry[]> = {}
-  for (const m of ollamaModels) {
-    const family = m.family ?? 'Other'
-    if (!ollamaFamilies[family]) ollamaFamilies[family] = []
-    ollamaFamilies[family].push(m)
+  // Group by family helper
+  function groupByFamily(list: ModelCatalogEntry[]): { families: Record<string, ModelCatalogEntry[]>; sorted: string[] } {
+    const families: Record<string, ModelCatalogEntry[]> = {}
+    for (const m of list) {
+      const family = m.family ?? 'Other'
+      if (!families[family]) families[family] = []
+      families[family].push(m)
+    }
+    const sorted = Object.keys(families).sort((a, b) => {
+      if (a === 'Other') return 1
+      if (b === 'Other') return -1
+      return a.localeCompare(b)
+    })
+    return { families, sorted }
   }
-  const sortedFamilies = Object.keys(ollamaFamilies).sort((a, b) => {
-    if (a === 'Other') return 1
-    if (b === 'Other') return -1
-    return a.localeCompare(b)
-  })
+
+  const cloudGrouped = groupByFamily(cloudModels)
+  const localGrouped = groupByFamily(localModels)
 
   const currentModelInfo = availableModels.find((m) => m.id === agent.model)
 
@@ -276,6 +283,24 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           onChange={(e) => handleModelChange(e.target.value)}
           className="select select-bordered select-sm w-full rounded-lg bg-base-200/50 text-sm"
         >
+          {cloudGrouped.sorted.map((family) => (
+            <optgroup key={`cloud-${family}`} label={`OLLAMA CLOUD — ${family}`}>
+              {cloudGrouped.families[family].map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          {localGrouped.sorted.map((family) => (
+            <optgroup key={`local-${family}`} label={`OLLAMA LOCAL — ${family}`}>
+              {localGrouped.families[family].map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
           {claudeModels.length > 0 && (
             <optgroup label="CLAUDE">
               {claudeModels.map((m) => (
@@ -285,15 +310,6 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
               ))}
             </optgroup>
           )}
-          {sortedFamilies.map((family) => (
-            <optgroup key={family} label={`OLLAMA — ${family}`}>
-              {ollamaFamilies[family].map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
         </select>
 
         {currentModelInfo?.category && (
