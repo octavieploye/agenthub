@@ -22,6 +22,7 @@ import { registerModelsHandlers } from './models.ipc'
 import { registerVoiceHandlers } from './voice.ipc'
 import { registerDockerHandlers } from './docker.ipc'
 import { registerContainersHandlers } from './containers.ipc'
+import { registerFsHandlers } from './fs.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -47,5 +48,6 @@ export function registerAllIpcHandlers(): void {
   registerVoiceHandlers()
   registerDockerHandlers()
   registerContainersHandlers()
+  registerFsHandlers()
   log.info('All IPC handlers registered')
 }

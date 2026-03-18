@@ -45,6 +45,7 @@ interface ViewStore {
   soundEnabled: boolean
   voiceEnabled: boolean
   ttsVolume: number
+  expandedRepoFileTree: string | null
   setViewMode: (mode: ViewMode) => void
   setFocusedAgent: (id: string | null) => void
   setSelectedRepoId: (id: string | null) => void
@@ -52,6 +53,7 @@ interface ViewStore {
   toggleSound: () => void
   toggleVoice: () => void
   setTtsVolume: (volume: number) => void
+  setExpandedRepoFileTree: (repoId: string | null) => void
 }
 
 export const useViewStore = create<ViewStore>((set) => ({
@@ -62,6 +64,7 @@ export const useViewStore = create<ViewStore>((set) => ({
   soundEnabled: loadSoundEnabled(),
   voiceEnabled: loadVoiceEnabled(),
   ttsVolume: loadTtsVolume(),
+  expandedRepoFileTree: null,
 
   setViewMode: (mode) => set({ viewMode: mode }),
   setFocusedAgent: (id) => set({ focusedAgentId: id }),
@@ -87,6 +90,7 @@ export const useViewStore = create<ViewStore>((set) => ({
       }
       return { voiceEnabled: next }
     }),
+  setExpandedRepoFileTree: (repoId) => set({ expandedRepoFileTree: repoId }),
   setTtsVolume: (volume) =>
     set(() => {
       const clamped = Math.min(1, Math.max(0, volume))

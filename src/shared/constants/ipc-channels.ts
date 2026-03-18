@@ -142,6 +142,10 @@ export const IPC_CHANNELS = {
     REBUILD: 'docker:rebuild',
     CHECK_CLI_VERSION: 'docker:check-cli-version'
   },
+  FS: {
+    READ_DIR: 'fs:read-dir',
+    READ_FILE: 'fs:read-file'
+  },
   CONTAINERS: {
     LIST: 'containers:list',
     STOP: 'containers:stop',

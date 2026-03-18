@@ -155,6 +155,10 @@ export interface AgentHubBridge {
     checkCliVersion: () => Promise<IpcResponse<{ hostVersion: string | null; imageVersion: string | null; mismatch: boolean }>>
     onBuildProgress: (callback: (line: string) => void) => () => void
   }
+  fs: {
+    readDir: (input: { repoPath: string; dirPath: string }) => Promise<IpcResponse<import('./fs.types').FileTreeNode[]>>
+    readFile: (input: { repoPath: string; filePath: string }) => Promise<IpcResponse<import('./fs.types').ReadFileResult>>
+  }
   containers: {
     list: () => Promise<IpcResponse<import('./docker.types').ContainerInfo[]>>
     stop: (repoId: string) => Promise<IpcResponse<void>>

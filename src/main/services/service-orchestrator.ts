@@ -10,6 +10,8 @@ import { GuardrailsManager } from './guardrails-manager'
 import { AutoPauseService } from './auto-pause'
 import { TrayManager } from './tray-manager'
 import { GitService } from './git-service'
+import { FsService } from './fs-service'
+import { getAllRepos } from '../db/queries/repos.queries'
 import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
@@ -28,6 +30,7 @@ let guardrailsManager: GuardrailsManager | null = null
 let autoPauseService: AutoPauseService | null = null
 let trayManager: TrayManager | null = null
 let gitService: GitService | null = null
+let fsService: FsService | null = null
 let skillsService: SkillsService | null = null
 let windowManager: WindowManager | null = null
 let settingsService: SettingsService | null = null
@@ -154,6 +157,23 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 7b. FsService — filesystem browsing scoped to repo paths
+  fsService = new FsService({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    logWarning: (message: string, meta?: Record<string, unknown>) => {
+      log.warn(message, meta)
+    },
+    getAllRepoPaths: () => {
+      try {
+        return getAllRepos(db).map((r) => r.path)
+      } catch {
+        return []
+      }
+    }
+  })
+
   // 8. SkillsService — standalone, scans for skill files
   skillsService = new SkillsService({
     logInfo: (message: string, meta?: Record<string, unknown>) => {
@@ -256,6 +276,10 @@ export function getGuardrailsManager(): GuardrailsManager | null {
 
 export function getGitService(): GitService | null {
   return gitService
+}
+
+export function getFsService(): FsService | null {
+  return fsService
 }
 
 export function getSkillsService(): SkillsService | null {

@@ -185,6 +185,12 @@ const agentHubBridge = {
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.DOCKER.BUILD_PROGRESS, handler) }
     }
   },
+  fs: {
+    readDir: (input: { repoPath: string; dirPath: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FS.READ_DIR, input),
+    readFile: (input: { repoPath: string; filePath: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FS.READ_FILE, input)
+  },
   containers: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.LIST),
     stop: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.STOP, repoId),
