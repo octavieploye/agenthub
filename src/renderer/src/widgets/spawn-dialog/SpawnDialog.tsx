@@ -176,12 +176,16 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
     const repo = repos.find((r) => r.id === repoId)
     if (!repo) return
 
-    // Optimistic removal
+    // Remove from UI immediately
     setRepos((prev) => prev.filter((r) => r.id !== repoId))
     if (selectedRepoId === repoId) setSelectedRepoId('')
 
+    // Soft-delete in DB immediately so it survives loadRepos() calls
+    try {
+      await window.agentHub.db.removeRepo(repoId)
+    } catch { /* best effort */ }
+
     const { addToast, dismissToast } = useNotificationStore.getState()
-    let undone = false
     const toastId = `undo-remove-${repoId}`
 
     addToast({
@@ -192,21 +196,15 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
       createdAt: Date.now(),
       actions: [{
         label: 'Undo',
-        onClick: () => {
-          undone = true
+        onClick: async () => {
           dismissToast(toastId)
-          setRepos((prev) => [...prev, repo].sort((a, b) => a.name.localeCompare(b.name)))
+          try {
+            await window.agentHub.db.unhideRepo(repoId)
+            setRepos((prev) => [...prev, repo].sort((a, b) => a.name.localeCompare(b.name)))
+          } catch { /* best effort */ }
         }
       }]
     })
-
-    setTimeout(async () => {
-      if (!undone) {
-        try {
-          await window.agentHub.db.removeRepo(repoId)
-        } catch { /* already removed from UI */ }
-      }
-    }, 5000)
   }, [repos, selectedRepoId])
 
   const handleRepoColorChange = useCallback(async (repoId: string, color: string) => {

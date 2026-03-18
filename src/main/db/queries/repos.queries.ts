@@ -15,7 +15,7 @@ function mapRow(row: Record<string, unknown>): RepoConfig {
 }
 
 export function getAllRepos(db: Database.Database): RepoConfig[] {
-  const rows = db.prepare('SELECT * FROM repos ORDER BY created_at DESC').all()
+  const rows = db.prepare('SELECT * FROM repos WHERE hidden = 0 ORDER BY created_at DESC').all()
   return rows.map((r) => mapRow(r as Record<string, unknown>))
 }
 
@@ -53,8 +53,14 @@ export function getRepoByPath(db: Database.Database, path: string): RepoConfig |
 }
 
 export function deleteRepo(db: Database.Database, id: string): void {
-  db.prepare('DELETE FROM repos WHERE id = ?').run(id)
-  log.info('Repo deleted', { id })
+  // Soft-delete: mark as hidden instead of deleting, because agents reference repos via foreign key
+  db.prepare('UPDATE repos SET hidden = 1 WHERE id = ?').run(id)
+  log.info('Repo hidden', { id })
+}
+
+export function unhideRepo(db: Database.Database, id: string): void {
+  db.prepare('UPDATE repos SET hidden = 0 WHERE id = ?').run(id)
+  log.info('Repo unhidden', { id })
 }
 
 export function updateRepoLastUsed(db: Database.Database, id: string): void {

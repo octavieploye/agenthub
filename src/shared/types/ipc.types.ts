@@ -39,6 +39,7 @@ export interface AgentHubBridge {
     getRepos: () => Promise<IpcResponse<import('./config.types').RepoConfig[]>>
     addRepo: (repo: Omit<import('./config.types').RepoConfig, 'id' | 'createdAt'>) => Promise<IpcResponse<import('./config.types').RepoConfig>>
     removeRepo: (repoId: string) => Promise<IpcResponse<void>>
+    unhideRepo: (repoId: string) => Promise<IpcResponse<void>>
     updateRepoColor: (repoId: string, color: string) => Promise<IpcResponse<void>>
   }
   search: {

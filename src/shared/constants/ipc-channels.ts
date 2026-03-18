@@ -24,6 +24,7 @@ export const IPC_CHANNELS = {
     GET_REPOS: 'db:get-repos',
     ADD_REPO: 'db:add-repo',
     REMOVE_REPO: 'db:remove-repo',
+    UNHIDE_REPO: 'db:unhide-repo',
     UPDATE_REPO_COLOR: 'db:update-repo-color'
   },
   TASKS: {
