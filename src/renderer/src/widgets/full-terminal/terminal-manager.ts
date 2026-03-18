@@ -107,7 +107,7 @@ export function getOrCreateTerminal(agentId: string, agentColor?: string): Manag
   ensureIpcSubscription()
 
   const BASE_BG = '#1e1e2e'
-  const bg = agentColor ? tintBackground(BASE_BG, agentColor, 0.12) : BASE_BG
+  const bg = agentColor ? tintBackground(BASE_BG, agentColor, 0.25) : BASE_BG
 
   // Hardcoded Catppuccin Mocha theme — tinted with agent color
   const term = new Terminal({
@@ -280,4 +280,32 @@ export function getSearchAddon(agentId: string): SearchAddon | null {
 
 export function getSerializeAddon(agentId: string): SerializeAddon | null {
   return terminals.get(agentId)?.serializeAddon ?? null
+}
+
+export interface TerminalSearchHit {
+  agentId: string
+  line: string
+  lineNumber: number
+}
+
+/**
+ * Search all terminal buffers for a query string. Returns matching lines grouped by agent.
+ */
+export function searchAllTerminals(query: string): TerminalSearchHit[] {
+  if (!query.trim()) return []
+  const lowerQuery = query.toLowerCase()
+  const results: TerminalSearchHit[] = []
+
+  for (const [agentId, managed] of terminals.entries()) {
+    const buffer = managed.term.buffer.active
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      if (!line) continue
+      const text = line.translateToString(true)
+      if (text.toLowerCase().includes(lowerQuery)) {
+        results.push({ agentId, line: text, lineNumber: i + 1 })
+      }
+    }
+  }
+  return results
 }

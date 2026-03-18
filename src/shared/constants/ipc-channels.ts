@@ -9,6 +9,8 @@ export const IPC_CHANNELS = {
     SEND_INPUT: 'agents:send-input',
     RESIZE: 'agents:resize',
     UPDATE_COLOR: 'agents:update-color',
+    UPDATE_TASK_DESCRIPTION: 'agents:update-task-description',
+    RENAME: 'agents:rename',
     UPDATE_MODEL: 'agents:update-model',
     ATTACH_TERMINAL: 'agents:attach-terminal',
     DETACH_TERMINAL: 'agents:detach-terminal',
@@ -21,7 +23,8 @@ export const IPC_CHANNELS = {
   DB: {
     GET_REPOS: 'db:get-repos',
     ADD_REPO: 'db:add-repo',
-    REMOVE_REPO: 'db:remove-repo'
+    REMOVE_REPO: 'db:remove-repo',
+    UPDATE_REPO_COLOR: 'db:update-repo-color'
   },
   TASKS: {
     LIST: 'tasks:list',

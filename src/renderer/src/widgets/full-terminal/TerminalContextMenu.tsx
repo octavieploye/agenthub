@@ -65,7 +65,7 @@ function TerminalContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[180px] bg-base-200 border border-base-content/20 rounded-lg shadow-xl py-1"
+      className="dropdown-panel fixed min-w-[180px]"
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item, i) => {
@@ -77,7 +77,7 @@ function TerminalContextMenu({
             key={i}
             onClick={item.onClick}
             disabled={!item.enabled}
-            className="w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-base-content/10 disabled:opacity-40 disabled:cursor-default"
+            className="dropdown-item w-full text-left text-sm flex items-center justify-between disabled:opacity-40 disabled:cursor-default"
           >
             <span>{item.label}</span>
             {item.shortcut && (

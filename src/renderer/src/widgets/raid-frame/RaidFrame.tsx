@@ -14,7 +14,7 @@ interface RaidFrameProps {
 const STATUS_DOT_CLASSES: Record<string, string> = {
   spawning: 'bg-info animate-pulse',
   busy: 'bg-success',
-  idle: 'bg-base-content/40',
+  idle: 'bg-base-content/60',
   locked: 'bg-warning animate-breathe',
   completed: 'bg-info',
   looping: 'bg-error animate-urgency-pulse',
@@ -64,13 +64,13 @@ function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JS
       <div className="flex items-center gap-1">
         <span
           data-testid="model-badge"
-          className="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/50 truncate"
+          className="text-[11px] px-1 py-0.5 rounded bg-base-content/15 text-base-content/60 truncate"
         >
           {agent.model}
         </span>
         <span
           data-testid="repo-label"
-          className="text-[9px] text-base-content/40 truncate"
+          className="text-[11px] text-base-content/60 truncate"
         >
           {repoLabel}
         </span>
@@ -92,7 +92,7 @@ function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JS
 
       <p
         data-testid="task-description"
-        className="text-[9px] text-base-content/40 truncate"
+        className="text-[11px] text-base-content/60 truncate"
       >
         {agent.taskDescription}
       </p>

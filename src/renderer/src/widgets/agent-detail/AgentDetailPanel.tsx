@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
+
+import { isLightColor } from './color-utils'
 import GeneralTab from './GeneralTab'
 import TerminalTab from './TerminalTab'
 import NotesTab from './NotesTab'
@@ -84,10 +86,13 @@ function AgentDetailPanel({
             onClick={() => handleTabClick(tab.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab.id
-                ? 'text-white'
+                ? ''
                 : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'
             }`}
-            style={activeTab === tab.id ? { backgroundColor: agent.color } : undefined}
+            style={activeTab === tab.id ? {
+              backgroundColor: agent.color,
+              color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff'
+            } : undefined}
           >
             {tab.label}
           </button>

@@ -13,6 +13,8 @@ import {
   sendInput,
   resizeAgent,
   updateAgentColor,
+  updateAgentTaskDescription,
+  renameAgent,
   updateAgentModel,
   startPtyProxy,
   stopPtyProxy,
@@ -154,6 +156,38 @@ export function registerAgentHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('UPDATE_COLOR_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.UPDATE_TASK_DESCRIPTION,
+    async (_event, agentId: unknown, taskDescription: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const descValidation = validateInput(z.string(), taskDescription)
+        if (!descValidation.valid) return descValidation.response
+        updateAgentTaskDescription(idValidation.data, descValidation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('UPDATE_TASK_DESCRIPTION_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.RENAME,
+    async (_event, agentId: unknown, name: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const nameValidation = validateInput(z.string(), name)
+        if (!nameValidation.valid) return nameValidation.response
+        renameAgent(idValidation.data, nameValidation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('RENAME_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

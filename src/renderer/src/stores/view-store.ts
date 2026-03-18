@@ -40,12 +40,14 @@ function loadTtsVolume(): number {
 interface ViewStore {
   viewMode: ViewMode
   focusedAgentId: string | null
+  selectedRepoId: string | null
   statusFilter: AgentLifecycleStatus | null
   soundEnabled: boolean
   voiceEnabled: boolean
   ttsVolume: number
   setViewMode: (mode: ViewMode) => void
   setFocusedAgent: (id: string | null) => void
+  setSelectedRepoId: (id: string | null) => void
   setStatusFilter: (status: AgentLifecycleStatus | null) => void
   toggleSound: () => void
   toggleVoice: () => void
@@ -55,6 +57,7 @@ interface ViewStore {
 export const useViewStore = create<ViewStore>((set) => ({
   viewMode: 'raid',
   focusedAgentId: null,
+  selectedRepoId: null,
   statusFilter: null,
   soundEnabled: loadSoundEnabled(),
   voiceEnabled: loadVoiceEnabled(),
@@ -62,6 +65,7 @@ export const useViewStore = create<ViewStore>((set) => ({
 
   setViewMode: (mode) => set({ viewMode: mode }),
   setFocusedAgent: (id) => set({ focusedAgentId: id }),
+  setSelectedRepoId: (id) => set({ selectedRepoId: id }),
   setStatusFilter: (status) => set({ statusFilter: status }),
   toggleSound: () =>
     set((state) => {

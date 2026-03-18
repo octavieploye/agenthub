@@ -24,6 +24,8 @@ export interface AgentHubBridge {
     sendInput: (agentId: string, data: string) => void
     resize: (agentId: string, cols: number, rows: number) => void
     updateColor: (agentId: string, color: string) => Promise<IpcResponse<void>>
+    rename: (agentId: string, name: string) => Promise<IpcResponse<void>>
+    updateTaskDescription: (agentId: string, taskDescription: string) => Promise<IpcResponse<void>>
     updateModel: (agentId: string, model: string, provider: string, effortLevel: string) => Promise<IpcResponse<void>>
     attachTerminal: (agentId: string) => Promise<IpcResponse<{ socketPath: string; attachCommand: string }>>
     detachTerminal: (agentId: string) => Promise<IpcResponse<void>>
@@ -37,6 +39,7 @@ export interface AgentHubBridge {
     getRepos: () => Promise<IpcResponse<import('./config.types').RepoConfig[]>>
     addRepo: (repo: Omit<import('./config.types').RepoConfig, 'id' | 'createdAt'>) => Promise<IpcResponse<import('./config.types').RepoConfig>>
     removeRepo: (repoId: string) => Promise<IpcResponse<void>>
+    updateRepoColor: (repoId: string, color: string) => Promise<IpcResponse<void>>
   }
   search: {
     query: (query: string) => Promise<IpcResponse<import('../types/search.types').SearchResult[]>>

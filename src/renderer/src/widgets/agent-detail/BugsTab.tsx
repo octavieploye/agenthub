@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBugStore } from '../../stores/bug-store'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { parseBugVoice } from '../../helpers/parse-voice-fields'
+import { isLightColor } from './color-utils'
 import type { AgentState } from '@shared/types/agent.types'
 import type { BugEntry, BugSeverity } from '@shared/types/bug-radar.types'
 
@@ -235,8 +236,8 @@ export default function BugsTab({ agent, onSendToAgent }: BugsTabProps): React.J
           </select>
           <button
             onClick={handleAdd}
-            className="btn-lcars text-[10px] px-3 py-1 text-white"
-            style={{ backgroundColor: agentColor }}
+            className="btn-lcars text-[10px] px-3 py-1"
+            style={{ backgroundColor: agentColor, color: isLightColor(agentColor) ? '#1e1e2e' : '#ffffff' }}
           >
             Add
           </button>

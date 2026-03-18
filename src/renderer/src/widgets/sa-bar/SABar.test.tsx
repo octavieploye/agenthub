@@ -22,6 +22,23 @@ vi.mock('@renderer/stores/view-store', () => ({
   })
 }))
 
+// Mock child components that have their own dependencies
+vi.mock('../theme-switcher/ThemeSwitcher', () => ({
+  default: () => <div data-testid="theme-switcher" />
+}))
+vi.mock('../skills-dropdown/SkillsDropdown', () => ({
+  default: () => <div data-testid="skills-dropdown" />
+}))
+vi.mock('../repo-switcher/RepoSwitcher', () => ({
+  default: vi.fn().mockReturnValue(<div data-testid="repo-switcher" />)
+}))
+vi.mock('../help-popover/HelpPopover', () => ({
+  default: () => <div data-testid="help-popover" />
+}))
+vi.mock('../code-blue/CodeBlueButton', () => ({
+  default: ({ onActivate }: { onActivate: () => void }) => <button data-testid="code-blue" onClick={onActivate} />
+}))
+
 function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
     id: 'agent-1',
@@ -59,48 +76,18 @@ describe('SABar', () => {
     window.agentHub = {
       docker: {
         status: vi.fn().mockResolvedValue({ success: true, data: { available: true, version: '24.0', imageReady: true, imageTag: 'agenthub-cli:latest', activeContainerCount: 0 } })
+      },
+      system: {
+        getAppVersion: vi.fn().mockResolvedValue('1.0.0-test')
       }
     } as any
   })
 
-  describe('agent status counters', () => {
-    it('renders correct count for active (busy) agents', () => {
-      render(<SABar agents={mockAgents} />)
-      const activeCounter = screen.getByTestId('status-counter-busy')
-      expect(activeCounter).toHaveTextContent('2')
-    })
-
-    it('renders correct count for locked agents', () => {
-      render(<SABar agents={mockAgents} />)
-      const lockedCounter = screen.getByTestId('status-counter-locked')
-      expect(lockedCounter).toHaveTextContent('1')
-    })
-
-    it('renders correct count for paused agents', () => {
-      render(<SABar agents={mockAgents} />)
-      const pausedCounter = screen.getByTestId('status-counter-paused')
-      expect(pausedCounter).toHaveTextContent('1')
-    })
-
-    it('renders correct count for completed agents', () => {
-      render(<SABar agents={mockAgents} />)
-      const completedCounter = screen.getByTestId('status-counter-completed')
-      expect(completedCounter).toHaveTextContent('2')
-    })
-
-    it('clicking active counter calls setStatusFilter with busy', () => {
-      render(<SABar agents={mockAgents} />)
-      const activeCounter = screen.getByTestId('status-counter-busy')
-      fireEvent.click(activeCounter)
-      expect(mockSetStatusFilter).toHaveBeenCalledWith('busy')
-    })
-  })
-
   describe('view mode toggle', () => {
-    it('renders view mode toggle with three buttons', () => {
+    it('renders view mode toggle with two buttons', () => {
       render(<SABar agents={mockAgents} />)
       expect(screen.getByTestId('view-mode-raid')).toBeInTheDocument()
-      expect(screen.getByTestId('view-mode-channel')).toBeInTheDocument()
+      expect(screen.queryByTestId('view-mode-channel')).not.toBeInTheDocument()
       expect(screen.getByTestId('view-mode-terminal')).toBeInTheDocument()
     })
 
@@ -108,12 +95,6 @@ describe('SABar', () => {
       render(<SABar agents={mockAgents} />)
       fireEvent.click(screen.getByTestId('view-mode-raid'))
       expect(mockSetViewMode).toHaveBeenCalledWith('raid')
-    })
-
-    it('clicking channel view mode button calls setViewMode with channel', () => {
-      render(<SABar agents={mockAgents} />)
-      fireEvent.click(screen.getByTestId('view-mode-channel'))
-      expect(mockSetViewMode).toHaveBeenCalledWith('channel')
     })
 
     it('clicking terminal view mode button calls setViewMode with terminal', () => {
@@ -137,10 +118,10 @@ describe('SABar', () => {
   })
 
   describe('layout', () => {
-    it('has fixed 48px height', () => {
+    it('has fixed 56px height', () => {
       render(<SABar agents={mockAgents} />)
       const bar = screen.getByTestId('sa-bar')
-      expect(bar.className).toMatch(/h-12/)
+      expect(bar.className).toMatch(/h-14/)
     })
   })
 })

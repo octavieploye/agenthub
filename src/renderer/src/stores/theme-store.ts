@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-const THEMES = ['deep-space', 'ember', 'matrix', 'arctic', 'twilight', 'jade', 'carbon'] as const
+const THEMES = ['mocha', 'neon-noir', 'solarized-dusk', 'rose-pine', 'latte'] as const
 type Theme = (typeof THEMES)[number]
 
 interface ThemeStore {
@@ -16,7 +16,7 @@ function getStoredTheme(): Theme {
   } catch {
     // ignore — localStorage may be unavailable
   }
-  return 'deep-space'
+  return 'mocha'
 }
 
 export const useThemeStore = create<ThemeStore>((set) => ({

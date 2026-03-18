@@ -142,7 +142,7 @@ describe('SnapshotEngine', () => {
     })
 
     it('takes periodic snapshot when state changes', () => {
-      let viewMode: 'raid' | 'channel' | 'terminal' | 'briefing' = 'raid'
+      let viewMode: 'raid' | 'terminal' = 'raid'
       engine = new SnapshotEngine(
         db,
         createMockProvider({
@@ -239,7 +239,7 @@ describe('SnapshotEngine', () => {
         createMockProvider({
           getAgents: () => [createAgent('a1')],
           getActiveAgentId: () => 'a1',
-          getViewMode: () => 'channel',
+          getViewMode: () => 'terminal',
           getSoundEnabled: () => false,
           getFocusedAgentId: () => 'a1',
           getStatusFilter: () => 'busy',
@@ -250,7 +250,7 @@ describe('SnapshotEngine', () => {
       const state = engine.buildWorkspaceState()
       expect(state.agents).toHaveLength(1)
       expect(state.activeAgentId).toBe('a1')
-      expect(state.viewMode).toBe('channel')
+      expect(state.viewMode).toBe('terminal')
       expect(state.soundEnabled).toBe(false)
       expect(state.focusedAgentId).toBe('a1')
       expect(state.statusFilter).toBe('busy')

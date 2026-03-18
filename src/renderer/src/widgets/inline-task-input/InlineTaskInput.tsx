@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
+import { isLightColor } from '../agent-detail/color-utils'
 
 interface InlineTaskInputProps {
   agent: AgentState
@@ -91,14 +92,14 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
       <VoiceInputButton inputRef={inputRef} />
       <button
         data-testid="inline-send-button"
-        className="btn btn-sm text-white text-xs"
-        style={{ backgroundColor: agent.color }}
+        className="btn btn-sm text-xs"
+        style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
         disabled={disabled || !inputValue.trim()}
         onClick={handleSubmit}
       >
         Send
       </button>
-      <span className="text-[9px] text-base-content/30 hidden sm:inline">
+      <span className="text-[11px] text-base-content/60 hidden sm:inline">
         {disabled ? '' : 'Enter'}
       </span>
     </div>

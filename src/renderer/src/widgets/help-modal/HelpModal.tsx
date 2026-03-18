@@ -11,7 +11,6 @@ const SECTIONS = [
       { keys: ['⌘ 1'], desc: 'Switch to Raid view (grid overview)' },
       { keys: ['⌘ 2'], desc: 'Switch to Channel view' },
       { keys: ['⌘ 3'], desc: 'Switch to Terminal view' },
-      { keys: ['⌘ B'], desc: 'Toggle Briefing view' },
     ]
   },
   {

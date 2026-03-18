@@ -46,7 +46,6 @@ describe('useKeyboardNav', () => {
   const callbacks = {
     onSpawnDialog: vi.fn(),
     onCommandPalette: vi.fn(),
-    onBriefingToggle: vi.fn(),
     onEscape: vi.fn(),
     onExpandFocused: vi.fn(),
     onContextMenuFocused: vi.fn(),
@@ -66,15 +65,9 @@ describe('useKeyboardNav', () => {
       expect(mockSetViewMode).toHaveBeenCalledWith('raid')
     })
 
-    it('Cmd+2 switches to channel view', () => {
+    it('Cmd+2 switches to terminal view', () => {
       renderHook(() => useKeyboardNav(callbacks))
       dispatchKey('2', { metaKey: true })
-      expect(mockSetViewMode).toHaveBeenCalledWith('channel')
-    })
-
-    it('Cmd+3 switches to terminal view', () => {
-      renderHook(() => useKeyboardNav(callbacks))
-      dispatchKey('3', { metaKey: true })
       expect(mockSetViewMode).toHaveBeenCalledWith('terminal')
     })
 
@@ -98,11 +91,6 @@ describe('useKeyboardNav', () => {
       expect(callbacks.onCommandPalette).toHaveBeenCalledOnce()
     })
 
-    it('Cmd+B toggles briefing view', () => {
-      renderHook(() => useKeyboardNav(callbacks))
-      dispatchKey('b', { metaKey: true })
-      expect(callbacks.onBriefingToggle).toHaveBeenCalledOnce()
-    })
   })
 
   describe('navigation keys', () => {

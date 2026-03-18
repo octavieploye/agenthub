@@ -9,7 +9,8 @@ function mapRow(row: Record<string, unknown>): RepoConfig {
     name: row.name as string,
     path: row.path as string,
     glowColor: (row.glow_color as string) ?? undefined,
-    createdAt: row.created_at as string
+    createdAt: row.created_at as string,
+    lastUsedAt: (row.last_used_at as string) ?? undefined
   }
 }
 
@@ -54,4 +55,12 @@ export function getRepoByPath(db: Database.Database, path: string): RepoConfig |
 export function deleteRepo(db: Database.Database, id: string): void {
   db.prepare('DELETE FROM repos WHERE id = ?').run(id)
   log.info('Repo deleted', { id })
+}
+
+export function updateRepoLastUsed(db: Database.Database, id: string): void {
+  db.prepare('UPDATE repos SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id)
+}
+
+export function updateRepoGlowColor(db: Database.Database, id: string, glowColor: string): void {
+  db.prepare('UPDATE repos SET glow_color = ? WHERE id = ?').run(glowColor, id)
 }
