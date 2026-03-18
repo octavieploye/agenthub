@@ -9,6 +9,12 @@ interface FilePreviewLayoutProps {
   repoName: string
 }
 
+// Apply theme from URL param synchronously before first paint
+const urlTheme = new URLSearchParams(window.location.search).get('theme')
+if (urlTheme) {
+  document.documentElement.setAttribute('data-theme', urlTheme)
+}
+
 function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutProps): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const [file, setFile] = useState<ReadFileResult | null>(null)
@@ -19,6 +25,7 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
   const fileName = filePath.split('/').pop() ?? filePath
   const icon = getFileIcon(fileName, 'file')
 
+  // Keep theme in sync if store changes
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
@@ -60,7 +67,7 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
   const lineCount = file?.content.split('\n').length ?? 0
 
   return (
-    <div className="flex flex-col h-screen w-screen" data-theme={theme}>
+    <div className="flex flex-col h-screen w-screen bg-base-300" data-theme={urlTheme ?? theme}>
       {/* Header breadcrumb */}
       <div className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b border-base-content/15 bg-base-200/50">
         <span className="text-base">{icon}</span>

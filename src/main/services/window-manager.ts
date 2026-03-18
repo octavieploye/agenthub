@@ -86,17 +86,30 @@ export class WindowManager {
 
   createFilePreview(
     filePath: string,
-    repoPath: string
+    repoPath: string,
+    theme?: string
   ): BreakoutWindowInfo {
     const previewId = `file-preview-${Date.now()}`
     const fileName = filePath.split('/').pop() ?? filePath
     const repoName = repoPath.split('/').pop() ?? 'project'
+
+    // Map theme to native background color to prevent white flash
+    const bgMap: Record<string, string> = {
+      'mocha': '#1e1e2e',
+      'neon-noir': '#0d0d14',
+      'solarized-dusk': '#1a2632',
+      'rose-pine': '#191724',
+      'latte': '#dce0e8'
+    }
+    const nativeBg = bgMap[theme ?? 'mocha'] ?? '#1e1e2e'
 
     const previewWindow = new BrowserWindow({
       width: 1000,
       height: 700,
       minWidth: 500,
       minHeight: 400,
+      show: false,
+      backgroundColor: nativeBg,
       title: `${fileName} — ${repoName}`,
       autoHideMenuBar: true,
       webPreferences: {
@@ -108,12 +121,18 @@ export class WindowManager {
       }
     })
 
+    // Show window only after content is painted — eliminates white flash
+    previewWindow.once('ready-to-show', () => {
+      previewWindow.show()
+    })
+
     const params = new URLSearchParams({
       breakout: 'true',
       type: 'file-preview',
       filePath,
       repoPath,
-      repoName
+      repoName,
+      theme: theme ?? 'mocha'
     })
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {

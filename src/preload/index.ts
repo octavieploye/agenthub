@@ -143,7 +143,7 @@ const agentHubBridge = {
   windows: {
     createBreakout: (agentId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.CREATE_BREAKOUT, agentId),
-    createFilePreview: (input: { filePath: string; repoPath: string }) =>
+    createFilePreview: (input: { filePath: string; repoPath: string; theme?: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.CREATE_FILE_PREVIEW, input),
     closeBreakout: (agentId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOWS.CLOSE_BREAKOUT, agentId),

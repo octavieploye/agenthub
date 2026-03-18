@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { getFileIcon } from './file-icons'
+import { useThemeStore } from '../../stores/theme-store'
 import type { FileTreeNode as FileTreeNodeType } from '@shared/types/fs.types'
 
 interface FileTreeNodeProps {
@@ -13,6 +14,7 @@ interface FileTreeNodeProps {
 
 function FileTreeNode({ node, repoPath, depth, isExpanded, isLoading, onToggleDir }: FileTreeNodeProps): React.JSX.Element {
   const rowRef = useRef<HTMLDivElement>(null)
+  const theme = useThemeStore((s) => s.theme)
 
   const icon = getFileIcon(node.name, node.type)
   const isDir = node.type === 'directory'
@@ -21,7 +23,7 @@ function FileTreeNode({ node, repoPath, depth, isExpanded, isLoading, onToggleDi
     if (isDir) {
       onToggleDir(node.path)
     } else {
-      window.agentHub.windows.createFilePreview({ filePath: node.path, repoPath })
+      window.agentHub.windows.createFilePreview({ filePath: node.path, repoPath, theme })
     }
   }
 

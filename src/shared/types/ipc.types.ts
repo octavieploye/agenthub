@@ -129,7 +129,7 @@ export interface AgentHubBridge {
   }
   windows: {
     createBreakout: (agentId: string) => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo>>
-    createFilePreview: (input: { filePath: string; repoPath: string }) => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo>>
+    createFilePreview: (input: { filePath: string; repoPath: string; theme?: string }) => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo>>
     closeBreakout: (agentId: string) => Promise<IpcResponse<void>>
     listBreakouts: () => Promise<IpcResponse<import('./window.types').BreakoutWindowInfo[]>>
     focusBreakout: (agentId: string) => Promise<IpcResponse<void>>
