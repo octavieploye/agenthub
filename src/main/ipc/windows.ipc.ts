@@ -19,6 +19,22 @@ export function registerWindowsHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.WINDOWS.CREATE_FILE_PREVIEW, async (_event, input: unknown) => {
+    try {
+      if (!input || typeof input !== 'object') return error('VALIDATION_ERROR', 'input must be an object')
+      const { filePath, repoPath } = input as { filePath?: string; repoPath?: string }
+      if (typeof filePath !== 'string' || typeof repoPath !== 'string') {
+        return error('VALIDATION_ERROR', 'filePath and repoPath must be strings')
+      }
+      const wm = getWindowManager()
+      if (!wm) return error('SERVICE_ERROR', 'WindowManager not initialized')
+      const info = wm.createFilePreview(filePath, repoPath)
+      return success(info)
+    } catch (err) {
+      return error('FILE_PREVIEW_ERROR', err instanceof Error ? err.message : String(err))
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.WINDOWS.CLOSE_BREAKOUT, async (_event, agentId: unknown) => {
     try {
       if (typeof agentId !== 'string') return error('VALIDATION_ERROR', 'agentId must be a string')

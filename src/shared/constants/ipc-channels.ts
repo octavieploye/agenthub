@@ -114,6 +114,7 @@ export const IPC_CHANNELS = {
   },
   WINDOWS: {
     CREATE_BREAKOUT: 'windows:create-breakout',
+    CREATE_FILE_PREVIEW: 'windows:create-file-preview',
     CLOSE_BREAKOUT: 'windows:close-breakout',
     LIST_BREAKOUTS: 'windows:list-breakouts',
     FOCUS_BREAKOUT: 'windows:focus-breakout'

@@ -19,6 +19,7 @@ import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
 import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
+import FilePreviewLayout from './widgets/file-preview/FilePreviewLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
@@ -47,7 +48,15 @@ function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
   const urlParams = new URLSearchParams(window.location.search)
   const isBreakout = urlParams.get('breakout') === 'true'
+  const breakoutType = urlParams.get('type')
   const breakoutAgentId = urlParams.get('agentId')
+
+  if (isBreakout && breakoutType === 'file-preview') {
+    const filePath = urlParams.get('filePath') ?? ''
+    const repoPath = urlParams.get('repoPath') ?? ''
+    const repoName = urlParams.get('repoName') ?? 'project'
+    return <FilePreviewLayout filePath={filePath} repoPath={repoPath} repoName={repoName} />
+  }
 
   if (isBreakout && breakoutAgentId) {
     return <BreakoutLayout agentId={breakoutAgentId} />

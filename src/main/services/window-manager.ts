@@ -84,6 +84,67 @@ export class WindowManager {
     return info
   }
 
+  createFilePreview(
+    filePath: string,
+    repoPath: string
+  ): BreakoutWindowInfo {
+    const previewId = `file-preview-${Date.now()}`
+    const fileName = filePath.split('/').pop() ?? filePath
+    const repoName = repoPath.split('/').pop() ?? 'project'
+
+    const previewWindow = new BrowserWindow({
+      width: 1000,
+      height: 700,
+      minWidth: 500,
+      minHeight: 400,
+      title: `${fileName} — ${repoName}`,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+        webSecurity: true
+      }
+    })
+
+    const params = new URLSearchParams({
+      breakout: 'true',
+      type: 'file-preview',
+      filePath,
+      repoPath,
+      repoName
+    })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+      for (const [k, v] of params) url.searchParams.set(k, v)
+      previewWindow.loadURL(url.toString())
+    } else {
+      previewWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+        search: params.toString()
+      })
+    }
+
+    const info: BreakoutWindowInfo = {
+      agentId: previewId,
+      windowId: previewWindow.id,
+      agentName: fileName,
+      repoPath,
+      agentColor: '#3B82F6'
+    }
+
+    this.breakouts.set(previewId, { window: previewWindow, info })
+
+    previewWindow.on('closed', () => {
+      this.breakouts.delete(previewId)
+      this.deps.logInfo('File preview window closed', { previewId, filePath })
+    })
+
+    this.deps.logInfo('File preview window created', { previewId, filePath })
+    return info
+  }
+
   closeBreakout(agentId: string): void {
     const entry = this.breakouts.get(agentId)
     if (entry && !entry.window.isDestroyed()) {
