@@ -6,7 +6,7 @@ import type { DockerStatus } from '@shared/types/docker.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
-import { CLAUDE_MODELS, ALL_OLLAMA_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
@@ -23,7 +23,12 @@ function catalogToModelInfo(entry: ModelCatalogEntry): ModelInfo {
     available: entry.available,
     contextWindow: entry.contextWindow,
     unavailableReason: entry.unavailableReason,
-    supportsEffort: entry.supportsEffort
+    supportsEffort: entry.supportsEffort,
+    capabilityTier: entry.capabilityTier,
+    description: entry.description,
+    strengths: entry.strengths,
+    speedProfile: entry.speedProfile,
+    claudeComparison: entry.claudeComparison
   }
 }
 
@@ -62,7 +67,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
-    [...CLAUDE_MODELS, ...ALL_OLLAMA_MODELS].map(catalogToModelInfo)
+    [...OLLAMA_CLOUD_MODELS, ...CLAUDE_MODELS].map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
 
@@ -258,13 +263,15 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
             initialTask=""
             recommendedModel={currentModelInfo?.name ?? selectedModel}
             modelRationale={
-              selectedModel.includes('opus')
-                ? 'Maximum capability for complex tasks'
-                : selectedModel.includes('sonnet')
-                  ? 'Balanced speed and capability for general tasks'
-                  : selectedModel.includes('haiku')
-                    ? 'Fast and efficient for routine tasks'
-                    : 'Local/cloud model — no Anthropic quota usage'
+              currentModelInfo?.description
+                ? `${currentModelInfo.description}${currentModelInfo.claudeComparison ? ` (${currentModelInfo.claudeComparison})` : ''}`
+                : selectedModel.includes('opus')
+                  ? 'Maximum capability for complex tasks'
+                  : selectedModel.includes('sonnet')
+                    ? 'Balanced speed and capability for general tasks'
+                    : selectedModel.includes('haiku')
+                      ? 'Fast and efficient for routine tasks'
+                      : 'Local/cloud model — no Anthropic quota usage'
             }
             quotaUsed={totalMessages}
             quotaLimit={limits?.messageLimit ?? 250}

@@ -1,6 +1,6 @@
 import type { ModelProvider } from '@shared/types/agent.types'
-import type { ModelCategory } from '@shared/types/model.types'
-import { CATEGORY_LABELS, CATEGORY_COLORS } from '@shared/constants/model-catalog'
+import type { ModelCategory, CapabilityTier, SpeedProfile } from '@shared/types/model.types'
+import { CATEGORY_LABELS, CATEGORY_COLORS, TIER_LABELS, TIER_COLORS } from '@shared/constants/model-catalog'
 
 export interface ModelInfo {
   id: string
@@ -12,6 +12,11 @@ export interface ModelInfo {
   contextWindow: number
   unavailableReason?: string
   supportsEffort?: boolean
+  capabilityTier?: CapabilityTier
+  description?: string
+  strengths?: string[]
+  speedProfile?: SpeedProfile
+  claudeComparison?: string
 }
 
 export interface ModelPoolProps {
@@ -38,6 +43,15 @@ function CategoryBadge({ category }: { category?: ModelCategory }): React.JSX.El
   )
 }
 
+function TierBadge({ tier }: { tier?: CapabilityTier }): React.JSX.Element | null {
+  if (!tier) return null
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full bg-base-content/5 ${TIER_COLORS[tier] ?? ''}`}>
+      {TIER_LABELS[tier] ?? tier}
+    </span>
+  )
+}
+
 function ModelRow({
   model,
   isSelected,
@@ -59,11 +73,17 @@ function ModelRow({
             : 'opacity-50 cursor-not-allowed'
       }`}
     >
-      <div className="flex items-center gap-2">
-        <span className="font-medium">{model.name}</span>
-        <CategoryBadge category={model.category} />
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{model.name}</span>
+          <CategoryBadge category={model.category} />
+          <TierBadge tier={model.capabilityTier} />
+        </div>
+        {model.description && (
+          <span className="text-[11px] text-base-content/40 mt-0.5">{model.description}</span>
+        )}
       </div>
-      <div className="flex items-center gap-2 text-xs text-base-content/50">
+      <div className="flex items-center gap-2 text-xs text-base-content/50 shrink-0 ml-2">
         <span>{formatContextWindow(model.contextWindow)}</span>
         {!model.available && model.unavailableReason && (
           <span className="text-error/60">{model.unavailableReason}</span>

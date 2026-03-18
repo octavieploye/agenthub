@@ -3,7 +3,7 @@ import type { AgentState, AgentLifecycleStatus, EffortLevel, ModelProvider } fro
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { useNow } from '@renderer/hooks/useNow'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
-import { CLAUDE_MODELS, EFFORT_LEVELS, EFFORT_LABELS, CATEGORY_LABELS, CATEGORY_COLORS } from '@shared/constants/model-catalog'
+import { CLAUDE_MODELS, EFFORT_LEVELS, EFFORT_LABELS, CATEGORY_LABELS, CATEGORY_COLORS, TIER_LABELS, TIER_COLORS } from '@shared/constants/model-catalog'
 import { useAgentStore } from '@renderer/stores/agent-store'
 
 interface GeneralTabProps {
@@ -312,12 +312,29 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
           )}
         </select>
 
-        {currentModelInfo?.category && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-base-content/40">Category:</span>
-            <span className={CATEGORY_COLORS[currentModelInfo.category] ?? ''}>
-              {CATEGORY_LABELS[currentModelInfo.category] ?? currentModelInfo.category}
-            </span>
+        {currentModelInfo && (
+          <div className="mt-2 p-2 rounded-lg bg-base-content/5 text-xs space-y-1">
+            {currentModelInfo.category && (
+              <div className="flex items-center gap-2">
+                <span className="text-base-content/40">Category:</span>
+                <span className={CATEGORY_COLORS[currentModelInfo.category] ?? ''}>
+                  {CATEGORY_LABELS[currentModelInfo.category] ?? currentModelInfo.category}
+                </span>
+              </div>
+            )}
+            {currentModelInfo.description && (
+              <p className="text-base-content/60">{currentModelInfo.description}</p>
+            )}
+            <div className="flex items-center gap-3 text-base-content/40">
+              {currentModelInfo.capabilityTier && (
+                <span className={TIER_COLORS[currentModelInfo.capabilityTier]}>
+                  {TIER_LABELS[currentModelInfo.capabilityTier]}
+                </span>
+              )}
+              {currentModelInfo.claudeComparison && (
+                <span>vs Claude: {currentModelInfo.claudeComparison}</span>
+              )}
+            </div>
           </div>
         )}
 

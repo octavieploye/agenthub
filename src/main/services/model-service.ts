@@ -74,13 +74,16 @@ function parseOllamaModels(
   return data.models.map((m) => {
     const name = m.name ?? 'unknown'
     return {
-      id: `${provider}:${name}`,
+      id: name,
       name,
       provider,
       category: categorizeOllamaModel(name),
       family: detectOllamaFamily(name),
       contextWindow: 128000,
-      available: true
+      available: true,
+      capabilityTier: 'capable' as const,
+      description: 'Locally installed model.',
+      speedProfile: 'balanced' as const
     }
   })
 }
