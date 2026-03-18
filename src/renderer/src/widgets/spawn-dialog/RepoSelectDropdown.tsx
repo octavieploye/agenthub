@@ -163,8 +163,8 @@ export default function RepoSelectDropdown({
 
           {/* Search */}
           <div className="p-2">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-base-300/50">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-base-content/40 shrink-0">
+            <div className="relative">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none">
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
@@ -178,7 +178,7 @@ export default function RepoSelectDropdown({
                   setHighlightIndex(0)
                 }}
                 onKeyDown={handleKeyDown}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/30"
+                className="input input-bordered w-full rounded-xl bg-base-200/50 text-sm pl-9"
                 role="searchbox"
                 aria-controls="repo-listbox"
               />
