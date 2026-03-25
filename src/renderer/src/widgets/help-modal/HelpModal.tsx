@@ -9,17 +9,23 @@ const SECTIONS = [
     title: 'Views',
     rows: [
       { keys: ['⌘ 1'], desc: 'Switch to Raid view (grid overview)' },
-      { keys: ['⌘ 2'], desc: 'Switch to Channel view' },
-      { keys: ['⌘ 3'], desc: 'Switch to Terminal view' },
+      { keys: ['⌘ 2'], desc: 'Switch to Terminal view' },
     ]
   },
   {
     title: 'Agent Navigation',
     rows: [
-      { keys: ['⌥ ↑'], desc: 'Select previous agent (wraps)' },
-      { keys: ['⌥ ↓'], desc: 'Select next agent (wraps)' },
-      { keys: ['⌥ ←'], desc: 'Switch to previous agent terminal (terminal view only)' },
-      { keys: ['⌥ →'], desc: 'Switch to next agent terminal (terminal view only)' },
+      { keys: ['↑', '⌥ ↑'], desc: 'Select previous agent in Raid view' },
+      { keys: ['↓', '⌥ ↓'], desc: 'Select next agent in Raid view' },
+      { keys: ['Tab'], desc: 'Cycle to next agent (wraps)' },
+      { keys: ['⇧ Tab'], desc: 'Cycle to previous agent (wraps)' },
+      { keys: ['⌘ ←', '⌥ ←'], desc: 'Switch to previous agent (terminal view)' },
+      { keys: ['⌘ →', '⌥ →'], desc: 'Switch to next agent (terminal view)' },
+      { keys: ['⌘ ⇧ ↑'], desc: 'Focus previous repo group (Raid view)' },
+      { keys: ['⌘ ⇧ ↓'], desc: 'Focus next repo group (Raid view)' },
+      { keys: ['Enter'], desc: 'Expand focused agent' },
+      { keys: ['Space'], desc: 'Open context menu for focused agent' },
+      { keys: ['⌫'], desc: 'Kill focused agent' },
     ]
   },
   {
@@ -31,7 +37,9 @@ const SECTIONS = [
   {
     title: 'General',
     rows: [
+      { keys: ['⌘ N'], desc: 'Spawn a new agent' },
       { keys: ['⌘ K'], desc: 'Open Command Palette (search agents, tasks, repos)' },
+      { keys: ['⌘ R'], desc: 'Open repo switcher' },
       { keys: ['⌘ Q'], desc: 'Quit / shutdown AgentHub' },
       { keys: ['Esc'], desc: 'Close any open panel or dialog' },
     ]

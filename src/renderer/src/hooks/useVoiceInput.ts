@@ -4,11 +4,13 @@ import { AudioRecorderService } from '../services/audio-recorder'
 export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>) {
   const [isListening, setIsListening] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [micError, setMicError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorderService | null>(null)
   const isListeningRef = useRef(false)
 
   const startListening = useCallback(async () => {
     if (isListeningRef.current || isProcessing) return
+    setMicError(null)
     const recorder = new AudioRecorderService()
     recorderRef.current = recorder
     try {
@@ -17,6 +19,11 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
       setIsListening(true)
     } catch (err) {
       console.error('Failed to start recording:', err)
+      const msg = err instanceof Error && err.name === 'NotAllowedError'
+        ? 'Microphone access denied — check System Settings > Privacy > Microphone'
+        : 'Could not access microphone'
+      setMicError(msg)
+      recorderRef.current = null
     }
   }, [isProcessing])
 
@@ -64,5 +71,5 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
     }
   }, [startListening, stopListening])
 
-  return { isListening, isProcessing, startListening, stopListening, toggleListening }
+  return { isListening, isProcessing, micError, startListening, stopListening, toggleListening }
 }

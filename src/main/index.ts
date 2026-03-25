@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, Menu, nativeImage, session, systemPreferences } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -88,6 +88,19 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // Allow microphone access from the renderer (required for voice input)
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'media') {
+      if (process.platform === 'darwin') {
+        systemPreferences.askForMediaAccess('microphone').then((granted) => callback(granted))
+      } else {
+        callback(true)
+      }
+      return
+    }
+    callback(false)
   })
 
   // Set app icon for macOS dock

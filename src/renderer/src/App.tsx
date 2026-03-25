@@ -451,10 +451,10 @@ function AppMain(): React.JSX.Element {
         }
       }
 
-      // Plain Arrow ↑/↓ — cycle focused agent in raid view (no modifier keys)
+      // Plain Arrow ↑/↓ or ⌥ ↑/↓ — cycle focused agent in raid view
       if (
         (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-        !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+        !e.metaKey && !e.ctrlKey && !e.shiftKey
       ) {
         const store = useViewStore.getState()
         if (store.viewMode !== 'raid') return
@@ -502,12 +502,13 @@ function AppMain(): React.JSX.Element {
     }
   }, [setActiveAgent, setFocusedAgent, agents, prefetchAgentData])
 
-  // Agent navigation — Cmd+←/→ switches agents in terminal view
+  // Agent navigation — Cmd+←/→ or ⌥ ←/→ switches agents in terminal view
   useEffect(() => {
     const handleAgentNav = (e: KeyboardEvent): void => {
-      if (!(e.metaKey || e.ctrlKey)) return
+      const isCmdArrow = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey
+      const isAltArrow = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
+      if (!isCmdArrow && !isAltArrow) return
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      if (e.shiftKey || e.altKey) return
 
       const viewStore = useViewStore.getState()
       if (viewStore.viewMode !== 'terminal') return
