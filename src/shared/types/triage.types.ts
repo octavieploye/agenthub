@@ -12,6 +12,8 @@ export interface TriageEvent {
   triageLevel: TriageLevel
   timestamp: number
   reason: string
+  requiresUserAction: boolean
+  isTaskCompleted: boolean
 }
 
 export interface TriageInput {

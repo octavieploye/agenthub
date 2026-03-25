@@ -20,7 +20,6 @@ const LAYER_RULES: {
 }[] = [
   { layer: 'toast', minLevel: 'low', configKey: null },
   { layer: 'desktop', minLevel: 'medium', configKey: 'desktopEnabled' },
-  { layer: 'sound', minLevel: 'high', configKey: 'soundEnabled' },
   { layer: 'voice', minLevel: 'critical', configKey: 'voiceEnabled' },
   { layer: 'telegram', minLevel: 'critical', configKey: 'telegramEnabled' }
 ]
@@ -36,6 +35,10 @@ export function routeNotification(
     if (rule.configKey !== null && !config[rule.configKey]) return false
     return true
   }).map((rule) => rule.layer)
+
+  if (config.soundEnabled && (event.requiresUserAction || event.isTaskCompleted)) {
+    layers.push('sound')
+  }
 
   return { layers, triageEvent: event }
 }

@@ -21,10 +21,8 @@ function createDeps(
 }
 
 const ALL_EVENTS: AgentSoundEvent[] = [
-  'agent_spawned',
   'agent_completed',
   'agent_locked',
-  'agent_looping',
   'code_blue',
   'mission_complete',
   'user_approval'
@@ -42,7 +40,7 @@ describe('Sound Alert Service', () => {
   // ── SOUND_MAP structure ──────────────────────────────────────────────────
 
   describe('SOUND_MAP', () => {
-    it('has entries for all 7 event types', () => {
+    it('has entries for all 5 event types', () => {
       for (const event of ALL_EVENTS) {
         expect(SOUND_MAP).toHaveProperty(event)
         expect(SOUND_MAP[event]).toHaveProperty('src')
@@ -58,10 +56,6 @@ describe('Sound Alert Service', () => {
       }
     })
 
-    it('agent_locked volume is greater than agent_spawned volume (attention > click sfx)', () => {
-      expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.agent_spawned.volume)
-    })
-
     it('agent_locked volume is greater than agent_completed volume', () => {
       expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.agent_completed.volume)
     })
@@ -70,35 +64,21 @@ describe('Sound Alert Service', () => {
   // ── Volume hierarchy ─────────────────────────────────────────────────────
 
   describe('volume hierarchy', () => {
-    it('code_blue (1.0) > agent_locked (0.8) > agent_looping (0.7) > mission_complete (0.6) > agent_spawned (0.5)', () => {
+    it('code_blue has the highest volume (1.0)', () => {
       expect(SOUND_MAP.code_blue.volume).toBe(1.0)
-      expect(SOUND_MAP.agent_locked.volume).toBe(0.8)
-      expect(SOUND_MAP.agent_looping.volume).toBe(0.7)
-      expect(SOUND_MAP.mission_complete.volume).toBe(0.6)
-      expect(SOUND_MAP.agent_spawned.volume).toBe(0.5)
     })
 
-    it('agent_completed shares the same volume as agent_spawned (0.5)', () => {
-      expect(SOUND_MAP.agent_completed.volume).toBe(0.5)
-    })
-
-    it('volumes are strictly descending: code_blue > agent_locked > agent_looping > mission_complete > agent_spawned', () => {
+    it('volumes are strictly descending: code_blue > agent_locked > user_approval > mission_complete > agent_completed', () => {
       expect(SOUND_MAP.code_blue.volume).toBeGreaterThan(SOUND_MAP.agent_locked.volume)
-      expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.agent_looping.volume)
-      expect(SOUND_MAP.agent_looping.volume).toBeGreaterThan(SOUND_MAP.mission_complete.volume)
-      expect(SOUND_MAP.mission_complete.volume).toBeGreaterThan(SOUND_MAP.agent_spawned.volume)
+      expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.user_approval.volume)
+      expect(SOUND_MAP.user_approval.volume).toBeGreaterThan(SOUND_MAP.mission_complete.volume)
+      expect(SOUND_MAP.mission_complete.volume).toBeGreaterThan(SOUND_MAP.agent_completed.volume)
     })
   })
 
   // ── playAgentSound: correct sound file per event ─────────────────────────
 
   describe('playAgentSound plays the correct sound file', () => {
-    it('plays state-change.mp3 for agent_spawned', () => {
-      playAgentSound('agent_spawned', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith('sounds/state-change.mp3', expect.any(Number))
-    })
-
     it('plays bridge-beep.wav for agent_completed', () => {
       playAgentSound('agent_completed', deps)
 
@@ -109,12 +89,6 @@ describe('Sound Alert Service', () => {
       playAgentSound('agent_locked', deps)
 
       expect(deps.playSound).toHaveBeenCalledWith('sounds/alert-yellow.wav', expect.any(Number))
-    })
-
-    it('plays alert-orange.mp3 for agent_looping', () => {
-      playAgentSound('agent_looping', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith('sounds/alert-orange.mp3', expect.any(Number))
     })
 
     it('plays code-blue.mp3 for code_blue', () => {
@@ -139,12 +113,6 @@ describe('Sound Alert Service', () => {
   // ── playAgentSound: correct volume per event ─────────────────────────────
 
   describe('playAgentSound passes the correct volume', () => {
-    it('passes volume 0.5 for agent_spawned', () => {
-      playAgentSound('agent_spawned', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.5)
-    })
-
     it('passes volume 0.5 for agent_completed', () => {
       playAgentSound('agent_completed', deps)
 
@@ -155,12 +123,6 @@ describe('Sound Alert Service', () => {
       playAgentSound('agent_locked', deps)
 
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.8)
-    })
-
-    it('passes volume 0.7 for agent_looping', () => {
-      playAgentSound('agent_looping', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.7)
     })
 
     it('passes volume 1.0 for code_blue', () => {
@@ -186,7 +148,7 @@ describe('Sound Alert Service', () => {
 
   describe('playAgentSound return value', () => {
     it('returns true when sound is played successfully', () => {
-      const result = playAgentSound('agent_spawned', deps)
+      const result = playAgentSound('agent_completed', deps)
 
       expect(result).toBe(true)
     })
@@ -201,7 +163,7 @@ describe('Sound Alert Service', () => {
     it('returns false when sound is disabled', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
 
-      const result = playAgentSound('agent_spawned', deps)
+      const result = playAgentSound('agent_completed', deps)
 
       expect(result).toBe(false)
     })
@@ -213,7 +175,7 @@ describe('Sound Alert Service', () => {
     it('does NOT call playSound when isSoundEnabled returns false', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
 
-      playAgentSound('agent_spawned', deps)
+      playAgentSound('agent_completed', deps)
 
       expect(deps.playSound).not.toHaveBeenCalled()
     })
@@ -241,54 +203,48 @@ describe('Sound Alert Service', () => {
   // ── statusToSoundEvent mapping ───────────────────────────────────────────
 
   describe('statusToSoundEvent', () => {
-    it('returns agent_spawned for spawning status', () => {
-      expect(statusToSoundEvent('spawning')).toBe('agent_spawned')
-    })
-
-    it('returns agent_completed for completed status', () => {
-      expect(statusToSoundEvent('completed')).toBe('agent_completed')
+    it('returns user_approval for awaiting_approval status', () => {
+      expect(statusToSoundEvent('awaiting_approval')).toBe('user_approval')
     })
 
     it('returns agent_locked for locked status', () => {
       expect(statusToSoundEvent('locked')).toBe('agent_locked')
     })
 
-    it('returns agent_looping for looping status', () => {
-      expect(statusToSoundEvent('looping')).toBe('agent_looping')
+    it('returns null for completed status (handled explicitly in App.tsx)', () => {
+      expect(statusToSoundEvent('completed')).toBeNull()
     })
 
-    it('returns user_approval for awaiting_approval status', () => {
-      expect(statusToSoundEvent('awaiting_approval')).toBe('user_approval')
+    it('returns null for error status (handled explicitly in App.tsx)', () => {
+      expect(statusToSoundEvent('error')).toBeNull()
     })
 
-    it('returns code_blue for error status', () => {
-      expect(statusToSoundEvent('error')).toBe('code_blue')
+    it('returns null for spawning status', () => {
+      expect(statusToSoundEvent('spawning')).toBeNull()
     })
 
-    it('returns null for busy status (no sound)', () => {
+    it('returns null for busy status', () => {
       expect(statusToSoundEvent('busy')).toBeNull()
     })
 
-    it('returns null for paused status (no sound)', () => {
+    it('returns null for paused status', () => {
       expect(statusToSoundEvent('paused')).toBeNull()
     })
 
-    it('returns null for interrupted status (no sound)', () => {
+    it('returns null for interrupted status', () => {
       expect(statusToSoundEvent('interrupted')).toBeNull()
     })
 
-    it('returns null for idle status (no sound)', () => {
+    it('returns null for idle status', () => {
       expect(statusToSoundEvent('idle')).toBeNull()
     })
 
-    it('returns null for tray_running status (no sound)', () => {
+    it('returns null for tray_running status', () => {
       expect(statusToSoundEvent('tray_running')).toBeNull()
     })
 
-    it('all 6 mapped statuses return a non-null sound event', () => {
-      const mappedStatuses: AgentLifecycleStatus[] = [
-        'spawning', 'completed', 'locked', 'looping', 'awaiting_approval', 'error'
-      ]
+    it('only awaiting_approval and locked return non-null sound events', () => {
+      const mappedStatuses: AgentLifecycleStatus[] = ['awaiting_approval', 'locked']
       for (const status of mappedStatuses) {
         expect(statusToSoundEvent(status)).not.toBeNull()
       }

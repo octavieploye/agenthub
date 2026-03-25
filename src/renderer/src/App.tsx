@@ -205,9 +205,8 @@ function AppMain(): React.JSX.Element {
       })
 
       if (typeof exitCode === 'number' && exitCode !== 0) {
+        console.warn('[sound-alert] agent exited with code', exitCode, 'for', agentId)
         updateStatus(agentId, 'error', 'confirmed')
-        // code_blue: abnormal exit — always play regardless of triage (process-level event)
-        playAgentSound('code_blue', soundDeps.current)
       } else {
         updateStatus(agentId, 'completed', 'confirmed')
       }
@@ -244,11 +243,25 @@ function AppMain(): React.JSX.Element {
         sendDesktopNotificationFromRenderer(triageEvent)
       }
 
-      // Layer 3: Sound — high+ events, gated by soundEnabled
+      // Layer 3: Sound
       if (layers.includes('sound')) {
+        // Handle completed: suppress in multi-agent (mission_complete plays instead)
+        if (triageEvent.currentStatus === 'completed') {
+          const agentCount = useAgentStore.getState().agents.size
+          if (agentCount <= 1) {
+            playAgentSound('agent_completed', soundDeps.current)
+          }
+        }
+
+        // Handle awaiting_approval and locked via statusToSoundEvent
         const soundEvent = statusToSoundEvent(triageEvent.currentStatus)
         if (soundEvent) {
           playAgentSound(soundEvent, soundDeps.current)
+        }
+
+        // Handle critical errors: code_blue only for actual error status
+        if (triageEvent.currentStatus === 'error') {
+          playAgentSound('code_blue', soundDeps.current)
         }
       }
 

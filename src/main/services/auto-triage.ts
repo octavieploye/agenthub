@@ -34,6 +34,8 @@ export function triageAgentEvent(input: TriageInput): TriageEvent {
     currentStatus: input.currentStatus,
     triageLevel: rule.level,
     timestamp: Date.now(),
-    reason: rule.reason
+    reason: rule.reason,
+    requiresUserAction: input.currentStatus === 'awaiting_approval' || input.currentStatus === 'locked',
+    isTaskCompleted: input.currentStatus === 'completed'
   }
 }
