@@ -15,29 +15,76 @@ MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.
 echo "=== AgentHub Whisper Setup ==="
 echo ""
 
-# --- Step 1: Build whisper-cli ---
-if [ -f "$RESOURCES_BIN/whisper-cli" ]; then
-  echo "[OK] whisper-cli already exists at $RESOURCES_BIN/whisper-cli"
-else
-  echo "[1/2] Building whisper-cli..."
+# --- Helper: verify whisper-cli binary is functional and statically linked ---
+verify_binary() {
+  local binary="$1"
 
-  if [ -d "$WHISPER_TMP" ]; then
-    echo "  Updating existing whisper.cpp clone..."
-    git -C "$WHISPER_TMP" pull --quiet
-  else
-    echo "  Cloning whisper.cpp..."
-    git clone --depth 1 https://github.com/ggerganov/whisper.cpp "$WHISPER_TMP"
+  if ! "$binary" --help >/dev/null 2>&1; then
+    echo "  [WARN] Binary at $binary is broken (--help failed)."
+    return 1
   fi
 
-  echo "  Compiling (Metal-accelerated via CMake)..."
-  cmake -B "$WHISPER_TMP/build" -S "$WHISPER_TMP" -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
+  if otool -L "$binary" 2>/dev/null | grep -q '@rpath'; then
+    echo "  [WARN] Binary at $binary has @rpath dylib dependencies:"
+    otool -L "$binary" | grep '@rpath'
+    return 1
+  fi
+
+  return 0
+}
+
+# --- Step 1: Build whisper-cli ---
+needs_build=false
+
+if [ -f "$RESOURCES_BIN/whisper-cli" ]; then
+  echo "[1/2] Checking existing whisper-cli..."
+  if verify_binary "$RESOURCES_BIN/whisper-cli"; then
+    echo "[OK] whisper-cli is functional and statically linked at $RESOURCES_BIN/whisper-cli"
+  else
+    echo "  Existing binary is broken or dynamically linked — rebuilding..."
+    needs_build=true
+  fi
+else
+  needs_build=true
+fi
+
+if [ "$needs_build" = true ]; then
+  echo "[1/2] Building whisper-cli (static)..."
+
+  if [ -d "$WHISPER_TMP" ]; then
+    echo "  Removing stale whisper.cpp clone..."
+    rm -rf "$WHISPER_TMP"
+  fi
+
+  echo "  Cloning whisper.cpp..."
+  git clone --depth 1 https://github.com/ggerganov/whisper.cpp "$WHISPER_TMP"
+
+  echo "  Compiling (static, Metal-accelerated via CMake)..."
+  cmake -B "$WHISPER_TMP/build" -S "$WHISPER_TMP" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DWHISPER_BUILD_TESTS=OFF \
+    -DWHISPER_BUILD_EXAMPLES=ON \
+    2>&1 | tail -5
+
   cmake --build "$WHISPER_TMP/build" --config Release -j "$(sysctl -n hw.ncpu)" 2>&1 | tail -5
 
   mkdir -p "$RESOURCES_BIN"
   cp "$WHISPER_TMP/build/bin/whisper-cli" "$RESOURCES_BIN/whisper-cli"
   chmod +x "$RESOURCES_BIN/whisper-cli"
 
-  echo "[OK] whisper-cli built and copied to $RESOURCES_BIN/whisper-cli"
+  echo "  Verifying static linking..."
+  if otool -L "$RESOURCES_BIN/whisper-cli" 2>/dev/null | grep -q '@rpath'; then
+    echo "[FAIL] whisper-cli still has @rpath dependencies:"
+    otool -L "$RESOURCES_BIN/whisper-cli" | grep '@rpath'
+    echo "Static build failed. Leaving $WHISPER_TMP for debugging."
+    exit 1
+  fi
+
+  echo "  Cleaning up $WHISPER_TMP..."
+  rm -rf "$WHISPER_TMP"
+
+  echo "[OK] whisper-cli built (static) and copied to $RESOURCES_BIN/whisper-cli"
 fi
 
 echo ""
