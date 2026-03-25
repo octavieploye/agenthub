@@ -560,6 +560,31 @@ h1, h2, h3, .agent-name {
   overflow: hidden;
 }
 
+/* Approval nudge — lateral shake on awaiting_approval entry */
+@keyframes card-nudge {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(-4px); }
+  35%  { transform: translateX(4px); }
+  55%  { transform: translateX(-3px); }
+  75%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+.card-nudge {
+  animation: card-nudge 400ms ease-out forwards;
+}
+
+/* Soft one-time glow pulse for completed */
+@keyframes glow-soft-pulse {
+  0%   { box-shadow: none; }
+  40%  { box-shadow: 0 0 20px var(--glow-color, transparent), 0 0 40px color-mix(in srgb, var(--glow-color, transparent) 25%, transparent); }
+  100% { box-shadow: none; }
+}
+
+.glow-blip-soft {
+  animation: glow-soft-pulse 800ms ease-out forwards;
+}
+
 /* Utility classes */
 .animate-breathe {
   animation: breathe var(--breathe-speed) ease-in-out infinite;

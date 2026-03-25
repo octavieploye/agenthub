@@ -14,9 +14,9 @@ describe('ClaudeCliOutputParser', () => {
       expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
     })
 
-    it('detects y/n prompt as locked', () => {
+    it('detects y/n prompt as awaiting_approval', () => {
       const result = parser.parse('Continue? (y/n)')
-      expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
     it('detects Claude CLI tool approval as awaiting_approval', () => {
@@ -117,14 +117,9 @@ describe('ClaudeCliOutputParser', () => {
   })
 
   describe('real Claude CLI prompt detection', () => {
-    it('detects "? for shortcuts" as locked (Claude CLI v2.x idle)', () => {
-      const result = parser.parse('? for shortcuts')
+    it('detects ❯ prompt as locked (Claude CLI v2.x idle)', () => {
+      const result = parser.parse('❯ ')
       expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
-    })
-
-    it('does NOT detect bare ❯ as locked (TUI redraws during busy)', () => {
-      const result = parser.parse('❯ \n')
-      expect(result).toBeNull()
     })
 
     it('detects ? at start of line as a confirmation prompt', () => {
@@ -132,9 +127,9 @@ describe('ClaudeCliOutputParser', () => {
       expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
     })
 
-    it('detects generic (y/n) prompt as locked', () => {
+    it('detects generic (y/n) prompt as awaiting_approval', () => {
       const result = parser.parse('Continue with operation? (y/n)')
-      expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
     it('detects [Y/n] prompt', () => {
@@ -206,9 +201,9 @@ describe('ClaudeCliOutputParser', () => {
       expect(result?.status).not.toBe('awaiting_approval')
     })
 
-    it('non-approval locked prompts still return locked', () => {
+    it('(y/n) is an approval pattern, returns awaiting_approval', () => {
       const result = parser.parse('Continue? (y/n)')
-      expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
     it('resets looping history on approval detection', () => {
@@ -290,9 +285,9 @@ describe('ClaudeCliOutputParser', () => {
     })
 
     it('strips ANSI codes and replaces cursor movement with spaces', () => {
-      // Simulates: "? for shortcuts" with ANSI color codes and cursor movements
-      const result = parser.parse('\x1b[38;5;246m?\x1b[1Cfor\x1b[1Cshortcuts\x1b[39m')
-      expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
+      // Simulates: "Do you want to create file" with ANSI cursor movements
+      const result = parser.parse('Do\x1b[1Cyou\x1b[1Cwant\x1b[1Cto\x1b[1Ccreate\x1b[1Cfile.md?')
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
     it('replaces \\x1b[nC] cursor movement with n spaces for pattern matching', () => {
@@ -309,7 +304,7 @@ describe('ClaudeCliOutputParser', () => {
     it('after completion, buffer resets so next idle detects locked', () => {
       parser.parse('Done! Created file.')
       // Buffer was reset by completion detection
-      const result = parser.parse('? for shortcuts')
+      const result = parser.parse('❯ ')
       expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
     })
 

@@ -30,6 +30,11 @@ interface ManagedAgent {
 
 const agents = new Map<string, ManagedAgent>()
 
+// Tracks when an agent entered awaiting_approval so we can hold the status
+// visible for at least 500ms before allowing it to be overwritten.
+const approvalEntryTimes = new Map<string, number>()
+const approvalHoldTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
 const ptyProxy = new PtyProxy({
   logInfo: (message, meta) => log.info(message, meta),
   logWarning: (message, meta) => log.warn(message, meta)
@@ -171,12 +176,44 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       if (mgd && mgd.state.status !== parsed.status) {
         const previousStatus = mgd.state.status
         const newStatus = parsed.status as AgentLifecycleStatus
-        mgd.state.status = newStatus
-        mgd.state.confidence = parsed.confidence
-        updateAgentStatus(db, agentState.id, newStatus, parsed.confidence)
-        emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed.confidence)
-        emitTriageResult(mgd.state, previousStatus)
-        log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed.confidence })
+
+        function applyStatusChange(): void {
+          const current = agents.get(agentState.id)
+          if (!current) return
+          current.state.status = newStatus
+          current.state.confidence = parsed!.confidence
+          updateAgentStatus(db, agentState.id, newStatus, parsed!.confidence)
+          emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed!.confidence)
+          emitTriageResult(current.state, previousStatus)
+          log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
+        }
+
+        if (newStatus === 'awaiting_approval') {
+          approvalEntryTimes.set(agentState.id, Date.now())
+          const existing = approvalHoldTimers.get(agentState.id)
+          if (existing) {
+            clearTimeout(existing)
+            approvalHoldTimers.delete(agentState.id)
+          }
+          applyStatusChange()
+        } else if (previousStatus === 'awaiting_approval') {
+          const entryTime = approvalEntryTimes.get(agentState.id)
+          const elapsed = entryTime !== undefined ? Date.now() - entryTime : Infinity
+          const remaining = 500 - elapsed
+          if (remaining > 0) {
+            const timer = setTimeout(() => {
+              approvalHoldTimers.delete(agentState.id)
+              approvalEntryTimes.delete(agentState.id)
+              applyStatusChange()
+            }, remaining)
+            approvalHoldTimers.set(agentState.id, timer)
+          } else {
+            approvalEntryTimes.delete(agentState.id)
+            applyStatusChange()
+          }
+        } else {
+          applyStatusChange()
+        }
       }
     }
   })
@@ -357,6 +394,9 @@ export function killAgent(agentId: string): void {
       mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
       emitTriageResult(mgd.state, previousStatusOnKill)
+      const holdTimer = approvalHoldTimers.get(agentId)
+      if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
+      approvalEntryTimes.delete(agentId)
       agents.delete(agentId)
     }
   }).catch((err) => {
@@ -373,6 +413,9 @@ export function killAgent(agentId: string): void {
       mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
       emitTriageResult(mgd.state, previousStatusOnKillCatch)
+      const holdTimer = approvalHoldTimers.get(agentId)
+      if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
+      approvalEntryTimes.delete(agentId)
       agents.delete(agentId)
     }
   })
@@ -494,5 +537,8 @@ export function cleanupAllAgents(): void {
     }
   }
   agents.clear()
+  for (const timer of approvalHoldTimers.values()) clearTimeout(timer)
+  approvalHoldTimers.clear()
+  approvalEntryTimes.clear()
   log.info('All agents cleaned up')
 }

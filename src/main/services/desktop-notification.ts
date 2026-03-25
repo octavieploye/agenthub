@@ -14,6 +14,12 @@ function formatNotification(payload: DesktopNotificationPayload): {
   title: string
   body: string
 } {
+  if (payload.status === 'awaiting_approval') {
+    return {
+      title: 'Agent Needs Approval',
+      body: `${payload.agentName}: Waiting for your approval — ${payload.taskDescription}`
+    }
+  }
   if (payload.status === 'locked') {
     return {
       title: 'Agent Needs Input',

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
-import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 import { useBranchName } from '@renderer/hooks/useBranchName'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
@@ -37,29 +36,47 @@ interface GlowResult {
 }
 
 function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | null {
-  const c = agent.color
-
   switch (agent.status) {
-    case 'busy':
-    case 'idle':
-    case 'paused':
-    case 'completed':
-      return null
+    case 'completed': {
+      const green = 'oklch(0.72 0.2 145)'
+      return {
+        boxShadow: '',  // animation handles box-shadow via glow-blip-soft (forwards)
+        cssVar: green,
+        glowClass: 'glow-blip-soft',
+      }
+    }
 
-    case 'locked':
     case 'awaiting_approval': {
+      const red = 'oklch(0.62 0.22 25)'
       if (isEscalated) {
-        const warmColor = 'oklch(0.72 0.18 65)'
         return {
-          boxShadow: `0 0 18px ${warmColor}, 0 0 40px color-mix(in srgb, ${warmColor} 40%, transparent)`,
-          cssVar: warmColor,
-          glowClass: '',
+          boxShadow: `0 0 20px ${red}, 0 0 50px color-mix(in srgb, ${red} 50%, transparent)`,
+          cssVar: red,
+          glowClass: 'glow-blip-fast',
         }
       }
       return {
-        boxShadow: `0 0 0 1px ${c}60`,
-        cssVar: c,
+        boxShadow: `0 0 12px ${red}, 0 0 30px color-mix(in srgb, ${red} 35%, transparent)`,
+        cssVar: red,
+        glowClass: 'glow-blip-fast',
+      }
+    }
+
+    case 'locked': {
+      const blue = 'oklch(0.65 0.18 240)'
+      return {
+        boxShadow: `0 0 10px ${blue}, 0 0 24px color-mix(in srgb, ${blue} 30%, transparent)`,
+        cssVar: blue,
         glowClass: 'glow-blip',
+      }
+    }
+
+    case 'busy': {
+      const blue = 'oklch(0.65 0.18 240)'
+      return {
+        boxShadow: `0 0 6px color-mix(in srgb, ${blue} 40%, transparent)`,
+        cssVar: blue,
+        glowClass: '',
       }
     }
 
@@ -99,7 +116,6 @@ function AgentCard({
   onResumeAgent: (id: string) => void
   onOpenGuardrails?: (agentId: string) => void
 }): React.JSX.Element {
-  const settledStatus = useSettledStatus(agent.status)
   const branchName = useBranchName(agent.cwd)
   const isRunning = agent.status === 'busy' || agent.status === 'locked'
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -137,19 +153,33 @@ function AgentCard({
   }, [agent.status])
 
   // Shimmer: add class on completed, remove after animation
+  // Nudge: lateral shake when entering awaiting_approval
   const [showShimmer, setShowShimmer] = useState(false)
+  const [showNudge, setShowNudge] = useState(false)
   const prevStatusRef = useRef(agent.status)
 
   useEffect(() => {
-    if (agent.status === 'completed' && prevStatusRef.current !== 'completed') {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = agent.status
+
+    if (agent.status === 'completed' && prev !== 'completed') {
       setShowShimmer(true)
       const timer = setTimeout(() => setShowShimmer(false), 650)
       return () => clearTimeout(timer)
     }
+    if (agent.status === 'awaiting_approval' && prev !== 'awaiting_approval') {
+      setShowShimmer(true)
+      setShowNudge(true)
+      const shimmerTimer = setTimeout(() => setShowShimmer(false), 650)
+      const nudgeTimer = setTimeout(() => setShowNudge(false), 400)
+      return () => {
+        clearTimeout(shimmerTimer)
+        clearTimeout(nudgeTimer)
+      }
+    }
     if (agent.status !== 'completed') {
       setShowShimmer(false)
     }
-    prevStatusRef.current = agent.status
   }, [agent.status])
 
   const handleAnimationEnd = useCallback(() => {
@@ -197,7 +227,7 @@ function AgentCard({
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
       onClick={() => onSelectAgent(agent.id)}
-      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${showShimmer ? 'card-shimmer' : ''}`}
+      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${showShimmer ? 'card-shimmer' : ''} ${showNudge ? 'card-nudge' : ''}`}
       onAnimationEnd={handleAnimationEnd}
       style={{
         ...colorWashStyle,

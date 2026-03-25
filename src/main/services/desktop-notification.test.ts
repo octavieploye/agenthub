@@ -42,6 +42,19 @@ function createLockedPayload(
   }
 }
 
+function createApprovalPayload(
+  overrides: Partial<DesktopNotificationPayload> = {}
+): DesktopNotificationPayload {
+  return {
+    agentId: 'agent-3',
+    agentName: 'Scout',
+    repoName: 'my-project',
+    taskDescription: 'Refactor auth module',
+    status: 'awaiting_approval',
+    ...overrides
+  }
+}
+
 function createCompletedPayload(
   overrides: Partial<DesktopNotificationPayload> = {}
 ): DesktopNotificationPayload {
@@ -60,6 +73,28 @@ describe('Desktop Notification Service', () => {
 
   beforeEach(() => {
     deps = createDeps()
+  })
+
+  // ── awaiting_approval ────────────────────────────────────────────────
+
+  describe('awaiting_approval notification', () => {
+    it('creates notification with title "Agent Needs Approval"', () => {
+      const payload = createApprovalPayload()
+      sendDesktopNotification(payload, deps)
+      expect(deps.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Agent Needs Approval' })
+      )
+    })
+
+    it('body includes agentName and taskDescription', () => {
+      const payload = createApprovalPayload({ agentName: 'Scout', taskDescription: 'Refactor auth module' })
+      sendDesktopNotification(payload, deps)
+      expect(deps.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: 'Scout: Waiting for your approval — Refactor auth module'
+        })
+      )
+    })
   })
 
   // ── Title formatting ─────────────────────────────────────────────────

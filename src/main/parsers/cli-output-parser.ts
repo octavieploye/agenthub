@@ -26,13 +26,17 @@ const PATTERNS = {
     /Do you want to (?:create|write|read|edit|delete|execute|run|update|modify|remove|install|push|overwrite)\b/i,
     // Fallback for other approval question forms
     /(?:do you (?:want to|wish to)|would you like to)\s+(?:approve|deny|allow)/i,
-    /(?:approve|deny|allow)\s+this\s+(?:tool|action|operation|request)\??/i
+    /(?:approve|deny|allow)\s+this\s+(?:tool|action|operation|request)\??/i,
+    // Yes/no confirmation prompts
+    /\[yes\/no\]/i,
+    /\(y\/n\)/i,
+    // "allow X to create/write/run/execute/delete Y"
+    /allow .* to .*(create|write|run|execute|delete)/i
   ],
   waiting_input: [
     /^\?\s+\S/m,
-    /\?\s+for\s+shortcuts/i,              // Claude CLI v2.x idle indicator (shown below ❯ prompt)
+    /^❯\s/m,                              // Claude CLI v2.x prompt indicator (agent at ❯ prompt)
     /waiting for (?:input|response)/i,
-    /\(y\/n\)/i,
     /\[Y\/n\]/,
     /press enter/i
   ],
