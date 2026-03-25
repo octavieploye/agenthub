@@ -53,10 +53,13 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
           el.dispatchEvent(new Event('input', { bubbles: true }))
         }
       } else if (response.success && response.data.error) {
-        console.error('Transcription error:', response.data.error)
+        setMicError(response.data.error)
+      } else if (!response.success) {
+        setMicError(response.error?.message ?? 'Transcription service error')
       }
     } catch (err) {
       console.error('Voice transcription failed:', err)
+      setMicError(err instanceof Error ? err.message : 'Transcription failed')
     } finally {
       setIsProcessing(false)
       recorderRef.current = null
