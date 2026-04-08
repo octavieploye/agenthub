@@ -425,7 +425,7 @@ describe('SkillsService', () => {
       mockReadFileSync.mockReturnValue('# Deploy\n# Deploys app\necho "deployed"')
 
       mockExecFile.mockImplementation(
-        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
           cb(null, 'deployed', '')
         }
       )
@@ -450,7 +450,7 @@ describe('SkillsService', () => {
       mockReadFileSync.mockReturnValue('# Analyze\n# Analyzes data\nprint("done")')
 
       mockExecFile.mockImplementation(
-        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
           cb(null, 'done', '')
         }
       )
@@ -475,7 +475,7 @@ describe('SkillsService', () => {
       mockReadFileSync.mockReturnValue('// Build\n// Builds project\nconsole.log("built")')
 
       mockExecFile.mockImplementation(
-        (cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
           cb(null, 'built', '')
         }
       )

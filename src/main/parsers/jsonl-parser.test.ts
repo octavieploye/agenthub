@@ -36,16 +36,6 @@ const VALID_USER_LINE = JSON.stringify({
   }
 })
 
-const ASSISTANT_NO_USAGE_LINE = JSON.stringify({
-  type: 'assistant',
-  timestamp: '2026-02-18T11:17:00.000Z',
-  sessionId: '35300a85-abcd-1234-efgh-567890abcdef',
-  message: {
-    model: 'claude-opus-4-6',
-    role: 'assistant',
-    content: [{ type: 'text', text: 'Acknowledged' }]
-  }
-})
 
 const ASSISTANT_NO_CACHE_LINE = JSON.stringify({
   type: 'assistant',

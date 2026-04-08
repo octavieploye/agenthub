@@ -70,7 +70,7 @@ function HelpPopover(): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.agentHub.system.getAppVersion().then((v) => setAppVersion(v)).catch(() => {})
+    window.agentHub.system.getAppVersion().then((v) => setAppVersion(String(v))).catch(() => {})
   }, [])
 
   const close = useCallback(() => setOpen(false), [])

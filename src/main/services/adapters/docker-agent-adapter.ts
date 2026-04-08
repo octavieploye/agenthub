@@ -8,6 +8,7 @@ export interface DockerExecOptions {
   cols?: number
   rows?: number
   role: DockerAgentRole
+  env?: Record<string, string>
 }
 
 export class DockerAgentAdapter {

@@ -2,7 +2,7 @@ import type {
   QualityPipelineDeps,
   PipelineRun,
   PipelineAttempt,
-  EscalationLevel
+  PipelineStatus
 } from '@shared/types/quality-pipeline.types'
 
 let idCounter = 0
@@ -54,13 +54,13 @@ export class QualityPipeline {
 
     try {
       await this.executeL1(run)
-      if (run.status === 'resolved') return run
+      if ((run.status as PipelineStatus) === 'resolved') return run
 
       await this.executeL2(run)
-      if (run.status === 'resolved') return run
+      if ((run.status as PipelineStatus) === 'resolved') return run
 
       await this.executeL3(run)
-      if (run.status === 'resolved') return run
+      if ((run.status as PipelineStatus) === 'resolved') return run
 
       this.executeL4(run)
     } finally {

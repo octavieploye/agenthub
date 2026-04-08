@@ -1,13 +1,11 @@
 import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react'
 import '@xterm/xterm/css/xterm.css'
-import { useThemeStore } from '@renderer/stores/theme-store'
 import TerminalContextMenu from './TerminalContextMenu'
 import {
   getOrCreateTerminal,
   attachToContainer,
   setVisible,
   fitTerminal,
-  updateTheme,
   getTerminal,
   getSearchAddon,
   getSerializeAddon,
@@ -25,7 +23,6 @@ interface FullTerminalProps {
 function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef(visible)
-  const theme = useThemeStore((s) => s.theme)
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)

@@ -1,4 +1,3 @@
-import { join } from 'path'
 import { WhisperEngine } from './transcription-engine'
 import type { VoiceStatusResult, VoiceTranscribeResult } from '../../shared/types/voice.types'
 

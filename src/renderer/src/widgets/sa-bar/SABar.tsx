@@ -12,7 +12,7 @@ interface SABarProps {
   onOpenGit?: () => void
   onOpenHelp?: () => void
   onOpenSearch?: () => void
-  repoSwitcherRef?: React.RefObject<RepoSwitcherHandle>
+  repoSwitcherRef?: React.RefObject<RepoSwitcherHandle | null>
 }
 
 const VIEW_MODES = [

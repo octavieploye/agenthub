@@ -192,7 +192,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   className="input input-bordered input-sm w-full bg-base-100/50 text-sm text-base-content border-base-content/10 focus:outline-none"
-                  style={{ borderColor: `${agentColor}40`, focusBorderColor: agentColor }}
+                  style={{ borderColor: `${agentColor}40` }}
                   autoFocus
                 />
                 <textarea

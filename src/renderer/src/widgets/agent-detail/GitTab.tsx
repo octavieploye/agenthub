@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useGitStore } from '../../stores/git-store'
 import type { AgentState } from '@shared/types/agent.types'
-import type { GitFileChange, GitDiffResult } from '@shared/types/git.types'
+import type { GitFileChange, GitDiffResult, GitRepoStatus, GitCommitEntry, GitBranchInfo } from '@shared/types/git.types'
 
 interface GitTabProps {
   agent: AgentState
@@ -257,8 +257,8 @@ function StatusSection({
   onUnstageAll,
   onSuggest
 }: {
-  status: ReturnType<typeof useGitStore>['status']
-  branches: ReturnType<typeof useGitStore>['branches']
+  status: GitRepoStatus | null
+  branches: GitBranchInfo | null
   onStage: (path: string) => void
   onUnstage: (path: string) => void
   onStageAll: () => void
@@ -366,7 +366,7 @@ function CommitSection({
   onSuggest,
   actionLoading
 }: {
-  status: ReturnType<typeof useGitStore>['status']
+  status: GitRepoStatus | null
   commitMsg: string
   setCommitMsg: (msg: string) => void
   onCommit: () => void
@@ -419,7 +419,7 @@ function CommitSection({
 function LogSection({
   log
 }: {
-  log: ReturnType<typeof useGitStore>['log']
+  log: GitCommitEntry[]
 }): React.JSX.Element {
   if (log.length === 0) {
     return (

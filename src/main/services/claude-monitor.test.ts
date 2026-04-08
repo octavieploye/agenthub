@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { SessionEntry, UsageSnapshot } from '@shared/types/usage.types'
+import type { SessionEntry } from '@shared/types/usage.types'
 
 // Mock electron-log before importing the module under test
 vi.mock('electron-log/main', () => ({
@@ -25,7 +25,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 import { detectPlan, calculateBurnRate, aggregateUsage, ClaudeMonitor } from './claude-monitor'
 import fs from 'node:fs'
-import fsp from 'node:fs/promises'
+import fsp, { readdir } from 'node:fs/promises'
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -53,7 +53,6 @@ function FileActionPopover({ filePath, repoPath, anchorRect, onClose }: FileActi
         // Open preview in a simple alert-like modal for now
         // This could be enhanced to a proper viewer
         const content = response.data.content.slice(0, 2000)
-        const truncated = response.data.isTruncated || response.data.content.length > 2000
         window.agentHub.clipboard.writeText(content)
         // For MVP: copy content to clipboard and notify
         setCopied(true)

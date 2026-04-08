@@ -52,6 +52,9 @@ function createAgent(id: string, status: AgentState['status'] = 'busy'): AgentSt
     ptyFd: null,
     cwd: '/tmp/test',
     progress: 50,
+    effortLevel: 'medium' as const,
+    color: '#3B82F6',
+    executionMode: 'native' as const,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }

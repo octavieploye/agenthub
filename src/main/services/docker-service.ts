@@ -1,6 +1,5 @@
 import { exec, spawn } from 'child_process'
 import { BrowserWindow } from 'electron'
-import log from 'electron-log/main'
 import { promisify } from 'util'
 import type { DockerStatus } from '../../shared/types/docker.types'
 import { DOCKER_IMAGE_TAG } from '../../shared/types/docker.types'

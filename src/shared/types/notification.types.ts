@@ -31,7 +31,7 @@ export interface DesktopNotificationPayload {
   agentName: string
   repoName: string
   taskDescription: string
-  status: 'locked' | 'completed'
+  status: 'locked' | 'completed' | 'awaiting_approval'
   question?: string
 }
 

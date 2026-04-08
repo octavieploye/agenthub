@@ -149,6 +149,7 @@ function AgentCard({
     } else {
       awaitingSinceRef.current = null
       setIsEscalated(false)
+      return undefined
     }
   }, [agent.status])
 
@@ -180,6 +181,7 @@ function AgentCard({
     if (agent.status !== 'completed') {
       setShowShimmer(false)
     }
+    return undefined
   }, [agent.status])
 
   const handleAnimationEnd = useCallback(() => {

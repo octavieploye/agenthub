@@ -1,4 +1,22 @@
-import type { AgentState } from '@shared/types/agent.types'
+// Web Speech API types (not in standard lib for Electron)
+interface WebSpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  abort(): void
+  onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null
+  onerror: ((event: { error: string }) => void) | null
+  onend: (() => void) | null
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => WebSpeechRecognition
+    webkitSpeechRecognition: new () => WebSpeechRecognition
+  }
+}
 
 export interface SpeechRecognitionDeps {
   onTranscript: (agentId: string, transcript: string) => void
@@ -6,7 +24,7 @@ export interface SpeechRecognitionDeps {
 }
 
 export class SpeechRecognitionService {
-  private recognition: SpeechRecognition | null = null
+  private recognition: WebSpeechRecognition | null = null
   private currentAgentId: string | null = null
   private deps: SpeechRecognitionDeps
   private isListening = false

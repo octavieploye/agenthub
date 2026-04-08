@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { routeNotification, DEFAULT_CONFIG } from './notification-router'
 import type { NotificationRouterConfig, RoutingResult } from '@shared/types/notification.types'
-import type { TriageEvent, TriageLevel } from '@shared/types/triage.types'
+import type { TriageEvent } from '@shared/types/triage.types'
 
 // ─── Helper ─────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,6 @@ import { exec, spawn } from 'child_process'
 import { homedir } from 'os'
 import { promisify } from 'util'
 import { randomUUID } from 'crypto'
-import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { ContainerInfo, ContainerStatus, DockerContainerConfig } from '../../shared/types/docker.types'
 import { DOCKER_IMAGE_TAG, DOCKER_CONTAINER_PREFIX, DOCKER_DEFAULT_TTL_DAYS } from '../../shared/types/docker.types'
@@ -21,6 +20,7 @@ interface ContainerRecord {
 interface ContainerManagerDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
   logWarning: (message: string, meta?: Record<string, unknown>) => void
+  getApiKey?: () => string
 }
 
 export class ContainerManager {

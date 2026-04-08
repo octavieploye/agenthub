@@ -31,6 +31,9 @@ function createAgent(overrides?: Partial<AgentState>): AgentState {
     ptyFd: null,
     cwd: '/tmp/test/payment-service',
     progress: 65,
+    effortLevel: 'medium' as const,
+    color: '#3B82F6',
+    executionMode: 'native' as const,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides

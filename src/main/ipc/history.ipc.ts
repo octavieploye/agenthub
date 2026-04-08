@@ -11,10 +11,6 @@ import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { HistoryEntry, HistorySearchResult } from '../../shared/types/history.types'
 import { z } from 'zod/v4'
 
-const searchSchema = z.object({
-  agentId: z.string(),
-  query: z.string().min(1)
-})
 
 export function registerHistoryHandlers(): void {
   ipcMain.handle(

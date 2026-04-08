@@ -61,7 +61,7 @@ describe('WindowManager', () => {
     vi.clearAllMocks()
     windowIdState.counter = 0
     mockWindowInstances.length = 0
-    process.env['ELECTRON_RENDERER_URL'] = 'http://localhost:5173'
+    ;(process.env as Record<string, string>)['ELECTRON_RENDERER_URL'] = 'http://localhost:5173'
     wm = new WindowManager(deps)
   })
 
@@ -152,7 +152,7 @@ describe('WindowManager', () => {
     it('sets window title from agent name and repo folder', () => {
       wm.createBreakout('agent-1', 'Builder', '/home/user/my-project', '#3B82F6')
 
-      const constructorCall = MockBrowserWindowCtor.mock.calls[0][0] as Record<string, unknown>
+      const constructorCall = (MockBrowserWindowCtor.mock.calls as unknown as Record<string, unknown>[][])[0][0]
       expect(constructorCall.title).toContain('Builder')
       expect(constructorCall.title).toContain('my-project')
     })

@@ -15,7 +15,7 @@ import type {
 } from '../../shared/types/git.types'
 
 const repoPathSchema = z.string().min(1)
-const filesSchema = z.array(z.string().min(1))
+
 const commitSchema = z.object({
   repoPath: z.string().min(1),
   message: z.string().min(1)

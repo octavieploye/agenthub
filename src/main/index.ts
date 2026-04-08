@@ -106,7 +106,7 @@ app.whenReady().then(() => {
   // Set app icon for macOS dock
   if (process.platform === 'darwin') {
     const nativeIcon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
-    app.dock.setIcon(nativeIcon)
+    app.dock?.setIcon(nativeIcon)
   }
 
   // Initialize database

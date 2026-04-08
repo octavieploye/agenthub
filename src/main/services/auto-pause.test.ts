@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AutoPauseService } from './auto-pause'
-import type { AutoPauseDeps, PausedAgentInfo } from './auto-pause'
+import type { AutoPauseDeps } from './auto-pause'
 import type { HealthAnomaly } from '@shared/types/health.types'
 
 vi.mock('electron-log/main', () => ({

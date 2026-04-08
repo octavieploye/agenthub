@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 
 import { isLightColor } from './color-utils'

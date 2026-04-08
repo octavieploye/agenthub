@@ -20,7 +20,7 @@ function useReducedMotion(): boolean {
   return mql.matches
 }
 
-function UnifiedView({ agents, onSelectAgent, onContextMenu, onSoloAgent, onMuteAgent, onKillAgent, soloedAgentId }: UnifiedViewProps): React.JSX.Element {
+function UnifiedView({ agents, onSelectAgent, onContextMenu }: UnifiedViewProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const focusedAgentId = useViewStore((s) => s.focusedAgentId)
   const reducedMotion = useReducedMotion()
@@ -41,6 +41,7 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu, onSoloAgent, onMute
       }, 50)
       return () => clearTimeout(timer)
     }
+    return undefined
   }, [viewMode, reducedMotion])
 
   return (

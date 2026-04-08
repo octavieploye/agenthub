@@ -61,10 +61,10 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [step, setStep] = useState<Step>('configure')
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
-  const [selectedColor, setSelectedColor] = useState(AGENT_COLOR_PALETTE[0])
+  const [selectedColor, setSelectedColor] = useState<string>(AGENT_COLOR_PALETTE[0])
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [skipPermissions, setSkipPermissions] = useState(false)
-  const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
+  const [_dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
     [...OLLAMA_CLOUD_MODELS, ...CLAUDE_MODELS].map(catalogToModelInfo)

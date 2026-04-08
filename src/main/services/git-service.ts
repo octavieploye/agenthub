@@ -236,7 +236,7 @@ export class GitService {
     return 'update'
   }
 
-  private resolveSubject(staged: GitFileChange[], extractedNames: string[], verb: string): string {
+  private resolveSubject(staged: GitFileChange[], extractedNames: string[], _verb: string): string {
     // If a single function/class was changed, mention it by name
     if (extractedNames.length === 1) {
       return extractedNames[0]

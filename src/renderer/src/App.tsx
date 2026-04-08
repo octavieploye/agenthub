@@ -7,7 +7,6 @@ import AgentSidebar from './widgets/agent-sidebar/AgentSidebar'
 import RepoSidebar from './widgets/repo-sidebar/RepoSidebar'
 import SABar from './widgets/sa-bar/SABar'
 import SpawnDialog from './widgets/spawn-dialog/SpawnDialog'
-import UnifiedView from './widgets/unified-view/UnifiedView'
 import CommandPalette from './widgets/command-palette/CommandPalette'
 import EvidencePanel from './widgets/evidence-panel/EvidencePanel'
 import CodeBluePanel from './widgets/code-blue/CodeBluePanel'
@@ -74,7 +73,7 @@ function sendDesktopNotificationFromRenderer(event: TriageEvent): void {
 }
 
 function AppMain(): React.JSX.Element {
-  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, updateColor, removeAgent } =
+  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
   const selectedRepoId = useViewStore((s) => s.selectedRepoId)

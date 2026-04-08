@@ -9,7 +9,6 @@ import { DOCKER_IMAGE_TAG } from '@shared/types/docker.types'
 
 const SKIP = process.env.DOCKER_INTEGRATION !== 'true'
 
-const deps = { logInfo: vi.fn(), logWarning: vi.fn() }
 
 describe.skipIf(SKIP)('DockerService — real Docker', () => {
   let svc: DockerService
