@@ -13,6 +13,7 @@ export interface TriageEvent {
   timestamp: number
   reason: string
   requiresUserAction: boolean
+  requiresSoundAlert: boolean
   isTaskCompleted: boolean
 }
 

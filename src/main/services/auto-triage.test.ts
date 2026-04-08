@@ -187,6 +187,34 @@ describe('Auto-Triage Engine', () => {
     })
   })
 
+  // ─── requiresSoundAlert Flag ───────────────────────────────────────────
+
+  describe('requiresSoundAlert flag', () => {
+    it('is true for awaiting_approval', () => {
+      const input = makeInput({ currentStatus: 'awaiting_approval' })
+      const result: TriageEvent = triageAgentEvent(input)
+      expect(result.requiresSoundAlert).toBe(true)
+    })
+
+    it('is false for locked (toast/desktop only, no sound)', () => {
+      const input = makeInput({ currentStatus: 'locked' })
+      const result: TriageEvent = triageAgentEvent(input)
+      expect(result.requiresSoundAlert).toBe(false)
+    })
+
+    it('is false for busy', () => {
+      const input = makeInput({ currentStatus: 'busy' })
+      const result: TriageEvent = triageAgentEvent(input)
+      expect(result.requiresSoundAlert).toBe(false)
+    })
+
+    it('is false for completed', () => {
+      const input = makeInput({ currentStatus: 'completed' })
+      const result: TriageEvent = triageAgentEvent(input)
+      expect(result.requiresSoundAlert).toBe(false)
+    })
+  })
+
   // ─── Triage Level Ordering ─────────────────────────────────────────────
 
   describe('triage level ordering', () => {

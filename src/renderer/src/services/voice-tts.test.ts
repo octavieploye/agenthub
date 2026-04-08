@@ -29,6 +29,9 @@ function createTriageEvent(overrides: Partial<TriageEvent> = {}): TriageEvent {
     triageLevel: 'critical',
     timestamp: Date.now(),
     reason: 'Agent needs user input',
+    requiresUserAction: false,
+    requiresSoundAlert: false,
+    isTaskCompleted: false,
     ...overrides
   }
 }

@@ -16,6 +16,9 @@ function makeTriageEvent(overrides: Partial<TriageEvent> = {}): TriageEvent {
     triageLevel: 'low',
     timestamp: Date.now(),
     reason: 'Agent working',
+    requiresUserAction: false,
+    requiresSoundAlert: false,
+    isTaskCompleted: false,
     ...overrides
   }
 }
@@ -142,18 +145,25 @@ describe('Notification Router', () => {
       expect(result.layers).not.toContain('sound')
     })
 
-    it('includes sound for high triage level when enabled', () => {
-      const event = makeTriageEvent({ triageLevel: 'high' })
+    it('includes sound for high triage level when enabled and requiresSoundAlert', () => {
+      const event = makeTriageEvent({ triageLevel: 'high', requiresSoundAlert: true })
       const config: NotificationRouterConfig = { ...allDisabled(), soundEnabled: true }
       const result: RoutingResult = routeNotification(event, config)
       expect(result.layers).toContain('sound')
     })
 
-    it('includes sound for critical triage level when enabled', () => {
-      const event = makeTriageEvent({ triageLevel: 'critical' })
+    it('includes sound for critical triage level when enabled and requiresSoundAlert', () => {
+      const event = makeTriageEvent({ triageLevel: 'critical', requiresSoundAlert: true })
       const config: NotificationRouterConfig = { ...allDisabled(), soundEnabled: true }
       const result: RoutingResult = routeNotification(event, config)
       expect(result.layers).toContain('sound')
+    })
+
+    it('does NOT include sound for high when requiresSoundAlert is false', () => {
+      const event = makeTriageEvent({ triageLevel: 'high', requiresSoundAlert: false })
+      const config: NotificationRouterConfig = { ...allDisabled(), soundEnabled: true }
+      const result: RoutingResult = routeNotification(event, config)
+      expect(result.layers).not.toContain('sound')
     })
 
     it('does NOT include sound for high when soundEnabled is false', () => {
@@ -305,14 +315,20 @@ describe('Notification Router', () => {
       expect(result.layers).toEqual(['toast', 'desktop'])
     })
 
-    it('high event -> toast + desktop + sound', () => {
-      const event = makeTriageEvent({ triageLevel: 'high' })
+    it('high event with sound alert -> toast + desktop + sound', () => {
+      const event = makeTriageEvent({ triageLevel: 'high', requiresSoundAlert: true })
       const result: RoutingResult = routeNotification(event, DEFAULT_CONFIG)
       expect(result.layers).toEqual(['toast', 'desktop', 'sound'])
     })
 
-    it('critical event -> toast + desktop + sound (voice off by default)', () => {
-      const event = makeTriageEvent({ triageLevel: 'critical' })
+    it('high event without sound alert -> toast + desktop (no sound)', () => {
+      const event = makeTriageEvent({ triageLevel: 'high' })
+      const result: RoutingResult = routeNotification(event, DEFAULT_CONFIG)
+      expect(result.layers).toEqual(['toast', 'desktop'])
+    })
+
+    it('critical event with sound alert -> toast + desktop + sound (voice off by default)', () => {
+      const event = makeTriageEvent({ triageLevel: 'critical', requiresSoundAlert: true })
       const result: RoutingResult = routeNotification(event, DEFAULT_CONFIG)
       expect(result.layers).toEqual(['toast', 'desktop', 'sound'])
     })
@@ -321,8 +337,8 @@ describe('Notification Router', () => {
   // ─── Full routing with all layers enabled ─────────────────────────────────
 
   describe('full routing with all layers enabled', () => {
-    it('critical event -> toast + desktop + sound + voice + telegram', () => {
-      const event = makeTriageEvent({ triageLevel: 'critical' })
+    it('critical event with sound alert -> toast + desktop + sound + voice + telegram', () => {
+      const event = makeTriageEvent({ triageLevel: 'critical', requiresSoundAlert: true })
       const result: RoutingResult = routeNotification(event, allEnabled())
       expect(result.layers).toEqual(['toast', 'desktop', 'sound', 'voice', 'telegram'])
     })

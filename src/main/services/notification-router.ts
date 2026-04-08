@@ -36,8 +36,9 @@ export function routeNotification(
     return true
   }).map((rule) => rule.layer)
 
-  if (config.soundEnabled && (event.requiresUserAction || event.isTaskCompleted)) {
-    layers.push('sound')
+  if (config.soundEnabled && (event.requiresSoundAlert || event.isTaskCompleted)) {
+    const desktopIdx = layers.indexOf('desktop')
+    layers.splice(desktopIdx + 1, 0, 'sound')
   }
 
   return { layers, triageEvent: event }
