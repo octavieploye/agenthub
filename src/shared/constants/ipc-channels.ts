@@ -14,7 +14,8 @@ export const IPC_CHANNELS = {
     UPDATE_MODEL: 'agents:update-model',
     ATTACH_TERMINAL: 'agents:attach-terminal',
     DETACH_TERMINAL: 'agents:detach-terminal',
-    GET_PROXY_PATH: 'agents:get-proxy-path'
+    GET_PROXY_PATH: 'agents:get-proxy-path',
+    RESPAWN: 'agents:respawn'
   },
   MODELS: {
     LIST_ALL: 'models:list-all',

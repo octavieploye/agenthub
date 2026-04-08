@@ -18,7 +18,8 @@ import {
   updateAgentModel,
   startPtyProxy,
   stopPtyProxy,
-  getPtyProxyPath
+  getPtyProxyPath,
+  respawnAgent
 } from '../services/agent-manager'
 import { ModelProviderSchema, EffortLevelSchema } from '../../shared/schemas/agent.schemas'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
@@ -94,6 +95,19 @@ export function registerAgentHandlers(): void {
         return success(listAgents())
       } catch (err) {
         return error('LIST_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.RESPAWN,
+    async (_event, agentId: unknown): Promise<IpcResponse<AgentState>> => {
+      try {
+        const validation = validateInput(z.string(), agentId)
+        if (!validation.valid) return validation.response
+        return success(respawnAgent(validation.data))
+      } catch (err) {
+        return error('RESPAWN_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

@@ -14,6 +14,7 @@ import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
+import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { routeNotification } from './notification-router'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
@@ -459,6 +460,61 @@ export function getAgentState(agentId: string): AgentState | null {
 
 export function listAgents(): AgentState[] {
   return getAllAgents(getDb())
+}
+
+export function respawnAgent(agentId: string): AgentState {
+  const db = getDb()
+  const oldAgent = getAgentById(db, agentId)
+  if (!oldAgent) throw new Error(`Agent ${agentId} not found in DB`)
+
+  // Kill orphan process if still alive
+  if (oldAgent.pid) {
+    try {
+      process.kill(oldAgent.pid, 'SIGTERM')
+      log.info('Killed orphaned agent process', { pid: oldAgent.pid })
+    } catch {
+      // Process already dead, ignore
+    }
+  }
+
+  // Mark old agent as completed
+  updateAgentStatus(db, agentId, 'completed', 'confirmed')
+
+  // Respawn with same config
+  const newAgent = spawnAgent({
+    repoId: oldAgent.repoId,
+    name: oldAgent.name + '-resumed',
+    cwd: oldAgent.cwd,
+    model: oldAgent.model,
+    provider: oldAgent.provider,
+    effortLevel: oldAgent.effortLevel,
+    taskDescription: oldAgent.taskDescription,
+    color: oldAgent.color
+  })
+
+  // Inject SBAR context if available
+  const handoff = getSBARByAgentId(db, agentId)
+  if (handoff) {
+    const context = [
+      '[RESUMED FROM INTERRUPTED SESSION]',
+      `Situation: ${handoff.situation}`,
+      `Background: ${handoff.background}`,
+      `Assessment: ${handoff.assessment}`,
+      `Recommendation: ${handoff.recommendation}`,
+      '',
+      'Please continue the work described above.'
+    ].join('\n')
+
+    setTimeout(() => {
+      try {
+        sendInput(newAgent.id, context + '\n')
+      } catch (err) {
+        log.warn('Failed to inject SBAR context', { error: (err as Error).message })
+      }
+    }, 2000)
+  }
+
+  return newAgent
 }
 
 export function updateAgentColor(agentId: string, color: string): void {

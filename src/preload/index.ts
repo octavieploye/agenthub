@@ -9,6 +9,7 @@ const agentHubBridge = {
     pause: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.PAUSE, agentId),
     resume: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESUME, agentId),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.LIST),
+    respawn: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESPAWN, agentId),
     getState: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_STATE, agentId),
     sendInput: (agentId: string, data: string) => {
       ipcRenderer.send(IPC_CHANNELS.AGENTS.SEND_INPUT, agentId, data)
