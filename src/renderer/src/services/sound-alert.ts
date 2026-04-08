@@ -8,6 +8,7 @@ export interface SoundAlertDeps {
 }
 
 export const SOUND_MAP: Record<AgentSoundEvent, { src: string; volume: number }> = {
+  agent_spawned: { src: 'sounds/state-change.mp3', volume: 0.5 },
   agent_completed: { src: 'sounds/bridge-beep.wav', volume: 0.5 },
   agent_locked: { src: 'sounds/alert-yellow.wav', volume: 0.8 },
   code_blue: { src: 'sounds/code-blue.mp3', volume: 1.0 },
@@ -18,7 +19,6 @@ export const SOUND_MAP: Record<AgentSoundEvent, { src: string; volume: number }>
 export function statusToSoundEvent(status: AgentLifecycleStatus): AgentSoundEvent | null {
   const map: Partial<Record<AgentLifecycleStatus, AgentSoundEvent>> = {
     awaiting_approval: 'user_approval',
-    locked: 'agent_locked',
   }
   return map[status] ?? null
 }

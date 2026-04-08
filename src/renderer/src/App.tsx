@@ -164,9 +164,10 @@ function AppMain(): React.JSX.Element {
 
       const lifecycleStatus = status as AgentLifecycleStatus
 
-      // Track known agents (used by agentTriaged handler for spawned detection)
+      // Track known agents — play spawn sound on first appearance
       if (!knownAgentIds.current.has(agentId)) {
         knownAgentIds.current.add(agentId)
+        playAgentSound('agent_spawned', soundDeps.current)
       }
 
       // mission_complete: all agents done AND more than 1 agent — needs cross-agent context
@@ -253,16 +254,17 @@ function AppMain(): React.JSX.Element {
           }
         }
 
-        // Handle awaiting_approval and locked via statusToSoundEvent
+        // Handle awaiting_approval only (locked is excluded — fires too often)
         const soundEvent = statusToSoundEvent(triageEvent.currentStatus)
         if (soundEvent) {
           playAgentSound(soundEvent, soundDeps.current)
         }
+      }
 
-        // Handle critical errors: code_blue only for actual error status
-        if (triageEvent.currentStatus === 'error') {
-          playAgentSound('code_blue', soundDeps.current)
-        }
+      // code_blue: play for error status regardless of sound layer
+      // (error has requiresUserAction=false so sound layer is not added by router)
+      if (triageEvent.currentStatus === 'error') {
+        playAgentSound('code_blue', soundDeps.current)
       }
 
       // Layer 4: Voice TTS — critical events, gated by voiceEnabled

@@ -19,6 +19,7 @@ export interface ToastNotification {
 }
 
 export type AgentSoundEvent =
+  | 'agent_spawned'
   | 'agent_completed'
   | 'agent_locked'
   | 'code_blue'
