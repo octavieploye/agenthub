@@ -17,7 +17,8 @@ interface SABarProps {
 
 const VIEW_MODES = [
   { key: 'raid' as const, label: 'Raid' },
-  { key: 'terminal' as const, label: 'Terminal' }
+  { key: 'terminal' as const, label: 'Terminal' },
+  { key: 'activity' as const, label: 'Activity' }
 ]
 
 /** Lucide-style inline SVG icons (16x16) — lucide-react is not installed */

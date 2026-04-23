@@ -1,6 +1,7 @@
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { NoteItem, CreateNoteInput } from '../../../shared/types/note.types'
+import { insertActivityEvent } from './activity.queries'
 
 function mapRow(row: Record<string, unknown>): NoteItem {
   return {
@@ -91,6 +92,12 @@ export function upsertNote(db: Database.Database, input: CreateNoteInput): NoteI
 
   const id = Number(result.lastInsertRowid)
   log.info('Note inserted', { id, type: input.type })
+  insertActivityEvent(db, {
+    eventType: 'note_created',
+    entityType: 'note',
+    entityId: String(id),
+    details: { type: input.type }
+  })
   return {
     id,
     type: input.type,

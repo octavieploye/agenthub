@@ -161,6 +161,10 @@ export interface AgentHubBridge {
     readDir: (input: { repoPath: string; dirPath: string }) => Promise<IpcResponse<import('./fs.types').FileTreeNode[]>>
     readFile: (input: { repoPath: string; filePath: string }) => Promise<IpcResponse<import('./fs.types').ReadFileResult>>
   }
+  activity: {
+    query: (params: { since: string; repoId?: string }) => Promise<IpcResponse<import('./activity.types').ActivityEvent[]>>
+    stats: (params: { since: string }) => Promise<IpcResponse<import('./activity.types').ActivityStats>>
+  }
   containers: {
     list: () => Promise<IpcResponse<import('./docker.types').ContainerInfo[]>>
     stop: (repoId: string) => Promise<IpcResponse<void>>

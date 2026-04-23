@@ -1,6 +1,6 @@
 import type { AgentState } from './agent.types'
 
-export type ViewMode = 'raid' | 'terminal'
+export type ViewMode = 'raid' | 'terminal' | 'activity'
 
 export interface SessionSnapshot {
   id: number

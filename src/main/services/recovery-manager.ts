@@ -4,6 +4,7 @@ import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { AgentState } from '../../shared/types/agent.types'
 import type { RecoveryInfo, SBARHandoff } from '../../shared/types/recovery.types'
+import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getLatestSnapshot } from '../db/queries/snapshots.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { getAllAgents, updateAgentStatus } from '../db/queries/agents.queries'
@@ -48,8 +49,16 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
       recoveredAgents.push(agent)
       log.info('Agent process still alive', { id: agent.id, pid: agent.pid })
     } else {
-      updateAgentStatus(db, agent.id, 'interrupted', 'confirmed')
       const handoff = getSBARByAgentId(db, agent.id)
+      updateAgentStatus(db, agent.id, 'interrupted', 'confirmed')
+      insertActivityEvent(db, {
+        eventType: 'agent_interrupted',
+        entityType: 'agent',
+        entityId: agent.id,
+        repoId: agent.repoId,
+        agentId: agent.id,
+        details: { hasSbar: !!handoff }
+      })
       interruptedAgents.push({
         ...agent,
         status: 'interrupted',

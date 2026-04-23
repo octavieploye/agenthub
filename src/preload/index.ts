@@ -200,6 +200,12 @@ const agentHubBridge = {
     destroy: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.DESTROY, repoId),
     stopAll: () => ipcRenderer.invoke(IPC_CHANNELS.CONTAINERS.STOP_ALL)
   },
+  activity: {
+    query: (params: { since: string; repoId?: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACTIVITY.QUERY, params),
+    stats: (params: { since: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACTIVITY.STATS, params)
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void

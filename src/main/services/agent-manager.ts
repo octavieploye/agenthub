@@ -14,6 +14,7 @@ import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
+import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { routeNotification } from './notification-router'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
@@ -146,6 +147,15 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   updateAgentPid(db, agentState.id, ptyProcess.pid, null)
   agentState.pid = ptyProcess.pid
 
+  insertActivityEvent(db, {
+    eventType: 'agent_spawned',
+    entityType: 'agent',
+    entityId: agentState.id,
+    repoId: agentState.repoId,
+    agentId: agentState.id,
+    details: { name: agentState.name, model: agentState.model, provider: agentState.provider }
+  })
+
   const parser = createParser() as ClaudeCliOutputParser
 
   ptyProcess.onData((data: string) => {
@@ -185,6 +195,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           current.state.confidence = parsed!.confidence
           updateAgentStatus(db, agentState.id, newStatus, parsed!.confidence)
           emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, newStatus, parsed!.confidence)
+          insertActivityEvent(db, {
+            eventType: 'agent_status_changed',
+            entityType: 'agent',
+            entityId: agentState.id,
+            repoId: agentState.repoId,
+            agentId: agentState.id,
+            details: { from: previousStatus, to: newStatus, confidence: parsed!.confidence }
+          })
           emitTriageResult(current.state, previousStatus)
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }
@@ -230,6 +248,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     agentState.confidence = 'confirmed'
     emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
     emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
+    insertActivityEvent(db, {
+      eventType: exitCode === 0 ? 'agent_completed' : 'agent_error',
+      entityType: 'agent',
+      entityId: agentState.id,
+      repoId: agentState.repoId,
+      agentId: agentState.id,
+      details: { exitCode }
+    })
     emitTriageResult(agentState, previousStatusOnExit)
 
     // Auto-close breakout window for this agent
@@ -480,6 +506,9 @@ export function respawnAgent(agentId: string): AgentState {
   // Mark old agent as completed
   updateAgentStatus(db, agentId, 'completed', 'confirmed')
 
+  // Fetch handoff before spawning so we can log it
+  const handoff = getSBARByAgentId(db, agentId)
+
   // Respawn with same config
   const newAgent = spawnAgent({
     repoId: oldAgent.repoId,
@@ -492,8 +521,16 @@ export function respawnAgent(agentId: string): AgentState {
     color: oldAgent.color
   })
 
+  insertActivityEvent(db, {
+    eventType: 'agent_respawned',
+    entityType: 'agent',
+    entityId: newAgent.id,
+    repoId: newAgent.repoId,
+    agentId: newAgent.id,
+    details: { oldAgentId: agentId, hasSbar: !!handoff }
+  })
+
   // Inject SBAR context if available
-  const handoff = getSBARByAgentId(db, agentId)
   if (handoff) {
     const context = [
       '[RESUMED FROM INTERRUPTED SESSION]',

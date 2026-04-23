@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { BugEntry, BugSeverity } from '../../../shared/types/bug-radar.types'
+import { insertActivityEvent } from './activity.queries'
 
 interface InsertBugData {
   agentId: string
@@ -40,6 +41,14 @@ export function insertBug(db: Database.Database, data: InsertBugData): BugEntry 
   ).run(id, data.agentId, data.agentName, data.repoId, data.repoName, data.errorType, data.filePath, data.message, data.severity, now)
 
   log.info('Bug inserted', { id, errorType: data.errorType })
+  insertActivityEvent(db, {
+    eventType: 'bug_created',
+    entityType: 'bug',
+    entityId: id,
+    repoId: data.repoId,
+    agentId: data.agentId,
+    details: { severity: data.severity, errorType: data.errorType }
+  })
 
   return {
     id,
@@ -75,6 +84,12 @@ export function resolveBug(db: Database.Database, id: string): void {
   const now = new Date().toISOString()
   db.prepare('UPDATE bugs SET resolved_at = ? WHERE id = ?').run(now, id)
   log.info('Bug resolved', { id })
+  insertActivityEvent(db, {
+    eventType: 'bug_resolved',
+    entityType: 'bug',
+    entityId: id,
+    details: {}
+  })
 }
 
 export function deleteBug(db: Database.Database, id: string): void {

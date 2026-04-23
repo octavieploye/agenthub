@@ -23,6 +23,7 @@ import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
+import ActivityLogView from './widgets/activity-log/ActivityLogView'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import { useWindowSize } from './hooks/useWindowSize'
 import type { SearchResult } from '@shared/types/search.types'
@@ -926,8 +927,8 @@ function AppMain(): React.JSX.Element {
 
       {/* Main layout: sidebar + content */}
       <main id="main-content" className="flex-1 flex min-h-0">
-        {/* Agent sidebar — only shown outside raid view */}
-        {viewMode !== 'raid' && (
+        {/* Agent sidebar — only shown in terminal view */}
+        {viewMode === 'terminal' && (
           <AgentSidebar
             agents={terminalSidebarAgents}
             activeAgentId={activeAgentId}
@@ -942,7 +943,9 @@ function AppMain(): React.JSX.Element {
 
         {/* Content area switches based on view mode */}
         <div className="flex-1 flex flex-col min-h-0">
-          {viewMode === 'raid' ? (
+          {viewMode === 'activity' ? (
+            <ActivityLogView />
+          ) : viewMode === 'raid' ? (
             /* Raid view — 3-column layout: RepoSidebar + AgentList + DetailPanel */
             <div className="flex h-full overflow-x-auto">
               <RepoSidebar onAddRepo={() => setSpawnDialogOpen(true)} />

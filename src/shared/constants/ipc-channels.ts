@@ -148,6 +148,10 @@ export const IPC_CHANNELS = {
     READ_DIR: 'fs:read-dir',
     READ_FILE: 'fs:read-file'
   },
+  ACTIVITY: {
+    QUERY: 'activity:query',
+    STATS: 'activity:stats'
+  },
   CONTAINERS: {
     LIST: 'containers:list',
     STOP: 'containers:stop',

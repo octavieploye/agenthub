@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type { RepoConfig } from '../../../shared/types/config.types'
 import type Database from 'better-sqlite3'
+import { insertActivityEvent } from './activity.queries'
 
 function mapRow(row: Record<string, unknown>): RepoConfig {
   return {
@@ -42,6 +43,13 @@ export function insertRepo(
   )
 
   log.info('Repo inserted', { id, name: repo.name })
+  insertActivityEvent(db, {
+    eventType: 'repo_added',
+    entityType: 'repo',
+    entityId: id,
+    repoId: id,
+    details: { name: repo.name, path: repo.path }
+  })
   return { id, name: repo.name, path: repo.path, glowColor: repo.glowColor, createdAt: now }
 }
 

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { TaskItem, TaskPriority, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../../shared/types/task.types'
+import { insertActivityEvent } from './activity.queries'
 
 function mapRow(row: Record<string, unknown>): TaskItem {
   return {
@@ -62,6 +63,13 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   )
 
   log.info('Task inserted', { id, title: input.title })
+  insertActivityEvent(db, {
+    eventType: 'task_created',
+    entityType: 'task',
+    entityId: id,
+    repoId: input.repoId,
+    details: { title: input.title, status: input.status ?? 'backlog' }
+  })
   return {
     id,
     repoId: input.repoId,
@@ -104,6 +112,14 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   values.push(id)
   db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...values)
   log.debug('Task updated', { id, fields: Object.keys(input) })
+  if (input.status !== undefined) {
+    insertActivityEvent(db, {
+      eventType: 'task_status_changed',
+      entityType: 'task',
+      entityId: id,
+      details: { to: input.status }
+    })
+  }
 }
 
 export function deleteTask(db: Database.Database, id: string): void {
