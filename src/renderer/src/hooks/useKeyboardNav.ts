@@ -68,6 +68,15 @@ export function useKeyboardNav(callbacks: KeyboardNavCallbacks): void {
         return
       }
 
+      // Ignore plain-key shortcuts when focus is inside an editable element or terminal
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        (target as HTMLElement).isContentEditable
+      ) return
+
       // Tab — cycle through agents
       if (e.key === 'Tab') {
         e.preventDefault()

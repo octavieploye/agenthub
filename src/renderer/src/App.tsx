@@ -119,6 +119,12 @@ function AppMain(): React.JSX.Element {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ agentId: string; position: { x: number; y: number } } | null>(null)
+  const lastMousePos = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+  useEffect(() => {
+    const track = (e: MouseEvent): void => { lastMousePos.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', track)
+    return () => window.removeEventListener('mousemove', track)
+  }, [])
 
   // Terminal search
   const [terminalSearchOpen, setTerminalSearchOpen] = useState(false)
@@ -417,7 +423,7 @@ function AppMain(): React.JSX.Element {
       const focused = useViewStore.getState().focusedAgentId
       if (!focused) return
       // Position context menu at the center of the screen as a fallback
-      setContextMenu({ agentId: focused, position: { x: window.innerWidth / 2, y: window.innerHeight / 2 } })
+      setContextMenu({ agentId: focused, position: lastMousePos.current })
     },
     onDeleteFocused: () => {
       const focused = useViewStore.getState().focusedAgentId
@@ -1193,30 +1199,32 @@ function AppMain(): React.JSX.Element {
 
       {/* Agent context menu (right-click on raid frames) */}
       {contextMenu && agents.get(contextMenu.agentId) && (
-        <AgentContextMenu
-          agent={agents.get(contextMenu.agentId)!}
-          position={contextMenu.position}
-          onClose={() => setContextMenu(null)}
-          onPause={handlePause}
-          onResume={handleResume}
-          onKill={handleKillRequest}
-          onViewOutput={(agentId) => {
-            handleSelectAgent(agentId)
-            useViewStore.getState().setViewMode('terminal')
-          }}
-          onCopyId={(agentId) => {
-            navigator.clipboard.writeText(agentId).catch(() => {})
-          }}
-          onSendTask={(agentId) => {
-            handleSelectAgent(agentId)
-            useViewStore.getState().setViewMode('terminal')
-          }}
-          onViewNotes={(agentId) => {
-            handleSelectAgent(agentId)
-          }}
-          onBreakout={handleBreakout}
-          onChangeColor={handleColorChange}
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <AgentContextMenu
+            agent={agents.get(contextMenu.agentId)!}
+            position={contextMenu.position}
+            onClose={() => setContextMenu(null)}
+            onPause={handlePause}
+            onResume={handleResume}
+            onKill={handleKillRequest}
+            onViewOutput={(agentId) => {
+              handleSelectAgent(agentId)
+              useViewStore.getState().setViewMode('terminal')
+            }}
+            onCopyId={(agentId) => {
+              navigator.clipboard.writeText(agentId).catch(() => {})
+            }}
+            onSendTask={(agentId) => {
+              handleSelectAgent(agentId)
+              useViewStore.getState().setViewMode('terminal')
+            }}
+            onViewNotes={(agentId) => {
+              handleSelectAgent(agentId)
+            }}
+            onBreakout={handleBreakout}
+            onChangeColor={handleColorChange}
+          />
+        </div>
       )}
 
       {/* Terminal search */}
