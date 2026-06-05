@@ -59,7 +59,11 @@ function App(): React.JSX.Element {
   }
 
   if (isBreakout && breakoutAgentId) {
-    return <BreakoutLayout agentId={breakoutAgentId} />
+    return (
+      <VoiceInputProvider>
+        <BreakoutLayout agentId={breakoutAgentId} />
+      </VoiceInputProvider>
+    )
   }
 
   return <AppMain />
