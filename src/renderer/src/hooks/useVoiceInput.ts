@@ -51,6 +51,7 @@ export function useVoiceInput(inputRef: RefObject<HTMLInputElement | HTMLTextAre
             : response.data.transcript
           nativeInputValueSetter?.call(el, newVal)
           el.dispatchEvent(new Event('input', { bubbles: true }))
+          el.focus()
         }
       } else if (response.success && response.data.error) {
         setMicError(response.data.error)

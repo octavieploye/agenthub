@@ -85,7 +85,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        disabled={disabled}
+        disabled={disabled && !inputValue.trim()}
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"
       />
@@ -94,7 +94,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         data-testid="inline-send-button"
         className="btn btn-sm text-xs"
         style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
-        disabled={disabled || !inputValue.trim()}
+        disabled={!inputValue.trim()}
         onClick={handleSubmit}
       >
         Send
