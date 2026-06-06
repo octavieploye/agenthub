@@ -26,6 +26,7 @@ import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import ActivityLogView from './widgets/activity-log/ActivityLogView'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import { useWindowSize } from './hooks/useWindowSize'
+import { useAgentTts } from './hooks/useAgentTts'
 import type { SearchResult } from '@shared/types/search.types'
 import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
@@ -78,7 +79,7 @@ function sendDesktopNotificationFromRenderer(event: TriageEvent): void {
 }
 
 function AppMain(): React.JSX.Element {
-  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent } =
+  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent, updateVoiceMode } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
   const selectedRepoId = useViewStore((s) => s.selectedRepoId)
@@ -87,6 +88,9 @@ function AppMain(): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const setFocusedAgent = useViewStore((s) => s.setFocusedAgent)
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
+  const ttsVolume = useViewStore((s) => s.ttsVolume)
+  const ttsRate = useViewStore((s) => s.ttsRate)
+  const ttsVoiceURI = useViewStore((s) => s.ttsVoiceURI)
   const prefetchAgentData = usePrefetchAgentData()
   const { width: windowWidth } = useWindowSize()
   const isNarrowWindow = windowWidth < 728
@@ -147,6 +151,18 @@ function AppMain(): React.JSX.Element {
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
     createSoundAlertDeps(() => useViewStore.getState().soundEnabled)
+  )
+
+  // Per-agent TTS — reads response text and speaks on busy→idle/locked
+  const ttsOpts = { volume: ttsVolume, rate: ttsRate, voiceURI: ttsVoiceURI }
+  const { readActiveAgent } = useAgentTts(activeAgentId, agents, ttsOpts)
+
+  const handleToggleVoiceMode = useCallback(
+    async (agentId: string, mode: import('@shared/types/agent.types').VoiceMode) => {
+      updateVoiceMode(agentId, mode)
+      await window.agentHub.agents.updateVoiceMode(agentId, mode).catch(console.error)
+    },
+    [updateVoiceMode]
   )
 
   // Ref to imperative handle on RepoSwitcher (for Cmd+E)
@@ -439,9 +455,15 @@ function AppMain(): React.JSX.Element {
           e.preventDefault()
           handleShutdownRequest()
         }
-        if (e.key === 'r') {
+        if (e.key === 'r' && !e.shiftKey) {
           e.preventDefault()
           repoSwitcherRef.current?.open()
+        }
+
+        // Cmd+Shift+R — read/cancel TTS for active agent
+        if (e.key === 'R' && e.shiftKey) {
+          e.preventDefault()
+          readActiveAgent()
         }
 
         // Cmd+Shift+↑/↓ — navigate repo list (raid view only)
@@ -923,6 +945,7 @@ function AppMain(): React.JSX.Element {
             onResumeAgent={handleResume}
             onSpawnAgent={() => setSpawnDialogOpen(true)}
             onOpenGuardrails={handleOpenGuardrails}
+            onToggleVoiceMode={handleToggleVoiceMode}
           />
         )}
 
@@ -953,6 +976,7 @@ function AppMain(): React.JSX.Element {
                     onResumeAgent={handleResume}
                     onSpawnAgent={() => setSpawnDialogOpen(true)}
                     onOpenGuardrails={handleOpenGuardrails}
+                    onToggleVoiceMode={handleToggleVoiceMode}
                   />
                 )}
               </div>
@@ -1002,6 +1026,7 @@ function AppMain(): React.JSX.Element {
                       onDetachTerminal={handleDetachTerminal}
                       proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
                       onTabChange={setActiveDetailTab}
+                      onReadResponse={readActiveAgent}
                     />
                     {activeDetailTab === 'terminal' && (
                       <InlineTaskInput

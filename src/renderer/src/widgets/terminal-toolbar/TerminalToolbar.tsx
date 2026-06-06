@@ -11,6 +11,7 @@ interface TerminalToolbarProps {
   onAttachTerminal?: (agentId: string) => void
   onDetachTerminal?: (agentId: string) => void
   proxyActive?: boolean
+  onReadResponse?: (agentId: string) => void
 }
 
 function TerminalToolbar({
@@ -22,7 +23,8 @@ function TerminalToolbar({
   onBreakout,
   onAttachTerminal,
   onDetachTerminal,
-  proxyActive
+  proxyActive,
+  onReadResponse
 }: TerminalToolbarProps): React.JSX.Element {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTerminal = agent.status === 'completed' || agent.status === 'interrupted'
@@ -85,6 +87,16 @@ function TerminalToolbar({
       </button>
 
       <div className="ml-auto flex items-center gap-1">
+        {onReadResponse && agent.voiceMode !== 'off' && (
+          <button
+            data-testid="toolbar-read-response"
+            className="btn btn-xs btn-ghost"
+            title="Read response (Cmd+Shift+R)"
+            onClick={() => onReadResponse(agent.id)}
+          >
+            Read
+          </button>
+        )}
         {(onAttachTerminal || onDetachTerminal) && !isTerminal && (
           proxyActive ? (
             <button

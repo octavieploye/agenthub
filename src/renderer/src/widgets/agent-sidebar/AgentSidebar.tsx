@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import { useBranchName } from '@renderer/hooks/useBranchName'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useViewStore } from '@renderer/stores/view-store'
 import { getShortModelName } from '@renderer/utils/model-utils'
+
+const VOICE_MODE_CYCLE: VoiceMode[] = ['off', 'speak_up', 'always_on']
+const VOICE_MODE_ICON: Record<VoiceMode, string> = { off: '🔇', speak_up: '🔈', always_on: '🔊' }
+const VOICE_MODE_LABEL: Record<VoiceMode, string> = { off: 'Voice off', speak_up: 'Speak up (manual read)', always_on: 'Always on (auto-read)' }
 
 interface AgentSidebarProps {
   agents: AgentState[]
@@ -15,6 +19,7 @@ interface AgentSidebarProps {
   onResumeAgent: (id: string) => void
   onSpawnAgent: () => void
   onOpenGuardrails?: (agentId: string) => void
+  onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -106,7 +111,8 @@ function AgentCard({
   onKillAgent,
   onPauseAgent,
   onResumeAgent,
-  onOpenGuardrails
+  onOpenGuardrails,
+  onToggleVoiceMode
 }: {
   agent: AgentState
   isActive: boolean
@@ -115,6 +121,7 @@ function AgentCard({
   onPauseAgent: (id: string) => void
   onResumeAgent: (id: string) => void
   onOpenGuardrails?: (agentId: string) => void
+  onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
 }): React.JSX.Element {
   const branchName = useBranchName(agent.cwd)
   const isRunning = agent.status === 'busy' || agent.status === 'locked'
@@ -433,6 +440,22 @@ function AgentCard({
               &#9881;
             </button>
           )}
+          {onToggleVoiceMode && (
+            <button
+              data-testid="voice-mode-toggle"
+              onClick={(e) => {
+                e.stopPropagation()
+                const current: VoiceMode = agent.voiceMode ?? 'off'
+                const idx = VOICE_MODE_CYCLE.indexOf(current)
+                const next = VOICE_MODE_CYCLE[(idx + 1) % VOICE_MODE_CYCLE.length]
+                onToggleVoiceMode(agent.id, next)
+              }}
+              className="btn btn-xs rounded-full bg-base-content/10 text-base-content/60 hover:bg-base-content/20"
+              title={VOICE_MODE_LABEL[agent.voiceMode ?? 'off']}
+            >
+              {VOICE_MODE_ICON[agent.voiceMode ?? 'off']}
+            </button>
+          )}
         </div>
       )}
 
@@ -495,7 +518,8 @@ function AgentSidebar({
   onPauseAgent,
   onResumeAgent,
   onSpawnAgent,
-  onOpenGuardrails
+  onOpenGuardrails,
+  onToggleVoiceMode
 }: AgentSidebarProps): React.JSX.Element {
   return (
     <aside className="w-56 shrink-0 panel-glass border-r border-base-content/10 flex flex-col h-full">
@@ -529,6 +553,7 @@ function AgentSidebar({
             onPauseAgent={onPauseAgent}
             onResumeAgent={onResumeAgent}
             onOpenGuardrails={onOpenGuardrails}
+            onToggleVoiceMode={onToggleVoiceMode}
           />
         ))}
       </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import RaidFrameGrid from '@renderer/widgets/raid-frame/RaidFrameGrid'
 import FullTerminal from '@renderer/widgets/full-terminal/FullTerminal'
@@ -12,6 +12,7 @@ interface UnifiedViewProps {
   onMuteAgent?: (agentId: string) => void
   onKillAgent?: (agentId: string) => void
   soloedAgentId?: string | null
+  onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
 }
 
 function useReducedMotion(): boolean {
@@ -20,7 +21,7 @@ function useReducedMotion(): boolean {
   return mql.matches
 }
 
-function UnifiedView({ agents, onSelectAgent, onContextMenu }: UnifiedViewProps): React.JSX.Element {
+function UnifiedView({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode }: UnifiedViewProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const focusedAgentId = useViewStore((s) => s.focusedAgentId)
   const reducedMotion = useReducedMotion()
@@ -57,6 +58,7 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu }: UnifiedViewProps)
           agents={agents}
           onSelectAgent={onSelectAgent}
           onContextMenu={onContextMenu}
+          onToggleVoiceMode={onToggleVoiceMode}
         />
       )}
 

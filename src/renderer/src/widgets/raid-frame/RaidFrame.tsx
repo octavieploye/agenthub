@@ -1,14 +1,27 @@
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import HeartbeatWaveform from '@renderer/widgets/heartbeat-waveform/HeartbeatWaveform'
 import CooldownTimer from '@renderer/widgets/cooldown-timer/CooldownTimer'
 import { useNow } from '@renderer/hooks/useNow'
 
 const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000
 
+const VOICE_MODE_CYCLE: VoiceMode[] = ['off', 'speak_up', 'always_on']
+const VOICE_MODE_ICON: Record<VoiceMode, string> = {
+  off: '🔇',
+  speak_up: '🔈',
+  always_on: '🔊',
+}
+const VOICE_MODE_LABEL: Record<VoiceMode, string> = {
+  off: 'Voice off',
+  speak_up: 'Speak up',
+  always_on: 'Always on',
+}
+
 interface RaidFrameProps {
   agent: AgentState
   onSelect: (agentId: string) => void
   onContextMenu: (agentId: string, position: { x: number; y: number }) => void
+  onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
 }
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
@@ -23,7 +36,7 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   tray_running: 'bg-success/50'
 }
 
-function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JSX.Element {
+function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode }: RaidFrameProps): React.JSX.Element {
   const repoLabel = agent.cwd.split('/').pop() ?? 'unknown'
   const isTicking = agent.status === 'busy' || agent.status === 'locked'
   const now = useNow(isTicking ? 1000 : 0)
@@ -59,6 +72,22 @@ function RaidFrame({ agent, onSelect, onContextMenu }: RaidFrameProps): React.JS
           }`}
         />
         <span className="text-xs font-medium truncate flex-1">{agent.name}</span>
+        {onToggleVoiceMode && (
+          <button
+            data-testid="voice-mode-toggle"
+            title={VOICE_MODE_LABEL[agent.voiceMode ?? 'off']}
+            className="text-[10px] opacity-50 hover:opacity-100 transition-opacity leading-none"
+            onClick={(e) => {
+              e.stopPropagation()
+              const current: VoiceMode = agent.voiceMode ?? 'off'
+              const idx = VOICE_MODE_CYCLE.indexOf(current)
+              const next = VOICE_MODE_CYCLE[(idx + 1) % VOICE_MODE_CYCLE.length]
+              onToggleVoiceMode(agent.id, next)
+            }}
+          >
+            {VOICE_MODE_ICON[agent.voiceMode ?? 'off']}
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-1">

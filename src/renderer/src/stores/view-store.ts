@@ -7,6 +7,8 @@ export type { ViewMode }
 const SOUND_KEY = 'agenthub:soundEnabled'
 const VOICE_KEY = 'agenthub:voiceEnabled'
 const TTS_VOLUME_KEY = 'agenthub:ttsVolume'
+const TTS_RATE_KEY = 'agenthub:ttsRate'
+const TTS_VOICE_URI_KEY = 'agenthub:ttsVoiceURI'
 
 function loadSoundEnabled(): boolean {
   try {
@@ -37,6 +39,25 @@ function loadTtsVolume(): number {
   }
 }
 
+function loadTtsRate(): number {
+  try {
+    const stored = localStorage.getItem(TTS_RATE_KEY)
+    if (stored === null) return 1.0
+    const parsed = parseFloat(stored)
+    return isNaN(parsed) ? 1.0 : Math.min(2, Math.max(0.5, parsed))
+  } catch {
+    return 1.0
+  }
+}
+
+function loadTtsVoiceURI(): string {
+  try {
+    return localStorage.getItem(TTS_VOICE_URI_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 interface ViewStore {
   viewMode: ViewMode
   focusedAgentId: string | null
@@ -45,6 +66,8 @@ interface ViewStore {
   soundEnabled: boolean
   voiceEnabled: boolean
   ttsVolume: number
+  ttsRate: number
+  ttsVoiceURI: string
   expandedRepoFileTree: string | null
   setViewMode: (mode: ViewMode) => void
   setFocusedAgent: (id: string | null) => void
@@ -53,6 +76,8 @@ interface ViewStore {
   toggleSound: () => void
   toggleVoice: () => void
   setTtsVolume: (volume: number) => void
+  setTtsRate: (rate: number) => void
+  setTtsVoiceURI: (uri: string) => void
   setExpandedRepoFileTree: (repoId: string | null) => void
 }
 
@@ -64,6 +89,8 @@ export const useViewStore = create<ViewStore>((set) => ({
   soundEnabled: loadSoundEnabled(),
   voiceEnabled: loadVoiceEnabled(),
   ttsVolume: loadTtsVolume(),
+  ttsRate: loadTtsRate(),
+  ttsVoiceURI: loadTtsVoiceURI(),
   expandedRepoFileTree: null,
 
   setViewMode: (mode) => set({ viewMode: mode }),
@@ -100,5 +127,24 @@ export const useViewStore = create<ViewStore>((set) => ({
         // ignore
       }
       return { ttsVolume: clamped }
+    }),
+  setTtsRate: (rate) =>
+    set(() => {
+      const clamped = Math.min(2, Math.max(0.5, rate))
+      try {
+        localStorage.setItem(TTS_RATE_KEY, String(clamped))
+      } catch {
+        // ignore
+      }
+      return { ttsRate: clamped }
+    }),
+  setTtsVoiceURI: (uri) =>
+    set(() => {
+      try {
+        localStorage.setItem(TTS_VOICE_URI_KEY, uri)
+      } catch {
+        // ignore
+      }
+      return { ttsVoiceURI: uri }
     })
 }))

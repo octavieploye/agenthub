@@ -1,0 +1,1 @@
+ALTER TABLE agents ADD COLUMN voice_mode TEXT NOT NULL DEFAULT 'off';

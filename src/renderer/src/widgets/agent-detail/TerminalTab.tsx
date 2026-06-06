@@ -11,9 +11,10 @@ interface TerminalTabProps {
   onAttachTerminal?: (agentId: string) => void
   onDetachTerminal?: (agentId: string) => void
   proxyActive?: boolean
+  onReadResponse?: (agentId: string) => void
 }
 
-function TerminalTab({ agent, onBreakout, onPause, onResume, onKill, onAttachTerminal, onDetachTerminal, proxyActive, visible = true }: TerminalTabProps & { visible?: boolean }): React.JSX.Element {
+function TerminalTab({ agent, onBreakout, onPause, onResume, onKill, onAttachTerminal, onDetachTerminal, proxyActive, onReadResponse, visible = true }: TerminalTabProps & { visible?: boolean }): React.JSX.Element {
   return (
     <div data-testid="terminal-tab" className="flex flex-col h-full">
       {/* Toolbar with breakout */}
@@ -27,6 +28,7 @@ function TerminalTab({ agent, onBreakout, onPause, onResume, onKill, onAttachTer
         onAttachTerminal={onAttachTerminal}
         onDetachTerminal={onDetachTerminal}
         proxyActive={proxyActive}
+        onReadResponse={onReadResponse}
       />
 
       {/* Terminal area */}

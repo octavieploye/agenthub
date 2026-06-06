@@ -31,6 +31,7 @@ export interface AgentHubBridge {
     detachTerminal: (agentId: string) => Promise<IpcResponse<void>>
     getProxyPath: (agentId: string) => Promise<IpcResponse<string | null>>
     respawn: (agentId: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
+    updateVoiceMode: (agentId: string, mode: string) => Promise<IpcResponse<void>>
   }
   models: {
     listAll: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>

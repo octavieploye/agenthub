@@ -30,7 +30,9 @@ const agentHubBridge = {
     detachTerminal: (agentId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.DETACH_TERMINAL, agentId),
     getProxyPath: (agentId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_PROXY_PATH, agentId)
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_PROXY_PATH, agentId),
+    updateVoiceMode: (agentId: string, mode: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_VOICE_MODE, agentId, mode)
   },
   models: {
     listAll: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.LIST_ALL),

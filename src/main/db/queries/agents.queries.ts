@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
-import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel, ExecutionMode } from '../../../shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel, ExecutionMode, VoiceMode } from '../../../shared/types/agent.types'
 import type Database from 'better-sqlite3'
 
 function mapRow(row: Record<string, unknown>): AgentState {
@@ -21,7 +21,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     color: (row.color as string) ?? '#3B82F6',
-    executionMode: (row.execution_mode as ExecutionMode) ?? 'native'
+    executionMode: (row.execution_mode as ExecutionMode) ?? 'native',
+    voiceMode: (row.voice_mode as VoiceMode) ?? 'off'
   }
 }
 
@@ -92,8 +93,15 @@ export function insertAgent(
     createdAt: now,
     updatedAt: now,
     color,
-    executionMode: agent.executionMode ?? 'native'
+    executionMode: agent.executionMode ?? 'native',
+    voiceMode: 'off'
   }
+}
+
+export function updateAgentVoiceMode(db: Database.Database, id: string, mode: VoiceMode): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE agents SET voice_mode = ?, updated_at = ? WHERE id = ?').run(mode, now, id)
+  log.debug('Agent voice mode updated', { id, mode })
 }
 
 export function updateAgentStatus(

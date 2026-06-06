@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentState, AgentLifecycleStatus, StatusConfidence, ModelProvider, EffortLevel } from '@shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus, StatusConfidence, ModelProvider, EffortLevel, VoiceMode } from '@shared/types/agent.types'
 
 interface AgentStore {
   agents: Map<string, AgentState>
@@ -12,6 +12,7 @@ interface AgentStore {
   updateTaskDescription: (id: string, taskDescription: string) => void
   renameAgent: (id: string, name: string) => void
   updateModel: (id: string, model: string, provider: ModelProvider, effortLevel: EffortLevel) => void
+  updateVoiceMode: (id: string, mode: VoiceMode) => void
   hydrateAgents: (agents: AgentState[]) => void
 }
 
@@ -78,6 +79,15 @@ export const useAgentStore = create<AgentStore>((set) => ({
       if (!agent) return state
       const next = new Map(state.agents)
       next.set(id, { ...agent, model, provider, effortLevel, updatedAt: new Date().toISOString() })
+      return { agents: next }
+    }),
+
+  updateVoiceMode: (id, mode) =>
+    set((state) => {
+      const agent = state.agents.get(id)
+      if (!agent) return state
+      const next = new Map(state.agents)
+      next.set(id, { ...agent, voiceMode: mode, updatedAt: new Date().toISOString() })
       return { agents: next }
     }),
 

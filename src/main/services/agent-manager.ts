@@ -4,7 +4,7 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
@@ -531,6 +531,15 @@ export function respawnAgent(agentId: string): AgentState {
   })
 
   return newAgent
+}
+
+export function updateAgentVoiceMode(agentId: string, mode: import('../../shared/types/voice.types').VoiceMode): void {
+  const managed = agents.get(agentId)
+  if (managed) {
+    managed.state.voiceMode = mode
+  }
+  dbUpdateAgentVoiceMode(getDb(), agentId, mode)
+  log.debug('Agent voice mode updated', { id: agentId, mode })
 }
 
 export function updateAgentColor(agentId: string, color: string): void {

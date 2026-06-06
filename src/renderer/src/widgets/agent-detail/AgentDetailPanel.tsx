@@ -28,6 +28,7 @@ interface AgentDetailPanelProps {
   onDetachTerminal?: (agentId: string) => void
   proxyActive?: boolean
   onTabChange?: (tab: string) => void
+  onReadResponse?: (agentId: string) => void
 }
 
 const BASE_TABS: { id: DetailTab; label: string }[] = [
@@ -51,7 +52,8 @@ function AgentDetailPanel({
   onAttachTerminal,
   onDetachTerminal,
   proxyActive,
-  onTabChange
+  onTabChange,
+  onReadResponse
 }: AgentDetailPanelProps): React.JSX.Element {
   const isInterrupted = agent.status === 'interrupted'
   const tabs = isInterrupted
@@ -150,6 +152,7 @@ function AgentDetailPanel({
             onAttachTerminal={onAttachTerminal}
             onDetachTerminal={onDetachTerminal}
             proxyActive={proxyActive}
+            onReadResponse={onReadResponse}
           />
         </div>
         {mountedTabs.has('notes') && (

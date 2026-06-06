@@ -1,4 +1,4 @@
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import RaidFrame from './RaidFrame'
 
@@ -6,9 +6,10 @@ interface RaidFrameGridProps {
   agents: AgentState[]
   onSelectAgent?: (agentId: string) => void
   onContextMenu?: (agentId: string, position: { x: number; y: number }) => void
+  onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
 }
 
-function RaidFrameGrid({ agents, onSelectAgent, onContextMenu }: RaidFrameGridProps): React.JSX.Element {
+function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode }: RaidFrameGridProps): React.JSX.Element {
   const statusFilter = useViewStore((s) => s.statusFilter)
 
   const filtered = statusFilter
@@ -37,6 +38,7 @@ function RaidFrameGrid({ agents, onSelectAgent, onContextMenu }: RaidFrameGridPr
           agent={agent}
           onSelect={onSelectAgent ?? (() => {})}
           onContextMenu={onContextMenu ?? (() => {})}
+          onToggleVoiceMode={onToggleVoiceMode}
         />
       ))}
     </div>

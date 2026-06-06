@@ -19,6 +19,9 @@ export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud'
 
 export type EffortLevel = 'high' | 'medium' | 'low'
 
+import type { VoiceMode } from './voice.types'
+export type { VoiceMode }
+
 export interface AgentState {
   id: string
   repoId: string
@@ -37,6 +40,7 @@ export interface AgentState {
   progress: number
   color: string
   executionMode: ExecutionMode
+  voiceMode: VoiceMode
 }
 
 export interface AgentSpawnOptions {
