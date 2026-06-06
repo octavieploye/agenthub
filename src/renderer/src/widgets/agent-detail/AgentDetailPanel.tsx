@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
+import type { SBARHandoff } from '@shared/types/recovery.types'
 
 import { isLightColor } from './color-utils'
 import GeneralTab from './GeneralTab'
@@ -9,8 +10,11 @@ import HistoryTab from './HistoryTab'
 import TodoTab from './TodoTab'
 import BugsTab from './BugsTab'
 import GitTab from './GitTab'
+import SessionReviewPanel from '../session-review/SessionReviewPanel'
+import { useTaskStore } from '../../stores/task-store'
+import { useBugStore } from '../../stores/bug-store'
 
-export type DetailTab = 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs' | 'git'
+export type DetailTab = 'review' | 'general' | 'terminal' | 'notes' | 'history' | 'todo' | 'bugs' | 'git'
 
 interface AgentDetailPanelProps {
   agent: AgentState
@@ -26,7 +30,7 @@ interface AgentDetailPanelProps {
   onTabChange?: (tab: string) => void
 }
 
-const tabs: { id: DetailTab; label: string }[] = [
+const BASE_TABS: { id: DetailTab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'terminal', label: 'Terminal' },
   { id: 'notes', label: 'Notes' },
@@ -49,17 +53,36 @@ function AgentDetailPanel({
   proxyActive,
   onTabChange
 }: AgentDetailPanelProps): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
+  const isInterrupted = agent.status === 'interrupted'
+  const tabs = isInterrupted
+    ? [{ id: 'review' as DetailTab, label: 'Review' }, ...BASE_TABS]
+    : BASE_TABS
+  const defaultTab: DetailTab = isInterrupted ? 'review' : initialTab
+
+  const [activeTab, setActiveTab] = useState<DetailTab>(defaultTab)
+  const [sbar, setSbar] = useState<SBARHandoff | null>(null)
+  const allTasks = useTaskStore((s) => s.tasks)
+  const allBugs = useBugStore((s) => s.bugs)
+
+  // Fetch SBAR when agent is interrupted
+  useEffect(() => {
+    if (!isInterrupted) return
+    window.agentHub.recovery.getSbar(agent.id).then((res) => {
+      if (res.success && res.data) setSbar(res.data as SBARHandoff)
+    }).catch(() => {})
+  }, [agent.id, isInterrupted])
 
   // Track which tabs have been visited — mount on first visit, keep mounted after
-  const [mountedTabs, setMountedTabs] = useState<Set<DetailTab>>(() => new Set([initialTab, 'terminal']))
+  const [mountedTabs, setMountedTabs] = useState<Set<DetailTab>>(() => new Set([defaultTab, 'terminal']))
 
   // Sync tab when initialTab prop changes (e.g., switching to terminal view mode)
+  // Don't override the review tab for interrupted agents
   useEffect(() => {
+    if (isInterrupted) return
     setActiveTab(initialTab)
     onTabChange?.(initialTab)
     setMountedTabs((prev) => prev.has(initialTab) ? prev : new Set([...prev, initialTab]))
-  }, [initialTab])
+  }, [initialTab, isInterrupted])
 
   // Mount a tab the first time it becomes active
   const handleTabClick = (tabId: DetailTab): void => {
@@ -101,6 +124,15 @@ function AgentDetailPanel({
 
       {/* Tab content — all data tabs stay mounted (absolute overlay) to avoid remount/IPC delays */}
       <div className="flex-1 min-h-0 overflow-hidden relative bg-base-100" role="tabpanel" aria-label={`${activeTab} tab content`}>
+        {activeTab === 'review' && isInterrupted && (
+          <div className="absolute inset-0">
+            <SessionReviewPanel
+              sbar={sbar}
+              todos={allTasks.filter((t) => t.agentId === agent.id)}
+              bugs={allBugs.filter((b) => b.agentId === agent.id)}
+            />
+          </div>
+        )}
         {activeTab === 'general' && (
           <div className="absolute inset-0">
             <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />

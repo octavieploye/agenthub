@@ -530,27 +530,6 @@ export function respawnAgent(agentId: string): AgentState {
     details: { oldAgentId: agentId, hasSbar: !!handoff }
   })
 
-  // Inject SBAR context if available
-  if (handoff) {
-    const context = [
-      '[RESUMED FROM INTERRUPTED SESSION]',
-      `Situation: ${handoff.situation}`,
-      `Background: ${handoff.background}`,
-      `Assessment: ${handoff.assessment}`,
-      `Recommendation: ${handoff.recommendation}`,
-      '',
-      'Please continue the work described above.'
-    ].join('\n')
-
-    setTimeout(() => {
-      try {
-        sendInput(newAgent.id, context + '\n')
-      } catch (err) {
-        log.warn('Failed to inject SBAR context', { error: (err as Error).message })
-      }
-    }, 2000)
-  }
-
   return newAgent
 }
 

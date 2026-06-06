@@ -818,31 +818,6 @@ function AppMain(): React.JSX.Element {
         <RecoveryScreen
           recoveryInfo={recoveryInfo}
           onContinue={handleRecoveryContinue}
-          onResumeAgent={async (agentId) => {
-            try {
-              const res = await window.agentHub.agents.respawn(agentId)
-              if (res.success && res.data) {
-                addAgent(res.data as import('@shared/types/agent.types').AgentState)
-                setActiveAgent(res.data.id)
-              }
-            } catch (err) {
-              console.error('[recovery] Failed to respawn agent:', err)
-            }
-            // Remove from recovery list, auto-dismiss if none left
-            if (recoveryInfo) {
-              const updatedRecovered = recoveryInfo.recoveredAgents.filter(a => a.id !== agentId)
-              const updatedInterrupted = recoveryInfo.interruptedAgents.filter(a => a.id !== agentId)
-              if (updatedRecovered.length === 0 && updatedInterrupted.length === 0) {
-                handleRecoveryContinue()
-              } else {
-                setRecoveryInfo({
-                  ...recoveryInfo,
-                  recoveredAgents: updatedRecovered,
-                  interruptedAgents: updatedInterrupted
-                })
-              }
-            }
-          }}
           onViewOutput={(agentId) => {
             // Hydrate agent into store so it can be rendered
             const agent = recoveryInfo?.recoveredAgents.find(a => a.id === agentId)

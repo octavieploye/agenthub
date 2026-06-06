@@ -24,7 +24,7 @@ function getInputConfig(status: AgentState['status']): {
     case 'paused':
       return { disabled: true, placeholder: 'Agent paused' }
     case 'interrupted':
-      return { disabled: true, placeholder: 'Agent interrupted' }
+      return { disabled: false, placeholder: 'Send a prompt to resume...' }
     case 'looping':
       return { disabled: true, placeholder: 'Agent looping...' }
     case 'tray_running':
@@ -45,6 +45,24 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
     onSendInput(agent.id, trimmed + '\r')
     setInputValue('')
   }, [inputValue, agent.id, onSendInput])
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLInputElement>) => {
+      e.preventDefault()
+      const text = e.clipboardData.getData('text')
+      if (!text) return
+      const el = e.currentTarget
+      const start = el.selectionStart ?? inputValue.length
+      const end = el.selectionEnd ?? inputValue.length
+      const next = inputValue.slice(0, start) + text + inputValue.slice(end)
+      setInputValue(next)
+      requestAnimationFrame(() => {
+        el.selectionStart = start + text.length
+        el.selectionEnd = start + text.length
+      })
+    },
+    [inputValue]
+  )
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -85,6 +103,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         disabled={disabled && !inputValue.trim()}
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"

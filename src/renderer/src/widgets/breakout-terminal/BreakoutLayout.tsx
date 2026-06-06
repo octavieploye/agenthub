@@ -58,6 +58,24 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
     [agentId]
   )
 
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLInputElement>) => {
+      e.preventDefault()
+      const text = e.clipboardData.getData('text')
+      if (!text) return
+      const el = e.currentTarget
+      const start = el.selectionStart ?? inputValue.length
+      const end = el.selectionEnd ?? inputValue.length
+      const next = inputValue.slice(0, start) + text + inputValue.slice(end)
+      setInputValue(next)
+      requestAnimationFrame(() => {
+        el.selectionStart = start + text.length
+        el.selectionEnd = start + text.length
+      })
+    },
+    [inputValue]
+  )
+
   const canSendInput =
     agent?.status === 'locked' ||
     agent?.status === 'idle' ||
@@ -115,6 +133,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && canSendInput) {
                 handleSendInput(inputValue)
