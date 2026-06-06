@@ -12,6 +12,14 @@ log.initialize()
 log.transports.file.level = 'info'
 log.transports.console.level = is.dev ? 'debug' : 'warn'
 
+process.on('uncaughtException', (err) => {
+  log.error('Uncaught exception', { message: err.message, stack: err.stack })
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.error('Unhandled rejection', { reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : String(reason) })
+})
+
 function createWindow(): void {
   const iconPath = process.platform === 'win32' ? join(__dirname, '../../build/icon.ico') : join(__dirname, '../../build/icon.png')
   const icon = nativeImage.createFromPath(iconPath)
@@ -38,6 +46,14 @@ function createWindow(): void {
     mainWindow.show()
     if (is.dev) mainWindow.webContents.openDevTools()
     log.info('Main window shown')
+  })
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    log.error('Renderer process gone', { reason: details.reason, exitCode: details.exitCode })
+  })
+
+  mainWindow.webContents.on('unresponsive', () => {
+    log.error('Renderer became unresponsive')
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

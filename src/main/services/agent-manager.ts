@@ -16,6 +16,7 @@ import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
+import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
@@ -36,11 +37,22 @@ const agents = new Map<string, ManagedAgent>()
 // visible for at least 500ms before allowing it to be overwritten.
 const approvalEntryTimes = new Map<string, number>()
 const approvalHoldTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const statusDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const ptyProxy = new PtyProxy({
   logInfo: (message, meta) => log.info(message, meta),
   logWarning: (message, meta) => log.warn(message, meta)
 })
+
+function buildSBARContext(managed: ManagedAgent): AgentContext {
+  const lastOutputLines = managed.outputBuffer
+    ? managed.outputBuffer.split('\n').slice(-20)
+    : []
+  return {
+    agent: managed.state,
+    lastOutputLines
+  }
+}
 
 function emitToAllRenderers(channel: string, ...args: unknown[]): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -231,13 +243,29 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             applyStatusChange()
           }
         } else {
-          applyStatusChange()
+          const existingDebounce = statusDebounceTimers.get(agentState.id)
+          if (existingDebounce) clearTimeout(existingDebounce)
+          const debounceTimer = setTimeout(() => {
+            statusDebounceTimers.delete(agentState.id)
+            const current = agents.get(agentState.id)
+            if (current && current.state.status !== newStatus) {
+              applyStatusChange()
+            }
+          }, 150)
+          statusDebounceTimers.set(agentState.id, debounceTimer)
         }
       }
     }
   })
 
   ptyProcess.onExit(({ exitCode }) => {
+    // Clean up timers
+    const debounce = statusDebounceTimers.get(agentState.id)
+    if (debounce) { clearTimeout(debounce); statusDebounceTimers.delete(agentState.id) }
+    const approval = approvalHoldTimers.get(agentState.id)
+    if (approval) { clearTimeout(approval); approvalHoldTimers.delete(agentState.id) }
+    approvalEntryTimes.delete(agentState.id)
+
     // Flush any remaining output
     flushOutputBuffer(agentState.id)
 
