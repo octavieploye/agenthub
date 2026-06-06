@@ -84,11 +84,10 @@ export function useAgentTts(
         }
       }
 
-      // Only fire TTS on confirmed transitions — inferred/unknown flickers during streaming
+      // Fire TTS when agent finishes responding (hasFiredTts + debounce handle flicker)
       if (
         prev === 'busy' &&
-        (curr === 'idle' || curr === 'locked') &&
-        agent.confidence === 'confirmed'
+        (curr === 'idle' || curr === 'locked' || curr === 'completed')
       ) {
         const { voiceMode, name } = agent
         if (voiceMode === 'off') {
