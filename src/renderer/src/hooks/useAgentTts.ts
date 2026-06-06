@@ -11,6 +11,17 @@ import type { SpeakOptions } from '../services/voice-speaker'
 
 type ReadStage = 'announced' | 'last' | 'full'
 
+/** Remove trailing blank lines and Claude prompt/tool-call noise. */
+function stripTrailingNoise(text: string): string {
+  const noisePattern = /^(\s*$|[>$]|.*<tool_call|.*<\/tool|.*✓|.*◆|.*▶)/
+  const lines = text.split('\n')
+  let end = lines.length
+  while (end > 0 && noisePattern.test(lines[end - 1])) {
+    end--
+  }
+  return lines.slice(0, end).join('\n').trim()
+}
+
 export interface AgentTtsActions {
   /** Triggered by Cmd+Shift+S on the focused agent. Cycles: announce→last→full→cancel. */
   readActiveAgent: () => void
@@ -39,13 +50,15 @@ export function useAgentTts(
   const pendingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   // Guards against multiple TTS fires per busy cycle (status can flicker busy→idle multiple times)
   const hasFiredTts = useRef(new Set<string>())
+  // Tracks which agents are currently accumulating output (stays true past idle transition)
+  const isAccumulating = useRef(new Set<string>())
 
   // Accumulate PTY output during busy periods
   useEffect(() => {
     const unsub = window.agentHub.on.agentOutput((agentId: string, data: string) => {
       const agent = agents.get(agentId)
       if (!agent || agent.voiceMode === 'off') return
-      if (agent.status !== 'busy') return
+      if (!isAccumulating.current.has(agentId)) return
       const existing = accumulators.current.get(agentId) ?? ''
       accumulators.current.set(agentId, existing + data)
     })
@@ -62,6 +75,8 @@ export function useAgentTts(
       if (curr === 'busy' && prev !== 'busy') {
         accumulators.current.set(agentId, '')
         readStages.current.delete(agentId)
+        isAccumulating.current.add(agentId)
+        hasFiredTts.current.delete(agentId)
         const existing = pendingTimers.current.get(agentId)
         if (existing) {
           clearTimeout(existing)
@@ -82,15 +97,23 @@ export function useAgentTts(
           continue
         }
 
+        // Skip if TTS already fired for this busy cycle (status flicker guard)
+        if (hasFiredTts.current.has(agentId)) {
+          prevStatuses.current.set(agentId, curr)
+          continue
+        }
+
         // Debounce 400ms so final IPC output chunks arrive before reading the accumulator
         const timer = setTimeout(() => {
           pendingTimers.current.delete(agentId)
+          isAccumulating.current.delete(agentId)
+          hasFiredTts.current.add(agentId)
           speak(`${name} has completed a response.`, opts)
           readStages.current.set(agentId, 'announced')
 
           if (voiceMode === 'always_on') {
             const raw = accumulators.current.get(agentId) ?? ''
-            const lastPara = extractLastParagraph(stripAnsi(raw))
+            const lastPara = extractLastParagraph(stripTrailingNoise(stripAnsi(raw)))
             if (lastPara) {
               speakQueued(lastPara, opts)
             }
@@ -116,7 +139,7 @@ export function useAgentTts(
 
     const stage = readStages.current.get(activeAgentId)
     const raw = accumulators.current.get(activeAgentId) ?? ''
-    const clean = stripAnsi(raw)
+    const clean = stripTrailingNoise(stripAnsi(raw))
 
     if (stage === 'full') {
       cancelSpeech()
