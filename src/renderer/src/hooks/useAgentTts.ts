@@ -12,7 +12,7 @@ import type { SpeakOptions } from '../services/voice-speaker'
 type ReadStage = 'announced' | 'last' | 'full'
 
 export interface AgentTtsActions {
-  /** Triggered by Cmd+Shift+R on the focused agent. Cycles: announce→last→full→cancel. */
+  /** Triggered by Cmd+Shift+S on the focused agent. Cycles: announce→last→full→cancel. */
   readActiveAgent: () => void
 }
 
@@ -21,8 +21,8 @@ export interface AgentTtsActions {
  * each agent's voiceMode setting.
  *
  * - off:       silent
- * - speak_up:  announces completion only; user triggers read with Cmd+Shift+R
- * - always_on: announces + auto-reads last paragraph; Cmd+Shift+R reads full
+ * - speak_up:  announces completion only; user triggers read with Cmd+Shift+S
+ * - always_on: announces + auto-reads last paragraph; Cmd+Shift+S reads full
  */
 export function useAgentTts(
   activeAgentId: string | null,
@@ -35,6 +35,10 @@ export function useAgentTts(
   const readStages = useRef(new Map<string, ReadStage>())
   // Previous status per agent — used to detect transitions
   const prevStatuses = useRef(new Map<string, string>())
+  // Pending debounce timers per agent — cleared if agent goes busy again before firing
+  const pendingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  // Guards against multiple TTS fires per busy cycle (status can flicker busy→idle multiple times)
+  const hasFiredTts = useRef(new Set<string>())
 
   // Accumulate PTY output during busy periods
   useEffect(() => {
@@ -48,42 +52,60 @@ export function useAgentTts(
     return () => unsub()
   }, [agents])
 
-  // Detect status transitions and fire TTS on busy→idle/locked
+  // Detect status transitions and fire TTS on busy→confirmed idle/locked
   useEffect(() => {
     for (const [agentId, agent] of agents) {
       const prev = prevStatuses.current.get(agentId)
       const curr = agent.status
 
-      // Reset accumulator when a new busy cycle starts
+      // Reset accumulator and cancel any pending timer when a new busy cycle starts
       if (curr === 'busy' && prev !== 'busy') {
         accumulators.current.set(agentId, '')
         readStages.current.delete(agentId)
+        const existing = pendingTimers.current.get(agentId)
+        if (existing) {
+          clearTimeout(existing)
+          pendingTimers.current.delete(agentId)
+        }
       }
 
-      // Fire TTS on busy→idle or busy→locked
-      if (prev === 'busy' && (curr === 'idle' || curr === 'locked')) {
-        const { voiceMode } = agent
+      // Only fire TTS on confirmed transitions — inferred/unknown flickers during streaming
+      if (
+        prev === 'busy' &&
+        (curr === 'idle' || curr === 'locked') &&
+        agent.confidence === 'confirmed'
+      ) {
+        const { voiceMode, name } = agent
         if (voiceMode === 'off') {
           accumulators.current.delete(agentId)
           prevStatuses.current.set(agentId, curr)
           continue
         }
 
-        // Always announce completion first
-        speak(`${agent.name} has completed a response.`, opts)
-        readStages.current.set(agentId, 'announced')
+        // Debounce 400ms so final IPC output chunks arrive before reading the accumulator
+        const timer = setTimeout(() => {
+          pendingTimers.current.delete(agentId)
+          speak(`${name} has completed a response.`, opts)
+          readStages.current.set(agentId, 'announced')
 
-        if (voiceMode === 'always_on') {
-          const raw = accumulators.current.get(agentId) ?? ''
-          const lastPara = extractLastParagraph(stripAnsi(raw))
-          if (lastPara) {
-            speakQueued(lastPara, opts)
+          if (voiceMode === 'always_on') {
+            const raw = accumulators.current.get(agentId) ?? ''
+            const lastPara = extractLastParagraph(stripAnsi(raw))
+            if (lastPara) {
+              speakQueued(lastPara, opts)
+            }
+            readStages.current.set(agentId, 'last')
           }
-          readStages.current.set(agentId, 'last')
-        }
+        }, 400)
+        pendingTimers.current.set(agentId, timer)
       }
 
       prevStatuses.current.set(agentId, curr)
+    }
+    return () => {
+      for (const timer of pendingTimers.current.values()) {
+        clearTimeout(timer)
+      }
     }
   }, [agents, opts])
 

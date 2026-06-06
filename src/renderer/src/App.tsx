@@ -249,6 +249,11 @@ function AppMain(): React.JSX.Element {
       speak: ({ text, volume }) => {
         const utterance = new SpeechSynthesisUtterance(text)
         utterance.volume = volume
+        const voiceURI = useViewStore.getState().ttsVoiceURI
+        if (voiceURI) {
+          const voice = window.speechSynthesis.getVoices().find((v) => v.voiceURI === voiceURI)
+          if (voice) utterance.voice = voice
+        }
         window.speechSynthesis.speak(utterance)
       },
       isVoiceEnabled: () => useViewStore.getState().voiceEnabled,
@@ -460,8 +465,8 @@ function AppMain(): React.JSX.Element {
           repoSwitcherRef.current?.open()
         }
 
-        // Cmd+Shift+R — read/cancel TTS for active agent
-        if (e.key === 'R' && e.shiftKey) {
+        // Cmd+Shift+S — read/cancel TTS for active agent
+        if (e.key === 'S' && e.shiftKey) {
           e.preventDefault()
           readActiveAgent()
         }
@@ -716,10 +721,15 @@ function AppMain(): React.JSX.Element {
   const handleSpawnWithTask = useCallback(
     (task: string) => {
       if (!activeAgentId) return
-      // Send task directly to the active agent's terminal instead of spawning a new agent
-      handleSendInput(activeAgentId, task + '\r')
+      const agent = agents.get(activeAgentId)
+      if (!agent) return
+      if (agent.status === 'interrupted') {
+        handleSpawn(agent.cwd, agent.name + '-resume', agent.repoId, undefined, task)
+      } else {
+        handleSendInput(activeAgentId, task + '\r')
+      }
     },
-    [activeAgentId, handleSendInput]
+    [activeAgentId, agents, handleSpawn, handleSendInput]
   )
 
   const handleSearchResult = useCallback((result: SearchResult) => {
