@@ -27,8 +27,26 @@ function mapRow(row: Record<string, unknown>): AgentState {
 }
 
 export function getAllAgents(db: Database.Database): AgentState[] {
+  const rows = db.prepare(
+    "SELECT * FROM agents WHERE status NOT IN ('completed', 'interrupted') ORDER BY created_at DESC"
+  ).all()
+  return rows.map((r) => mapRow(r as Record<string, unknown>))
+}
+
+export function getAllAgentsIncludingDead(db: Database.Database): AgentState[] {
   const rows = db.prepare('SELECT * FROM agents ORDER BY created_at DESC').all()
   return rows.map((r) => mapRow(r as Record<string, unknown>))
+}
+
+export function purgeDeadAgents(db: Database.Database, olderThanHours = 24): number {
+  const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString()
+  const result = db.prepare(
+    "DELETE FROM agents WHERE status IN ('completed', 'interrupted') AND updated_at < ?"
+  ).run(cutoff)
+  if (result.changes > 0) {
+    log.info('Purged dead agents', { count: result.changes, olderThanHours })
+  }
+  return result.changes
 }
 
 export function getAgentById(db: Database.Database, id: string): AgentState | null {

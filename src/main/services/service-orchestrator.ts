@@ -19,6 +19,7 @@ import { VoiceService } from './voice-service'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
+import { purgeDeadAgents } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
@@ -52,6 +53,8 @@ function emitToAllRenderers(channel: string, ...args: unknown[]): void {
 }
 
 export function initializeServices(db: Database.Database): void {
+  // Purge dead agents older than 24h to prevent DB bloat
+  purgeDeadAgents(db, 24)
   // 1. GuardrailsManager — standalone, no deps
   guardrailsManager = new GuardrailsManager({
     readFile: (path: string) => {
