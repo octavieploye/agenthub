@@ -40,13 +40,25 @@ export function getAllAgentsIncludingDead(db: Database.Database): AgentState[] {
 
 export function purgeDeadAgents(db: Database.Database, olderThanHours = 24): number {
   const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString()
-  const result = db.prepare(
-    "DELETE FROM agents WHERE status IN ('completed', 'interrupted') AND updated_at < ?"
-  ).run(cutoff)
-  if (result.changes > 0) {
-    log.info('Purged dead agents', { count: result.changes, olderThanHours })
-  }
-  return result.changes
+  const deadIds = db.prepare(
+    "SELECT id FROM agents WHERE status IN ('completed', 'interrupted') AND updated_at < ?"
+  ).all(cutoff) as { id: string }[]
+
+  if (deadIds.length === 0) return 0
+
+  const ids = deadIds.map((r) => r.id)
+  const placeholders = ids.map(() => '?').join(',')
+
+  const purge = db.transaction(() => {
+    db.prepare(`DELETE FROM terminal_output WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM sbar_handoffs WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`UPDATE tasks SET agent_id = NULL WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM agents WHERE id IN (${placeholders})`).run(...ids)
+  })
+  purge()
+
+  log.info('Purged dead agents', { count: ids.length, olderThanHours })
+  return ids.length
 }
 
 export function getAgentById(db: Database.Database, id: string): AgentState | null {
