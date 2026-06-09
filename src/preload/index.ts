@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, clipboard } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC_CHANNELS, IPC_EVENTS } from '../shared/constants/ipc-channels'
+import type { RendererErrorPayload } from '../shared/types/log.types'
 
 const agentHubBridge = {
   agents: {
@@ -172,6 +173,11 @@ const agentHubBridge = {
     minimizeToTray: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.MINIMIZE_TO_TRAY),
     openTerminal: (command: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_TERMINAL, command)
+  },
+  log: {
+    rendererError: (payload: RendererErrorPayload): void => {
+      ipcRenderer.send(IPC_CHANNELS.LOG.RENDERER_ERROR, payload)
+    }
   },
   voice: {
     transcribe: (audioBuffer: ArrayBuffer) =>
