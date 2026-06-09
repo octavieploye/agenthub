@@ -317,4 +317,16 @@ describe('FullTerminal', () => {
 
     expect(mockOnDataDisposable.dispose).toHaveBeenCalled()
   })
+
+  it('Cmd+V keydown does not call sendInput directly — paste routes through onData only', async () => {
+    mockClipboard.readText.mockReturnValue('pasted text')
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    render(<FullTerminal agentId="agent-1" visible={true} />)
+
+    const keyHandler = mockTerminalInstance.attachCustomKeyEventHandler.mock.calls[0][0]
+    keyHandler({ type: 'keydown', metaKey: true, ctrlKey: false, key: 'v' })
+
+    expect(mockAgents.sendInput).not.toHaveBeenCalled()
+  })
 })

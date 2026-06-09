@@ -90,11 +90,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
         window.agentHub.clipboard.writeText(managed.term.getSelection())
         return false
       }
-      if (isMeta && e.key === 'v') {
-        const text = window.agentHub.clipboard.readText()
-        if (text) window.agentHub.agents.sendInput(agentId, text)
-        return false
-      }
+
       if (isMeta && e.key === 'f') {
         setSearchOpen(true)
         setTimeout(() => searchInputRef.current?.focus(), 50)
