@@ -16,13 +16,14 @@
  *   node scripts/init-project.mjs --help
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const SCRIPT_DIR   = dirname(new URL(import.meta.url).pathname)
 const AGENTHUB_DIR = join(SCRIPT_DIR, '..')
-const TEMPLATE_DIR = join(AGENTHUB_DIR, 'templates', 'new-project')
+const TEMPLATE_DIR     = join(AGENTHUB_DIR, 'templates', 'new-project')
+const TEMPLATE_DOT_CLAUDE = join(TEMPLATE_DIR, 'dot-claude')
 const isDryRun     = process.argv.includes('--dry-run')
 
 // ── CLI helpers ─────────────────────────────────────────────────────────────
@@ -304,7 +305,7 @@ async function handleDocFile(filename, projectPath, label) {
 
 async function handleClaudeFile(filename, projectClaudeDir, replacements) {
   const dst    = join(projectClaudeDir, filename)
-  const src    = join(TEMPLATE_DIR, '.claude', filename)
+  const src    = join(TEMPLATE_DOT_CLAUDE, filename)
   const exists = existsSync(dst)
   const label  = `.claude/${filename}`
 
@@ -362,6 +363,36 @@ async function handleClaudeFile(filename, projectClaudeDir, replacements) {
   writeFileSync(dst, content, 'utf8')
   ok(`Written: ${label}`)
   return true
+}
+
+// ── TDD script injector ───────────────────────────────────────────────────────
+//
+// Copies tdd-cycle.mjs from agenthub/scripts into the target project's scripts/
+// so the workflow is self-contained and works without agenthub being in scope.
+
+function injectTddScript(projectPath) {
+  const src = join(AGENTHUB_DIR, 'scripts', 'tdd-cycle.mjs')
+  const dstDir = join(projectPath, 'scripts')
+  const dst = join(dstDir, 'tdd-cycle.mjs')
+
+  if (!existsSync(src)) {
+    warn('tdd-cycle.mjs not found in agenthub/scripts — skipping injection')
+    return
+  }
+
+  if (existsSync(dst)) {
+    skip('scripts/tdd-cycle.mjs already exists — kept')
+    return
+  }
+
+  if (isDryRun) {
+    dim(`  [dry-run] Would copy tdd-cycle.mjs → ${dst}`)
+    return
+  }
+
+  mkdirSync(dstDir, { recursive: true })
+  copyFileSync(src, dst)
+  ok('Injected scripts/tdd-cycle.mjs')
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -481,6 +512,11 @@ What it does:
   const wroteClaudeMd = await handleClaudeFile('CLAUDE.md',  projectClaudeDir, replacements)
   const wroteAgentsMd = await handleClaudeFile('agents.md',  projectClaudeDir, replacements)
 
+  // ── Step 5: Inject TDD workflow script ────────────────────────────────────────
+
+  log('\n\x1b[1mStep 3 — TDD workflow script\x1b[0m')
+  injectTddScript(projectPath)
+
   // ── Summary ───────────────────────────────────────────────────────────────────
 
   log('\n\x1b[1mDone\x1b[0m')
@@ -495,6 +531,7 @@ What it does:
     if (wroteClaudeMd)     log('  • Review .claude/CLAUDE.md — fill any remaining [PLACEHOLDERS]')
     if (wroteAgentsMd)     log('  • Review .claude/agents.md — customise agent roster for this project\'s stack')
     log('  • Run: node scripts/sync-global-claude.mjs   (if not already synced)')
+    log('  • Start TDD cycle: node scripts/tdd-cycle.mjs')
     log('  • Open a Claude Code session in the project directory\n')
   }
 
