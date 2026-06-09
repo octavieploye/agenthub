@@ -401,6 +401,7 @@ What it does:
 
   const readme  = await handleDocFile('README.md',           projectPath, 'README.md')
   const devplan = await handleDocFile('DEVELOPMENT-PLAN.md', projectPath, 'DEVELOPMENT-PLAN.md')
+  await handleDocFile('.gitignore',          projectPath, '.gitignore')
 
   // ── Step 2: Extract details from existing docs ───────────────────────────────
 
