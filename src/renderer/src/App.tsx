@@ -41,6 +41,7 @@ import { useNotificationStore } from './stores/notification-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
+import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { VoiceInputProvider } from './contexts/VoiceInputContext'
@@ -329,6 +330,7 @@ function AppMain(): React.JSX.Element {
   // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
     startIpcListener()
+    initCrashLogger()
   }, [])
 
   // Request desktop notification permission once on mount
