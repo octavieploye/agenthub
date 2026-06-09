@@ -316,9 +316,12 @@ async function handleClaudeFile(filename, projectClaudeDir, replacements) {
 
   if (exists) {
     const currentContent = readFileSync(dst, 'utf8')
-    const hasUnfilled = currentContent.includes('[PROJECT NAME]') ||
-                        currentContent.includes('[PLACEHOLDERS]') ||
-                        currentContent.includes('[one-line description')
+    const hasUnfilled = currentContent.includes('[PROJECT_NAME]') ||
+                        currentContent.includes('[STACK_BACKEND]') ||
+                        currentContent.includes('[KEY_FILES_BLOCK]') ||
+                        currentContent.includes('[PROJECT_RULES_BLOCK]') ||
+                        currentContent.includes('[SECURITY_RULES_BLOCK]') ||
+                        currentContent.includes('[NEVER_RULES_BLOCK]')
 
     if (hasUnfilled && replacements && Object.keys(replacements).length > 0) {
       info('File exists but still has unfilled placeholders — filling in-place')
