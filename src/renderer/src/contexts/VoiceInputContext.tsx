@@ -85,8 +85,11 @@ export function VoiceInputProvider({ children }: { children: ReactNode }) {
   )
 }
 
+const noopContext: VoiceInputContextValue = {
+  register: () => {},
+  unregister: () => {}
+}
+
 export function useVoiceInputContext(): VoiceInputContextValue {
-  const ctx = useContext(VoiceInputContext)
-  if (!ctx) throw new Error('useVoiceInputContext must be used within VoiceInputProvider')
-  return ctx
+  return useContext(VoiceInputContext) ?? noopContext
 }

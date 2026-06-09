@@ -134,4 +134,22 @@ describe('InlineTaskInput', () => {
     render(<InlineTaskInput agent={createMockAgent({ status: 'busy' })} onSendInput={mockOnSendInput} />)
     expect(screen.getByTestId('inline-input-field')).toHaveAttribute('placeholder', 'Agent working...')
   })
+
+  it('does not render an Enter hint text next to the send button', () => {
+    render(<InlineTaskInput agent={createMockAgent({ status: 'idle' })} onSendInput={mockOnSendInput} />)
+    expect(screen.queryByText('Enter')).not.toBeInTheDocument()
+  })
+
+  it('send button has type=button to prevent implicit form submission', () => {
+    render(<InlineTaskInput agent={createMockAgent({ status: 'idle' })} onSendInput={mockOnSendInput} />)
+    expect(screen.getByTestId('inline-send-button')).toHaveAttribute('type', 'button')
+  })
+
+  it('send button fires onSendInput exactly once per click', () => {
+    render(<InlineTaskInput agent={createMockAgent({ status: 'idle' })} onSendInput={mockOnSendInput} />)
+    const input = screen.getByTestId('inline-input-field')
+    fireEvent.change(input, { target: { value: 'hello' } })
+    fireEvent.click(screen.getByTestId('inline-send-button'))
+    expect(mockOnSendInput).toHaveBeenCalledTimes(1)
+  })
 })

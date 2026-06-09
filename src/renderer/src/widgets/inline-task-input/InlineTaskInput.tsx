@@ -113,14 +113,12 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         data-testid="inline-send-button"
         className="btn btn-sm text-xs"
         style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
+        type="button"
         disabled={!inputValue.trim()}
         onClick={handleSubmit}
       >
         Send
       </button>
-      <span className="text-[11px] text-base-content/60 hidden sm:inline">
-        {disabled ? '' : 'Enter'}
-      </span>
     </div>
   )
 }
