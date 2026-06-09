@@ -182,6 +182,9 @@ export interface AgentHubBridge {
     minimizeToTray: () => Promise<IpcResponse<void>>
     openTerminal: (command: string) => Promise<IpcResponse<void>>
   }
+  log: {
+    rendererError: (payload: import('./log.types').RendererErrorPayload) => void
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
