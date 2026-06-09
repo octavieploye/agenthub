@@ -162,6 +162,9 @@ export const IPC_CHANNELS = {
   PROJECT: {
     INIT: 'project:init'
   },
+  LOG: {
+    RENDERER_ERROR: 'log:renderer-error'
+  },
 } as const
 
 export const IPC_EVENTS = {
