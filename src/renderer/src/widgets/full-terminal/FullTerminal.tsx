@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react'
 import '@xterm/xterm/css/xterm.css'
+import { watchWebGlContext } from '../../crash-logger'
 import TerminalContextMenu from './TerminalContextMenu'
 import {
   getOrCreateTerminal,
@@ -80,6 +81,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
 
     // Attach to DOM
     attachToContainer(agentId, containerRef.current)
+    watchWebGlContext(containerRef.current, agentId)
 
     // Wire keyboard shortcuts (clipboard, search)
     managed.term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
