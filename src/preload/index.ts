@@ -208,6 +208,9 @@ const agentHubBridge = {
     stats: (params: { since: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.ACTIVITY.STATS, params)
   },
+  project: {
+    init: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT.INIT, cwd)
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void

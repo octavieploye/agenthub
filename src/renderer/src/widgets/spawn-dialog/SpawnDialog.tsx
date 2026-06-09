@@ -64,6 +64,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const [selectedColor, setSelectedColor] = useState<string>(AGENT_COLOR_PALETTE[0])
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [skipPermissions, setSkipPermissions] = useState(false)
+  const [isNewProject, setIsNewProject] = useState(false)
   const [_dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
@@ -111,6 +112,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
       setSelectedModel('claude-sonnet-4-6')
       setEffortLevel('medium')
       setSkipPermissions(false)
+      setIsNewProject(false)
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
   }, [open, loadRepos, loadModels, prefilledRepoId])
@@ -156,9 +158,17 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const resolvedCwd = selectedRepo?.path ?? customCwd.trim()
   const canProceed = !!resolvedCwd
 
-  const handleNext = useCallback(() => {
-    if (canProceed) setStep('pre-launch')
-  }, [canProceed])
+  const handleNext = useCallback(async () => {
+    if (!canProceed) return
+    if (isNewProject && resolvedCwd) {
+      try {
+        await window.agentHub.project.init(resolvedCwd)
+      } catch {
+        // non-critical — proceed even if init fails
+      }
+    }
+    setStep('pre-launch')
+  }, [canProceed, isNewProject, resolvedCwd])
 
   const handleLaunch = useCallback(
     async (task: string) => {
@@ -465,6 +475,26 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
               </div>
             </div>
           )}
+
+          {/* New project toggle */}
+          <div className="panel-glass p-3 rounded-lg">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <span className="text-xs font-bold tracking-wide text-base-content/60 block">
+                  NEW PROJECT
+                </span>
+                <span className="text-[10px] text-base-content/40">
+                  Initialize .claude/ config (CLAUDE.md + agents.md)
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={isNewProject}
+                onChange={(e) => setIsNewProject(e.target.checked)}
+                className="toggle toggle-sm toggle-primary"
+              />
+            </label>
+          </div>
         </div>
 
         <div className="flex gap-2 mt-5 justify-end">

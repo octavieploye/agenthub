@@ -172,6 +172,9 @@ export interface AgentHubBridge {
     destroy: (repoId: string) => Promise<IpcResponse<void>>
     stopAll: () => Promise<IpcResponse<void>>
   }
+  project: {
+    init: (cwd: string) => Promise<IpcResponse<{ claudeMdCreated: boolean; agentsMdCreated: boolean }>>
+  }
   system: {
     getAppVersion: () => Promise<IpcResponse<string>>
     getPlatform: () => Promise<IpcResponse<string>>

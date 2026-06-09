@@ -159,6 +159,9 @@ export const IPC_CHANNELS = {
     DESTROY: 'containers:destroy',
     STOP_ALL: 'containers:stop-all'
   },
+  PROJECT: {
+    INIT: 'project:init'
+  },
 } as const
 
 export const IPC_EVENTS = {
