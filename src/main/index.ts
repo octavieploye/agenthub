@@ -9,7 +9,7 @@ import { cleanupAllAgents } from './services/agent-manager'
 import { initializeServices, startServices, stopServices } from './services/service-orchestrator'
 
 log.initialize()
-log.transports.file.level = 'info'
+log.transports.file.level = 'debug'
 log.transports.console.level = is.dev ? 'debug' : 'warn'
 
 process.on('uncaughtException', (err) => {
@@ -18,6 +18,10 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason) => {
   log.error('Unhandled rejection', { reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : String(reason) })
+})
+
+process.on('exit', (code) => {
+  log.info('Process exit', { code })
 })
 
 function createWindow(): void {
@@ -132,6 +136,15 @@ app.whenReady().then(() => {
 
   // Register all IPC handlers
   registerAllIpcHandlers()
+
+  setInterval(() => {
+    const mem = process.memoryUsage()
+    log.debug('Heartbeat', {
+      rss: Math.round(mem.rss / 1024 / 1024),
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
+    })
+  }, 30_000)
 
   // Initialize services (creates instances, wires dependencies)
   initializeServices(db)
