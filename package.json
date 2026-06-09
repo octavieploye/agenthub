@@ -24,7 +24,10 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "docker:build": "docker build -t agenthub-cli:latest ./docker/agent",
-    "docker:rebuild": "docker build --no-cache -t agenthub-cli:latest ./docker/agent"
+    "docker:rebuild": "docker build --no-cache -t agenthub-cli:latest ./docker/agent",
+    "init-project": "node scripts/init-project.mjs",
+    "sync-global-claude": "node scripts/sync-global-claude.mjs",
+    "tdd": "node scripts/tdd-cycle.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

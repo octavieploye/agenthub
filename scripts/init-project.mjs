@@ -241,6 +241,7 @@ function buildReplacements({ name, description, backend, frontend, database, inf
     '[SECURITY_RULES_BLOCK]': securityRulesBlock,
     '[NEVER_RULES_BLOCK]':    neverRulesBlock,
     '[main context file]':    keyFiles[0]?.path ?? 'README.md',
+    '<agenthub-path>':        AGENTHUB_DIR,
   }
 }
 
