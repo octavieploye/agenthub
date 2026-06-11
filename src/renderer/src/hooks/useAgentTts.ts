@@ -20,11 +20,11 @@ function getTts(): AgentHubTts | undefined {
 async function invokeTts(text: string): Promise<void> {
   const tts = getTts()
   if (!tts) return
-  const { ttsVoiceURI, ttsRate, ttsVolume } = useViewStore.getState()
+  const { piperVoiceId, ttsRate, ttsVolume } = useViewStore.getState()
   try {
     const result = await tts.speak({
       text,
-      voiceId: ttsVoiceURI || 'en_US-amy-medium',
+      voiceId: piperVoiceId || 'en_US-amy-medium',
       rate: ttsRate,
       volume: ttsVolume,
     })

@@ -1,26 +1,28 @@
 import { useState, useEffect } from 'react'
 import { useViewStore } from '../../../stores/view-store'
 
+type PiperVoice = { id: string; lang: string; name: string; quality: string }
+
+type TtsApi = {
+  listVoices: () => Promise<{ data?: PiperVoice[] }>
+}
+
 export function VoiceTab(): React.JSX.Element {
   const ttsVolume = useViewStore((s) => s.ttsVolume)
   const ttsRate = useViewStore((s) => s.ttsRate)
-  const ttsVoiceURI = useViewStore((s) => s.ttsVoiceURI)
+  const piperVoiceId = useViewStore((s) => s.piperVoiceId)
   const setTtsVolume = useViewStore((s) => s.setTtsVolume)
   const setTtsRate = useViewStore((s) => s.setTtsRate)
-  const setTtsVoiceURI = useViewStore((s) => s.setTtsVoiceURI)
+  const setPiperVoiceId = useViewStore((s) => s.setPiperVoiceId)
 
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [voices, setVoices] = useState<PiperVoice[]>([])
 
   useEffect(() => {
-    const load = (): void => {
-      const available = window.speechSynthesis.getVoices()
-      if (available.length > 0) setVoices(available)
-    }
-    load()
-    window.speechSynthesis.onvoiceschanged = load
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null
-    }
+    const ttsApi = (window as Window & typeof globalThis & { agentHub?: { tts?: TtsApi } }).agentHub?.tts
+    if (!ttsApi) return
+    ttsApi.listVoices().then((result) => {
+      if (result?.data) setVoices(result.data)
+    }).catch(console.warn)
   }, [])
 
   return (
@@ -30,13 +32,13 @@ export function VoiceTab(): React.JSX.Element {
         <select
           data-testid="tts-voice-select"
           className="select select-sm select-bordered w-full text-xs"
-          value={ttsVoiceURI}
-          onChange={(e) => setTtsVoiceURI(e.target.value)}
+          value={piperVoiceId}
+          onChange={(e) => setPiperVoiceId(e.target.value)}
         >
           <option value="">System default</option>
           {voices.map((v) => (
-            <option key={v.voiceURI} value={v.voiceURI}>
-              {v.name} ({v.lang})
+            <option key={v.id} value={v.id}>
+              {v.name} ({v.lang}) — {v.quality}
             </option>
           ))}
         </select>

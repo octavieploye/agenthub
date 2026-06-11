@@ -246,11 +246,11 @@ function AppMain(): React.JSX.Element {
       speak: async ({ text, volume }) => {
         const tts = (window as Window & typeof globalThis & { agentHub?: { tts?: { speak: (o: { text: string; voiceId: string; rate: number; volume: number }) => Promise<{ data?: ArrayBuffer }> } } }).agentHub?.tts
         if (!tts) return
-        const { ttsVoiceURI, ttsRate } = useViewStore.getState()
+        const { piperVoiceId, ttsRate } = useViewStore.getState()
         try {
           const result = await tts.speak({
             text,
-            voiceId: ttsVoiceURI || 'en_US-amy-medium',
+            voiceId: piperVoiceId || 'en_US-amy-medium',
             rate: ttsRate,
             volume,
           })
