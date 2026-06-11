@@ -14,6 +14,7 @@ import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
+import { startResponseCollector } from './response-collector'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
@@ -29,6 +30,7 @@ interface ManagedAgent {
   flushTimer: ReturnType<typeof setTimeout> | null
   ipcBatchBuffer: string
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
+  responseCollector: import('child_process').ChildProcess | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -300,7 +302,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 
@@ -370,6 +372,28 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
+  }
+
+  // Start ResponseCollector for TTS — only when agent has voice enabled
+  if (agentState.voiceMode !== 'off' && task) {
+    const managed = agents.get(agentState.id)
+    if (managed) {
+      const escapedForCollector = task.replace(/"/g, '\\"')
+      const collectorArgs: string[] = []
+      if (modelFlag.trim()) {
+        collectorArgs.push(...modelFlag.trim().split(/\s+/).filter(Boolean))
+      }
+      if (effortFlag.trim()) {
+        collectorArgs.push(...effortFlag.trim().split(/\s+/).filter(Boolean))
+      }
+      managed.responseCollector = startResponseCollector({
+        agentId: agentState.id,
+        task: escapedForCollector,
+        claudeArgs: collectorArgs,
+        env,
+        logInfo: (msg, meta) => log.info(msg, meta),
+      })
+    }
   }
 
   log.info('Agent spawned', { id: agentState.id, pid: ptyProcess.pid, cwd: options.cwd })
@@ -442,6 +466,10 @@ export function killAgent(agentId: string): void {
     // If the onExit handler hasn't already cleaned up, do it now
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
+      if (mgd.responseCollector && !mgd.responseCollector.killed) {
+        mgd.responseCollector.kill()
+      }
+      mgd.responseCollector = null
       const previousStatusOnKill = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -461,6 +489,10 @@ export function killAgent(agentId: string): void {
     } catch { /* already dead */ }
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
+      if (mgd.responseCollector && !mgd.responseCollector.killed) {
+        mgd.responseCollector.kill()
+      }
+      mgd.responseCollector = null
       const previousStatusOnKillCatch = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
