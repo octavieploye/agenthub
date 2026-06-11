@@ -20,41 +20,44 @@ export function extractLastParagraph(text: string): string {
 export interface SpeakOptions {
   volume?: number
   rate?: number
-  voiceURI?: string
+  piperVoiceId?: string
+}
+
+type AgentHubTts = {
+  speak: (o: { text: string; voiceId: string; rate: number; volume: number }) => Promise<{ data?: ArrayBuffer; error?: string }>
+}
+
+function getTts(): AgentHubTts | undefined {
+  return (window as Window & typeof globalThis & { agentHub?: { tts?: AgentHubTts } }).agentHub?.tts
 }
 
 /**
- * Cancels any in-progress speech and speaks new text.
- * Does nothing if text is blank.
+ * Speaks text via Piper TTS (IPC → main process → piper binary → WAV → Web Audio).
+ * Falls back silently if IPC is unavailable.
  */
-export function speak(text: string, opts: SpeakOptions = {}): void {
+export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
   if (!text.trim()) return
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.volume = opts.volume ?? 0.8
-  utterance.rate = opts.rate ?? 1.0
-  if (opts.voiceURI) {
-    const voice = window.speechSynthesis.getVoices().find((v) => v.voiceURI === opts.voiceURI)
-    if (voice) utterance.voice = voice
-  }
-  window.speechSynthesis.speak(utterance)
-}
+  const tts = getTts()
+  if (!tts) return
 
-/**
- * Queues text after any currently-speaking utterance (does NOT cancel first).
- */
-export function speakQueued(text: string, opts: SpeakOptions = {}): void {
-  if (!text.trim()) return
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.volume = opts.volume ?? 0.8
-  utterance.rate = opts.rate ?? 1.0
-  if (opts.voiceURI) {
-    const voice = window.speechSynthesis.getVoices().find((v) => v.voiceURI === opts.voiceURI)
-    if (voice) utterance.voice = voice
+  const result = await tts.speak({
+    text,
+    voiceId: opts.piperVoiceId ?? 'en_US-amy-medium',
+    rate: opts.rate ?? 1.0,
+    volume: opts.volume ?? 0.8,
+  })
+
+  if (result?.error) {
+    console.warn('[voice-speaker] TTS error:', result.error)
+    return
   }
-  window.speechSynthesis.speak(utterance)
+
+  if (result?.data) {
+    const { playWav } = await import('./tts-player')
+    await playWav(result.data, opts.volume ?? 0.8)
+  }
 }
 
 export function cancelSpeech(): void {
-  window.speechSynthesis.cancel()
+  import('./tts-player').then(({ stopPlayback }) => stopPlayback()).catch(() => {})
 }

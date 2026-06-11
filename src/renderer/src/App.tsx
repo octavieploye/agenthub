@@ -89,9 +89,6 @@ function AppMain(): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const setFocusedAgent = useViewStore((s) => s.setFocusedAgent)
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
-  const ttsVolume = useViewStore((s) => s.ttsVolume)
-  const ttsRate = useViewStore((s) => s.ttsRate)
-  const ttsVoiceURI = useViewStore((s) => s.ttsVoiceURI)
   const prefetchAgentData = usePrefetchAgentData()
   const { width: windowWidth } = useWindowSize()
   const isNarrowWindow = windowWidth < 728
@@ -154,9 +151,8 @@ function AppMain(): React.JSX.Element {
     createSoundAlertDeps(() => useViewStore.getState().soundEnabled)
   )
 
-  // Per-agent TTS — reads response text and speaks on busy→idle/locked
-  const ttsOpts = { volume: ttsVolume, rate: ttsRate, voiceURI: ttsVoiceURI }
-  const { readActiveAgent } = useAgentTts(activeAgentId, agents, ttsOpts)
+  // Per-agent TTS — reads response text and speaks on busy→completed
+  const { readActiveAgent } = useAgentTts(agents)
 
   const handleToggleVoiceMode = useCallback(
     async (agentId: string, mode: import('@shared/types/agent.types').VoiceMode) => {
@@ -247,15 +243,24 @@ function AppMain(): React.JSX.Element {
     // Layer 4: Voice TTS — critical events, gated by voiceEnabled
 
     const voiceDeps: VoiceTtsDeps = {
-      speak: ({ text, volume }) => {
-        const utterance = new SpeechSynthesisUtterance(text)
-        utterance.volume = volume
-        const voiceURI = useViewStore.getState().ttsVoiceURI
-        if (voiceURI) {
-          const voice = window.speechSynthesis.getVoices().find((v) => v.voiceURI === voiceURI)
-          if (voice) utterance.voice = voice
+      speak: async ({ text, volume }) => {
+        const tts = (window as Window & typeof globalThis & { agentHub?: { tts?: { speak: (o: { text: string; voiceId: string; rate: number; volume: number }) => Promise<{ data?: ArrayBuffer }> } } }).agentHub?.tts
+        if (!tts) return
+        const { ttsVoiceURI, ttsRate } = useViewStore.getState()
+        try {
+          const result = await tts.speak({
+            text,
+            voiceId: ttsVoiceURI || 'en_US-amy-medium',
+            rate: ttsRate,
+            volume,
+          })
+          if (result?.data) {
+            const { playWav } = await import('./services/tts-player')
+            await playWav(result.data, volume)
+          }
+        } catch (err) {
+          console.warn('[App voiceDeps] TTS error:', err)
         }
-        window.speechSynthesis.speak(utterance)
       },
       isVoiceEnabled: () => useViewStore.getState().voiceEnabled,
       isFocused: (agentId) => useViewStore.getState().focusedAgentId === agentId,
