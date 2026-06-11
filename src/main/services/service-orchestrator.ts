@@ -16,6 +16,8 @@ import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
 import { VoiceService } from './voice-service'
+import { PiperService } from './piper-service'
+import { registerTtsHandlers } from '../ipc/tts.ipc'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
@@ -36,6 +38,7 @@ let skillsService: SkillsService | null = null
 let windowManager: WindowManager | null = null
 let settingsService: SettingsService | null = null
 let voiceService: VoiceService | null = null
+let piperService: PiperService | null = null
 let dockerService: DockerService | null = null
 let containerManager: ContainerManager | null = null
 
@@ -217,7 +220,21 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
-  // 12. DockerService — Docker availability detection and image management
+  // 12. PiperService — Piper TTS sidecar, no deps
+  piperService = new PiperService({
+    logInfo: (message: string, meta?: Record<string, unknown>) => {
+      log.info(message, meta)
+    },
+    binaryPath: app.isPackaged
+      ? require('path').join(process.resourcesPath, 'bin', 'piper')
+      : require('path').join(process.cwd(), 'resources', 'bin', 'piper'),
+    voicesDir: app.isPackaged
+      ? require('path').join(process.resourcesPath, 'voices')
+      : require('path').join(process.cwd(), 'resources', 'voices'),
+  })
+  registerTtsHandlers()
+
+  // 13. DockerService — Docker availability detection and image management
   dockerService = new DockerService({
     logInfo: (message: string, meta?: Record<string, unknown>) => {
       log.info(message, meta)
@@ -299,6 +316,10 @@ export function getSettingsService(): SettingsService | null {
 
 export function getVoiceService(): VoiceService | null {
   return voiceService
+}
+
+export function getPiperService(): PiperService | null {
+  return piperService
 }
 
 export function getDockerService(): DockerService | null {
