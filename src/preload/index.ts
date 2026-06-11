@@ -217,6 +217,19 @@ const agentHubBridge = {
   project: {
     init: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT.INIT, cwd)
   },
+  tts: {
+    speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TTS.SPEAK, opts),
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.TTS.STOP),
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.TTS.STATUS),
+    listVoices: () => ipcRenderer.invoke(IPC_CHANNELS.TTS.LIST_VOICES),
+    onResponseReady: (cb: (agentId: string, text: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, agentId: string, text: string) =>
+        cb(agentId, text)
+      ipcRenderer.on(IPC_EVENTS.TTS.RESPONSE_READY, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.TTS.RESPONSE_READY, handler)
+    },
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void

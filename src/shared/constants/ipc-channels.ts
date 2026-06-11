@@ -165,6 +165,12 @@ export const IPC_CHANNELS = {
   LOG: {
     RENDERER_ERROR: 'log:renderer-error'
   },
+  TTS: {
+    SPEAK: 'tts:speak',
+    STOP: 'tts:stop',
+    STATUS: 'tts:status',
+    LIST_VOICES: 'tts:list-voices',
+  },
 } as const
 
 export const IPC_EVENTS = {
@@ -185,5 +191,8 @@ export const IPC_EVENTS = {
   DOCKER: {
     BUILD_PROGRESS: 'on-docker:build-progress',
     STATUS_CHANGE: 'on-docker:status-change'
+  },
+  TTS: {
+    RESPONSE_READY: 'on-tts:response-ready',
   },
 } as const
