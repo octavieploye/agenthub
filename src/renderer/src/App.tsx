@@ -23,6 +23,8 @@ import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
+import { OutputReplayModal } from './widgets/output-replay/OutputReplayModal'
+import { ContinuationDialog } from './widgets/continuation-dialog/ContinuationDialog'
 import ActivityLogView from './widgets/activity-log/ActivityLogView'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import { useWindowSize } from './hooks/useWindowSize'
@@ -32,7 +34,7 @@ import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
 import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
-import type { AgentLifecycleStatus } from '@shared/types/agent.types'
+import type { AgentLifecycleStatus, AgentState } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps, statusToSoundEvent } from './services/sound-alert'
 import { speakTriageEvent } from './services/voice-tts'
 import type { VoiceTtsDeps } from './services/voice-tts'
@@ -106,6 +108,8 @@ function AppMain(): React.JSX.Element {
   // Recovery screen
   const [recoveryInfo, setRecoveryInfo] = useState<RecoveryInfo | null>(null)
   const [showRecovery, setShowRecovery] = useState(false)
+  const [outputReplayAgent, setOutputReplayAgent] = useState<AgentState | null>(null)
+  const [continuationAgent, setContinuationAgent] = useState<AgentState | null>(null)
 
   // Shutdown dialog
   const [showShutdown, setShowShutdown] = useState(false)
@@ -635,6 +639,10 @@ function AppMain(): React.JSX.Element {
     [addAgent]
   )
 
+  const handleSpawnContinuation = useCallback((agent: AgentState) => {
+    setContinuationAgent(agent)
+  }, [])
+
   // Kill with confirmation
   const handleKillRequest = useCallback(
     (agentId: string) => {
@@ -867,12 +875,9 @@ function AppMain(): React.JSX.Element {
           recoveryInfo={recoveryInfo}
           onContinue={handleRecoveryContinue}
           onViewOutput={(agentId) => {
-            // Hydrate agent into store so it can be rendered
             const agent = recoveryInfo?.recoveredAgents.find(a => a.id === agentId)
               ?? recoveryInfo?.interruptedAgents.find(a => a.id === agentId)
-            if (agent) addAgent(agent)
-            handleSelectAgent(agentId)
-            useViewStore.getState().setViewMode('terminal')
+            if (agent) setOutputReplayAgent(agent)
             // Remove from recovery list, auto-dismiss if none left
             if (recoveryInfo) {
               const updatedRecovered = recoveryInfo.recoveredAgents.filter(a => a.id !== agentId)
@@ -1249,6 +1254,10 @@ function AppMain(): React.JSX.Element {
             }}
             onBreakout={handleBreakout}
             onChangeColor={handleColorChange}
+            onSpawnContinuation={(agentId) => {
+              const agent = agents.get(agentId)
+              if (agent) handleSpawnContinuation(agent)
+            }}
           />
         </div>
       )}
@@ -1269,6 +1278,31 @@ function AppMain(): React.JSX.Element {
 
       {/* Help modal */}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+
+      {outputReplayAgent && (
+        <OutputReplayModal
+          agent={outputReplayAgent}
+          onClose={() => setOutputReplayAgent(null)}
+          onSpawnContinuation={(agentId) => {
+            setOutputReplayAgent(null)
+            const agent = agents.get(agentId)
+              ?? recoveryInfo?.interruptedAgents.find(a => a.id === agentId)
+            if (agent) setContinuationAgent(agent)
+          }}
+          onDropAgent={(agentId) => {
+            handleKillDirect(agentId)
+            setOutputReplayAgent(null)
+          }}
+        />
+      )}
+
+      {continuationAgent && (
+        <ContinuationDialog
+          agent={continuationAgent}
+          onClose={() => setContinuationAgent(null)}
+          onSpawn={handleSpawn}
+        />
+      )}
 
     </div>
     </VoiceInputProvider>
