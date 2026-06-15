@@ -14,7 +14,6 @@ import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
-import { startResponseCollector } from './response-collector'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
@@ -372,28 +371,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
-  }
-
-  // Start ResponseCollector for TTS — only when agent has voice enabled
-  if (agentState.voiceMode !== 'off' && task) {
-    const managed = agents.get(agentState.id)
-    if (managed) {
-      const escapedForCollector = task.replace(/"/g, '\\"')
-      const collectorArgs: string[] = []
-      if (modelFlag.trim()) {
-        collectorArgs.push(...modelFlag.trim().split(/\s+/).filter(Boolean))
-      }
-      if (effortFlag.trim()) {
-        collectorArgs.push(...effortFlag.trim().split(/\s+/).filter(Boolean))
-      }
-      managed.responseCollector = startResponseCollector({
-        agentId: agentState.id,
-        task: escapedForCollector,
-        claudeArgs: collectorArgs,
-        env,
-        logInfo: (msg, meta) => log.info(msg, meta),
-      })
-    }
   }
 
   log.info('Agent spawned', { id: agentState.id, pid: ptyProcess.pid, cwd: options.cwd })
