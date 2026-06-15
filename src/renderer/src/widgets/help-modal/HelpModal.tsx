@@ -29,11 +29,14 @@ const SECTIONS = [
     ]
   },
   {
-    title: 'Voice Input',
+    title: 'Voice & TTS',
     rows: [
-      { keys: ['⌘ E'], desc: 'Start / stop voice recording in the task input field' },
-      { keys: ['⌘ ⇧ S'], desc: 'Cancel in-progress TTS speech' },
-      { keys: ['⌘ ⇧ I'], desc: 'Read full response for the focused agent (after last paragraph plays automatically)' },
+      { keys: ['⌘ E'], desc: 'Start / stop voice recording in the task input field (speech-to-text)' },
+      { keys: ['🔇 → 🔔 → 🔊'], desc: 'Per-agent voice mode toggle on each agent card — Off / Speak Up / Always On' },
+      { keys: ['Auto'], desc: 'When a response arrives: announces "[Agent] done", then reads the last paragraph automatically' },
+      { keys: ['⌘ ⇧ I'], desc: 'Read full response aloud for the focused agent' },
+      { keys: ['⌘ ⇧ S'], desc: 'Stop / cancel any in-progress speech' },
+      { keys: ['Settings → Voice'], desc: 'Pick Piper voice, adjust speed and volume' },
     ]
   },
   {
