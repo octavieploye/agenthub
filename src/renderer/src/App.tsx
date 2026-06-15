@@ -579,7 +579,10 @@ function AppMain(): React.JSX.Element {
       if (viewStore.viewMode !== 'terminal') return
 
       const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      // Allow Cmd/Alt+Arrow through xterm.js's hidden textarea (terminal focus),
+      // but block from regular text inputs where arrow keys are cursor movement.
+      const isXtermTextarea = target.tagName === 'TEXTAREA' && target.classList.contains('xterm-helper-textarea')
+      if (target.tagName === 'INPUT' || (target.tagName === 'TEXTAREA' && !isXtermTextarea)) return
 
       const allAgents = Array.from(useAgentStore.getState().agents.values())
       if (allAgents.length < 2) return

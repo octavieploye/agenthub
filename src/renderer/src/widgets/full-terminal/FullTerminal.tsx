@@ -98,6 +98,13 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
         setTimeout(() => searchInputRef.current?.focus(), 50)
         return false
       }
+
+      // Agent navigation shortcuts — let these bubble to App.tsx instead of going to PTY
+      const isAlt = e.altKey && !e.metaKey && !e.ctrlKey
+      if ((isMeta || isAlt) && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        return false
+      }
+
       if (e.key === 'Escape') {
         setSearchOpen(false)
         setSearchQuery('')
