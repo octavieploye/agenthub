@@ -13,6 +13,7 @@ interface AgentContextMenuProps {
   onViewNotes?: (agentId: string) => void
   onBreakout?: (agentId: string) => void
   onChangeColor?: (agentId: string) => void
+  onSpawnContinuation?: (agentId: string) => void
 }
 
 function AgentContextMenu({
@@ -27,7 +28,8 @@ function AgentContextMenu({
   onSendTask,
   onViewNotes,
   onBreakout,
-  onChangeColor
+  onChangeColor,
+  onSpawnContinuation
 }: AgentContextMenuProps): React.JSX.Element {
   const handleAction = (action: (agentId: string) => void): void => {
     action(agent.id)
@@ -37,6 +39,7 @@ function AgentContextMenu({
   const canPause = agent.status === 'busy' || agent.status === 'idle' || agent.status === 'locked'
   const canResume = agent.status === 'paused'
   const canSendTask = agent.status === 'idle' || agent.status === 'completed' || agent.status === 'locked'
+  const canContinue = agent.status === 'completed' || agent.status === 'interrupted'
 
   return (
     <div
@@ -117,6 +120,16 @@ function AgentContextMenu({
           onClick={() => handleAction(onChangeColor)}
         >
           Change Color
+        </button>
+      )}
+
+      {onSpawnContinuation && canContinue && (
+        <button
+          data-testid="context-menu-spawn-continuation"
+          className="dropdown-item w-full text-left text-xs"
+          onClick={() => handleAction(onSpawnContinuation)}
+        >
+          Spawn Continuation
         </button>
       )}
 
