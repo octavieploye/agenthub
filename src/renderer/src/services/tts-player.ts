@@ -26,10 +26,14 @@ export async function playWav(wavBuffer: ArrayBuffer, volume: number): Promise<v
   gainNode.connect(ctx.destination)
 
   currentSource = source
-  source.onended = () => {
-    currentSource = null
-  }
-  source.start()
+
+  return new Promise<void>((resolve) => {
+    source.onended = () => {
+      currentSource = null
+      resolve()
+    }
+    source.start()
+  })
 }
 
 export function stopPlayback(): void {

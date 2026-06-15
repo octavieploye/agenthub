@@ -152,7 +152,7 @@ function AppMain(): React.JSX.Element {
   )
 
   // Per-agent TTS — reads response text and speaks on busy→completed
-  const { readActiveAgent } = useAgentTts(agents)
+  const { readActiveAgent, readFullResponse } = useAgentTts(agents)
 
   const handleToggleVoiceMode = useCallback(
     async (agentId: string, mode: import('@shared/types/agent.types').VoiceMode) => {
@@ -472,10 +472,16 @@ function AppMain(): React.JSX.Element {
           repoSwitcherRef.current?.open()
         }
 
-        // Cmd+Shift+S — read/cancel TTS for active agent
+        // Cmd+Shift+S — cancel any in-progress TTS
         if (e.key === 'S' && e.shiftKey) {
           e.preventDefault()
           readActiveAgent()
+        }
+
+        // Cmd+Shift+I — read full response for the focused agent
+        if (e.key === 'I' && e.shiftKey) {
+          e.preventDefault()
+          readFullResponse(useViewStore.getState().focusedAgentId)
         }
 
         // Cmd+Shift+↑/↓ — navigate repo list (raid view only)

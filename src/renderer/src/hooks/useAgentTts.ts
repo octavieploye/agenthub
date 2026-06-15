@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
-import { cancelSpeech } from '../services/voice-speaker'
+import { cancelSpeech, extractLastParagraph } from '../services/voice-speaker'
 import { useViewStore } from '../stores/view-store'
 
 export interface AgentTtsActions {
-  /** Triggered by Cmd+Shift+S — stops any in-progress TTS. */
+  /** Cmd+Shift+S — stops any in-progress TTS. */
   readActiveAgent: () => void
+  /** Cmd+Shift+I — reads the full stored response for the given agent. */
+  readFullResponse: (agentId: string | null) => void
 }
 
 type AgentHubTts = {
@@ -21,55 +23,52 @@ async function invokeTts(text: string): Promise<void> {
   const tts = getTts()
   if (!tts) return
   const { piperVoiceId, ttsRate, ttsVolume } = useViewStore.getState()
-  try {
-    const result = await tts.speak({
-      text,
-      voiceId: piperVoiceId || 'en_US-amy-medium',
-      rate: ttsRate,
-      volume: ttsVolume,
-    })
-    if (result?.data) {
-      const { playWav } = await import('../services/tts-player')
-      await playWav(result.data, ttsVolume)
-    }
-  } catch (err) {
-    console.warn('[useAgentTts] speak error:', err)
+  const result = await tts.speak({
+    text,
+    voiceId: piperVoiceId || 'en_US-amy-medium',
+    rate: ttsRate,
+    volume: ttsVolume,
+  })
+  if (result?.data) {
+    const { playWav } = await import('../services/tts-player')
+    await playWav(result.data, ttsVolume)
   }
 }
 
 /**
- * Two responsibilities:
- * 1. Announces agent completion by name on busy→completed transition.
- * 2. Listens for on-tts:response-ready IPC events and reads the full response text.
+ * Three-stage TTS flow:
+ * 1. ResponseCollector emits response-ready → announcement plays, then last paragraph plays.
+ * 2. Cmd+Shift+I → reads full stored response for the focused agent.
+ * 3. Cmd+Shift+S → cancels any in-progress speech.
  *
- * Only fires for agents with voiceMode !== 'off'.
+ * The busy→completed status transition is no longer used for announcements —
+ * onResponseReady owns the full sequence so announcement and text are always in sync.
  */
 export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
-  const prevStatuses = useRef(new Map<string, string>())
-
-  // Announce completion by name on busy → completed only
-  useEffect(() => {
-    for (const [agentId, agent] of agents) {
-      const prev = prevStatuses.current.get(agentId)
-      const curr = agent.status
-
-      if (prev === 'busy' && curr === 'completed' && agent.voiceMode !== 'off') {
-        invokeTts(`${agent.name} has completed a response.`)
-      }
-
-      prevStatuses.current.set(agentId, curr)
-    }
-  }, [agents])
+  // Stores the full response text per agent for Cmd+Shift+I replay
+  const lastResponseText = useRef(new Map<string, string>())
 
   // Listen for response-ready events from ResponseCollector
   useEffect(() => {
     const tts = getTts()
     if (!tts?.onResponseReady) return
 
-    const unsub = tts.onResponseReady((agentId: string, text: string) => {
+    const unsub = tts.onResponseReady(async (agentId: string, text: string) => {
       const agent = agents.get(agentId)
       if (!agent || agent.voiceMode === 'off') return
-      invokeTts(text)
+
+      // Store full text for Cmd+Shift+I
+      lastResponseText.current.set(agentId, text)
+
+      try {
+        // Stage 1: announce completion
+        await invokeTts(`${agent.name} has completed a response.`)
+        // Stage 2: read last paragraph (auto, sequential after announcement)
+        const lastParagraph = extractLastParagraph(text)
+        if (lastParagraph) await invokeTts(lastParagraph)
+      } catch (err) {
+        console.warn('[useAgentTts] response sequence error:', err)
+      }
     })
 
     return unsub
@@ -79,5 +78,13 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
     cancelSpeech()
   }, [])
 
-  return { readActiveAgent }
+  const readFullResponse = useCallback((agentId: string | null) => {
+    if (!agentId) return
+    const text = lastResponseText.current.get(agentId)
+    if (!text) return
+    cancelSpeech()
+    invokeTts(text).catch((err) => console.warn('[useAgentTts] readFullResponse error:', err))
+  }, [])
+
+  return { readActiveAgent, readFullResponse }
 }

@@ -32,7 +32,8 @@ const SECTIONS = [
     title: 'Voice Input',
     rows: [
       { keys: ['⌘ E'], desc: 'Start / stop voice recording in the task input field' },
-      { keys: ['⌘ ⇧ S'], desc: 'Read / speak the active agent\'s last response (cycles: last paragraph → full → cancel)' },
+      { keys: ['⌘ ⇧ S'], desc: 'Cancel in-progress TTS speech' },
+      { keys: ['⌘ ⇧ I'], desc: 'Read full response for the focused agent (after last paragraph plays automatically)' },
     ]
   },
   {
