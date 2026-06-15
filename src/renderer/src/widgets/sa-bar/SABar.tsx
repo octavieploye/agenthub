@@ -141,7 +141,7 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
             {soundEnabled ? <Volume2Icon /> : <VolumeXIcon />}
           </button>
           {showVolumeSlider && (
-            <div className="absolute bottom-full right-0 mb-2 px-2 py-1.5 rounded-lg bg-base-200 border border-base-content/15 shadow-lg flex flex-col items-center gap-1 z-[200]">
+            <div className="absolute top-full right-0 mt-2 px-2 py-1.5 rounded-lg bg-base-200 border border-base-content/15 shadow-lg flex flex-col items-center gap-1 z-[200]">
               <span className="text-[9px] text-base-content/40 whitespace-nowrap">Volume</span>
               <input
                 type="range"
@@ -150,7 +150,8 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
                 step={0.05}
                 value={ttsVolume}
                 onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
-                className="w-20 h-1 accent-primary cursor-pointer"
+                className="h-20 w-1 accent-primary cursor-pointer"
+                style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
                 aria-label="TTS volume"
               />
               <span className="text-[9px] text-base-content/40">{Math.round(ttsVolume * 100)}%</span>
