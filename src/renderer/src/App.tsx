@@ -1291,6 +1291,7 @@ function AppMain(): React.JSX.Element {
           }}
           onDropAgent={(agentId) => {
             handleKillDirect(agentId)
+            removeAgent(agentId)
             setOutputReplayAgent(null)
           }}
         />
