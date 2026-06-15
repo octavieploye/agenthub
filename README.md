@@ -33,6 +33,48 @@ $ npm run build:mac
 $ npm run build:linux
 ```
 
+## Voice TTS (Piper)
+
+AgentHub uses [Piper](https://github.com/rhasspy/piper) for neural text-to-speech. TTS reads the actual Claude response text (not the terminal noise) via a clean structured output channel.
+
+### First-time setup
+
+Download the piper binary and starter voice models (en/fr/es):
+
+```bash
+bash scripts/setup-piper.sh
+```
+
+This places the piper binary at `resources/bin/piper` and 3 voice models in `resources/voices/`.
+
+### Enabling TTS per agent
+
+Each agent card has a voice mode toggle (click to cycle):
+
+| Icon | Mode | Behaviour |
+|------|------|-----------|
+| 🔇 | Off | Silent — no TTS |
+| 🔔 | Speak Up | Announces `"[Agent] has completed a response."` + reads the response |
+| 🔊 | Always On | Same as Speak Up (automatic, no manual trigger needed) |
+
+Only agents with Speak Up or Always On fire TTS. Silent agents have zero extra API cost.
+
+### Configuring voice, speed, and volume
+
+Open **Settings → Voice** (top-right ⚙️):
+
+- **Voice** — dropdown of installed Piper voices (loaded from `resources/voices/`)
+- **Volume** — 0–100%
+- **Speed** — 0.5× to 2.0×
+
+The selected voice determines language — pick a French voice for French output, English for English, etc.
+
+### Adding more voices
+
+Download any voice from the [Piper voices catalogue](https://huggingface.co/rhasspy/piper-voices/tree/v1.0.0). Place the `.onnx` and `.onnx.json` pair in `resources/voices/` and restart the app — it will appear in the Voice dropdown automatically.
+
+---
+
 ## Debugging
 
 ### Crash Logs

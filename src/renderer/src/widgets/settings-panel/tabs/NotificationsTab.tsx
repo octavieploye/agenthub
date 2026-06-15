@@ -35,7 +35,16 @@ export function NotificationsTab(): React.JSX.Element {
   }
 
   const handleTestVoice = (): void => {
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance('Agent task complete'))
+    const tts = (window as Window & typeof globalThis & { agentHub?: { tts?: { speak: (o: { text: string; voiceId: string; rate: number; volume: number }) => Promise<{ data?: ArrayBuffer }> } } }).agentHub?.tts
+    if (!tts) return
+    tts.speak({ text: 'Agent task complete', voiceId: 'en_US-amy-medium', rate: 1.0, volume: ttsVolume })
+      .then(async (result) => {
+        if (result?.data) {
+          const { playWav } = await import('../../../services/tts-player')
+          await playWav(result.data, ttsVolume)
+        }
+      })
+      .catch(console.warn)
   }
 
   return (
