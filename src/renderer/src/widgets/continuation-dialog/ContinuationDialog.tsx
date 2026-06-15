@@ -23,6 +23,7 @@ export function ContinuationDialog({
   const [model, setModel] = useState(agent.model ?? '')
   const [summaryVisible, setSummaryVisible] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [spawning, setSpawning] = useState(false)
   const [spawnError, setSpawnError] = useState<string | null>(null)
 
@@ -51,7 +52,10 @@ export function ContinuationDialog({
       setPrompt(generated)
       setLoading(false)
     }).catch(() => {
-      if (!cancelled) setLoading(false)
+      if (!cancelled) {
+        setFetchError('Failed to load session context.')
+        setLoading(false)
+      }
     })
 
     return () => { cancelled = true }
@@ -81,6 +85,8 @@ export function ContinuationDialog({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {loading ? (
             <div className="text-sm text-base-content/40 text-center py-8">Loading session context…</div>
+          ) : fetchError ? (
+            <div className="text-sm text-error text-center py-8">{fetchError}</div>
           ) : (
             <>
               {/* Zone 1 — Context Summary */}
