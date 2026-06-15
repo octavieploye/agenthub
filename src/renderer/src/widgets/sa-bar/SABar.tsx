@@ -1,3 +1,4 @@
+import { useState, useRef } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import { useViewStore } from '@renderer/stores/view-store'
 import RepoSwitcher from '../repo-switcher/RepoSwitcher'
@@ -65,6 +66,10 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
   const setViewMode = useViewStore((s) => s.setViewMode)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
   const toggleSound = useViewStore((s) => s.toggleSound)
+  const ttsVolume = useViewStore((s) => s.ttsVolume)
+  const setTtsVolume = useViewStore((s) => s.setTtsVolume)
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false)
+  const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   return (
     <header
@@ -115,16 +120,43 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, repoSwitcherRef 
           <SearchIcon />
         </button>
 
-        {/* Sound toggle */}
-        <button
-          data-testid="sound-toggle"
-          onClick={toggleSound}
-          className="p-1.5 rounded-md text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
-          title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-          aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+        {/* Sound toggle + volume slider */}
+        <div
+          className="relative"
+          onMouseEnter={() => {
+            if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current)
+            setShowVolumeSlider(true)
+          }}
+          onMouseLeave={() => {
+            volumeHideTimer.current = setTimeout(() => setShowVolumeSlider(false), 200)
+          }}
         >
-          {soundEnabled ? <Volume2Icon /> : <VolumeXIcon />}
-        </button>
+          <button
+            data-testid="sound-toggle"
+            onClick={toggleSound}
+            className="p-1.5 rounded-md text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+            title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+            aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+          >
+            {soundEnabled ? <Volume2Icon /> : <VolumeXIcon />}
+          </button>
+          {showVolumeSlider && (
+            <div className="absolute bottom-full right-0 mb-2 px-2 py-1.5 rounded-lg bg-base-200 border border-base-content/15 shadow-lg flex flex-col items-center gap-1 z-[200]">
+              <span className="text-[9px] text-base-content/40 whitespace-nowrap">Volume</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={ttsVolume}
+                onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
+                className="w-20 h-1 accent-primary cursor-pointer"
+                aria-label="TTS volume"
+              />
+              <span className="text-[9px] text-base-content/40">{Math.round(ttsVolume * 100)}%</span>
+            </div>
+          )}
+        </div>
 
         {/* Settings */}
         {onOpenSettings && (
