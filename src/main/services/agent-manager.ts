@@ -20,6 +20,7 @@ import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
+import { stripAnsi } from '../utils/strip-ansi'
 
 interface ManagedAgent {
   state: AgentState
@@ -30,6 +31,7 @@ interface ManagedAgent {
   ipcBatchBuffer: string
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
   responseCollector: import('child_process').ChildProcess | null
+  cleanTextBuffer: string
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -187,6 +189,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
       // Buffer output for batched DB persistence
       managed.outputBuffer += data
+      // Accumulate ANSI-stripped text for TTS response capture
+      managed.cleanTextBuffer += stripAnsi(data)
       if (!managed.flushTimer) {
         managed.flushTimer = setTimeout(() => {
           flushOutputBuffer(agentState.id)
@@ -204,6 +208,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         function applyStatusChange(): void {
           const current = agents.get(agentState.id)
           if (!current) return
+
+          // Reset clean-text buffer when a new response session begins
+          if (newStatus === 'busy' && previousStatus !== 'busy') {
+            current.cleanTextBuffer = ''
+          }
+
+          // Emit clean response text when agent finishes responding
+          if ((newStatus === 'locked' || newStatus === 'completed') && current.cleanTextBuffer.trim()) {
+            emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, current.cleanTextBuffer.trim())
+            current.cleanTextBuffer = ''
+          }
+
           current.state.status = newStatus
           current.state.confidence = parsed!.confidence
           updateAgentStatus(db, agentState.id, newStatus, parsed!.confidence)
@@ -301,7 +317,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '' })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 
