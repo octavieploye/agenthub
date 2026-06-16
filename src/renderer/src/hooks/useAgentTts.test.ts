@@ -136,6 +136,20 @@ describe('useAgentTts — onResponseReady', () => {
     expect(hub.tts.speak.mock.calls[0][0].text).toContain('Stored response text.')
   })
 
+  it('speaks announcement even when cleanText is empty (tool-only response)', async () => {
+    const agent = makeAgent({ voiceMode: 'speak_up' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', '')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has completed a response.')
+  })
+
   it('fires exactly once even when responseReady fires in rapid succession', async () => {
     const agent = makeAgent({ voiceMode: 'speak_up' })
     const agents = new Map([['agent-1', agent]])

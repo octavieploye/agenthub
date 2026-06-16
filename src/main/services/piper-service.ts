@@ -61,6 +61,7 @@ export class PiperService {
   }
 
   speak(text: string, voiceId: string, rate: number): Promise<Buffer> {
+    if (!text.trim()) return Promise.resolve(Buffer.alloc(0))
     return new Promise((resolve, reject) => {
       const modelPath = path.join(this.deps.voicesDir, `${voiceId}.onnx`)
       if (!existsSync(modelPath)) {

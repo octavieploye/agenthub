@@ -215,12 +215,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             current.cleanTextBuffer = ''
           }
 
-          // Emit filtered prose text when agent finishes responding
-          if (newStatus === 'completed' && current.cleanTextBuffer.trim()) {
+          // Emit filtered prose text when agent finishes responding.
+          // Fire on locked (waiting for input) OR completed (process exited).
+          // Always emit so the completion announcement fires even for tool-only responses.
+          if ((newStatus === 'locked' || newStatus === 'completed') && previousStatus === 'busy') {
             const filteredText = filterTtsResponse(current.cleanTextBuffer.trim())
-            if (filteredText) {
-              emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, filteredText)
-            }
+            emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, filteredText)
             current.cleanTextBuffer = ''
           }
 

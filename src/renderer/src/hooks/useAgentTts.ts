@@ -36,16 +36,17 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
 
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
-      if (!cleanText.trim()) return
-
       const agent = agentsRef.current.get(agentId)
       if (!agent || agent.voiceMode === 'off') return
 
-      lastResponseText.current.set(agentId, cleanText)
+      if (cleanText.trim()) {
+        lastResponseText.current.set(agentId, cleanText)
+      }
 
       try {
+        // Always announce completion, even if response was tool-only (empty text)
         await invokeTts(`${agent.name} has completed a response.`)
-        if (agent.voiceMode === 'always_on') {
+        if (agent.voiceMode === 'always_on' && cleanText.trim()) {
           const lastParagraph = extractLastParagraph(cleanText)
           if (lastParagraph) await invokeTts(lastParagraph)
         }
