@@ -21,6 +21,7 @@ import { routeNotification } from './notification-router'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
+import { filterTtsResponse } from '../utils/tts-response-filter'
 
 interface ManagedAgent {
   state: AgentState
@@ -214,9 +215,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             current.cleanTextBuffer = ''
           }
 
-          // Emit clean response text when agent finishes responding
-          if ((newStatus === 'locked' || newStatus === 'completed') && current.cleanTextBuffer.trim()) {
-            emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, current.cleanTextBuffer.trim())
+          // Emit filtered prose text when agent finishes responding
+          if (newStatus === 'completed' && current.cleanTextBuffer.trim()) {
+            const filteredText = filterTtsResponse(current.cleanTextBuffer.trim())
+            if (filteredText) {
+              emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, filteredText)
+            }
             current.cleanTextBuffer = ''
           }
 
