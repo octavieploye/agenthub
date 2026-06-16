@@ -22,6 +22,7 @@ import type { NotificationRouterConfig } from '../../shared/types/notification.t
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
+import { TtsTrigger } from '../utils/tts-trigger'
 
 interface ManagedAgent {
   state: AgentState
@@ -33,6 +34,7 @@ interface ManagedAgent {
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
   responseCollector: import('child_process').ChildProcess | null
   cleanTextBuffer: string
+  ttsTrigger: TtsTrigger
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -215,14 +217,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             current.cleanTextBuffer = ''
           }
 
-          // Emit filtered prose text when agent finishes responding.
-          // Fire on locked (waiting for input) OR completed (process exited).
-          // Always emit so the completion announcement fires even for tool-only responses.
-          if ((newStatus === 'locked' || newStatus === 'completed') && previousStatus === 'busy') {
-            const filteredText = filterTtsResponse(current.cleanTextBuffer.trim())
-            emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, filteredText)
-            current.cleanTextBuffer = ''
-          }
+          // Delegate TTS emit timing to TtsTrigger — it debounces to ensure
+          // only the FINAL locked/completed transition fires, not intermediate
+          // ones from tool-call cycles (busy→locked→busy→locked patterns).
+          const filteredText = filterTtsResponse(current.cleanTextBuffer.trim())
+          current.ttsTrigger.onStatusChange(previousStatus, newStatus, filteredText)
 
           current.state.status = newStatus
           current.state.confidence = parsed!.confidence
@@ -321,7 +320,15 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.status = 'busy'
   agentState.confidence = 'inferred'
 
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '' })
+  const ttsTrigger = new TtsTrigger({
+    debounceMs: 1000,
+    onEmit: (text: string) => {
+      const current = agents.get(agentState.id)
+      if (current) current.cleanTextBuffer = ''
+      emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, text)
+    }
+  })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '', ttsTrigger })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 
