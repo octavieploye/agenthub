@@ -146,6 +146,98 @@ describe('useTaskStore', () => {
       expect(useTaskStore.getState().tasks).toHaveLength(0)
     })
   })
+
+  describe('reorderTask', () => {
+    it('is defined on the store', () => {
+      expect(useTaskStore.getState().reorderTask).toBeDefined()
+    })
+
+    it('calls updateTaskRemote with position and returns true on success', async () => {
+      useTaskStore.getState().setTasks([makeMockTask({ id: 'task-1', position: 0 })])
+      window.agentHub = {
+        tasks: {
+          update: vi.fn().mockResolvedValue({ success: true, data: undefined })
+        }
+      } as any
+
+      const result = await useTaskStore.getState().reorderTask('task-1', 5)
+      expect(result).toBe(true)
+      expect((window.agentHub.tasks.update as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('task-1', { position: 5 })
+    })
+
+    it('returns false when IPC update fails', async () => {
+      useTaskStore.getState().setTasks([makeMockTask({ id: 'task-1' })])
+      window.agentHub = {
+        tasks: {
+          update: vi.fn().mockResolvedValue({ success: false, error: { code: 'ERR', message: 'update failed' } })
+        }
+      } as any
+
+      const result = await useTaskStore.getState().reorderTask('task-1', 3)
+      expect(result).toBe(false)
+      expect(useTaskStore.getState().error).toBe('update failed')
+    })
+  })
+
+  describe('batchCreateFromSprint', () => {
+    it('is defined on the store', () => {
+      expect(useTaskStore.getState().batchCreateFromSprint).toBeDefined()
+    })
+
+    it('creates all stories and returns created tasks', async () => {
+      const story1 = makeMockTask({ id: 'sprint-1', title: 'Story 1', sprintName: 'S1', epicName: 'E1' })
+      const story2 = makeMockTask({ id: 'sprint-2', title: 'Story 2', sprintName: 'S1', epicName: 'E1' })
+      const createMock = vi.fn()
+        .mockResolvedValueOnce({ success: true, data: story1 })
+        .mockResolvedValueOnce({ success: true, data: story2 })
+
+      window.agentHub = {
+        tasks: {
+          create: createMock
+        }
+      } as any
+
+      const stories = [
+        { title: 'Story 1', description: '', priority: 3 as const, sprintName: 'S1', epicName: 'E1', repoId: 'repo-1' },
+        { title: 'Story 2', description: '', priority: 2 as const, sprintName: 'S1', epicName: 'E1', repoId: 'repo-1' }
+      ]
+
+      const result = await useTaskStore.getState().batchCreateFromSprint(stories)
+      expect(result).toHaveLength(2)
+      expect(result[0].id).toBe('sprint-1')
+      expect(result[1].id).toBe('sprint-2')
+      expect(createMock).toHaveBeenCalledTimes(2)
+      expect(useTaskStore.getState().tasks).toHaveLength(2)
+    })
+
+    it('skips failed creations and returns only successful tasks', async () => {
+      const story1 = makeMockTask({ id: 'sprint-1', title: 'Story 1' })
+      const createMock = vi.fn()
+        .mockResolvedValueOnce({ success: true, data: story1 })
+        .mockResolvedValueOnce({ success: false, error: { code: 'ERR', message: 'create failed' } })
+
+      window.agentHub = {
+        tasks: {
+          create: createMock
+        }
+      } as any
+
+      const stories = [
+        { title: 'Story 1', description: '', priority: 3 as const, sprintName: 'S1', epicName: 'E1', repoId: 'repo-1' },
+        { title: 'Story 2', description: '', priority: 2 as const, sprintName: 'S1', epicName: 'E1', repoId: 'repo-1' }
+      ]
+
+      const result = await useTaskStore.getState().batchCreateFromSprint(stories)
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('sprint-1')
+    })
+
+    it('returns empty array when stories list is empty', async () => {
+      window.agentHub = { tasks: {} } as any
+      const result = await useTaskStore.getState().batchCreateFromSprint([])
+      expect(result).toEqual([])
+    })
+  })
 })
 
 describe('buildBacklogGroups', () => {

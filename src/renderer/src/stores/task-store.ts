@@ -1,6 +1,15 @@
 import { create } from 'zustand'
-import type { TaskItem, CreateTaskInput, UpdateTaskInput, BacklogGroup } from '@shared/types/task.types'
+import type { TaskItem, TaskPriority, CreateTaskInput, UpdateTaskInput, BacklogGroup } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
+
+export interface SprintStory {
+  title: string
+  description: string
+  priority: TaskPriority
+  sprintName: string
+  epicName: string
+  repoId: string
+}
 
 interface TaskStore {
   tasks: TaskItem[]
@@ -20,6 +29,8 @@ interface TaskStore {
   createTask: (input: CreateTaskInput) => Promise<TaskItem | null>
   updateTaskRemote: (id: string, input: UpdateTaskInput) => Promise<boolean>
   deleteTask: (id: string) => Promise<boolean>
+  reorderTask: (taskId: string, position: number) => Promise<boolean>
+  batchCreateFromSprint: (stories: SprintStory[]) => Promise<TaskItem[]>
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -116,6 +127,27 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       set({ error: err instanceof Error ? err.message : String(err) })
       return false
     }
+  },
+
+  reorderTask: async (taskId, position) => {
+    return get().updateTaskRemote(taskId, { position })
+  },
+
+  batchCreateFromSprint: async (stories) => {
+    const created: TaskItem[] = []
+    for (const story of stories) {
+      const task = await get().createTask({
+        repoId: story.repoId,
+        title: story.title,
+        description: story.description,
+        priority: story.priority,
+        status: 'backlog',
+        sprintName: story.sprintName,
+        epicName: story.epicName
+      })
+      if (task) created.push(task)
+    }
+    return created
   }
 }))
 
