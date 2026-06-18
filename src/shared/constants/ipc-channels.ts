@@ -162,6 +162,11 @@ export const IPC_CHANNELS = {
   PROJECT: {
     INIT: 'project:init'
   },
+  KANBAN: {
+    OPEN: 'kanban:open',
+    UPDATE_POSITION: 'kanban:update-position',
+    SPRINT_INTAKE: 'kanban:sprint-intake'
+  },
   LOG: {
     RENDERER_ERROR: 'log:renderer-error'
   },

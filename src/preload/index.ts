@@ -217,6 +217,13 @@ const agentHubBridge = {
   project: {
     init: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT.INIT, cwd)
   },
+  kanban: {
+    open: (agentId?: string) => ipcRenderer.invoke(IPC_CHANNELS.KANBAN.OPEN, agentId),
+    updatePosition: (taskId: string, position: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.UPDATE_POSITION, taskId, position),
+    sprintIntake: (stories: unknown[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_INTAKE, stories)
+  },
   tts: {
     speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.TTS.SPEAK, opts),

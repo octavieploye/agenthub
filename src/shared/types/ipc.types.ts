@@ -185,8 +185,10 @@ export interface AgentHubBridge {
   log: {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void
   }
-  kanban?: {
-    open: () => Promise<void>
+  kanban: {
+    open: (agentId?: string) => Promise<{ success: boolean }>
+    updatePosition: (taskId: string, position: number) => Promise<{ success: boolean; error?: { message: string } }>
+    sprintIntake: (stories: import('./task.types').CreateTaskInput[]) => Promise<{ success: boolean; data?: import('./task.types').TaskItem[]; error?: { message: string } }>
   }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
