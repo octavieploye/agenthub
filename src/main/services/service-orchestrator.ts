@@ -20,6 +20,8 @@ import { PiperService } from './piper-service'
 import { registerTtsHandlers } from '../ipc/tts.ipc'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
+import { AnamnesisWriter } from './anamnesis-writer'
+import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { purgeDeadAgents } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -41,6 +43,7 @@ let voiceService: VoiceService | null = null
 let piperService: PiperService | null = null
 let dockerService: DockerService | null = null
 let containerManager: ContainerManager | null = null
+let anamnesisWriter: AnamnesisWriter | null = null
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -255,6 +258,14 @@ export function initializeServices(db: Database.Database): void {
   })
   containerManager.init(db).catch((err) => log.error('ContainerManager init failed', err))
 
+  // 15. AnamnesisWriter — Kanban → Anamnesis event pipeline
+  const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
+  anamnesisWriter = new AnamnesisWriter(db, { anamnesisUrl })
+  anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
+
+  // 16. Kanban IPC handlers
+  registerKanbanHandlers(db, windowManager!)
+
   log.info('All services initialized')
 }
 
@@ -328,4 +339,8 @@ export function getDockerService(): DockerService | null {
 
 export function getContainerManager(): ContainerManager | null {
   return containerManager
+}
+
+export function getAnamnesisWriter(): AnamnesisWriter | null {
+  return anamnesisWriter
 }
