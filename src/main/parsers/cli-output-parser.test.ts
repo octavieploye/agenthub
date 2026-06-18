@@ -114,6 +114,16 @@ describe('ClaudeCliOutputParser', () => {
       const result = parser.parse('The server may deny the connection if credentials are invalid.')
       expect(result?.status).not.toBe('locked')
     })
+
+    it('does NOT treat shell-echoed command ❯ claude "task" as locked', () => {
+      const result = parser.parse('❯ claude "implement the feature"')
+      expect(result?.status).not.toBe('locked')
+    })
+
+    it('does NOT treat user typing ❯ hello world as locked', () => {
+      const result = parser.parse('❯ hello world')
+      expect(result?.status).not.toBe('locked')
+    })
   })
 
   describe('real Claude CLI prompt detection', () => {

@@ -35,7 +35,7 @@ const PATTERNS = {
   ],
   waiting_input: [
     /^\?\s+\S/m,
-    /^❯\s/m,                              // Claude CLI v2.x prompt indicator (agent at ❯ prompt)
+    /^❯\s*$/m,                             // Claude CLI v2.x empty prompt (❯ alone on a line, no content)
     /waiting for (?:input|response)/i,
     /\[Y\/n\]/,
     /press enter/i

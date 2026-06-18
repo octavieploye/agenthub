@@ -145,3 +145,66 @@ describe('TtsTrigger — tool-only responses', () => {
     expect(emit).toHaveBeenCalledWith('')
   })
 })
+
+describe('TtsTrigger — interactive mode (primed: false)', () => {
+  it('does NOT emit on first busy → locked before any locked → busy has been seen', () => {
+    // Simulates: agent spawned in interactive mode, zsh/Claude shows ❯ before user sends anything
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: false })
+
+    trigger.onStatusChange('busy', 'locked', '')
+    vi.advanceTimersByTime(300)
+
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('emits after user sends first request: locked → busy unlocks the trigger', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: false })
+
+    // False positive at startup — should be ignored
+    trigger.onStatusChange('busy', 'locked', '')
+    vi.advanceTimersByTime(100)
+
+    // User sends first message → Claude starts processing
+    trigger.onStatusChange('locked', 'busy', '')
+
+    // Claude responds → busy → locked
+    trigger.onStatusChange('busy', 'locked', 'First real response.')
+    vi.advanceTimersByTime(300)
+
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('First real response.')
+  })
+
+  it('continues emitting for all subsequent responses once unlocked', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: false })
+
+    // Unlock via first user request
+    trigger.onStatusChange('busy', 'locked', '')
+    trigger.onStatusChange('locked', 'busy', '')
+    trigger.onStatusChange('busy', 'locked', 'response one')
+    vi.advanceTimersByTime(300)
+    expect(emit).toHaveBeenCalledTimes(1)
+
+    // Second response
+    trigger.onStatusChange('locked', 'busy', '')
+    trigger.onStatusChange('busy', 'locked', 'response two')
+    vi.advanceTimersByTime(300)
+    expect(emit).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('TtsTrigger — task mode (primed: true, default)', () => {
+  it('emits on first busy → locked when primed: true (task was given at spawn)', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: true })
+
+    trigger.onStatusChange('busy', 'locked', 'Task response.')
+    vi.advanceTimersByTime(300)
+
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('Task response.')
+  })
+})

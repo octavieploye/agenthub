@@ -11,7 +11,7 @@ import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
-import { getWindowManager } from './service-orchestrator'
+import { getWindowManager, getAnamnesisWriter } from './service-orchestrator'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
@@ -23,6 +23,20 @@ import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
 import { TtsTrigger } from '../utils/tts-trigger'
+import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
+import { insertTaskEvent } from '../db/queries/task-events.queries'
+import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
+
+const AGENT_TO_TASK_STATUS: Partial<Record<string, TaskStatus>> = {
+  busy: 'in_progress',
+  completed: 'completed',
+  interrupted: 'interrupted'
+}
+const AGENT_TO_EVENT_TYPE: Partial<Record<string, TaskEventType>> = {
+  busy: 'CARD_TRANSITION',
+  completed: 'CARD_COMPLETED',
+  interrupted: 'CARD_INTERRUPTED'
+}
 
 interface ManagedAgent {
   state: AgentState
@@ -89,6 +103,30 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   const triageEvent = triageAgentEvent(triageInput)
   const routingResult = routeNotification(triageEvent, getNotificationConfig())
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
+}
+
+function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus: string): void {
+  const taskStatus = AGENT_TO_TASK_STATUS[newStatus]
+  const eventType = AGENT_TO_EVENT_TYPE[newStatus]
+  if (!taskStatus || !eventType) return
+  try {
+    const linkedTask = getTaskByAgentId(db, agentId)
+    if (!linkedTask) return
+    updateTask(db, linkedTask.id, { status: taskStatus })
+    insertTaskEvent(db, {
+      taskId: linkedTask.id,
+      eventType,
+      fromStatus: linkedTask.status,
+      toStatus: taskStatus,
+      agentId,
+      payload: { taskTitle: linkedTask.title, repoId: linkedTask.repoId }
+    })
+    getAnamnesisWriter()?.onEventInserted()
+    emitToAllRenderers(IPC_EVENTS.TASKS.UPDATED, { taskId: linkedTask.id })
+    log.debug('Kanban card synced', { taskId: linkedTask.id, agentId, taskStatus })
+  } catch (err) {
+    log.warn('Failed to sync kanban card', { agentId, newStatus, error: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 function flushOutputBuffer(agentId: string): void {
@@ -212,11 +250,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           const current = agents.get(agentState.id)
           if (!current) return
 
-          // Reset clean-text buffer when a new response session begins
-          if (newStatus === 'busy' && previousStatus !== 'busy') {
-            current.cleanTextBuffer = ''
-          }
-
           // Delegate TTS emit timing to TtsTrigger — it debounces to ensure
           // only the FINAL locked/completed transition fires, not intermediate
           // ones from tool-call cycles (busy→locked→busy→locked patterns).
@@ -236,6 +269,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             details: { from: previousStatus, to: newStatus, confidence: parsed!.confidence }
           })
           emitTriageResult(current.state, previousStatus)
+          syncKanbanCard(db, agentState.id, newStatus)
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }
 
@@ -271,7 +305,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             if (current && current.state.status !== newStatus) {
               applyStatusChange()
             }
-          }, 150)
+          }, 4000)
           statusDebounceTimers.set(agentState.id, debounceTimer)
         }
       }
@@ -305,6 +339,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       details: { exitCode }
     })
     emitTriageResult(agentState, previousStatusOnExit)
+    syncKanbanCard(db, agentState.id, 'completed')
 
     // Auto-close breakout window for this agent
     const wm = getWindowManager()
@@ -322,6 +357,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   const ttsTrigger = new TtsTrigger({
     debounceMs: 1000,
+    // primed: true  → agent was spawned with a task; first busy→locked is a real response
+    // primed: false → interactive spawn; wait for the first locked→busy before firing
+    primed: !!task,
     onEmit: (text: string) => {
       const current = agents.get(agentState.id)
       if (current) current.cleanTextBuffer = ''
@@ -378,6 +416,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       // Send task as input after claude session initializes
       if (task) {
         setTimeout(() => {
+          const mOllama = agents.get(agentState.id)
+          if (mOllama) mOllama.cleanTextBuffer = ''
           ptyProcess.write(task + '\n')
           log.info('Sent task to Ollama agent', { id: agentState.id, task })
         }, 3000)
@@ -385,6 +425,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }, 500)
   } else if (task) {
     setTimeout(() => {
+      const mTask = agents.get(agentState.id)
+      if (mTask) mTask.cleanTextBuffer = ''
       const escapedTask = task.replace(/"/g, '\\"')
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
@@ -408,6 +450,14 @@ export function sendInput(agentId: string, data: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
   console.log('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
+
+  // Start a fresh TTS capture window when the user submits a request.
+  // Resetting here (before the write) clears any echoed typing from the buffer
+  // before Claude's response starts accumulating. Avoids the stale 4000ms
+  // debounce wiping the buffer AFTER the response has already arrived.
+  if (data.includes('\r') && managed.state.status === 'locked') {
+    managed.cleanTextBuffer = ''
+  }
 
   // Claude Code CLI enables bracketed paste mode. When sending bulk text
   // ending with \r (Enter), the TUI swallows the \r if it arrives in the
@@ -481,6 +531,7 @@ export function killAgent(agentId: string): void {
       mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
       emitTriageResult(mgd.state, previousStatusOnKill)
+      syncKanbanCard(db, agentId, 'interrupted')
       const holdTimer = approvalHoldTimers.get(agentId)
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
@@ -504,6 +555,7 @@ export function killAgent(agentId: string): void {
       mgd.state.confidence = 'confirmed'
       emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'interrupted', 'confirmed')
       emitTriageResult(mgd.state, previousStatusOnKillCatch)
+      syncKanbanCard(db, agentId, 'interrupted')
       const holdTimer = approvalHoldTimers.get(agentId)
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
@@ -540,6 +592,7 @@ export function resumeAgent(agentId: string): void {
   managed.state.status = 'busy'
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'busy', 'inferred')
   emitTriageResult(managed.state, previousStatusOnResume)
+  syncKanbanCard(db, agentId, 'busy')
 }
 
 export function getAgentState(agentId: string): AgentState | null {

@@ -197,6 +197,9 @@ export const IPC_EVENTS = {
     BUILD_PROGRESS: 'on-docker:build-progress',
     STATUS_CHANGE: 'on-docker:status-change'
   },
+  TASKS: {
+    UPDATED: 'on-tasks:updated'
+  },
   TTS: {
     RESPONSE_READY: 'on-tts:response-ready',
   },
