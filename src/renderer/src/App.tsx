@@ -19,6 +19,7 @@ import AgentDetailPanel from './widgets/agent-detail/AgentDetailPanel'
 import InlineTaskInput from './widgets/inline-task-input/InlineTaskInput'
 import BreakoutLayout from './widgets/breakout-terminal/BreakoutLayout'
 import FilePreviewLayout from './widgets/file-preview/FilePreviewLayout'
+import { KanbanLayout } from './layouts/KanbanLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
@@ -61,6 +62,9 @@ function App(): React.JSX.Element {
     const repoName = urlParams.get('repoName') ?? 'project'
     return <FilePreviewLayout filePath={filePath} repoPath={repoPath} repoName={repoName} />
   }
+
+  const isKanban = urlParams.get('kanban') === 'true'
+  if (isKanban) return <KanbanLayout />
 
   if (isBreakout && breakoutAgentId) {
     return (
@@ -952,16 +956,25 @@ function AppMain(): React.JSX.Element {
       </a>
 
       {/* SA Bar — persistent status header */}
-      <SABar
-        agents={agentList}
-        onCodeBlue={handleCodeBlueActivate}
-        selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenGit={() => setGitPanelOpen(true)}
-        onOpenHelp={() => setHelpOpen(true)}
-        onOpenSearch={() => setTerminalSearchOpen(true)}
-        repoSwitcherRef={repoSwitcherRef}
-      />
+      <div className="flex items-center shrink-0">
+        <SABar
+          agents={agentList}
+          onCodeBlue={handleCodeBlueActivate}
+          selectedAgentRepoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenGit={() => setGitPanelOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
+          onOpenSearch={() => setTerminalSearchOpen(true)}
+          repoSwitcherRef={repoSwitcherRef}
+        />
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={() => window.agentHub.kanban?.open()}
+          title="Open Kanban board"
+        >
+          Board
+        </button>
+      </div>
 
       {/* Main layout: sidebar + content */}
       <main id="main-content" className="flex-1 flex min-h-0">

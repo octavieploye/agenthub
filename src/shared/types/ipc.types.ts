@@ -185,6 +185,9 @@ export interface AgentHubBridge {
   log: {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void
   }
+  kanban?: {
+    open: () => Promise<void>
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
