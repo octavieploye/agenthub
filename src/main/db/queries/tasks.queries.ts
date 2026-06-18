@@ -13,6 +13,10 @@ function mapRow(row: Record<string, unknown>): TaskItem {
     priority: (row.priority as TaskPriority) ?? 3,
     status: (row.status as TaskStatus) ?? 'backlog',
     agentId: (row.agent_id as string) ?? null,
+    position: (row.position as number) ?? 0,
+    sbarId: (row.sbar_id as string) ?? null,
+    sprintName: (row.sprint_name as string) ?? null,
+    epicName: (row.epic_name as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -44,13 +48,22 @@ export function getTaskById(db: Database.Database, id: string): TaskItem | null 
   return row ? mapRow(row) : null
 }
 
+export function getTaskByAgentId(db: Database.Database, agentId: string): TaskItem | null {
+  const row = db
+    .prepare(
+      "SELECT * FROM tasks WHERE agent_id = ? AND status NOT IN ('completed', 'tested') LIMIT 1"
+    )
+    .get(agentId) as Record<string, unknown> | undefined
+  return row ? mapRow(row) : null
+}
+
 export function insertTask(db: Database.Database, input: CreateTaskInput): TaskItem {
   const id = randomUUID()
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, sprint_name, epic_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -58,6 +71,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.description ?? '',
     input.priority ?? 3,
     input.status ?? 'backlog',
+    input.sprintName ?? null,
+    input.epicName ?? null,
     now,
     now
   )
@@ -78,6 +93,10 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     priority: (input.priority ?? 3) as TaskPriority,
     status: input.status ?? 'backlog',
     agentId: null,
+    position: 0,
+    sbarId: null,
+    sprintName: input.sprintName ?? null,
+    epicName: input.epicName ?? null,
     createdAt: now,
     updatedAt: now
   }
@@ -108,6 +127,22 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
     sets.push('agent_id = ?')
     values.push(input.agentId)
   }
+  if (input.position !== undefined) {
+    sets.push('position = ?')
+    values.push(input.position)
+  }
+  if (input.sbarId !== undefined) {
+    sets.push('sbar_id = ?')
+    values.push(input.sbarId)
+  }
+  if (input.sprintName !== undefined) {
+    sets.push('sprint_name = ?')
+    values.push(input.sprintName)
+  }
+  if (input.epicName !== undefined) {
+    sets.push('epic_name = ?')
+    values.push(input.epicName)
+  }
 
   values.push(id)
   db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...values)
@@ -120,6 +155,16 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
       details: { to: input.status }
     })
   }
+}
+
+export function updateTaskPosition(db: Database.Database, id: string, position: number): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE tasks SET position = ?, updated_at = ? WHERE id = ?').run(position, now, id)
+}
+
+export function linkSBARToTask(db: Database.Database, id: string, sbarId: string): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE tasks SET sbar_id = ?, updated_at = ? WHERE id = ?').run(sbarId, now, id)
 }
 
 export function deleteTask(db: Database.Database, id: string): void {

@@ -10,6 +10,10 @@ export interface TaskItem {
   priority: TaskPriority
   status: TaskStatus
   agentId: string | null
+  position: number
+  sbarId: string | null
+  sprintName: string | null
+  epicName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -20,6 +24,8 @@ export interface CreateTaskInput {
   description?: string
   priority?: TaskPriority
   status?: TaskStatus
+  sprintName?: string
+  epicName?: string
 }
 
 export interface UpdateTaskInput {
@@ -28,6 +34,29 @@ export interface UpdateTaskInput {
   priority?: TaskPriority
   status?: TaskStatus
   agentId?: string | null
+  position?: number
+  sbarId?: string | null
+  sprintName?: string | null
+  epicName?: string | null
+}
+
+export type TaskEventType =
+  | 'CARD_TRANSITION'
+  | 'CARD_COMPLETED'
+  | 'CARD_INTERRUPTED'
+  | 'SPRINT_INTAKE'
+
+export interface TaskEvent {
+  id: string
+  taskId: string
+  eventType: TaskEventType
+  fromStatus: string | null
+  toStatus: string
+  agentId: string | null
+  payloadJson: string
+  createdAt: string
+  syncedToAnamnesis: number
+  enrichedFromAnamnesis: number
 }
 
 export interface BacklogGroup {

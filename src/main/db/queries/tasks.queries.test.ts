@@ -9,7 +9,9 @@ import {
   insertTask,
   updateTask,
   deleteTask,
-  getCompletedTasksSince
+  getCompletedTasksSince,
+  updateTaskPosition,
+  linkSBARToTask
 } from './tasks.queries'
 import { insertRepo } from './repos.queries'
 import { insertAgent } from './agents.queries'
@@ -164,6 +166,42 @@ describe('tasks.queries', () => {
       const task = insertTask(db, { repoId, title: 'Doomed' })
       deleteTask(db, task.id)
       expect(getTaskById(db, task.id)).toBeNull()
+    })
+  })
+
+  describe('kanban fields', () => {
+    it('mapRow includes position and sbarId defaults', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Test', status: 'backlog' })
+      const fetched = getTaskById(db, task.id)
+      expect(fetched?.position).toBe(0)
+      expect(fetched?.sbarId).toBeNull()
+      expect(fetched?.sprintName).toBeNull()
+      expect(fetched?.epicName).toBeNull()
+    })
+
+    it('updateTaskPosition changes position', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Test', status: 'today' })
+      updateTaskPosition(db, task.id, 5)
+      const fetched = getTaskById(db, task.id)
+      expect(fetched?.position).toBe(5)
+    })
+
+    it('linkSBARToTask sets sbarId', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Test', status: 'backlog' })
+      linkSBARToTask(db, task.id, 'sbar-uuid-123')
+      const fetched = getTaskById(db, task.id)
+      expect(fetched?.sbarId).toBe('sbar-uuid-123')
+    })
+
+    it('insertTask stores sprintName and epicName', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Sprint task', sprintName: 'Sprint 1', epicName: 'Epic A' })
+      const fetched = getTaskById(db, task.id)
+      expect(fetched?.sprintName).toBe('Sprint 1')
+      expect(fetched?.epicName).toBe('Epic A')
     })
   })
 

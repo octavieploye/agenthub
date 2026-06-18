@@ -12,6 +12,10 @@ function makeMockTask(overrides: Partial<TaskItem> = {}): TaskItem {
     priority: 3,
     status: 'backlog',
     agentId: null,
+    position: 0,
+    sbarId: null,
+    sprintName: null,
+    epicName: null,
     createdAt: '2026-03-06T00:00:00Z',
     updatedAt: '2026-03-06T00:00:00Z',
     ...overrides
