@@ -164,6 +164,58 @@ export class WindowManager {
     return info
   }
 
+  createKanbanWindow(agentId?: string): void {
+    const existing = this.breakouts.get('__kanban__')
+    if (existing && !existing.window.isDestroyed()) {
+      existing.window.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 1200,
+      height: 700,
+      minWidth: 800,
+      minHeight: 500,
+      title: 'Kanban Board',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+        webSecurity: true
+      }
+    })
+
+    const search = agentId ? `kanban=true&agentId=${agentId}` : 'kanban=true'
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+      url.searchParams.set('kanban', 'true')
+      if (agentId) url.searchParams.set('agentId', agentId)
+      win.loadURL(url.toString())
+    } else {
+      win.loadFile(join(__dirname, '../renderer/index.html'), { search })
+    }
+
+    const info: BreakoutWindowInfo = {
+      agentId: '__kanban__',
+      windowId: win.id,
+      agentName: 'Kanban',
+      repoPath: '',
+      agentColor: '#000'
+    }
+
+    this.breakouts.set('__kanban__', { window: win, info })
+
+    win.on('closed', () => {
+      this.breakouts.delete('__kanban__')
+      this.deps.logInfo('Kanban window closed')
+    })
+
+    this.deps.logInfo('Kanban window created', { windowId: win.id })
+  }
+
   closeBreakout(agentId: string): void {
     const entry = this.breakouts.get(agentId)
     if (entry && !entry.window.isDestroyed()) {
