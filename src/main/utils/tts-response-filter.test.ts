@@ -121,6 +121,27 @@ describe('filterTtsResponse', () => {
     expect(filterTtsResponse(input)).toBe(input)
   })
 
+  it('does NOT drop prose lines that contain a box-drawing char mid-line', () => {
+    // BOX_DRAWING_RE must be anchored to line-start; mid-line occurrences in prose
+    // (e.g. describing the │ character) must be preserved.
+    const input = 'The │ character is used for vertical borders in terminal UIs.'
+    expect(filterTtsResponse(input)).toBe(input)
+  })
+
+  it('does NOT drop indented prose after a double blank line following a tool result', () => {
+    // After 2+ blank lines the tool_result context must be reset so indented
+    // LLM prose (e.g. a preformatted paragraph) is kept.
+    const input = [
+      '● Read(src/foo.ts)',
+      '  file content line 1',
+      '  file content line 2',
+      '',
+      '',
+      '  This indented prose comes after a paragraph break and must be kept.',
+    ].join('\n')
+    expect(filterTtsResponse(input)).toBe('  This indented prose comes after a paragraph break and must be kept.')
+  })
+
   it('handles a realistic mixed response', () => {
     const input = [
       '⠋',

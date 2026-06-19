@@ -12,7 +12,7 @@ const DECORATIVE_SPINNER_RE = /^[✻✳✢✺✶✽·\s]+$/
 const TOOL_CALL_START_RE = /^[●○]/
 const TOOL_CONTINUATION_RE = /^[⎿├└]/
 const TOOL_STATUS_RE = /^[✓✗⏺]/
-const BOX_DRAWING_RE = /[╭╮╰╯│─]/
+const BOX_DRAWING_RE = /^[╭╮╰╯│─]/
 const PROMPT_CHROME_RE = /^❯\s*$/
 const APPROVAL_PROMPT_RE = /^\?\s/
 const UPDATE_BANNER_RE = /update available/i
@@ -72,7 +72,11 @@ export function filterTtsResponse(text: string): string {
       if (consecutiveBlanks === 1 && output.length > 0) {
         output.push('')
       }
-      // Don't update prevKind on blank lines — keep context for tool_result detection
+      // After a double blank line (strong paragraph break) the tool_result
+      // context ends — indented prose after the gap must not be dropped.
+      if (consecutiveBlanks >= 2) {
+        prevKind = 'empty'
+      }
       continue
     }
 

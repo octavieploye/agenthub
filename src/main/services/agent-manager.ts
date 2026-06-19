@@ -246,15 +246,26 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         const previousStatus = mgd.state.status
         const newStatus = parsed.status as AgentLifecycleStatus
 
+        // Feed every raw parser transition to TtsTrigger immediately — before
+        // the 4 s status debounce — so it sees all busy/locked cycles and can
+        // cancel premature emits correctly. The debounce below is only for DB
+        // writes and UI status updates, not for TTS timing.
+        {
+          const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
+          log.debug('[TTS] parser transition', {
+            agentId: agentState.id,
+            prev: previousStatus,
+            next: newStatus,
+            bufLen: mgd.cleanTextBuffer.length,
+            filteredLen: rawFiltered.length,
+            filteredPreview: rawFiltered.slice(0, 120).replace(/\n/g, '↵'),
+          })
+          mgd.ttsTrigger.onStatusChange(previousStatus, newStatus, rawFiltered)
+        }
+
         function applyStatusChange(): void {
           const current = agents.get(agentState.id)
           if (!current) return
-
-          // Delegate TTS emit timing to TtsTrigger — it debounces to ensure
-          // only the FINAL locked/completed transition fires, not intermediate
-          // ones from tool-call cycles (busy→locked→busy→locked patterns).
-          const filteredText = filterTtsResponse(current.cleanTextBuffer.trim())
-          current.ttsTrigger.onStatusChange(previousStatus, newStatus, filteredText)
 
           current.state.status = newStatus
           current.state.confidence = parsed!.confidence
@@ -363,6 +374,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     onEmit: (text: string) => {
       const current = agents.get(agentState.id)
       if (current) current.cleanTextBuffer = ''
+      log.info('[TTS] emitting RESPONSE_READY', {
+        agentId: agentState.id,
+        textLen: text.length,
+        preview: text.slice(0, 200).replace(/\n/g, '↵'),
+      })
       emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, text)
     }
   })
