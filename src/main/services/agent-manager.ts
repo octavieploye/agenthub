@@ -359,7 +359,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     debounceMs: 1000,
     // primed: true  → agent was spawned with a task; first busy→locked is a real response
     // primed: false → interactive spawn; wait for the first locked→busy before firing
-    primed: !!task,
+    primed: !!options.taskDescription?.trim(),
     onEmit: (text: string) => {
       const current = agents.get(agentState.id)
       if (current) current.cleanTextBuffer = ''
