@@ -8,15 +8,21 @@
 
 // Unicode ranges and symbols used by Claude CLI scaffolding (not LLM prose)
 const BRAILLE_SPINNER_RE = /^[\u2800-\u28FF\s]+$/
-const DECORATIVE_SPINNER_RE = /^[✻✳✢✺✶✽·\s]+$/
+// Spinner chars alone on a line, OR spinner char + space + description text
+// e.g. "✻ Implementing free-text categories…" (Claude CLI tool-call progress lines)
+const DECORATIVE_SPINNER_RE = /^[✻✳✢✺✶✽·\s]+$|^[✻✳✢✺✶✽·]\s+\S/
 const TOOL_CALL_START_RE = /^[●○]/
 const TOOL_CONTINUATION_RE = /^[⎿├└]/
 const TOOL_STATUS_RE = /^[✓✗⏺]/
 const BOX_DRAWING_RE = /^[╭╮╰╯│─]/
+// Block-element characters used in Claude Code startup banner (▐▛▜▌▝▘█ etc.)
+const BLOCK_ELEMENT_BANNER_RE = /^[\u2580-\u259F\s]+$/
 const PROMPT_CHROME_RE = /^❯\s*$/
 const APPROVAL_PROMPT_RE = /^\?\s/
 const UPDATE_BANNER_RE = /update available/i
 const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking)[…\.]*\s*$/i
+// Safety net: any line that still begins with an escape character after stripAnsi
+const RESIDUAL_ESCAPE_RE = /^\x1b/
 
 type LineKind = 'prose' | 'tool_call' | 'tool_result' | 'spinner' | 'banner' | 'prompt' | 'empty'
 
@@ -27,12 +33,14 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   const trimmed = line.trim()
 
   if (trimmed === '') return 'empty'
+  if (RESIDUAL_ESCAPE_RE.test(trimmed)) return 'banner'
   if (BRAILLE_SPINNER_RE.test(trimmed) || DECORATIVE_SPINNER_RE.test(trimmed)) return 'spinner'
   if (THINKING_LINE_RE.test(trimmed)) return 'spinner'
   if (TOOL_CALL_START_RE.test(trimmed)) return 'tool_call'
   if (TOOL_CONTINUATION_RE.test(trimmed)) return 'tool_call'
   if (TOOL_STATUS_RE.test(trimmed)) return 'tool_call'
   if (BOX_DRAWING_RE.test(trimmed)) return 'banner'
+  if (BLOCK_ELEMENT_BANNER_RE.test(trimmed)) return 'banner'
   if (UPDATE_BANNER_RE.test(trimmed)) return 'banner'
   if (PROMPT_CHROME_RE.test(line)) return 'prompt'
   if (APPROVAL_PROMPT_RE.test(trimmed)) return 'prompt'
