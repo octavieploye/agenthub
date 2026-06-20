@@ -32,7 +32,8 @@ const createTaskSchema = z.object({
   category: categorySchema,
   sprintName: z.string().optional(),
   epicName: z.string().optional(),
-  projectId: z.string().nullable().optional()
+  projectId: z.string().nullable().optional(),
+  note: z.string().nullable().optional()
 })
 
 const updateTaskSchema = z.object({
@@ -49,7 +50,8 @@ const updateTaskSchema = z.object({
   sprintName: z.string().nullable().optional(),
   epicName: z.string().nullable().optional(),
   projectId: z.string().nullable().optional(),
-  sectionTargetDate: z.string().nullable().optional()
+  sectionTargetDate: z.string().nullable().optional(),
+  note: z.string().nullable().optional()
 })
 
 export function registerTasksHandlers(): void {

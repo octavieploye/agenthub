@@ -59,6 +59,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               ...(input.sprintName !== undefined && { sprintName: input.sprintName }),
               ...(input.epicName !== undefined && { epicName: input.epicName }),
               ...(input.sectionTargetDate !== undefined && { sectionTargetDate: input.sectionTargetDate }),
+              ...(input.note !== undefined && { note: input.note }),
               updatedAt: new Date().toISOString()
             }
           : t

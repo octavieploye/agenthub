@@ -42,6 +42,7 @@ export interface TaskItem {
   epicName: string | null
   projectId: string | null
   sectionTargetDate: string | null
+  note: string | null
   createdAt: string
   updatedAt: string
 }
@@ -56,6 +57,7 @@ export interface CreateTaskInput {
   sprintName?: string
   epicName?: string
   projectId?: string | null
+  note?: string | null
 }
 
 export interface UpdateTaskInput {
@@ -71,6 +73,7 @@ export interface UpdateTaskInput {
   epicName?: string | null
   projectId?: string | null
   sectionTargetDate?: string | null
+  note?: string | null
 }
 
 export type TaskEventType =

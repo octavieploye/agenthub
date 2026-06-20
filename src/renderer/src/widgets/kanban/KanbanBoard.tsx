@@ -52,9 +52,10 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     updateTaskRemote(taskId, { status: toStatus })
   }
 
-  async function handleAddTask(status: TaskStatus, title: string, repoId: string, category: TaskCategory | null) {
+  async function handleAddTask(status: TaskStatus, title: string, repoId: string, category: TaskCategory | null, note: string | null) {
     await createTask({ repoId, title, status, category: category ?? undefined,
-      projectId: selectedProjectId ?? undefined
+      projectId: selectedProjectId ?? undefined,
+      note: note ?? undefined
     })
   }
 
@@ -210,7 +211,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               repos={repos}
               onToggleCollapse={() => toggleCollapse(status)}
               onCardDrop={handleCardDrop}
-              onAddTask={(title, repoId, cat) => handleAddTask(status, title, repoId, cat)}
+              onAddTask={(title, repoId, cat, n) => handleAddTask(status, title, repoId, cat, n)}
             >
               {renderSections(columnTasks)}
             </KanbanColumn>

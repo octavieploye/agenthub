@@ -11,7 +11,7 @@ interface KanbanColumnProps {
   repos: RepoConfig[]
   onToggleCollapse: () => void
   onCardDrop: (taskId: string, toStatus: TaskStatus) => void
-  onAddTask: (title: string, repoId: string, category: TaskCategory | null) => Promise<void>
+  onAddTask: (title: string, repoId: string, category: TaskCategory | null, note: string | null) => Promise<void>
   children: React.ReactNode
 }
 
@@ -32,6 +32,7 @@ export function KanbanColumn({
   const [title, setTitle] = useState('')
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
   const [category, setCategory] = useState<TaskCategory | null>(null)
+  const [note, setNote] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   function handleDragOver(e: React.DragEvent) {
@@ -56,14 +57,16 @@ export function KanbanColumn({
     setAdding(false)
     setTitle('')
     setCategory(null)
+    setNote('')
   }
 
   async function submitForm() {
     const trimmed = title.trim()
     if (!trimmed || !repoId) return
-    await onAddTask(trimmed, repoId, category)
+    await onAddTask(trimmed, repoId, category, note.trim() || null)
     setTitle('')
     setCategory(null)
+    setNote('')
     setAdding(false)
   }
 
@@ -122,6 +125,13 @@ export function KanbanColumn({
                   </select>
                 )}
               </div>
+              <input
+                type="text"
+                className="input input-xs input-bordered w-full"
+                placeholder="Note / path (hover to see)…"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
               <div className="flex gap-1 justify-end">
                 <button className="btn btn-xs btn-ghost" onClick={cancelForm}>Cancel</button>
                 <button className="btn btn-xs btn-primary" onClick={submitForm} disabled={!title.trim() || !repoId}>Add</button>

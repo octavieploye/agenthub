@@ -20,6 +20,7 @@ function mapRow(row: Record<string, unknown>): TaskItem {
     epicName: (row.epic_name as string) ?? null,
     projectId: (row.project_id as string) ?? null,
     sectionTargetDate: (row.section_target_date as string) ?? null,
+    note: (row.note as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -65,8 +66,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, note, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -78,6 +79,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.sprintName ?? null,
     input.epicName ?? null,
     input.projectId ?? null,
+    input.note ?? null,
     now,
     now
   )
@@ -105,6 +107,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     epicName: input.epicName ?? null,
     projectId: input.projectId ?? null,
     sectionTargetDate: null,
+    note: input.note ?? null,
     createdAt: now,
     updatedAt: now
   }
@@ -162,6 +165,10 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   if (input.sectionTargetDate !== undefined) {
     sets.push('section_target_date = ?')
     values.push(input.sectionTargetDate)
+  }
+  if (input.note !== undefined) {
+    sets.push('note = ?')
+    values.push(input.note)
   }
 
   values.push(id)

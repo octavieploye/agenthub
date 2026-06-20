@@ -37,9 +37,14 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
     <div
       draggable
       onDragStart={handleDragStart}
-      className="rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
+      className="relative group rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
       style={repoGlowColor ? { borderLeftColor: repoGlowColor, borderLeftWidth: 3 } : undefined}
     >
+      {task.note && (
+        <div className="absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover:block bg-base-300 border border-base-content/20 rounded-lg px-3 py-2 text-xs text-base-content/80 max-w-[240px] whitespace-pre-wrap shadow-xl pointer-events-none">
+          {task.note}
+        </div>
+      )}
       {/* Title row */}
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
@@ -83,6 +88,9 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
             style={{ backgroundColor: agentColor }}
             title={agentName}
           />
+        )}
+        {task.note && (
+          <span className="text-[10px] text-base-content/40" title={task.note}>✎</span>
         )}
         <span className="text-[10px] text-base-content/35 ml-auto">
           {STATUS_LABEL[task.status]}

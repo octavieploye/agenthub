@@ -65,6 +65,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
   const [newCategory, setNewCategory] = useState<TaskCategory | null>(null)
+  const [newNote, setNewNote] = useState('')
 
   const [sentTaskId, setSentTaskId] = useState<string | null>(null)
 
@@ -108,14 +109,16 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
       title,
       description: newDescription.trim() || undefined,
       priority: newPriority,
-      category: newCategory ?? undefined
+      category: newCategory ?? undefined,
+      note: newNote.trim() || undefined
     })
     setNewTitle('')
     setNewDescription('')
     setNewPriority(2)
     setNewCategory(null)
+    setNewNote('')
     voiceParsedRef.current = false
-  }, [newTitle, newDescription, newPriority, newCategory, agent.repoId, createTask])
+  }, [newTitle, newDescription, newPriority, newCategory, newNote, agent.repoId, createTask])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -369,6 +372,14 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
           />
           <VoiceInputButton inputRef={descriptionRef} />
         </div>
+        <input
+          type="text"
+          placeholder="Note / path (hover on card to see)…"
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          className="input input-bordered input-sm w-full bg-base-100/50 text-xs text-base-content placeholder:text-base-content/30 border-base-content/10 focus:outline-none"
+          style={{ borderColor: `${agentColor}20` }}
+        />
       </div>
     </div>
   )
