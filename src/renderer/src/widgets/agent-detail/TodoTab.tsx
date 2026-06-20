@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTaskStore } from '../../stores/task-store'
 import { useProjectStore } from '../../stores/project-store'
 import type { AgentState } from '@shared/types/agent.types'
-import type { TaskItem, TaskPriority, TaskStatus } from '@shared/types/task.types'
+import type { TaskItem, TaskPriority, TaskStatus, TaskCategory } from '@shared/types/task.types'
+import { CATEGORY_LABEL } from '@shared/types/task.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { parseTaskVoice } from '../../helpers/parse-voice-fields'
 import { isLightColor } from './color-utils'
@@ -63,6 +64,7 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const [newDescription, setNewDescription] = useState('')
   const [newPriority, setNewPriority] = useState<TaskPriority>(2)
+  const [newCategory, setNewCategory] = useState<TaskCategory | null>(null)
 
   const [sentTaskId, setSentTaskId] = useState<string | null>(null)
 
@@ -105,13 +107,15 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
       repoId: agent.repoId,
       title,
       description: newDescription.trim() || undefined,
-      priority: newPriority
+      priority: newPriority,
+      category: newCategory ?? undefined
     })
     setNewTitle('')
     setNewDescription('')
     setNewPriority(2)
+    setNewCategory(null)
     voiceParsedRef.current = false
-  }, [newTitle, newDescription, newPriority, agent.repoId, createTask])
+  }, [newTitle, newDescription, newPriority, newCategory, agent.repoId, createTask])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -334,6 +338,16 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
             <option value={1}>P1</option>
             <option value={2}>P2</option>
             <option value={3}>P3</option>
+          </select>
+          <select
+            value={newCategory ?? ''}
+            onChange={(e) => setNewCategory((e.target.value as TaskCategory) || null)}
+            className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
+          >
+            <option value="">Category…</option>
+            {(Object.keys(CATEGORY_LABEL) as TaskCategory[]).map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+            ))}
           </select>
           <button
             onClick={handleAdd}

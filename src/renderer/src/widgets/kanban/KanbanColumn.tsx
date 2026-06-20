@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react'
-import type { TaskItem, TaskStatus } from '@shared/types/task.types'
+import type { TaskItem, TaskStatus, TaskCategory } from '@shared/types/task.types'
+import { CATEGORY_LABEL } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 
 interface KanbanColumnProps {
@@ -10,9 +11,11 @@ interface KanbanColumnProps {
   repos: RepoConfig[]
   onToggleCollapse: () => void
   onCardDrop: (taskId: string, toStatus: TaskStatus) => void
-  onAddTask: (title: string, repoId: string) => Promise<void>
+  onAddTask: (title: string, repoId: string, category: TaskCategory | null) => Promise<void>
   children: React.ReactNode
 }
+
+const CATEGORIES: TaskCategory[] = ['backend', 'frontend', 'database', 'schema', 'functionality']
 
 export function KanbanColumn({
   status,
@@ -28,6 +31,7 @@ export function KanbanColumn({
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
+  const [category, setCategory] = useState<TaskCategory | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function handleDragOver(e: React.DragEvent) {
@@ -44,19 +48,22 @@ export function KanbanColumn({
   function openForm() {
     setAdding(true)
     setRepoId(repos[0]?.id ?? '')
+    setCategory(null)
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   function cancelForm() {
     setAdding(false)
     setTitle('')
+    setCategory(null)
   }
 
   async function submitForm() {
     const trimmed = title.trim()
     if (!trimmed || !repoId) return
-    await onAddTask(trimmed, repoId)
+    await onAddTask(trimmed, repoId, category)
     setTitle('')
+    setCategory(null)
     setAdding(false)
   }
 
@@ -92,17 +99,29 @@ export function KanbanColumn({
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
-              {repos.length > 1 && (
+              <div className="flex gap-1">
                 <select
-                  className="select select-xs select-bordered w-full"
-                  value={repoId}
-                  onChange={(e) => setRepoId(e.target.value)}
+                  className="select select-xs select-bordered flex-1"
+                  value={category ?? ''}
+                  onChange={(e) => setCategory((e.target.value as TaskCategory) || null)}
                 >
-                  {repos.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                  <option value="">Category…</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
                   ))}
                 </select>
-              )}
+                {repos.length > 1 && (
+                  <select
+                    className="select select-xs select-bordered flex-1"
+                    value={repoId}
+                    onChange={(e) => setRepoId(e.target.value)}
+                  >
+                    {repos.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <div className="flex gap-1 justify-end">
                 <button className="btn btn-xs btn-ghost" onClick={cancelForm}>Cancel</button>
                 <button className="btn btn-xs btn-primary" onClick={submitForm} disabled={!title.trim() || !repoId}>Add</button>

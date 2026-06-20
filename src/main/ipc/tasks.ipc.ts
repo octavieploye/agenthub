@@ -16,6 +16,11 @@ import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { TaskItem, CreateTaskInput, UpdateTaskInput, TaskStatus } from '../../shared/types/task.types'
 import { z } from 'zod/v4'
 
+const categorySchema = z
+  .enum(['backend', 'frontend', 'database', 'schema', 'functionality'])
+  .nullable()
+  .optional()
+
 const createTaskSchema = z.object({
   repoId: z.string(),
   title: z.string().min(1),
@@ -24,6 +29,7 @@ const createTaskSchema = z.object({
   status: z
     .enum(['backlog', 'today', 'in_progress', 'completed', 'tested', 'interrupted'])
     .optional(),
+  category: categorySchema,
   sprintName: z.string().optional(),
   epicName: z.string().optional(),
   projectId: z.string().nullable().optional()
@@ -36,6 +42,7 @@ const updateTaskSchema = z.object({
   status: z
     .enum(['backlog', 'today', 'in_progress', 'completed', 'tested', 'interrupted'])
     .optional(),
+  category: categorySchema,
   agentId: z.string().nullable().optional(),
   position: z.number().int().optional(),
   sbarId: z.string().nullable().optional(),

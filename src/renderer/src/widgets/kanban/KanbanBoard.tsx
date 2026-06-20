@@ -5,7 +5,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { ProjectManagerModal } from './ProjectManagerModal'
-import type { TaskItem, TaskStatus } from '@shared/types/task.types'
+import type { TaskItem, TaskStatus, TaskCategory } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -52,8 +52,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     updateTaskRemote(taskId, { status: toStatus })
   }
 
-  async function handleAddTask(status: TaskStatus, title: string, repoId: string) {
-    await createTask({ repoId, title, status,
+  async function handleAddTask(status: TaskStatus, title: string, repoId: string, category: TaskCategory | null) {
+    await createTask({ repoId, title, status, category: category ?? undefined,
       projectId: selectedProjectId ?? undefined
     })
   }
@@ -210,7 +210,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               repos={repos}
               onToggleCollapse={() => toggleCollapse(status)}
               onCardDrop={handleCardDrop}
-              onAddTask={(title, repoId) => handleAddTask(status, title, repoId)}
+              onAddTask={(title, repoId, cat) => handleAddTask(status, title, repoId, cat)}
             >
               {renderSections(columnTasks)}
             </KanbanColumn>

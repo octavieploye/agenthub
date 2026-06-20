@@ -2,6 +2,31 @@ export type TaskPriority = 1 | 2 | 3
 
 export type TaskStatus = 'backlog' | 'today' | 'in_progress' | 'completed' | 'tested' | 'interrupted'
 
+export type TaskCategory = 'backend' | 'frontend' | 'database' | 'schema' | 'functionality'
+
+export const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  1: 'High',
+  2: 'Medium',
+  3: 'Low'
+}
+
+export const STATUS_LABEL: Record<TaskStatus, string> = {
+  backlog: 'Not Started',
+  today: 'Today',
+  in_progress: 'In Progress',
+  completed: 'Done',
+  tested: 'Tested',
+  interrupted: 'Interrupted'
+}
+
+export const CATEGORY_LABEL: Record<TaskCategory, string> = {
+  backend: 'Backend',
+  frontend: 'Frontend',
+  database: 'Database',
+  schema: 'Schema',
+  functionality: 'Functionality'
+}
+
 export interface TaskItem {
   id: string
   repoId: string
@@ -9,6 +34,7 @@ export interface TaskItem {
   description: string
   priority: TaskPriority
   status: TaskStatus
+  category: TaskCategory | null
   agentId: string | null
   position: number
   sbarId: string | null
@@ -26,6 +52,7 @@ export interface CreateTaskInput {
   description?: string
   priority?: TaskPriority
   status?: TaskStatus
+  category?: TaskCategory | null
   sprintName?: string
   epicName?: string
   projectId?: string | null
@@ -36,6 +63,7 @@ export interface UpdateTaskInput {
   description?: string
   priority?: TaskPriority
   status?: TaskStatus
+  category?: TaskCategory | null
   agentId?: string | null
   position?: number
   sbarId?: string | null

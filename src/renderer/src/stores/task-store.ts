@@ -53,6 +53,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               ...(input.status !== undefined && { status: input.status }),
               ...(input.agentId !== undefined && { agentId: input.agentId }),
               ...(input.position !== undefined && { position: input.position }),
+              ...(input.category !== undefined && { category: input.category }),
               ...(input.projectId !== undefined && { projectId: input.projectId }),
               ...(input.sbarId !== undefined && { sbarId: input.sbarId }),
               ...(input.sprintName !== undefined && { sprintName: input.sprintName }),

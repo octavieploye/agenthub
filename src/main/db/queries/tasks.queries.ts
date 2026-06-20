@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
-import type { TaskItem, TaskPriority, TaskStatus, CreateTaskInput, UpdateTaskInput } from '../../../shared/types/task.types'
+import type { TaskItem, TaskPriority, TaskStatus, TaskCategory, CreateTaskInput, UpdateTaskInput } from '../../../shared/types/task.types'
 import { insertActivityEvent } from './activity.queries'
 
 function mapRow(row: Record<string, unknown>): TaskItem {
@@ -12,6 +12,7 @@ function mapRow(row: Record<string, unknown>): TaskItem {
     description: (row.description as string) ?? '',
     priority: (row.priority as TaskPriority) ?? 3,
     status: (row.status as TaskStatus) ?? 'backlog',
+    category: (row.category as TaskCategory) ?? null,
     agentId: (row.agent_id as string) ?? null,
     position: (row.position as number) ?? 0,
     sbarId: (row.sbar_id as string) ?? null,
@@ -64,8 +65,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, sprint_name, epic_name, project_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -73,6 +74,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.description ?? '',
     input.priority ?? 3,
     input.status ?? 'backlog',
+    input.category ?? null,
     input.sprintName ?? null,
     input.epicName ?? null,
     input.projectId ?? null,
@@ -97,6 +99,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     status: input.status ?? 'backlog',
     agentId: null,
     position: 0,
+    category: input.category ?? null,
     sbarId: null,
     sprintName: input.sprintName ?? null,
     epicName: input.epicName ?? null,
@@ -127,6 +130,10 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   if (input.status !== undefined) {
     sets.push('status = ?')
     values.push(input.status)
+  }
+  if (input.category !== undefined) {
+    sets.push('category = ?')
+    values.push(input.category)
   }
   if (input.agentId !== undefined) {
     sets.push('agent_id = ?')
