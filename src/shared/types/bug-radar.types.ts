@@ -11,5 +11,6 @@ export interface BugEntry {
   message: string
   severity: BugSeverity
   resolvedAt: string | null
+  projectId: string | null
   createdAt: string
 }

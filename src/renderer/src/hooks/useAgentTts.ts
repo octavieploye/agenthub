@@ -44,8 +44,8 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
       }
 
       try {
-        // Always announce completion, even if response was tool-only (empty text)
-        await invokeTts(`${agent.name} has completed a response.`)
+        // Announce that the agent has responded (not "completed" — the task may still be ongoing)
+        await invokeTts(`${agent.name} has responded.`)
         if (agent.voiceMode === 'always_on' && cleanText.trim()) {
           const lastParagraph = extractLastParagraph(cleanText)
           if (lastParagraph) await invokeTts(lastParagraph)

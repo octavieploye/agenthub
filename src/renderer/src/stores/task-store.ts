@@ -52,6 +52,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               ...(input.priority !== undefined && { priority: input.priority }),
               ...(input.status !== undefined && { status: input.status }),
               ...(input.agentId !== undefined && { agentId: input.agentId }),
+              ...(input.position !== undefined && { position: input.position }),
+              ...(input.projectId !== undefined && { projectId: input.projectId }),
+              ...(input.sbarId !== undefined && { sbarId: input.sbarId }),
+              ...(input.sprintName !== undefined && { sprintName: input.sprintName }),
+              ...(input.epicName !== undefined && { epicName: input.epicName }),
+              ...(input.sectionTargetDate !== undefined && { sectionTargetDate: input.sectionTargetDate }),
               updatedAt: new Date().toISOString()
             }
           : t
@@ -98,6 +104,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   updateTaskRemote: async (id, input) => {
+    // TODO: Phase 1 guard — when input.agentId is set, check that the agent's repoId
+    // is linked to task.projectId before proceeding. Requires project-store.getState()
+    // and agent-store.getState() to look up project repos. Add console.warn or toast
+    // if agent repo is not in the task's project. Blocked until agent-to-repo assignment
+    // UI exists (no current UI sets agentId on a task via updateTaskRemote).
     try {
       const response = await window.agentHub.tasks.update(id, input)
       if (response.success) {

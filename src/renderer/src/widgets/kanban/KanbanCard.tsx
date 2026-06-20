@@ -1,9 +1,11 @@
+import React from 'react'
 import type { TaskItem } from '@shared/types/task.types'
 
 interface KanbanCardProps {
   task: TaskItem
   agentColor?: string
   agentName?: string
+  repoGlowColor?: string
   onSBARClick?: () => void
 }
 
@@ -13,7 +15,7 @@ const PRIORITY_BADGE: Record<number, string> = {
   3: 'badge-ghost'
 }
 
-export function KanbanCard({ task, agentColor, agentName, onSBARClick }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARClick }: KanbanCardProps) {
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData('taskId', task.id)
     e.dataTransfer.effectAllowed = 'move'
@@ -35,6 +37,13 @@ export function KanbanCard({ task, agentColor, agentName, onSBARClick }: KanbanC
           {task.sprintName && (
             <span className="text-xs text-base-content/50 truncate max-w-[80px]">{task.sprintName}</span>
           )}
+          {repoGlowColor && (
+            <span
+              className="w-2 h-2 rounded-full shrink-0 border border-base-300"
+              style={{ backgroundColor: repoGlowColor }}
+              title="Repo"
+            />
+          )}
           {agentColor && (
             <span
               className="w-2 h-2 rounded-full shrink-0"
@@ -42,7 +51,7 @@ export function KanbanCard({ task, agentColor, agentName, onSBARClick }: KanbanC
               title={agentName}
             />
           )}
-          {task.sbarId && (
+          {task.sbarId && onSBARClick && (
             <button
               className="btn btn-xs btn-ghost ml-auto"
               onClick={onSBARClick}

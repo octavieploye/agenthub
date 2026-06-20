@@ -72,10 +72,22 @@ export default function BugsTab({ agent, onSendToAgent }: BugsTabProps): React.J
   const [newSeverity, setNewSeverity] = useState<BugSeverity>('medium')
   const bugInputRef = useRef<HTMLInputElement>(null)
   const voiceParsedRef = useRef(false)
+  const [repoProjects, setRepoProjects] = useState<string[]>([])
 
   useEffect(() => {
     fetchBugsOnce()
   }, [fetchBugsOnce])
+
+  useEffect(() => {
+    if (!agent.repoId) return
+    window.agentHub.projects.getByRepo(agent.repoId).then((response) => {
+      if (response.success) {
+        setRepoProjects(response.data.map((p: { name: string }) => p.name))
+      }
+    }).catch(() => {
+      // silently ignore — project context is optional
+    })
+  }, [agent.repoId])
 
   useEffect(() => {
     if (voiceParsedRef.current || !newMessage) return
@@ -143,6 +155,12 @@ export default function BugsTab({ agent, onSendToAgent }: BugsTabProps): React.J
         {loading && (
           <div className="flex items-center justify-center py-8">
             <span className="loading loading-dots loading-sm text-base-content/40" />
+          </div>
+        )}
+
+        {!loading && repoProjects.length > 0 && (
+          <div className="px-3 py-1 text-xs text-base-content/50">
+            Projects: {repoProjects.join(', ')}
           </div>
         )}
 

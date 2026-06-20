@@ -13,6 +13,7 @@ interface InsertBugData {
   filePath: string
   message: string
   severity: BugSeverity
+  projectId?: string | null
 }
 
 function mapRow(row: Record<string, unknown>): BugEntry {
@@ -27,6 +28,7 @@ function mapRow(row: Record<string, unknown>): BugEntry {
     message: row.message as string,
     severity: row.severity as BugSeverity,
     resolvedAt: (row.resolved_at as string) ?? null,
+    projectId: (row.project_id as string) ?? null,
     createdAt: row.created_at as string
   }
 }
@@ -36,9 +38,9 @@ export function insertBug(db: Database.Database, data: InsertBugData): BugEntry 
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO bugs (id, agent_id, agent_name, repo_id, repo_name, error_type, file_path, message, severity, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, data.agentId, data.agentName, data.repoId, data.repoName, data.errorType, data.filePath, data.message, data.severity, now)
+    `INSERT INTO bugs (id, agent_id, agent_name, repo_id, repo_name, error_type, file_path, message, severity, project_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, data.agentId, data.agentName, data.repoId, data.repoName, data.errorType, data.filePath, data.message, data.severity, data.projectId ?? null, now)
 
   log.info('Bug inserted', { id, errorType: data.errorType })
   insertActivityEvent(db, {
@@ -61,6 +63,7 @@ export function insertBug(db: Database.Database, data: InsertBugData): BugEntry 
     message: data.message,
     severity: data.severity,
     resolvedAt: null,
+    projectId: data.projectId ?? null,
     createdAt: now
   }
 }

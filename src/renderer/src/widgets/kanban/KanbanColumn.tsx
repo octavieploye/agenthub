@@ -1,12 +1,16 @@
+import React, { useState, useRef } from 'react'
 import type { TaskItem, TaskStatus } from '@shared/types/task.types'
+import type { RepoConfig } from '@shared/types/config.types'
 
 interface KanbanColumnProps {
   status: TaskStatus
   label: string
   tasks: TaskItem[]
   collapsed: boolean
+  repos: RepoConfig[]
   onToggleCollapse: () => void
   onCardDrop: (taskId: string, toStatus: TaskStatus) => void
+  onAddTask: (title: string, repoId: string) => Promise<void>
   children: React.ReactNode
 }
 
@@ -15,10 +19,17 @@ export function KanbanColumn({
   label,
   tasks,
   collapsed,
+  repos,
   onToggleCollapse,
   onCardDrop,
+  onAddTask,
   children,
 }: KanbanColumnProps) {
+  const [adding, setAdding] = useState(false)
+  const [title, setTitle] = useState('')
+  const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
+  const inputRef = useRef<HTMLInputElement>(null)
+
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
@@ -28,6 +39,30 @@ export function KanbanColumn({
     e.preventDefault()
     const taskId = e.dataTransfer.getData('taskId')
     if (taskId) onCardDrop(taskId, status)
+  }
+
+  function openForm() {
+    setAdding(true)
+    setRepoId(repos[0]?.id ?? '')
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function cancelForm() {
+    setAdding(false)
+    setTitle('')
+  }
+
+  async function submitForm() {
+    const trimmed = title.trim()
+    if (!trimmed || !repoId) return
+    await onAddTask(trimmed, repoId)
+    setTitle('')
+    setAdding(false)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); submitForm() }
+    if (e.key === 'Escape') cancelForm()
   }
 
   return (
@@ -46,6 +81,41 @@ export function KanbanColumn({
       {!collapsed && (
         <div className="flex flex-col gap-2 p-2 min-h-[80px]">
           {children}
+          {adding ? (
+            <div className="flex flex-col gap-1 mt-1">
+              <input
+                ref={inputRef}
+                type="text"
+                className="input input-xs input-bordered w-full"
+                placeholder="Task title…"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+              {repos.length > 1 && (
+                <select
+                  className="select select-xs select-bordered w-full"
+                  value={repoId}
+                  onChange={(e) => setRepoId(e.target.value)}
+                >
+                  {repos.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              )}
+              <div className="flex gap-1 justify-end">
+                <button className="btn btn-xs btn-ghost" onClick={cancelForm}>Cancel</button>
+                <button className="btn btn-xs btn-primary" onClick={submitForm} disabled={!title.trim() || !repoId}>Add</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="btn btn-xs btn-ghost w-full text-base-content/40 hover:text-base-content/70 mt-1"
+              onClick={openForm}
+            >
+              + Add task
+            </button>
+          )}
         </div>
       )}
     </div>

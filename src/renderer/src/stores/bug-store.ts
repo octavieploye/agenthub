@@ -10,6 +10,7 @@ export interface CreateBugInput {
   filePath: string
   message: string
   severity: BugSeverity
+  projectId?: string | null
 }
 
 interface BugStore {

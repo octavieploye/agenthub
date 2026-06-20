@@ -23,7 +23,10 @@ const createTaskSchema = z.object({
   priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   status: z
     .enum(['backlog', 'today', 'in_progress', 'completed', 'tested', 'interrupted'])
-    .optional()
+    .optional(),
+  sprintName: z.string().optional(),
+  epicName: z.string().optional(),
+  projectId: z.string().nullable().optional()
 })
 
 const updateTaskSchema = z.object({
@@ -33,7 +36,13 @@ const updateTaskSchema = z.object({
   status: z
     .enum(['backlog', 'today', 'in_progress', 'completed', 'tested', 'interrupted'])
     .optional(),
-  agentId: z.string().nullable().optional()
+  agentId: z.string().nullable().optional(),
+  position: z.number().int().optional(),
+  sbarId: z.string().nullable().optional(),
+  sprintName: z.string().nullable().optional(),
+  epicName: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  sectionTargetDate: z.string().nullable().optional()
 })
 
 export function registerTasksHandlers(): void {

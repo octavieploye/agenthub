@@ -48,6 +48,12 @@ interface ManagedAgent {
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
   responseCollector: import('child_process').ChildProcess | null
   cleanTextBuffer: string
+  /**
+   * Tracks the real parser status immediately — never debounced.
+   * Used as previousStatus for TtsTrigger so it always sees accurate
+   * busy↔locked transitions even when state.status lags by 4s.
+   */
+  ttsStatus: string
   ttsTrigger: TtsTrigger
 }
 
@@ -250,17 +256,24 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         // the 4 s status debounce — so it sees all busy/locked cycles and can
         // cancel premature emits correctly. The debounce below is only for DB
         // writes and UI status updates, not for TTS timing.
-        {
+        //
+        // IMPORTANT: use ttsStatus (not state.status) as previousStatus.
+        // state.status lags by up to 4 s due to the debounce below, which
+        // causes false "already in this state" check failures for agents that
+        // respond in under 4 s. ttsStatus is updated immediately here.
+        if (mgd.ttsStatus !== newStatus) {
+          const ttsPrev = mgd.ttsStatus
+          mgd.ttsStatus = newStatus
           const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
           log.debug('[TTS] parser transition', {
             agentId: agentState.id,
-            prev: previousStatus,
+            prev: ttsPrev,
             next: newStatus,
             bufLen: mgd.cleanTextBuffer.length,
             filteredLen: rawFiltered.length,
             filteredPreview: rawFiltered.slice(0, 120).replace(/\n/g, '↵'),
           })
-          mgd.ttsTrigger.onStatusChange(previousStatus, newStatus, rawFiltered)
+          mgd.ttsTrigger.onStatusChange(ttsPrev, newStatus, rawFiltered)
         }
 
         function applyStatusChange(): void {
@@ -382,7 +395,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, text)
     }
   })
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '', ttsTrigger })
+  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '', ttsStatus: agentState.status, ttsTrigger })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 

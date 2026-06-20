@@ -22,6 +22,7 @@ import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { AnamnesisWriter } from './anamnesis-writer'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
+import { registerProjectHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { purgeDeadAgents } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -265,6 +266,9 @@ export function initializeServices(db: Database.Database): void {
 
   // 16. Kanban IPC handlers
   registerKanbanHandlers(db, windowManager!)
+
+  // 17. Projects IPC handlers
+  registerProjectHandlers(db)
 
   log.info('All services initialized')
 }

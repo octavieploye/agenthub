@@ -924,7 +924,7 @@ function AppMain(): React.JSX.Element {
     <div className="flex flex-col h-full" data-theme={theme}>
       {/* CLI version mismatch banner */}
       {cliVersionBanner && (
-        <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-between gap-3 px-4 py-2 bg-warning/20 border-b border-warning/40 text-warning-content text-xs">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-warning/20 border-b border-warning/40 text-warning-content text-xs shrink-0">
           <span>
             Claude CLI updated: host <code className="font-mono">{cliVersionBanner.hostVersion}</code>
             {' '}→ image <code className="font-mono">{cliVersionBanner.imageVersion}</code>.

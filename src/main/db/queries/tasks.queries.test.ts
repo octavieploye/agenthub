@@ -203,6 +203,14 @@ describe('tasks.queries', () => {
       expect(fetched?.sprintName).toBe('Sprint 1')
       expect(fetched?.epicName).toBe('Epic A')
     })
+
+    it('mapRow includes projectId and sectionTargetDate', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Test', status: 'backlog' })
+      const fetched = getTaskById(db, task.id)
+      expect(fetched?.projectId).toBeNull()
+      expect(fetched?.sectionTargetDate).toBeNull()
+    })
   })
 
   describe('getCompletedTasksSince', () => {

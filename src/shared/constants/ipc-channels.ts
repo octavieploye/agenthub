@@ -162,6 +162,15 @@ export const IPC_CHANNELS = {
   PROJECT: {
     INIT: 'project:init'
   },
+  PROJECTS: {
+    LIST: 'projects:list',
+    CREATE: 'projects:create',
+    UPDATE: 'projects:update',
+    DELETE: 'projects:delete',
+    GET_BY_REPO: 'projects:get-by-repo',
+    LINK_REPO: 'projects:link-repo',
+    UNLINK_REPO: 'projects:unlink-repo'
+  },
   KANBAN: {
     OPEN: 'kanban:open',
     UPDATE_POSITION: 'kanban:update-position',

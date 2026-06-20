@@ -224,6 +224,15 @@ const agentHubBridge = {
     sprintIntake: (stories: unknown[]) =>
       ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_INTAKE, stories)
   },
+  projects: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.LIST),
+    create: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.CREATE, input),
+    update: (id: string, input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.UPDATE, id, input),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.DELETE, id),
+    getByRepo: (repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.GET_BY_REPO, repoId),
+    linkRepo: (projectId: string, repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.LINK_REPO, projectId, repoId),
+    unlinkRepo: (projectId: string, repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.UNLINK_REPO, projectId, repoId)
+  },
   tts: {
     speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.TTS.SPEAK, opts),
@@ -293,6 +302,11 @@ const agentHubBridge = {
       const handler = (): void => callback()
       ipcRenderer.on(IPC_EVENTS.DOCKER.STATUS_CHANGE, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.DOCKER.STATUS_CHANGE, handler)
+    },
+    tasksUpdated: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.TASKS.UPDATED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.TASKS.UPDATED, handler)
     }
   }
 }

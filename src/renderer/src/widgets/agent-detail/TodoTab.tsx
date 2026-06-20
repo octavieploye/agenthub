@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTaskStore } from '../../stores/task-store'
+import { useProjectStore } from '../../stores/project-store'
 import type { AgentState } from '@shared/types/agent.types'
 import type { TaskItem, TaskPriority, TaskStatus } from '@shared/types/task.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
@@ -70,9 +71,16 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
   const [editDescription, setEditDescription] = useState('')
   const [editPriority, setEditPriority] = useState<TaskPriority>(2)
 
+  const { projects, fetchProjects } = useProjectStore()
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]))
+
   useEffect(() => {
     fetchTasksOnce()
   }, [fetchTasksOnce])
+
+  useEffect(() => {
+    if (projects.length === 0) fetchProjects()
+  }, [projects.length, fetchProjects])
 
   const voiceParsedRef = useRef(false)
 
@@ -236,6 +244,9 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
 
                 <div className="flex-1 min-w-0">
                   <span className="text-sm break-words">{task.title}</span>
+                  {task.projectId && projectNameById.has(task.projectId) && (
+                    <span className="badge badge-outline badge-xs ml-1">{projectNameById.get(task.projectId)}</span>
+                  )}
                   {task.description && (
                     <p className="text-xs text-base-content/50 break-words mt-0.5">{task.description}</p>
                   )}

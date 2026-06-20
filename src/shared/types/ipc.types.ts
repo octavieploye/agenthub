@@ -190,6 +190,22 @@ export interface AgentHubBridge {
     updatePosition: (taskId: string, position: number) => Promise<{ success: boolean; error?: { message: string } }>
     sprintIntake: (stories: import('./task.types').CreateTaskInput[]) => Promise<{ success: boolean; data?: import('./task.types').TaskItem[]; error?: { message: string } }>
   }
+  projects: {
+    list: () => Promise<IpcResponse<import('./project.types').Project[]>>
+    create: (input: import('./project.types').CreateProjectInput) => Promise<IpcResponse<import('./project.types').Project>>
+    update: (id: string, input: import('./project.types').UpdateProjectInput) => Promise<IpcResponse<import('./project.types').Project>>
+    delete: (id: string) => Promise<IpcResponse<void>>
+    getByRepo: (repoId: string) => Promise<IpcResponse<import('./project.types').Project[]>>
+    linkRepo: (projectId: string, repoId: string) => Promise<IpcResponse<void>>
+    unlinkRepo: (projectId: string, repoId: string) => Promise<IpcResponse<void>>
+  }
+  tts: {
+    speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) => Promise<import('./ipc.types').IpcResponse<void>>
+    stop: () => Promise<import('./ipc.types').IpcResponse<void>>
+    status: () => Promise<import('./ipc.types').IpcResponse<unknown>>
+    listVoices: () => Promise<import('./ipc.types').IpcResponse<unknown[]>>
+    onResponseReady: (cb: (agentId: string, text: string) => void) => () => void
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
@@ -198,5 +214,6 @@ export interface AgentHubBridge {
     snapshotSaved: (callback: () => void) => () => void
     agentTriaged: (callback: (result: import('./notification.types').RoutingResult) => void) => () => void
     dockerStatusChange: (callback: () => void) => () => void
+    tasksUpdated: (callback: () => void) => () => void
   }
 }

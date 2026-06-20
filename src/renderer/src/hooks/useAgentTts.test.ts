@@ -71,7 +71,7 @@ describe('useAgentTts — onResponseReady', () => {
     })
 
     expect(hub.tts.speak).toHaveBeenCalledTimes(2)
-    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has completed a response.')
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has responded.')
     expect(hub.tts.speak.mock.calls[1][0].text).toBe('Final response paragraph here.')
   })
 
@@ -86,7 +86,7 @@ describe('useAgentTts — onResponseReady', () => {
     })
 
     expect(hub.tts.speak).toHaveBeenCalledTimes(1)
-    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has completed a response.')
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has responded.')
   })
 
   it('does not speak when voiceMode is off', async () => {
@@ -147,7 +147,7 @@ describe('useAgentTts — onResponseReady', () => {
     })
 
     expect(hub.tts.speak).toHaveBeenCalledTimes(1)
-    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has completed a response.')
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has responded.')
   })
 
   it('fires exactly once even when responseReady fires in rapid succession', async () => {
