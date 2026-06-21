@@ -5,6 +5,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { ProjectManagerModal } from './ProjectManagerModal'
+import { KanbanDispatchModal } from './KanbanDispatchModal'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 
@@ -29,6 +30,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const [agentFilter, setAgentFilter] = useState<string | null>(defaultAgentFilter ?? null)
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [projectModalOpen, setProjectModalOpen] = useState(false)
+  const [dispatchModalTask, setDispatchModalTask] = useState<TaskItem | null>(null)
 
   useEffect(() => {
     fetchTasksOnce()
@@ -104,9 +106,11 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 agentColor={getAgentColor(task.agentId)}
                 agentName={getAgentName(task.agentId)}
                 repoGlowColor={getRepoGlowColor(task.repoId)}
+                defaultProjectId={selectedProjectId ?? undefined}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
+                onDispatch={task.agentId ? () => setDispatchModalTask(task) : undefined}
               />
             ))}
           </div>
@@ -149,9 +153,11 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               agentColor={getAgentColor(task.agentId)}
               agentName={getAgentName(task.agentId)}
               repoGlowColor={getRepoGlowColor(task.repoId)}
+              defaultProjectId={selectedProjectId ?? undefined}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
+              onDispatch={task.agentId ? () => setDispatchModalTask(task) : undefined}
             />
           ))}
         </div>
@@ -229,6 +235,14 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
         isOpen={projectModalOpen}
         onClose={() => setProjectModalOpen(false)}
       />
+
+      {dispatchModalTask && dispatchModalTask.agentId && (
+        <KanbanDispatchModal
+          task={dispatchModalTask}
+          agentId={dispatchModalTask.agentId}
+          onClose={() => setDispatchModalTask(null)}
+        />
+      )}
     </div>
   )
 }

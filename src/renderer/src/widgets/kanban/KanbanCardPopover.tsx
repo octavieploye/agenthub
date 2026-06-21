@@ -2,6 +2,8 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
+import { useAgentStore } from '../../stores/agent-store'
+import { useProjectStore } from '../../stores/project-store'
 
 interface KanbanCardPopoverProps {
   task: TaskItem
@@ -10,9 +12,10 @@ interface KanbanCardPopoverProps {
   onClose: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
+  defaultProjectId?: string
 }
 
-export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave }: KanbanCardPopoverProps) {
+export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId }: KanbanCardPopoverProps) {
   const hasFocusRef = useRef(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
@@ -23,6 +26,18 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [epicName, setEpicName] = useState(task.epicName ?? '')
   const [sprintName, setSprintName] = useState(task.sprintName ?? '')
   const [sectionTargetDate, setSectionTargetDate] = useState(task.sectionTargetDate ?? '')
+
+  const agents = useAgentStore((s) => s.agents)
+  const agentList = Array.from(agents.values())
+  const { projects, createProject, linkRepo } = useProjectStore()
+
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(task.agentId ?? null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    task.projectId ?? defaultProjectId ?? null
+  )
+  const [showInlineCreate, setShowInlineCreate] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [newProjectCreating, setNewProjectCreating] = useState(false)
 
   function handleSave() {
     if (!title.trim()) return
@@ -36,6 +51,8 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
       epicName: epicName.trim() || null,
       sprintName: sprintName.trim() || null,
       sectionTargetDate: sectionTargetDate || null,
+      agentId: selectedAgentId,
+      projectId: selectedProjectId,
     })
     onClose()
   }
@@ -111,6 +128,83 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Agent */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor="popover-agent" className="text-xs text-base-content/50 font-medium uppercase tracking-wide">Agent</label>
+        <select
+          id="popover-agent"
+          aria-label="Agent"
+          className="select select-xs select-bordered w-full"
+          value={selectedAgentId ?? ''}
+          onChange={(e) => setSelectedAgentId(e.target.value || null)}
+        >
+          <option value="">Unassigned</option>
+          {agentList.map((agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Project */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor="popover-project" className="text-xs text-base-content/50 font-medium uppercase tracking-wide">Project</label>
+        <select
+          id="popover-project"
+          aria-label="Project"
+          className="select select-xs select-bordered w-full"
+          value={selectedProjectId ?? ''}
+          onChange={(e) => {
+            if (e.target.value === '__create__') {
+              setShowInlineCreate(true)
+            } else {
+              setSelectedProjectId(e.target.value || null)
+              setShowInlineCreate(false)
+            }
+          }}
+        >
+          <option value="">No Project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+          <option value="__create__">+ New project…</option>
+        </select>
+        {showInlineCreate && (
+          <div className="flex flex-col gap-1 pl-2 border-l-2 border-primary/30">
+            <input
+              className="input input-xs input-bordered w-full"
+              placeholder="Project name…"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setShowInlineCreate(false); setNewProjectName('') } }}
+              autoFocus
+            />
+            <div className="flex gap-1">
+              <button
+                className="btn btn-xs btn-primary flex-1"
+                disabled={!newProjectName.trim() || newProjectCreating}
+                onClick={async () => {
+                  setNewProjectCreating(true)
+                  const created = await createProject({ name: newProjectName.trim() })
+                  if (created) {
+                    await linkRepo(created.id, task.repoId)
+                    setSelectedProjectId(created.id)
+                  }
+                  setNewProjectName('')
+                  setShowInlineCreate(false)
+                  setNewProjectCreating(false)
+                }}
+              >Create & assign</button>
+              <button
+                className="btn btn-xs btn-ghost"
+                onClick={() => { setShowInlineCreate(false); setNewProjectName('') }}
+              >Cancel create</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Category */}

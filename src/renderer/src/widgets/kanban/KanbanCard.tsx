@@ -8,10 +8,12 @@ interface KanbanCardProps {
   agentColor?: string
   agentName?: string
   repoGlowColor?: string
+  defaultProjectId?: string
   onSBARClick?: () => void
   onPriorityChange?: (priority: TaskPriority) => void
   onDelete?: () => void
   onEdit?: (input: UpdateTaskInput) => void
+  onDispatch?: () => void
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -51,7 +53,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARClick, onPriorityChange, onDelete, onEdit }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, repoGlowColor, defaultProjectId, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -247,6 +249,14 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
               onClick={(e) => { e.stopPropagation(); startEdit() }}
             >✏</button>
           )}
+          {task.agentId && onDispatch && (
+            <button
+              className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-warning/60 hover:text-warning"
+              title="Dispatch to agent"
+              onMouseEnter={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onDispatch() }}
+            >⚡</button>
+          )}
           {onDelete && (
             <button
               className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
@@ -273,6 +283,7 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
           onClose={() => setPopoverVisible(false)}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
+          defaultProjectId={defaultProjectId}
         />
       )}
     </>
