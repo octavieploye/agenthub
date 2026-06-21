@@ -132,8 +132,8 @@ describe('TtsTrigger — multiple sequential responses', () => {
   })
 })
 
-describe('TtsTrigger — tool-only responses', () => {
-  it('still emits with empty text so the completion announcement always fires', () => {
+describe('TtsTrigger — empty text guard (premature fire prevention)', () => {
+  it('does NOT call onEmit when text is empty string', () => {
     const emit = vi.fn()
     const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
 
@@ -141,8 +141,51 @@ describe('TtsTrigger — tool-only responses', () => {
 
     vi.advanceTimersByTime(300)
 
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('does NOT call onEmit when text is whitespace only', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
+
+    trigger.onStatusChange('busy', 'locked', '   \n  ')
+
+    vi.advanceTimersByTime(300)
+
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('calls onEmit when text has actual content', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
+
+    trigger.onStatusChange('busy', 'locked', 'Here is the response.')
+
+    vi.advanceTimersByTime(300)
+
     expect(emit).toHaveBeenCalledTimes(1)
-    expect(emit).toHaveBeenCalledWith('')
+    expect(emit).toHaveBeenCalledWith('Here is the response.')
+  })
+
+  it('suppresses premature fire: brief busy→locked with empty buffer then real response fires correctly', () => {
+    // Simulates: user sends request → Claude briefly shows ❯ (empty buffer, premature)
+    // → Claude goes busy again → produces response → locked (non-empty) → fires once
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
+
+    // User sends → locked→busy (prime)
+    trigger.onStatusChange('locked', 'busy', '')
+    // Premature lock: Claude briefly redraws ❯ before spinner appears
+    trigger.onStatusChange('busy', 'locked', '')
+    vi.advanceTimersByTime(100)
+    // Claude actually starts working
+    trigger.onStatusChange('locked', 'busy', '')
+    // Real response
+    trigger.onStatusChange('busy', 'locked', 'Actual response text.')
+    vi.advanceTimersByTime(300)
+
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('Actual response text.')
   })
 })
 

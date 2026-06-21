@@ -381,7 +381,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   agentState.confidence = 'inferred'
 
   const ttsTrigger = new TtsTrigger({
-    debounceMs: 1000,
+    debounceMs: 2500,
     // primed: true  → agent was spawned with a task; first busy→locked is a real response
     // primed: false → interactive spawn; wait for the first locked→busy before firing
     primed: !!options.taskDescription?.trim(),

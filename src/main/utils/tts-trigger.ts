@@ -63,7 +63,7 @@ export class TtsTrigger {
       }
       this.timer = setTimeout(() => {
         this.timer = null
-        this.onEmit(text)
+        if (text.trim()) this.onEmit(text)
       }, this.debounceMs)
     }
   }
