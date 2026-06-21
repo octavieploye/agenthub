@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
@@ -13,6 +13,7 @@ interface KanbanCardPopoverProps {
 }
 
 export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave }: KanbanCardPopoverProps) {
+  const hasFocusRef = useRef(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task.priority)
@@ -27,7 +28,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
     if (!title.trim()) return
     onSave({
       title: title.trim(),
-      description: description.trim() || undefined,
+      description: description.trim(),
       priority,
       status,
       category: category.trim() || null,
@@ -44,8 +45,10 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
       data-testid="card-popover"
       style={{ top: position.top, left: position.left, width: 340, zIndex: 9999 }}
       className="fixed bg-base-200 border border-base-300 rounded-xl shadow-2xl flex flex-col gap-3 p-4 max-h-[80vh] overflow-y-auto"
+      onFocus={() => { hasFocusRef.current = true }}
+      onBlur={() => { hasFocusRef.current = false }}
       onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseLeave={() => { if (!hasFocusRef.current) onMouseLeave() }}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">

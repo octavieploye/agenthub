@@ -97,4 +97,33 @@ describe('KanbanCardPopover', () => {
     const panel = screen.getByTestId('card-popover')
     expect(panel).toHaveStyle({ top: '100px', left: '400px' })
   })
+
+  it('does not close popover on mouse leave when a field is focused', () => {
+    render(<KanbanCardPopover {...defaultProps} />)
+    const panel = screen.getByTestId('card-popover')
+    const titleInput = screen.getByDisplayValue('Fix login bug')
+    fireEvent.focus(titleInput)
+    fireEvent.mouseLeave(panel)
+    expect(defaultProps.onMouseLeave).not.toHaveBeenCalled()
+  })
+
+  it('allows close on mouse leave after field is blurred', () => {
+    render(<KanbanCardPopover {...defaultProps} />)
+    const panel = screen.getByTestId('card-popover')
+    const titleInput = screen.getByDisplayValue('Fix login bug')
+    fireEvent.focus(titleInput)
+    fireEvent.blur(titleInput)
+    fireEvent.mouseLeave(panel)
+    expect(defaultProps.onMouseLeave).toHaveBeenCalledOnce()
+  })
+
+  it('calls onSave with empty description when description is cleared', () => {
+    render(<KanbanCardPopover {...defaultProps} />)
+    const descriptionTextarea = screen.getByDisplayValue('Users cannot log in after token refresh')
+    fireEvent.change(descriptionTextarea, { target: { value: '' } })
+    fireEvent.click(screen.getByText('Save'))
+    expect(defaultProps.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ description: '' })
+    )
+  })
 })
