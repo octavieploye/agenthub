@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
+import { KanbanCardPopover } from './KanbanCardPopover'
 
 interface KanbanCardProps {
   task: TaskItem
@@ -32,12 +33,86 @@ function cyclePriority(p: TaskPriority): TaskPriority {
   return p === 1 ? 2 : p === 2 ? 3 : 1
 }
 
+function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
+  const popoverWidth = 340
+  const gap = 12
+  const rightSpace = window.innerWidth - rect.right
+  const leftSpace = rect.left
+  let left: number
+  if (rightSpace >= popoverWidth + gap) {
+    left = rect.right + gap
+  } else if (leftSpace >= popoverWidth + gap) {
+    left = rect.left - popoverWidth - gap
+  } else {
+    left = Math.max(0, (window.innerWidth - popoverWidth) / 2)
+  }
+  const estimatedMaxHeight = Math.min(window.innerHeight * 0.8, 600)
+  const top = Math.min(rect.top, window.innerHeight - estimatedMaxHeight - 12)
+  return { top, left }
+}
+
 export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARClick, onPriorityChange, onDelete, onEdit }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editCategory, setEditCategory] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [popoverVisible, setPopoverVisible] = useState(false)
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+  const cardRef = useRef<HTMLDivElement>(null)
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Close popover and cancel open timer when inline edit activates
+  useEffect(() => {
+    if (editing) {
+      if (openTimerRef.current) {
+        clearTimeout(openTimerRef.current)
+        openTimerRef.current = null
+      }
+      setPopoverVisible(false)
+    }
+  }, [editing])
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (openTimerRef.current) clearTimeout(openTimerRef.current)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [])
+
+  function scheduleClose() {
+    closeTimerRef.current = setTimeout(() => {
+      setPopoverVisible(false)
+    }, 150)
+  }
+
+  function cancelClose() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  function handleCardMouseEnter() {
+    if (editing || popoverVisible) return
+    openTimerRef.current = setTimeout(() => {
+      if (!cardRef.current) return
+      const rect = cardRef.current.getBoundingClientRect()
+      setPopoverPos(computePopoverPosition(rect))
+      setPopoverVisible(true)
+    }, 650)
+  }
+
+  function handleCardMouseLeave() {
+    if (openTimerRef.current) {
+      clearTimeout(openTimerRef.current)
+      openTimerRef.current = null
+    }
+    scheduleClose()
+  }
 
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData('taskId', task.id)
@@ -112,94 +187,94 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
   }
 
   return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      onMouseLeave={() => setConfirmDelete(false)}
-      className="relative group rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
-      style={repoGlowColor ? { borderLeftColor: repoGlowColor, borderLeftWidth: 3 } : undefined}
-    >
-      {task.note && (
-        <div className="absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover:block bg-base-300 border border-base-content/20 rounded-lg px-3 py-2 text-xs text-base-content/80 max-w-[240px] whitespace-pre-wrap shadow-xl pointer-events-none">
-          {task.note}
-        </div>
-      )}
-      {/* Title row */}
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
-        <span
-          className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityClass} ${onPriorityChange ? 'cursor-pointer hover:opacity-70' : ''}`}
-          title={onPriorityChange ? 'Click to cycle priority' : undefined}
-          onClick={onPriorityChange ? (e) => { e.stopPropagation(); onPriorityChange(cyclePriority(task.priority)) } : undefined}
-        >
-          {priorityLabel}
-        </span>
-      </div>
-
-      {/* Category + sprint */}
-      {(task.category || task.sprintName) && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {task.category && (
-            <span
-              className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}
-            >
-              {CATEGORY_LABEL[task.category] ?? task.category}
-            </span>
-          )}
-          {task.sprintName && (
-            <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">
-              {task.sprintName}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Footer: dots + SBAR */}
-      <div className="flex items-center gap-1.5">
-        {repoGlowColor && (
+    <>
+      <div
+        ref={cardRef}
+        draggable
+        onDragStart={handleDragStart}
+        onMouseEnter={handleCardMouseEnter}
+        onMouseLeave={() => { handleCardMouseLeave(); setConfirmDelete(false) }}
+        className="relative group rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
+        style={repoGlowColor ? { borderLeftColor: repoGlowColor, borderLeftWidth: 3 } : undefined}
+      >
+        {/* Title row */}
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
           <span
-            className="w-2 h-2 rounded-full shrink-0 border border-base-300"
-            style={{ backgroundColor: repoGlowColor }}
-            title="Repo"
-          />
-        )}
-        {agentColor && (
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: agentColor }}
-            title={agentName}
-          />
-        )}
-        {task.note && (
-          <span className="text-[10px] text-base-content/40" title={task.note}>✎</span>
-        )}
-        <span className="text-[10px] text-base-content/35 ml-auto">
-          {STATUS_LABEL[task.status]}
-        </span>
-        {onEdit && (
-          <button
-            className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-base-content/40 hover:text-base-content"
-            title="Edit task"
-            onClick={(e) => { e.stopPropagation(); startEdit() }}
-          >✏</button>
-        )}
-        {onDelete && (
-          <button
-            className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
-            title={confirmDelete ? 'Click again to confirm' : 'Delete task'}
-            onClick={handleDeleteClick}
-          >{confirmDelete ? '✓' : '✕'}</button>
-        )}
-        {task.sbarId && onSBARClick && (
-          <button
-            className="btn btn-xs btn-ghost py-0 h-5 min-h-0 text-[10px]"
-            onClick={onSBARClick}
-            title="View SBAR summary"
+            className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityClass} ${onPriorityChange ? 'cursor-pointer hover:opacity-70' : ''}`}
+            title={onPriorityChange ? 'Click to cycle priority' : undefined}
+            onClick={onPriorityChange ? (e) => { e.stopPropagation(); onPriorityChange(cyclePriority(task.priority)) } : undefined}
           >
-            SBAR
-          </button>
+            {priorityLabel}
+          </span>
+        </div>
+
+        {/* Category + sprint */}
+        {(task.category || task.sprintName) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {task.category && (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}>
+                {CATEGORY_LABEL[task.category] ?? task.category}
+              </span>
+            )}
+            {task.sprintName && (
+              <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
+            )}
+          </div>
         )}
+
+        {/* Footer */}
+        <div className="flex items-center gap-1.5">
+          {repoGlowColor && (
+            <span
+              className="w-2 h-2 rounded-full shrink-0 border border-base-300"
+              style={{ backgroundColor: repoGlowColor }}
+              title="Repo"
+            />
+          )}
+          {agentColor && (
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agentColor }} title={agentName} />
+          )}
+          {task.note && (
+            <span className="text-[10px] text-base-content/40">✎</span>
+          )}
+          <span className="text-[10px] text-base-content/35 ml-auto">{STATUS_LABEL[task.status]}</span>
+          {onEdit && (
+            <button
+              className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-base-content/40 hover:text-base-content"
+              title="Edit task"
+              onMouseEnter={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); startEdit() }}
+            >✏</button>
+          )}
+          {onDelete && (
+            <button
+              className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
+              title={confirmDelete ? 'Click again to confirm' : 'Delete task'}
+              onMouseEnter={(e) => e.stopPropagation()}
+              onClick={handleDeleteClick}
+            >{confirmDelete ? '✓' : '✕'}</button>
+          )}
+          {task.sbarId && onSBARClick && (
+            <button
+              className="btn btn-xs btn-ghost py-0 h-5 min-h-0 text-[10px]"
+              onClick={onSBARClick}
+              title="View SBAR summary"
+            >SBAR</button>
+          )}
+        </div>
       </div>
-    </div>
+
+      {popoverVisible && onEdit && (
+        <KanbanCardPopover
+          task={task}
+          position={popoverPos}
+          onSave={(input) => onEdit(input)}
+          onClose={() => setPopoverVisible(false)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+    </>
   )
 }
