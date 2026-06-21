@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
-import { cancelSpeech, extractLastParagraph, speak } from '../services/voice-speaker'
+import { cancelSpeech, extractLastParagraph, isReadableParagraph, speak } from '../services/voice-speaker'
 import { useViewStore } from '../stores/view-store'
 
 export interface AgentTtsActions {
@@ -43,13 +43,23 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
         lastResponseText.current.set(agentId, cleanText)
       }
 
+      const announcement = `${agent.name} has responded.`
+      const rawLastParagraph = agent.voiceMode === 'always_on' ? extractLastParagraph(cleanText) : null
+      const lastParagraph = rawLastParagraph && isReadableParagraph(rawLastParagraph) ? rawLastParagraph : null
+      console.log('[TTS] onResponseReady', {
+        agentId,
+        agentName: agent.name,
+        voiceMode: agent.voiceMode,
+        cleanTextLen: cleanText.length,
+        cleanTextPreview: cleanText.slice(0, 200).replace(/\n/g, '↵'),
+        announcement,
+        lastParagraph: lastParagraph ?? '(none)',
+      })
+
       try {
         // Announce that the agent has responded (not "completed" — the task may still be ongoing)
-        await invokeTts(`${agent.name} has responded.`)
-        if (agent.voiceMode === 'always_on' && cleanText.trim()) {
-          const lastParagraph = extractLastParagraph(cleanText)
-          if (lastParagraph) await invokeTts(lastParagraph)
-        }
+        await invokeTts(announcement)
+        if (lastParagraph) await invokeTts(lastParagraph)
       } catch (err) {
         console.warn('[useAgentTts] TTS error:', err)
       }

@@ -10,6 +10,13 @@ export interface TtsTriggerOptions {
   debounceMs: number
   onEmit: (text: string) => void
   /**
+   * Called on every locked→busy transition so the caller can reset the
+   * cleanTextBuffer at the start of each new response cycle. Without this,
+   * the buffer accumulates across multiple responses when the user types
+   * before the 4 s status debounce elapses.
+   */
+  onBufferReset?: () => void
+  /**
    * Whether the trigger is ready to fire immediately on the first busy→locked.
    * - true (default): task mode — agent was spawned with a task, first response is real
    * - false: interactive mode — wait for the first locked→busy (user sends a message)
@@ -21,12 +28,14 @@ export interface TtsTriggerOptions {
 export class TtsTrigger {
   private debounceMs: number
   private onEmit: (text: string) => void
+  private onBufferReset: (() => void) | undefined
   private timer: ReturnType<typeof setTimeout> | null = null
   private primed: boolean
 
   constructor(options: TtsTriggerOptions) {
     this.debounceMs = options.debounceMs
     this.onEmit = options.onEmit
+    this.onBufferReset = options.onBufferReset
     this.primed = options.primed ?? true
   }
 
@@ -40,6 +49,7 @@ export class TtsTrigger {
       }
       if (prevStatus === 'locked') {
         this.primed = true
+        this.onBufferReset?.()
       }
       return
     }

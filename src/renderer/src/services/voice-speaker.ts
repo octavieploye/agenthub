@@ -17,6 +17,16 @@ export function extractLastParagraph(text: string): string {
   return paragraphs.at(-1) ?? text.trim()
 }
 
+/**
+ * Returns true only when a paragraph has enough words to be meaningful spoken
+ * text. Guards against speaking UI chrome fragments (keyboard hints, short
+ * status lines) that survive filterTtsResponse and end up as the last paragraph.
+ */
+export function isReadableParagraph(text: string, minWords = 10): boolean {
+  const words = text.trim().split(/\s+/).filter((w) => w.length > 0)
+  return words.length >= minWords
+}
+
 export interface SpeakOptions {
   volume?: number
   rate?: number

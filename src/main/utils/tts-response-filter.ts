@@ -20,7 +20,15 @@ const BLOCK_ELEMENT_BANNER_RE = /^[\u2580-\u259F\s]+$/
 const PROMPT_CHROME_RE = /^❯\s*$/
 const APPROVAL_PROMPT_RE = /^\?\s/
 const UPDATE_BANNER_RE = /update available/i
-const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking)[…\.]*\s*$/i
+// Matches any line whose first word is a Claude CLI thinking-mode indicator,
+// including verbose forms: "Thinking…", "Thinking with high effort", "Thinking about…"
+const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking)\b/i
+// Claude CLI keyboard shortcut footer lines rendered after each response.
+// Examples (after ANSI stripping):
+//   "Esc to interrupt  Ctrl+T to hide task  agent-manager.ts"
+//   "esc to cancel  tab to amend"
+// These always start with a key name immediately followed by " to ".
+const KEYBOARD_HINT_RE = /^(esc|ctrl\+\w+)\s+to\s+/i
 // Safety net: any line that still begins with an escape character after stripAnsi
 const RESIDUAL_ESCAPE_RE = /^\x1b/
 
@@ -42,6 +50,7 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   if (BOX_DRAWING_RE.test(trimmed)) return 'banner'
   if (BLOCK_ELEMENT_BANNER_RE.test(trimmed)) return 'banner'
   if (UPDATE_BANNER_RE.test(trimmed)) return 'banner'
+  if (KEYBOARD_HINT_RE.test(trimmed)) return 'prompt'
   if (PROMPT_CHROME_RE.test(line)) return 'prompt'
   if (APPROVAL_PROMPT_RE.test(trimmed)) return 'prompt'
 

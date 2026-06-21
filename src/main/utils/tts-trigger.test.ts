@@ -196,6 +196,52 @@ describe('TtsTrigger — interactive mode (primed: false)', () => {
   })
 })
 
+describe('TtsTrigger — onBufferReset callback', () => {
+  it('calls onBufferReset on locked → busy transition', () => {
+    const emit = vi.fn()
+    const onBufferReset = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, onBufferReset })
+
+    trigger.onStatusChange('locked', 'busy', '')
+
+    expect(onBufferReset).toHaveBeenCalledOnce()
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('calls onBufferReset on each locked → busy, not on other transitions', () => {
+    const emit = vi.fn()
+    const onBufferReset = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, onBufferReset })
+
+    trigger.onStatusChange('busy', 'locked', 'response')
+    trigger.onStatusChange('locked', 'busy', '')
+    trigger.onStatusChange('busy', 'locked', 'response 2')
+    trigger.onStatusChange('locked', 'busy', '')
+
+    expect(onBufferReset).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT call onBufferReset on busy → locked (that is the emit path)', () => {
+    const emit = vi.fn()
+    const onBufferReset = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, onBufferReset })
+
+    trigger.onStatusChange('busy', 'locked', 'prose')
+    vi.advanceTimersByTime(300)
+
+    expect(onBufferReset).not.toHaveBeenCalled()
+    expect(emit).toHaveBeenCalledOnce()
+  })
+
+  it('works correctly when onBufferReset is not provided', () => {
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
+
+    // Should not throw when no onBufferReset is set
+    expect(() => trigger.onStatusChange('locked', 'busy', '')).not.toThrow()
+  })
+})
+
 describe('TtsTrigger — task mode (primed: true, default)', () => {
   it('emits on first busy → locked when primed: true (task was given at spawn)', () => {
     const emit = vi.fn()

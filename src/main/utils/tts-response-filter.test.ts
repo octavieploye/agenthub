@@ -39,6 +39,21 @@ describe('filterTtsResponse', () => {
     expect(filterTtsResponse(input)).toBe('Here is my answer.')
   })
 
+  it('removes "Thinking with high effort" extended thinking indicator', () => {
+    const input = 'Thinking with high effort\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('removes "Thinking about this..." variant', () => {
+    const input = 'Thinking about the architecture…\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('removes verbose Bootstrapping / Spelunking lines with trailing content', () => {
+    const input = 'Bootstrapping the environment with dependencies\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
   it('removes lines with decorative spinner chars only', () => {
     const input = '✻ \nHere is my answer.'
     expect(filterTtsResponse(input)).toBe('Here is my answer.')
@@ -91,6 +106,32 @@ describe('filterTtsResponse', () => {
   it('removes "Update available" notification lines', () => {
     const input = 'Update available! Run: brew upgrade claude-code\nHere is my answer.'
     expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  // ── REMOVE: Claude CLI keyboard shortcut footer lines ────────────────
+  it('removes "esc to interrupt" keyboard hint line', () => {
+    const input = 'esc to interrupt\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('removes full Claude CLI footer: "Esc to interrupt  Ctrl+T to hide task  agent-manager.ts"', () => {
+    const input = 'Esc to interrupt  Ctrl+T to hide task  agent-manager.ts\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('removes "esc to cancel  tab to amend" keyboard hint line', () => {
+    const input = 'esc to cancel  tab to amend\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('removes "ctrl+T to hide task" keyboard hint line', () => {
+    const input = 'ctrl+T to hide task in useAgentTts.ts\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('does NOT remove prose that mentions Ctrl or Esc mid-sentence', () => {
+    const input = 'Press Esc to cancel is common UI advice.\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe(input)
   })
 
   // ── REMOVE: prompt chrome ────────────────────────────────────────────

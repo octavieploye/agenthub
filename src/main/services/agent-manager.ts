@@ -22,6 +22,7 @@ import type { NotificationRouterConfig } from '../../shared/types/notification.t
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
+import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
 import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
@@ -384,6 +385,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // primed: true  → agent was spawned with a task; first busy→locked is a real response
     // primed: false → interactive spawn; wait for the first locked→busy before firing
     primed: !!options.taskDescription?.trim(),
+    onBufferReset: () => {
+      const current = agents.get(agentState.id)
+      if (current) current.cleanTextBuffer = ''
+    },
     onEmit: (text: string) => {
       const current = agents.get(agentState.id)
       if (current) current.cleanTextBuffer = ''
@@ -484,7 +489,7 @@ export function sendInput(agentId: string, data: string): void {
   // Resetting here (before the write) clears any echoed typing from the buffer
   // before Claude's response starts accumulating. Avoids the stale 4000ms
   // debounce wiping the buffer AFTER the response has already arrived.
-  if (data.includes('\r') && managed.state.status === 'locked') {
+  if (shouldResetTtsBuffer(data, managed.ttsStatus)) {
     managed.cleanTextBuffer = ''
   }
 
