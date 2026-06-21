@@ -5,7 +5,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { ProjectManagerModal } from './ProjectManagerModal'
-import type { TaskItem, TaskStatus, TaskCategory } from '@shared/types/task.types'
+import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -22,7 +22,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
-  const { tasks, fetchTasks, fetchTasksOnce, updateTaskRemote, createTask } = useTaskStore()
+  const { tasks, fetchTasks, fetchTasksOnce, updateTaskRemote, createTask, deleteTask } = useTaskStore()
   const agents = useAgentStore((s) => s.agents)
   const { projects, selectedProjectId, selectProject, fetchProjects } = useProjectStore()
   const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set())
@@ -52,8 +52,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     updateTaskRemote(taskId, { status: toStatus })
   }
 
-  async function handleAddTask(status: TaskStatus, title: string, repoId: string, category: TaskCategory | null, note: string | null) {
-    await createTask({ repoId, title, status, category: category ?? undefined,
+  async function handleAddTask(status: TaskStatus, title: string, repoId: string, category: TaskCategory | null, priority: TaskPriority, note: string | null) {
+    await createTask({ repoId, title, status, category: category ?? undefined, priority,
       projectId: selectedProjectId ?? undefined,
       note: note ?? undefined
     })
@@ -104,6 +104,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 agentColor={getAgentColor(task.agentId)}
                 agentName={getAgentName(task.agentId)}
                 repoGlowColor={getRepoGlowColor(task.repoId)}
+                onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
+                onEdit={(input) => updateTaskRemote(task.id, input)}
+                onDelete={() => deleteTask(task.id)}
               />
             ))}
           </div>
@@ -146,6 +149,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               agentColor={getAgentColor(task.agentId)}
               agentName={getAgentName(task.agentId)}
               repoGlowColor={getRepoGlowColor(task.repoId)}
+              onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
+              onEdit={(input) => updateTaskRemote(task.id, input)}
+              onDelete={() => deleteTask(task.id)}
             />
           ))}
         </div>
@@ -211,7 +217,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               repos={repos}
               onToggleCollapse={() => toggleCollapse(status)}
               onCardDrop={handleCardDrop}
-              onAddTask={(title, repoId, cat, n) => handleAddTask(status, title, repoId, cat, n)}
+              onAddTask={(title, repoId, cat, priority, n) => handleAddTask(status, title, repoId, cat, priority, n)}
             >
               {renderSections(columnTasks)}
             </KanbanColumn>

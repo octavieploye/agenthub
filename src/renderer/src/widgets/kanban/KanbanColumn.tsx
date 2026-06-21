@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
-import type { TaskItem, TaskStatus, TaskCategory } from '@shared/types/task.types'
-import { CATEGORY_LABEL } from '@shared/types/task.types'
+import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
+import { CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 
 interface KanbanColumnProps {
@@ -11,11 +11,9 @@ interface KanbanColumnProps {
   repos: RepoConfig[]
   onToggleCollapse: () => void
   onCardDrop: (taskId: string, toStatus: TaskStatus) => void
-  onAddTask: (title: string, repoId: string, category: TaskCategory | null, note: string | null) => Promise<void>
+  onAddTask: (title: string, repoId: string, category: TaskCategory | null, priority: TaskPriority, note: string | null) => Promise<void>
   children: React.ReactNode
 }
-
-const CATEGORIES: TaskCategory[] = ['backend', 'frontend', 'database', 'schema', 'functionality']
 
 export function KanbanColumn({
   status,
@@ -32,6 +30,7 @@ export function KanbanColumn({
   const [title, setTitle] = useState('')
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
   const [category, setCategory] = useState<TaskCategory | null>(null)
+  const [priority, setPriority] = useState<TaskPriority>(3)
   const [note, setNote] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -57,15 +56,17 @@ export function KanbanColumn({
     setAdding(false)
     setTitle('')
     setCategory(null)
+    setPriority(3)
     setNote('')
   }
 
   async function submitForm() {
     const trimmed = title.trim()
     if (!trimmed || !repoId) return
-    await onAddTask(trimmed, repoId, category, note.trim() || null)
+    await onAddTask(trimmed, repoId, category, priority, note.trim() || null)
     setTitle('')
     setCategory(null)
+    setPriority(3)
     setNote('')
     setAdding(false)
   }
@@ -103,15 +104,26 @@ export function KanbanColumn({
                 onKeyDown={handleKeyDown}
               />
               <div className="flex gap-1">
-                <select
-                  className="select select-xs select-bordered flex-1"
+                <input
+                  list={`cat-${status}`}
+                  className="input input-xs input-bordered flex-1"
+                  placeholder="Category…"
                   value={category ?? ''}
-                  onChange={(e) => setCategory((e.target.value as TaskCategory) || null)}
-                >
-                  <option value="">Category…</option>
-                  {CATEGORIES.map((c) => (
+                  onChange={(e) => setCategory(e.target.value || null)}
+                />
+                <datalist id={`cat-${status}`}>
+                  {KNOWN_CATEGORIES.map((c) => (
                     <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
                   ))}
+                </datalist>
+                <select
+                  className="select select-xs select-bordered"
+                  value={priority}
+                  onChange={(e) => setPriority(Number(e.target.value) as TaskPriority)}
+                >
+                  <option value={1}>High</option>
+                  <option value={2}>Medium</option>
+                  <option value={3}>Low</option>
                 </select>
                 {repos.length > 1 && (
                   <select

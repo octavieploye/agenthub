@@ -1,6 +1,6 @@
-import React from 'react'
-import type { TaskItem, TaskPriority, TaskCategory } from '@shared/types/task.types'
-import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL } from '@shared/types/task.types'
+import React, { useState } from 'react'
+import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
+import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 
 interface KanbanCardProps {
   task: TaskItem
@@ -8,6 +8,9 @@ interface KanbanCardProps {
   agentName?: string
   repoGlowColor?: string
   onSBARClick?: () => void
+  onPriorityChange?: (priority: TaskPriority) => void
+  onDelete?: () => void
+  onEdit?: (input: UpdateTaskInput) => void
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -16,27 +19,103 @@ const PRIORITY_CLASS: Record<TaskPriority, string> = {
   3: 'bg-base-content/8 text-base-content/50 border-base-content/15'
 }
 
-const CATEGORY_CLASS: Record<TaskCategory, string> = {
+const CATEGORY_CLASS: Record<string, string> = {
   backend:       'bg-violet-500/15 text-violet-400 border-violet-500/25',
   frontend:      'bg-sky-500/15 text-sky-400 border-sky-500/25',
   database:      'bg-amber-500/15 text-amber-400 border-amber-500/25',
   schema:        'bg-teal-500/15 text-teal-400 border-teal-500/25',
   functionality: 'bg-green-500/15 text-green-400 border-green-500/25'
 }
+const DEFAULT_CATEGORY_CLASS = 'bg-base-content/8 text-base-content/50 border-base-content/15'
 
-export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARClick }: KanbanCardProps) {
+function cyclePriority(p: TaskPriority): TaskPriority {
+  return p === 1 ? 2 : p === 2 ? 3 : 1
+}
+
+export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARClick, onPriorityChange, onDelete, onEdit }: KanbanCardProps) {
+  const [editing, setEditing] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editCategory, setEditCategory] = useState('')
+  const [editNote, setEditNote] = useState('')
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData('taskId', task.id)
     e.dataTransfer.effectAllowed = 'move'
   }
 
+  function startEdit() {
+    setEditTitle(task.title)
+    setEditCategory(task.category ?? '')
+    setEditNote(task.note ?? '')
+    setEditing(true)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+  }
+
+  function submitEdit() {
+    if (!editTitle.trim()) return
+    onEdit?.({ title: editTitle.trim(), category: editCategory.trim() || null, note: editNote.trim() || null })
+    setEditing(false)
+  }
+
+  function handleDeleteClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (confirmDelete) {
+      onDelete?.()
+    } else {
+      setConfirmDelete(true)
+    }
+  }
+
   const priorityLabel = PRIORITY_LABEL[task.priority]
   const priorityClass = PRIORITY_CLASS[task.priority]
+
+  if (editing) {
+    return (
+      <div className="rounded-lg bg-base-100 border border-primary/50 shadow-sm px-3 py-2.5 flex flex-col gap-2">
+        <input
+          autoFocus
+          className="input input-xs input-bordered w-full"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submitEdit(); if (e.key === 'Escape') cancelEdit() }}
+          placeholder="Title"
+        />
+        <input
+          list={`edit-cat-${task.id}`}
+          className="input input-xs input-bordered w-full"
+          placeholder="Category…"
+          value={editCategory}
+          onChange={(e) => setEditCategory(e.target.value)}
+        />
+        <datalist id={`edit-cat-${task.id}`}>
+          {KNOWN_CATEGORIES.map((c) => (
+            <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+          ))}
+        </datalist>
+        <textarea
+          className="textarea textarea-xs textarea-bordered w-full resize-none"
+          rows={2}
+          placeholder="Note…"
+          value={editNote}
+          onChange={(e) => setEditNote(e.target.value)}
+        />
+        <div className="flex gap-1 justify-end">
+          <button className="btn btn-xs btn-ghost" onClick={cancelEdit}>Cancel</button>
+          <button className="btn btn-xs btn-primary" onClick={submitEdit}>Save</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
       draggable
       onDragStart={handleDragStart}
+      onMouseLeave={() => setConfirmDelete(false)}
       className="relative group rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
       style={repoGlowColor ? { borderLeftColor: repoGlowColor, borderLeftWidth: 3 } : undefined}
     >
@@ -49,7 +128,9 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
         <span
-          className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityClass}`}
+          className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityClass} ${onPriorityChange ? 'cursor-pointer hover:opacity-70' : ''}`}
+          title={onPriorityChange ? 'Click to cycle priority' : undefined}
+          onClick={onPriorityChange ? (e) => { e.stopPropagation(); onPriorityChange(cyclePriority(task.priority)) } : undefined}
         >
           {priorityLabel}
         </span>
@@ -60,9 +141,9 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
         <div className="flex items-center gap-1.5 flex-wrap">
           {task.category && (
             <span
-              className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${CATEGORY_CLASS[task.category]}`}
+              className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}
             >
-              {CATEGORY_LABEL[task.category]}
+              {CATEGORY_LABEL[task.category] ?? task.category}
             </span>
           )}
           {task.sprintName && (
@@ -95,6 +176,20 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, onSBARC
         <span className="text-[10px] text-base-content/35 ml-auto">
           {STATUS_LABEL[task.status]}
         </span>
+        {onEdit && (
+          <button
+            className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-base-content/40 hover:text-base-content"
+            title="Edit task"
+            onClick={(e) => { e.stopPropagation(); startEdit() }}
+          >✏</button>
+        )}
+        {onDelete && (
+          <button
+            className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
+            title={confirmDelete ? 'Click again to confirm' : 'Delete task'}
+            onClick={handleDeleteClick}
+          >{confirmDelete ? '✓' : '✕'}</button>
+        )}
         {task.sbarId && onSBARClick && (
           <button
             className="btn btn-xs btn-ghost py-0 h-5 min-h-0 text-[10px]"

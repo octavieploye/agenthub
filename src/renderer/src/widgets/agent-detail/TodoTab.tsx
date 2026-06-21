@@ -3,7 +3,7 @@ import { useTaskStore } from '../../stores/task-store'
 import { useProjectStore } from '../../stores/project-store'
 import type { AgentState } from '@shared/types/agent.types'
 import type { TaskItem, TaskPriority, TaskStatus, TaskCategory } from '@shared/types/task.types'
-import { CATEGORY_LABEL } from '@shared/types/task.types'
+import { CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { parseTaskVoice } from '../../helpers/parse-voice-fields'
 import { isLightColor } from './color-utils'
@@ -342,16 +342,18 @@ export default function TodoTab({ agent, onSpawnWithTask }: TodoTabProps): React
             <option value={2}>P2</option>
             <option value={3}>P3</option>
           </select>
-          <select
+          <input
+            list="todo-category-list"
             value={newCategory ?? ''}
-            onChange={(e) => setNewCategory((e.target.value as TaskCategory) || null)}
-            className="select select-bordered select-sm bg-base-100/50 text-xs border-base-content/10"
-          >
-            <option value="">Category…</option>
-            {(Object.keys(CATEGORY_LABEL) as TaskCategory[]).map((c) => (
+            onChange={(e) => setNewCategory(e.target.value || null)}
+            placeholder="Category…"
+            className="input input-bordered input-sm bg-base-100/50 text-xs border-base-content/10"
+          />
+          <datalist id="todo-category-list">
+            {KNOWN_CATEGORIES.map((c) => (
               <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
             ))}
-          </select>
+          </datalist>
           <button
             onClick={handleAdd}
             className="btn-lcars text-[10px] px-3 py-1"

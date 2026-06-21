@@ -2,7 +2,9 @@ export type TaskPriority = 1 | 2 | 3
 
 export type TaskStatus = 'backlog' | 'today' | 'in_progress' | 'completed' | 'tested' | 'interrupted'
 
-export type TaskCategory = 'backend' | 'frontend' | 'database' | 'schema' | 'functionality'
+export type TaskCategory = string
+
+export const KNOWN_CATEGORIES: TaskCategory[] = ['backend', 'frontend', 'database', 'schema', 'functionality']
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   1: 'High',
@@ -19,7 +21,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   interrupted: 'Interrupted'
 }
 
-export const CATEGORY_LABEL: Record<TaskCategory, string> = {
+export const CATEGORY_LABEL: Record<string, string> = {
   backend: 'Backend',
   frontend: 'Frontend',
   database: 'Database',
