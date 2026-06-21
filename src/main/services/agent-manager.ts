@@ -175,7 +175,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     provider: options.provider,
     effortLevel: options.effortLevel,
     taskDescription: options.taskDescription,
-    color: options.color
+    color: options.color,
+    voiceMode: options.voiceMode
   })
 
   // Track last-used repo for dropdown ordering

@@ -57,4 +57,5 @@ export interface AgentSpawnOptions {
   rows?: number
   skipPermissions?: boolean
   isLeadAgent?: boolean
+  voiceMode?: VoiceMode
 }

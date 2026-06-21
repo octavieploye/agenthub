@@ -99,4 +99,25 @@ describe('Agents Queries', () => {
     insertAgent(db, { repoId, name: 'a2', cwd: '/tmp' })
     expect(getAllAgents(db)).toHaveLength(2)
   })
+
+  it('defaults voiceMode to always_on when not specified', () => {
+    const agent = insertAgent(db, { repoId, name: 'voice-default', cwd: '/tmp' })
+    expect(agent.voiceMode).toBe('always_on')
+    const fromDb = getAgentById(db, agent.id)
+    expect(fromDb!.voiceMode).toBe('always_on')
+  })
+
+  it('persists explicit voiceMode when provided', () => {
+    const agent = insertAgent(db, { repoId, name: 'voice-speak-up', cwd: '/tmp', voiceMode: 'speak_up' })
+    expect(agent.voiceMode).toBe('speak_up')
+    const fromDb = getAgentById(db, agent.id)
+    expect(fromDb!.voiceMode).toBe('speak_up')
+  })
+
+  it('persists voiceMode off when explicitly set to off', () => {
+    const agent = insertAgent(db, { repoId, name: 'voice-off', cwd: '/tmp', voiceMode: 'off' })
+    expect(agent.voiceMode).toBe('off')
+    const fromDb = getAgentById(db, agent.id)
+    expect(fromDb!.voiceMode).toBe('off')
+  })
 })

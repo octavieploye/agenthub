@@ -80,16 +80,18 @@ export function insertAgent(
     taskDescription?: string
     color?: string
     executionMode?: ExecutionMode
+    voiceMode?: VoiceMode
   }
 ): AgentState {
   const id = randomUUID()
   const now = new Date().toISOString()
   const color = agent.color ?? '#3B82F6'
   const effortLevel = agent.effortLevel ?? 'medium'
+  const voiceMode = agent.voiceMode ?? 'always_on'
 
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
@@ -101,6 +103,7 @@ export function insertAgent(
     agent.taskDescription ?? '',
     color,
     agent.executionMode ?? 'native',
+    voiceMode,
     now,
     now
   )
@@ -124,7 +127,7 @@ export function insertAgent(
     updatedAt: now,
     color,
     executionMode: agent.executionMode ?? 'native',
-    voiceMode: 'off'
+    voiceMode
   }
 }
 
