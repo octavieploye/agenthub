@@ -1,6 +1,9 @@
 import { KanbanBoard } from '../widgets/kanban/KanbanBoard'
+import { useKanbanHydration } from './useKanbanHydration'
 
 export function KanbanLayout() {
+  useKanbanHydration()
+
   const params = new URLSearchParams(window.location.search)
   const agentFilter = params.get('agentId') ?? undefined
 
