@@ -11,3 +11,5 @@ _bmad-output
 .env                                                                                                                                                                                   
 .env.*
 *.tsbuildinfo
+resources/voices/                                                                                                                                       
+resources/bin/ 

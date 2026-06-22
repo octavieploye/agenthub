@@ -3,6 +3,7 @@ import log from 'electron-log/main'
 import { runMigrations } from './migration-runner'
 
 let db: Database.Database | null = null
+let shuttingDown = false
 
 export function getDb(dbPath?: string): Database.Database {
   if (db) return db
@@ -20,6 +21,26 @@ export function getDb(dbPath?: string): Database.Database {
   return db
 }
 
+/**
+ * Returns true once markShuttingDown() has been called.
+ * Callers should check this before attempting DB writes
+ * during the shutdown window (after cleanupAllAgents but
+ * before the process exits).
+ */
+export function isDbShuttingDown(): boolean {
+  return shuttingDown
+}
+
+/**
+ * Signal that the app is shutting down. Called before
+ * cleanupAllAgents so that async onExit handlers know
+ * not to attempt DB writes.
+ */
+export function markShuttingDown(): void {
+  shuttingDown = true
+  log.info('Database marked as shutting down')
+}
+
 export function closeDb(): void {
   if (db) {
     db.close()
@@ -30,4 +51,5 @@ export function closeDb(): void {
 
 export function resetDb(): void {
   db = null
+  shuttingDown = false
 }

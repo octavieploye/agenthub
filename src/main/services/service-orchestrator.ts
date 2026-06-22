@@ -24,6 +24,7 @@ import { AnamnesisWriter } from './anamnesis-writer'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { registerProjectHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
+import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -140,6 +141,7 @@ export function initializeServices(db: Database.Database): void {
       }
     },
     onKillAll: () => {
+      setShutdownReason('tray-kill-all')
       cleanupAllAgents()
       app.quit()
     },

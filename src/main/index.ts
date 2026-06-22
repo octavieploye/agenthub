@@ -3,10 +3,11 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import { APP_DEFAULTS } from '../shared/constants/defaults'
-import { getDb, closeDb } from './db/connection'
+import { getDb, closeDb, markShuttingDown } from './db/connection'
 import { registerAllIpcHandlers } from './ipc/register-all'
 import { cleanupAllAgents } from './services/agent-manager'
 import { initializeServices, startServices, stopServices } from './services/service-orchestrator'
+import { getShutdownReason, setShutdownReason } from './shutdown-reason'
 
 log.initialize()
 log.transports.file.level = 'debug'
@@ -21,7 +22,23 @@ process.on('unhandledRejection', (reason) => {
 })
 
 process.on('exit', (code) => {
-  log.info('Process exit', { code })
+  log.info('Process exit', { code, shutdownReason: getShutdownReason() })
+})
+
+// OS signals — these fire before before-quit and tell us WHY
+process.on('SIGTERM', () => {
+  setShutdownReason('SIGTERM (system termination)')
+  log.warn('Received SIGTERM — system requested termination')
+})
+
+process.on('SIGINT', () => {
+  setShutdownReason('SIGINT (Ctrl+C or system interrupt)')
+  log.warn('Received SIGINT')
+})
+
+process.on('SIGHUP', () => {
+  setShutdownReason('SIGHUP (terminal closed or parent died)')
+  log.warn('Received SIGHUP')
 })
 
 function createWindow(): void {
@@ -48,16 +65,36 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    // DevTools disabled
     log.info('Main window shown')
   })
 
+  mainWindow.on('close', () => {
+    log.info('Main window close event', {
+      reason: getShutdownReason(),
+      isQuitting: app.isQuitting?.() ?? 'unknown'
+    })
+  })
+
+  mainWindow.on('closed', () => {
+    log.info('Main window closed (destroyed)')
+  })
+
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    log.error('Renderer process gone', { reason: details.reason, exitCode: details.exitCode })
+    log.error('Renderer process gone', {
+      reason: details.reason,
+      exitCode: details.exitCode
+    })
+    if (details.reason === 'crashed' || details.reason === 'killed') {
+      setShutdownReason(`renderer-${details.reason} (exitCode: ${details.exitCode})`)
+    }
   })
 
   mainWindow.webContents.on('unresponsive', () => {
     log.error('Renderer became unresponsive')
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    log.error('Renderer failed to load', { errorCode, errorDescription })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -162,14 +199,31 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  log.info('All windows closed', { platform: process.platform })
   if (process.platform !== 'darwin') {
+    setShutdownReason('window-all-closed (non-macOS auto-quit)')
     app.quit()
   }
 })
 
 app.on('before-quit', () => {
-  log.info('AgentHub shutting down')
+  // If no explicit reason was set by a signal or tray action,
+  // it's most likely Cmd+Q / menu quit on macOS or app.quit() call
+  if (getShutdownReason() === 'unknown') {
+    setShutdownReason('user-quit (Cmd+Q, menu, or dock)')
+  }
+  log.info('AgentHub shutting down', { reason: getShutdownReason(), windowCount: BrowserWindow.getAllWindows().length })
+
+  // Mark DB as shutting down BEFORE killing agents so their
+  // async onExit handlers know to skip DB writes.
+  markShuttingDown()
+
   stopServices()
   cleanupAllAgents()
   closeDb()
+})
+
+// will-quit fires after all windows are closed but before the process exits
+app.on('will-quit', () => {
+  log.info('App will-quit', { reason: getShutdownReason() })
 })

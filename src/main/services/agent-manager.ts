@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
-import { getDb } from '../db/connection'
+import { getDb, isDbShuttingDown } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
@@ -139,6 +139,12 @@ function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus
 function flushOutputBuffer(agentId: string): void {
   const managed = agents.get(agentId)
   if (!managed || managed.outputBuffer.length === 0) return
+  if (isDbShuttingDown()) {
+    log.debug('Skipping output flush during shutdown', { agentId })
+    managed.outputBuffer = ''
+    managed.flushTimer = null
+    return
+  }
   try {
     insertTerminalOutput(getDb(), agentId, managed.outputBuffer)
   } catch (err) {
@@ -247,6 +253,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
     }
 
+    // BEL character (\x07) — Claude CLI sends this when a response completes
+    // (visible as bell icon in macOS Terminal). Use it to accelerate TTS trigger
+    // by forcing a busy→locked transition immediately, bypassing parser heuristics.
+    if (data.includes('\x07') && managed) {
+      if (managed.ttsStatus === 'busy') {
+        const rawFiltered = filterTtsResponse(managed.cleanTextBuffer.trim())
+        log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length })
+        managed.ttsStatus = 'locked'
+        managed.ttsTrigger.onStatusChange('busy', 'locked', rawFiltered)
+      }
+    }
+
     const parsed = parser.parse(data)
     if (parsed) {
       const mgd = agents.get(agentState.id)
@@ -281,6 +299,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         function applyStatusChange(): void {
           const current = agents.get(agentState.id)
           if (!current) return
+          if (isDbShuttingDown()) {
+            log.debug('Skipping status change during shutdown', { id: agentState.id, newStatus })
+            return
+          }
 
           current.state.status = newStatus
           current.state.confidence = parsed!.confidence
@@ -350,6 +372,15 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     flushOutputBuffer(agentState.id)
 
     log.info('Agent exited', { id: agentState.id, exitCode })
+
+    // During shutdown the DB is already closed — skip all DB writes
+    // to avoid "The database connection is not open" crashes.
+    if (isDbShuttingDown()) {
+      log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
+      agents.delete(agentState.id)
+      return
+    }
+
     const previousStatusOnExit = agentState.status
     updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
     agentState.status = 'completed'

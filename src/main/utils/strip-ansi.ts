@@ -19,6 +19,8 @@ export function stripAnsi(text: string): string {
     .replace(/\x0f|\x0e/g, '')
     // Backspace characters (terminal echo artefacts like c\bclaude)
     .replace(/\x08/g, '')
+    // Bare BEL character (terminal bell — not part of prose)
+    .replace(/\x07/g, '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
 }
