@@ -87,9 +87,15 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
   }, [])
 
   const readFullResponse = useCallback((agentId: string | null) => {
-    if (!agentId) return
+    if (!agentId) {
+      console.warn('[useAgentTts] readFullResponse:', 'no agent focused — press arrow keys to select an agent first')
+      return
+    }
     const text = lastResponseText.current.get(agentId)
-    if (!text) return
+    if (!text) {
+      console.warn('[useAgentTts] readFullResponse:', `no stored text for agent ${agentId}`)
+      return
+    }
     cancelSpeech()
     invokeTts(text).catch((err) => console.warn('[useAgentTts] readFullResponse error:', err))
   }, [])

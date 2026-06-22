@@ -210,4 +210,41 @@ describe('useAgentTts — onResponseReady', () => {
 
     expect(hub.tts.speak).toHaveBeenCalledTimes(2)
   })
+
+  it('readFullResponse with null agentId logs a warning', async () => {
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const { result } = renderHook(() => useAgentTts(agents))
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await act(async () => {
+      result.current.readFullResponse(null)
+    })
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[useAgentTts]'),
+      expect.stringContaining('no agent')
+    )
+    warnSpy.mockRestore()
+  })
+
+  it('readFullResponse with valid agent but no stored text logs a warning', async () => {
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const { result } = renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    // Don't emit any responseReady — lastResponseText is empty
+    await act(async () => {
+      result.current.readFullResponse('agent-1')
+    })
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[useAgentTts]'),
+      expect.stringContaining('no stored text')
+    )
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
 })

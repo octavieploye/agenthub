@@ -496,10 +496,19 @@ function AppMain(): React.JSX.Element {
           readActiveAgent()
         }
 
-        // Cmd+Shift+I — read full response for the focused agent
+        // Cmd+Shift+I — read full response for the focused agent (or most recent)
         if (e.key === 'I' && e.shiftKey) {
           e.preventDefault()
-          readFullResponse(useViewStore.getState().focusedAgentId)
+          let targetId = useViewStore.getState().focusedAgentId
+          if (!targetId) {
+            // Fallback: find the most recently updated agent that has responded
+            const allAgents = Array.from(useAgentStore.getState().agents.values())
+            const recent = allAgents
+              .filter((a) => a.status === 'locked' || a.status === 'completed' || a.status === 'awaiting_approval')
+              .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+            targetId = recent[0]?.id ?? null
+          }
+          readFullResponse(targetId)
         }
 
         // Cmd+Shift+↑/↓ — navigate repo list (raid view only)
