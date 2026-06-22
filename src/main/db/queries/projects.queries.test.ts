@@ -50,3 +50,26 @@ it('deleteProject removes the project', () => {
   deleteProject(db, p.id)
   expect(getProjectById(db, p.id)).toBeNull()
 })
+
+describe('project path field', () => {
+  it('insertProject stores null path by default', () => {
+    const p = insertProject(db, { name: 'Test' })
+    const fetched = getProjectById(db, p.id)
+    expect(fetched?.path).toBeNull()
+  })
+
+  it('updateProject can set path', () => {
+    const p = insertProject(db, { name: 'Test' })
+    updateProject(db, p.id, { path: '/Users/dev/myproject' })
+    const fetched = getProjectById(db, p.id)
+    expect(fetched?.path).toBe('/Users/dev/myproject')
+  })
+
+  it('updateProject can clear path to null', () => {
+    const p = insertProject(db, { name: 'Test' })
+    updateProject(db, p.id, { path: '/tmp/foo' })
+    updateProject(db, p.id, { path: null })
+    const fetched = getProjectById(db, p.id)
+    expect(fetched?.path).toBeNull()
+  })
+})

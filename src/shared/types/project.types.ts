@@ -2,6 +2,7 @@ export interface Project {
   id: string
   name: string
   description: string | null
+  path: string | null
   createdAt: string
   updatedAt: string
 }
@@ -19,4 +20,5 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   name?: string
   description?: string | null
+  path?: string | null
 }
