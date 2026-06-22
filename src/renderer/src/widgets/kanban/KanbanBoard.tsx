@@ -9,6 +9,7 @@ import { KanbanDispatchModal } from './KanbanDispatchModal'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
+import { useViewStore } from '../../stores/view-store'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'backlog', label: 'Backlog' },
@@ -32,6 +33,14 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [dispatchModalTask, setDispatchModalTask] = useState<TaskItem | null>(null)
+  const { setViewMode, setFocusedAgent } = useViewStore()
+  const { setActiveAgent } = useAgentStore()
+
+  function navigateToAgent(agentId: string) {
+    setActiveAgent(agentId)
+    setFocusedAgent(agentId)
+    setViewMode('terminal')
+  }
 
   useEffect(() => {
     fetchTasksOnce()
@@ -119,6 +128,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
                 onDispatch={() => setDispatchModalTask(task)}
+                onBadgeClick={task.agentId ? () => navigateToAgent(task.agentId!) : undefined}
               />
             ))}
           </div>
@@ -168,6 +178,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
               onDispatch={() => setDispatchModalTask(task)}
+              onBadgeClick={task.agentId ? () => navigateToAgent(task.agentId!) : undefined}
             />
           ))}
         </div>

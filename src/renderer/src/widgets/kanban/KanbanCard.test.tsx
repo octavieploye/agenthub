@@ -142,6 +142,35 @@ describe('KanbanCard — agent status badge', () => {
   })
 })
 
+describe('KanbanCard — badge click navigation', () => {
+  it('calls onBadgeClick when agent status badge is clicked', () => {
+    const onBadgeClick = vi.fn()
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(
+      <KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="busy" onEdit={vi.fn()} onBadgeClick={onBadgeClick} />
+    )
+    fireEvent.click(screen.getByTestId('agent-status-badge'))
+    expect(onBadgeClick).toHaveBeenCalledOnce()
+  })
+
+  it('does not error when badge is clicked without onBadgeClick', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(
+      <KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="busy" onEdit={vi.fn()} />
+    )
+    expect(() => fireEvent.click(screen.getByTestId('agent-status-badge'))).not.toThrow()
+  })
+
+  it('renders badge with cursor-pointer when onBadgeClick is provided', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(
+      <KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="busy" onEdit={vi.fn()} onBadgeClick={vi.fn()} />
+    )
+    const badge = screen.getByTestId('agent-status-badge')
+    expect(badge.className).toContain('cursor-pointer')
+  })
+})
+
 describe('KanbanCard — dispatch icon', () => {
   it('renders dispatch icon on hover when onDispatch is provided, regardless of agentId', () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} onDispatch={vi.fn()} />)

@@ -17,6 +17,7 @@ interface KanbanCardProps {
   onDelete?: () => void
   onEdit?: (input: UpdateTaskInput) => void
   onDispatch?: () => void
+  onBadgeClick?: () => void
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -66,7 +67,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -228,7 +229,8 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
         {task.agentId && agentStatus && STATUS_BADGE[agentStatus] && (
           <div
             data-testid="agent-status-badge"
-            className={`flex items-center gap-1.5 text-[10px] font-medium ${STATUS_BADGE[agentStatus].class}`}
+            className={`flex items-center gap-1.5 text-[10px] font-medium ${STATUS_BADGE[agentStatus].class}${onBadgeClick ? ' cursor-pointer' : ''}`}
+            onClick={onBadgeClick ? (e) => { e.stopPropagation(); onBadgeClick() } : undefined}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${STATUS_BADGE[agentStatus].pulse ? 'animate-pulse' : ''}`}
