@@ -25,7 +25,7 @@ import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { registerProjectHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
-import { purgeDeadAgents } from '../db/queries/agents.queries'
+import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
@@ -63,6 +63,8 @@ function emitToAllRenderers(channel: string, ...args: unknown[]): void {
 export function initializeServices(db: Database.Database): void {
   // Purge dead agents older than 24h to prevent DB bloat
   purgeDeadAgents(db, 24)
+  // Reset any non-terminal agents left over from a crashed or force-quit session
+  resetStaleAgentsOnStartup(db)
   // 1. GuardrailsManager — standalone, no deps
   guardrailsManager = new GuardrailsManager({
     readFile: (path: string) => {

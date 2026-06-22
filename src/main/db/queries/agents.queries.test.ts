@@ -12,7 +12,8 @@ import {
   insertAgent,
   updateAgentStatus,
   updateAgentPid,
-  deleteAgent
+  deleteAgent,
+  resetStaleAgentsOnStartup
 } from './agents.queries'
 import type Database from 'better-sqlite3'
 
@@ -119,5 +120,54 @@ describe('Agents Queries', () => {
     expect(agent.voiceMode).toBe('off')
     const fromDb = getAgentById(db, agent.id)
     expect(fromDb!.voiceMode).toBe('off')
+  })
+})
+
+describe('resetStaleAgentsOnStartup', () => {
+  let db: Database.Database
+  let repoId: string
+
+  beforeEach(() => {
+    resetDb()
+    db = getDb(':memory:')
+    db.prepare(
+      `INSERT INTO repos (id, name, path, created_at) VALUES ('r1','test','/tmp','2026-01-01')`
+    ).run()
+    repoId = 'r1'
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('marks busy and idle agents as interrupted', () => {
+    db.prepare(
+      `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at, status, confidence)
+      VALUES ('a1',?,'Alpha','/tmp','claude-sonnet-4-6','anthropic','medium','test','#3B82F6','native','off','2026-01-01','2026-01-01','busy','confirmed')`
+    ).run(repoId)
+    db.prepare(
+      `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at, status, confidence)
+      VALUES ('a2',?,'Beta','/tmp','claude-sonnet-4-6','anthropic','medium','test','#10B981','native','off','2026-01-01','2026-01-01','idle','confirmed')`
+    ).run(repoId)
+    db.prepare(
+      `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at, status, confidence)
+      VALUES ('a3',?,'Gamma','/tmp','claude-sonnet-4-6','anthropic','medium','test','#F59E0B','native','off','2026-01-01','2026-01-01','interrupted','confirmed')`
+    ).run(repoId)
+    db.prepare(
+      `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at, status, confidence)
+      VALUES ('a4',?,'Delta','/tmp','claude-sonnet-4-6','anthropic','medium','test','#8B5CF6','native','off','2026-01-01','2026-01-01','completed','confirmed')`
+    ).run(repoId)
+
+    resetStaleAgentsOnStartup(db)
+
+    const agents = db
+      .prepare('SELECT id, status FROM agents ORDER BY id')
+      .all() as Array<{ id: string; status: string }>
+    expect(agents).toEqual([
+      { id: 'a1', status: 'interrupted' },
+      { id: 'a2', status: 'interrupted' },
+      { id: 'a3', status: 'interrupted' },
+      { id: 'a4', status: 'completed' }
+    ])
   })
 })

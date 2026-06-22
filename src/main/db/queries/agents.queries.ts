@@ -61,6 +61,14 @@ export function purgeDeadAgents(db: Database.Database, olderThanHours = 24): num
   return ids.length
 }
 
+export function resetStaleAgentsOnStartup(db: Database.Database): void {
+  const now = new Date().toISOString()
+  db.prepare(
+    `UPDATE agents SET status = 'interrupted', confidence = 'confirmed', updated_at = ?
+     WHERE status NOT IN ('completed', 'interrupted')`
+  ).run(now)
+}
+
 export function getAgentById(db: Database.Database, id: string): AgentState | null {
   const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as
     | Record<string, unknown>
