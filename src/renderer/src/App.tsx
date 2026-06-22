@@ -505,7 +505,7 @@ function AppMain(): React.JSX.Element {
             const allAgents = Array.from(useAgentStore.getState().agents.values())
             const recent = allAgents
               .filter((a) => a.status === 'locked' || a.status === 'completed' || a.status === 'awaiting_approval')
-              .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+              .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
             targetId = recent[0]?.id ?? null
           }
           readFullResponse(targetId)
