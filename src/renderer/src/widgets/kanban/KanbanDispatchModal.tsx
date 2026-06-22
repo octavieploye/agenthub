@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem } from '@shared/types/task.types'
+import type { RepoConfig } from '@shared/types/config.types'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
 
 const ROLES = ['dev-backend', 'dev-frontend', 'dev-integration']
+
+type DispatchMode = 'existing' | 'spawn'
 
 function buildPrompt(task: TaskItem, projectName: string | undefined): string {
   const lines = [
@@ -39,19 +42,42 @@ function buildRecommendations(task: TaskItem, agentStatus: string | undefined): 
   return tips
 }
 
-interface KanbanDispatchModalProps {
-  task: TaskItem
-  agentId: string
-  onClose: () => void
+function generateAgentName(title: string): string {
+  const date = new Date().toISOString().slice(0, 10)
+  const short = title.length > 40 ? title.slice(0, 40).trimEnd() : title
+  return `${short} — ${date}`
 }
 
-export function KanbanDispatchModal({ task, agentId, onClose }: KanbanDispatchModalProps) {
+function resolveCwd(
+  task: TaskItem,
+  projects: { id: string; path: string | null }[],
+  repos: RepoConfig[]
+): string {
+  const project = projects.find((p) => p.id === task.projectId)
+  if (project?.path) return project.path
+  const repo = repos.find((r) => r.id === task.repoId)
+  return repo?.path ?? '/tmp'
+}
+
+interface KanbanDispatchModalProps {
+  task: TaskItem
+  agentId: string | null
+  onClose: () => void
+  repos: RepoConfig[]
+}
+
+export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDispatchModalProps) {
   const agents = useAgentStore((s) => s.agents)
   const { projects } = useProjectStore()
 
-  const agent = agents.get(agentId)
+  const agent = agentId ? agents.get(agentId) : undefined
+  const isAgentLive = agent && agent.status !== 'completed' && agent.status !== 'interrupted'
   const project = projects.find((p) => p.id === task.projectId)
 
+  const [mode, setMode] = useState<DispatchMode>(
+    agentId && isAgentLive ? 'existing' : 'spawn'
+  )
+  const [spawnName, setSpawnName] = useState(() => generateAgentName(task.title))
   const [prompt, setPrompt] = useState(() => buildPrompt(task, project?.name))
   const [isDispatching, setIsDispatching] = useState(false)
 
@@ -63,31 +89,58 @@ export function KanbanDispatchModal({ task, agentId, onClose }: KanbanDispatchMo
   const activeAgentCount = Array.from(agents.values()).filter(
     (a) => a.status !== 'completed' && a.status !== 'interrupted'
   ).length
-  const wouldExceed = activeAgentCount + selectedRoles.size > 3
+  const spawnCount = mode === 'spawn' ? 1 : 0
+  const wouldExceed = activeAgentCount + selectedRoles.size + spawnCount > 3
 
   const recommendations = buildRecommendations(task, agent?.status)
 
   async function handleDispatch() {
     setIsDispatching(true)
 
-    if (selectedRoles.size > 0 && agent) {
+    let targetAgentId = agentId
+
+    if (mode === 'spawn') {
+      const cwd = resolveCwd(task, projects, repos)
+      const result = await window.agentHub.agents.spawn({
+        repoId: task.repoId,
+        name: spawnName.trim() || generateAgentName(task.title),
+        cwd,
+        taskDescription: task.title,
+        color: '#6B7280',
+      })
+      if (result.success && result.data) {
+        targetAgentId = result.data.id
+      } else {
+        setIsDispatching(false)
+        return
+      }
+    }
+
+    if (!targetAgentId) {
+      setIsDispatching(false)
+      return
+    }
+
+    if (selectedRoles.size > 0) {
+      const existingAgent = agents.get(targetAgentId)
+      const spawnCwd = existingAgent?.cwd ?? resolveCwd(task, projects, repos)
       const roles = Array.from(selectedRoles)
       for (const role of roles) {
         await window.agentHub.agents.spawn({
           repoId: task.repoId,
           name: `${teamName}-${role}`,
-          cwd: agent.cwd,
+          cwd: spawnCwd,
           taskDescription: `[${role}] ${task.title}`,
           color: '#6B7280',
         })
       }
     }
 
-    window.agentHub.agents.sendInput(agentId, prompt.trim() + '\r')
+    window.agentHub.agents.sendInput(targetAgentId, prompt.trim() + '\r')
 
     await window.agentHub.tasks.update(task.id, {
       status: 'in_progress',
-      agentId,
+      agentId: targetAgentId,
     })
 
     setIsDispatching(false)
@@ -102,20 +155,9 @@ export function KanbanDispatchModal({ task, agentId, onClose }: KanbanDispatchMo
       <div className="bg-base-200 border border-base-300 rounded-xl shadow-2xl flex flex-col gap-4 p-5 w-[480px] max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {agent && (
-              <span
-                className="w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: agent.color }}
-              />
-            )}
-            <div className="flex flex-col">
-              <span className="text-xs text-base-content/50 uppercase tracking-wide">Dispatch to</span>
-              <span className="text-sm font-semibold">{agent?.name ?? agentId}</span>
-            </div>
-          </div>
-          <div className="text-sm text-base-content/60 truncate max-w-[200px]" title={task.title}>
-            {task.title}
+          <div className="flex flex-col">
+            <span className="text-xs text-base-content/50 uppercase tracking-wide">Dispatch task</span>
+            <span className="text-sm font-semibold truncate max-w-[300px]" title={task.title}>{task.title}</span>
           </div>
           <button
             aria-label="Close dispatch modal"
@@ -123,6 +165,61 @@ export function KanbanDispatchModal({ task, agentId, onClose }: KanbanDispatchMo
             onClick={onClose}
           >✕</button>
         </div>
+
+        {/* Mode toggle */}
+        <div className="flex gap-3 bg-base-300/50 rounded-lg p-2">
+          <label className="flex items-center gap-2 text-xs cursor-pointer flex-1">
+            <input
+              type="radio"
+              name="dispatch-mode"
+              className="radio radio-xs radio-primary"
+              aria-label="Spawn new agent"
+              checked={mode === 'spawn'}
+              onChange={() => setMode('spawn')}
+            />
+            <span>Spawn new agent</span>
+          </label>
+          <label className={`flex items-center gap-2 text-xs cursor-pointer flex-1 ${!agentId ? 'opacity-40' : ''}`}>
+            <input
+              type="radio"
+              name="dispatch-mode"
+              className="radio radio-xs radio-primary"
+              aria-label="Use existing agent"
+              checked={mode === 'existing'}
+              onChange={() => setMode('existing')}
+              disabled={!agentId}
+            />
+            <span>Use existing agent</span>
+          </label>
+        </div>
+
+        {/* Mode-specific UI */}
+        {mode === 'spawn' ? (
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="spawn-agent-name"
+              className="text-xs text-base-content/50 font-medium uppercase tracking-wide"
+            >Agent name</label>
+            <input
+              id="spawn-agent-name"
+              aria-label="Agent name"
+              className="input input-sm input-bordered w-full"
+              value={spawnName}
+              onChange={(e) => setSpawnName(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {agent && (
+              <span
+                className="w-3 h-3 rounded-full shrink-0"
+                style={{ backgroundColor: agent.color }}
+              />
+            )}
+            <span className="text-sm font-semibold">{agent?.name ?? agentId}</span>
+            <span className="text-xs text-base-content/40 ml-auto">{agent?.status}</span>
+          </div>
+        )}
 
         <div className="border-t border-base-300" />
 
@@ -211,7 +308,7 @@ export function KanbanDispatchModal({ task, agentId, onClose }: KanbanDispatchMo
               </div>
               {wouldExceed && (
                 <div className="text-xs text-warning bg-warning/10 rounded-lg p-2">
-                  Adding {selectedRoles.size} role(s) + current agents exceeds 3 active agents (CLAUDE.md rule).
+                  Adding {selectedRoles.size + spawnCount} agent(s) + current agents exceeds 3 active agents (CLAUDE.md rule).
                 </div>
               )}
             </div>
