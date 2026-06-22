@@ -73,12 +73,8 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
         lastParagraph: lastParagraph ?? '(none)',
       })
 
-      try {
-        ttsQueue.enqueue(announcement)
-        if (lastParagraph) ttsQueue.enqueue(lastParagraph)
-      } catch (err) {
-        console.warn('[useAgentTts] TTS error:', err)
-      }
+      ttsQueue.enqueue(announcement)
+      if (lastParagraph) ttsQueue.enqueue(lastParagraph)
     })
 
     return () => {
