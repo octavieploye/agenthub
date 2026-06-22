@@ -159,7 +159,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
-              onDispatch={task.agentId ? () => setDispatchModalTask(task) : undefined}
+              onDispatch={() => setDispatchModalTask(task)}
             />
           ))}
         </div>
