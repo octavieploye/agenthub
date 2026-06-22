@@ -211,5 +211,6 @@ export const IPC_EVENTS = {
   },
   TTS: {
     RESPONSE_READY: 'on-tts:response-ready',
+    APPROVAL_NEEDED: 'on-tts:approval-needed',
   },
 } as const

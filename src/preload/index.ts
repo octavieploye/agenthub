@@ -245,6 +245,11 @@ const agentHubBridge = {
       ipcRenderer.on(IPC_EVENTS.TTS.RESPONSE_READY, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.TTS.RESPONSE_READY, handler)
     },
+    onApprovalNeeded: (cb: (agentId: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, agentId: string): void => cb(agentId)
+      ipcRenderer.on(IPC_EVENTS.TTS.APPROVAL_NEEDED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.TTS.APPROVAL_NEEDED, handler)
+    },
   },
   on: {
     agentStatusChange: (

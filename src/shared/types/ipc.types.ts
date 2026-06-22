@@ -205,6 +205,7 @@ export interface AgentHubBridge {
     status: () => Promise<import('./ipc.types').IpcResponse<unknown>>
     listVoices: () => Promise<import('./ipc.types').IpcResponse<unknown[]>>
     onResponseReady: (cb: (agentId: string, text: string) => void) => () => void
+    onApprovalNeeded: (cb: (agentId: string) => void) => () => void
   }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void

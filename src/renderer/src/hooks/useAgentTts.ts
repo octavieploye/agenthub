@@ -77,8 +77,23 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       if (lastParagraph) ttsQueue.enqueue(lastParagraph)
     })
 
+    const unsubApproval = window.agentHub.tts.onApprovalNeeded(async (agentId) => {
+      const agent = agentsRef.current.get(agentId)
+      if (!agent) return
+      if (agent.voiceMode === 'off') return
+
+      const announcement = `${agent.name} is waiting for your approval.`
+      console.log('[TTS] onApprovalNeeded', { agentId, agentName: agent.name, voiceMode: agent.voiceMode })
+      try {
+        ttsQueue.enqueue(announcement)
+      } catch (err) {
+        console.warn('[useAgentTts] approval TTS error:', err)
+      }
+    })
+
     return () => {
       unsubResponseReady()
+      unsubApproval()
     }
   }, [])
 

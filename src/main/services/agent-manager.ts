@@ -338,6 +338,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             approvalHoldTimers.delete(agentState.id)
           }
           applyStatusChange()
+          // Emit TTS approval announcement (immediate — no debounce needed)
+          emitToAllRenderers(IPC_EVENTS.TTS.APPROVAL_NEEDED, agentState.id)
         } else if (previousStatus === 'awaiting_approval') {
           const entryTime = approvalEntryTimes.get(agentState.id)
           const elapsed = entryTime !== undefined ? Date.now() - entryTime : Infinity

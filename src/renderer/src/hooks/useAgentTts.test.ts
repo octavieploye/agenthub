@@ -9,6 +9,7 @@ type ResponseReadyCb = (agentId: string, text: string) => void
 
 function makeAgentHub() {
   const responseListeners: ResponseReadyCb[] = []
+  const approvalListeners: ((agentId: string) => void)[] = []
   const ttsSpeak = vi.fn().mockResolvedValue({})
   return {
     on: {
@@ -20,10 +21,16 @@ function makeAgentHub() {
         responseListeners.push(cb)
         return () => responseListeners.splice(responseListeners.indexOf(cb), 1)
       }),
+      onApprovalNeeded: vi.fn((cb: (agentId: string) => void) => {
+        approvalListeners.push(cb)
+        return () => approvalListeners.splice(approvalListeners.indexOf(cb), 1)
+      }),
     },
     _emit: {
       responseReady: (agentId: string, text: string) =>
         responseListeners.forEach((l) => l(agentId, text)),
+      approvalNeeded: (agentId: string) =>
+        approvalListeners.forEach((l) => l(agentId)),
     },
   }
 }
@@ -246,5 +253,48 @@ describe('useAgentTts — onResponseReady', () => {
     )
     expect(hub.tts.speak).not.toHaveBeenCalled()
     warnSpy.mockRestore()
+  })
+})
+
+describe('useAgentTts — approval announcement', () => {
+  it('speaks approval announcement when agent enters awaiting_approval (always_on)', async () => {
+    const agent = makeAgent({ voiceMode: 'always_on', name: 'Sam' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
+  })
+
+  it('speaks approval announcement in speak_up mode', async () => {
+    const agent = makeAgent({ voiceMode: 'speak_up', name: 'Sam' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
+  })
+
+  it('does NOT speak approval when voiceMode is off', async () => {
+    const agent = makeAgent({ voiceMode: 'off' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    expect(hub.tts.speak).not.toHaveBeenCalled()
   })
 })
