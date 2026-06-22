@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import { cancelSpeech, extractLastParagraph, isReadableParagraph, speak } from '../services/voice-speaker'
 import { useViewStore } from '../stores/view-store'
+import { TtsQueue } from '../services/tts-queue'
 
 export interface AgentTtsOptions {
   /** Called when voiceMode is 'off' and an agent responds — plays a notification sound instead of speaking. */
@@ -20,6 +21,9 @@ async function invokeTts(text: string): Promise<void> {
   const { piperVoiceId, ttsRate, ttsVolume } = useViewStore.getState()
   await speak(text, { piperVoiceId: piperVoiceId || 'en_US-amy-medium', rate: ttsRate, volume: ttsVolume })
 }
+
+// Module-level queue — shared across all hook instances (one in App.tsx)
+const ttsQueue = new TtsQueue(invokeTts)
 
 /**
  * TTS driven by the main-process TTS.RESPONSE_READY IPC event.
@@ -57,7 +61,8 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
 
       const announcement = `${agent.name} has responded.`
       const rawLastParagraph = agent.voiceMode === 'always_on' ? extractLastParagraph(cleanText) : null
-      const lastParagraph = rawLastParagraph && isReadableParagraph(rawLastParagraph) ? rawLastParagraph : null
+      // minWords=4: permits real 4-word spoken responses while blocking 1-3 word UI chrome
+      const lastParagraph = rawLastParagraph && isReadableParagraph(rawLastParagraph, 4) ? rawLastParagraph : null
       console.log('[TTS] onResponseReady', {
         agentId,
         agentName: agent.name,
@@ -69,9 +74,8 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       })
 
       try {
-        // Announce that the agent has responded (not "completed" — the task may still be ongoing)
-        await invokeTts(announcement)
-        if (lastParagraph) await invokeTts(lastParagraph)
+        ttsQueue.enqueue(announcement)
+        if (lastParagraph) ttsQueue.enqueue(lastParagraph)
       } catch (err) {
         console.warn('[useAgentTts] TTS error:', err)
       }
@@ -83,6 +87,7 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
   }, [])
 
   const readActiveAgent = useCallback(() => {
+    ttsQueue.clear()
     cancelSpeech()
   }, [])
 
