@@ -57,6 +57,8 @@ interface ManagedAgent {
    */
   ttsStatus: string
   ttsTrigger: TtsTrigger
+  /** True once the user (or task auto-send) has written input to this agent's PTY. */
+  hasSentInput: boolean
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -425,7 +427,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     },
     onEmit: (text: string) => {
       const current = agents.get(agentState.id)
-      if (current) current.cleanTextBuffer = ''
+      if (!current) return
+      if (!current.hasSentInput) {
+        log.debug('[TTS] suppressed RESPONSE_READY — no user input yet', { agentId: agentState.id })
+        current.cleanTextBuffer = ''
+        return
+      }
+      current.cleanTextBuffer = ''
       log.info('[TTS] emitting RESPONSE_READY', {
         agentId: agentState.id,
         textLen: text.length,
@@ -434,7 +442,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       emitToAllRenderers(IPC_EVENTS.TTS.RESPONSE_READY, agentState.id, text)
     }
   })
-  agents.set(agentState.id, { state: agentState, ptyProcess, parser, outputBuffer: '', flushTimer: null, ipcBatchBuffer: '', ipcBatchTimer: null, responseCollector: null, cleanTextBuffer: '', ttsStatus: agentState.status, ttsTrigger })
+  agents.set(agentState.id, {
+    state: agentState, ptyProcess, parser,
+    outputBuffer: '', flushTimer: null,
+    ipcBatchBuffer: '', ipcBatchTimer: null,
+    responseCollector: null, cleanTextBuffer: '',
+    ttsStatus: agentState.status, ttsTrigger,
+    hasSentInput: false
+  })
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 
@@ -486,7 +501,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       if (task) {
         setTimeout(() => {
           const mOllama = agents.get(agentState.id)
-          if (mOllama) mOllama.cleanTextBuffer = ''
+          if (mOllama) {
+            mOllama.cleanTextBuffer = ''
+            mOllama.hasSentInput = true
+          }
           ptyProcess.write(task + '\n')
           log.info('Sent task to Ollama agent', { id: agentState.id, task })
         }, 3000)
@@ -495,7 +513,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   } else if (task) {
     setTimeout(() => {
       const mTask = agents.get(agentState.id)
-      if (mTask) mTask.cleanTextBuffer = ''
+      if (mTask) {
+        mTask.cleanTextBuffer = ''
+        mTask.hasSentInput = true
+      }
       // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
       const escapedTask = task.replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
@@ -519,6 +540,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 export function sendInput(agentId: string, data: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
+  managed.hasSentInput = true
   console.log('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
 
   // Start a fresh TTS capture window when the user submits a request.

@@ -325,4 +325,26 @@ describe('TtsTrigger — task-agent startup banner suppression (primed: false)',
     expect(emit).toHaveBeenCalledTimes(1)
     expect(emit).toHaveBeenCalledWith('Here is the file listing you requested.')
   })
+
+  it('REGRESSION: multi-cycle startup (shell→banner→prompt) primes trigger and fires on banner', () => {
+    // Documents the bug: Claude CLI startup has multiple status cycles.
+    // Shell prompt → locked (skipped by primed:false) → CLI spinner → busy →
+    // CLI prompt → locked (primed was set to true by locked→busy, so this FIRES)
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: false })
+
+    // Phase 1: shell prompt → busy→locked
+    trigger.onStatusChange('busy', 'locked', '')
+    vi.advanceTimersByTime(100)
+    // Phase 2: Claude CLI starts → locked→busy (primes the trigger!)
+    trigger.onStatusChange('locked', 'busy', '')
+    // Phase 3: CLI banner done → busy→locked (trigger is primed, fires!)
+    trigger.onStatusChange('busy', 'locked', 'Tips for getting started with Claude Code...')
+    vi.advanceTimersByTime(300)
+
+    // BUG confirmed: TtsTrigger fires with banner text.
+    // The guard must live in agent-manager (hasSentInput), not TtsTrigger.
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('Tips for getting started with Claude Code...')
+  })
 })
