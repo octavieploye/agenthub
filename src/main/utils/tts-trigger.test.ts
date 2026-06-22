@@ -133,7 +133,7 @@ describe('TtsTrigger — multiple sequential responses', () => {
 })
 
 describe('TtsTrigger — empty text guard (premature fire prevention)', () => {
-  it('does NOT call onEmit when text is empty string', () => {
+  it('calls onEmit with empty string when text is empty (tool-only response)', () => {
     const emit = vi.fn()
     const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
 
@@ -141,10 +141,11 @@ describe('TtsTrigger — empty text guard (premature fire prevention)', () => {
 
     vi.advanceTimersByTime(300)
 
-    expect(emit).not.toHaveBeenCalled()
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('')
   })
 
-  it('does NOT call onEmit when text is whitespace only', () => {
+  it('calls onEmit with whitespace-only string (renderer will filter it)', () => {
     const emit = vi.fn()
     const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit })
 
@@ -152,7 +153,8 @@ describe('TtsTrigger — empty text guard (premature fire prevention)', () => {
 
     vi.advanceTimersByTime(300)
 
-    expect(emit).not.toHaveBeenCalled()
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('   \n  ')
   })
 
   it('calls onEmit when text has actual content', () => {
