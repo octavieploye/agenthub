@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
+import type { AgentState } from '@shared/types/agent.types'
 import { KanbanCardPopover } from './KanbanCardPopover'
 
 interface KanbanCardProps {
@@ -9,6 +10,7 @@ interface KanbanCardProps {
   agentName?: string
   repoGlowColor?: string
   defaultProjectId?: string
+  agents?: AgentState[]
   onSBARClick?: () => void
   onPriorityChange?: (priority: TaskPriority) => void
   onDelete?: () => void
@@ -53,7 +55,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, repoGlowColor, defaultProjectId, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -249,7 +251,7 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, default
               onClick={(e) => { e.stopPropagation(); startEdit() }}
             >✏</button>
           )}
-          {task.agentId && onDispatch && (
+          {onDispatch && (
             <button
               className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-warning/60 hover:text-warning"
               title="Dispatch to agent"
@@ -284,6 +286,7 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, default
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
           defaultProjectId={defaultProjectId}
+          agents={agents ?? []}
         />
       )}
     </>

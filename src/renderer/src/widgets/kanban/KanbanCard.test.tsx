@@ -106,21 +106,19 @@ describe('KanbanCard hover popover', () => {
 })
 
 describe('KanbanCard — dispatch icon', () => {
-  it('does not render dispatch icon when task has no agentId', () => {
+  it('renders dispatch icon on hover when onDispatch is provided, regardless of agentId', () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} onDispatch={vi.fn()} />)
+    expect(screen.getByTitle('Dispatch to agent')).toBeInTheDocument()
+  })
+
+  it('does not render dispatch icon when onDispatch is not provided', () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
     expect(screen.queryByTitle('Dispatch to agent')).not.toBeInTheDocument()
   })
 
-  it('renders dispatch icon when task.agentId is set and onDispatch provided', () => {
-    const task = { ...mockTask, agentId: 'agent-1' }
-    render(<KanbanCard task={task} onEdit={vi.fn()} onDelete={vi.fn()} onDispatch={vi.fn()} />)
-    expect(screen.getByTitle('Dispatch to agent')).toBeInTheDocument()
-  })
-
   it('calls onDispatch when dispatch icon is clicked', () => {
     const onDispatch = vi.fn()
-    const task = { ...mockTask, agentId: 'agent-1' }
-    render(<KanbanCard task={task} onEdit={vi.fn()} onDelete={vi.fn()} onDispatch={onDispatch} />)
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} onDispatch={onDispatch} />)
     fireEvent.click(screen.getByTitle('Dispatch to agent'))
     expect(onDispatch).toHaveBeenCalledOnce()
   })
