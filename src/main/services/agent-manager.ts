@@ -47,8 +47,6 @@ interface ManagedAgent {
   flushTimer: ReturnType<typeof setTimeout> | null
   ipcBatchBuffer: string
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
-  /** @deprecated responseCollector is unused — retained for interface stability */
-  responseCollector: null
   cleanTextBuffer: string
   /**
    * Tracks the real parser status immediately — never debounced.
@@ -454,7 +452,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     state: agentState, ptyProcess, parser,
     outputBuffer: '', flushTimer: null,
     ipcBatchBuffer: '', ipcBatchTimer: null,
-    responseCollector: null, cleanTextBuffer: '',
+    cleanTextBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false
   })
@@ -620,10 +618,6 @@ export function killAgent(agentId: string): void {
     // If the onExit handler hasn't already cleaned up, do it now
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
-      if (mgd.responseCollector && !mgd.responseCollector.killed) {
-        mgd.responseCollector.kill()
-      }
-      mgd.responseCollector = null
       const previousStatusOnKill = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -644,10 +638,6 @@ export function killAgent(agentId: string): void {
     } catch { /* already dead */ }
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
-      if (mgd.responseCollector && !mgd.responseCollector.killed) {
-        mgd.responseCollector.kill()
-      }
-      mgd.responseCollector = null
       const previousStatusOnKillCatch = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
