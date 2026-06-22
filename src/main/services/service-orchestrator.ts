@@ -22,7 +22,7 @@ import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { AnamnesisWriter } from './anamnesis-writer'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
-import { registerProjectHandlers } from '../ipc/projects.ipc'
+import { registerProjectsHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -261,7 +261,10 @@ export function initializeServices(db: Database.Database): void {
       log.warn(message, meta)
     }
   })
-  containerManager.init(db).catch((err) => log.error('ContainerManager init failed', err))
+  containerManager.init(db).catch((err) => {
+    log.error('ContainerManager init failed', err)
+    containerManager = null
+  })
 
   // 15. AnamnesisWriter — Kanban → Anamnesis event pipeline
   const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
@@ -272,7 +275,7 @@ export function initializeServices(db: Database.Database): void {
   registerKanbanHandlers(db, windowManager!)
 
   // 17. Projects IPC handlers
-  registerProjectHandlers(db)
+  registerProjectsHandlers(db)
 
   log.info('All services initialized')
 }
@@ -293,6 +296,7 @@ export function stopServices(): void {
   windowManager?.closeAll()
   trayManager?.destroy()
   voiceService?.dispose()
+  piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   log.info('All services stopped')
 }

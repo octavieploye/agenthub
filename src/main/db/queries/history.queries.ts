@@ -59,18 +59,21 @@ export function insertTerminalOutput(
 ): void {
   const now = new Date().toISOString()
 
-  const result = db
-    .prepare(
-      `INSERT INTO terminal_output (agent_id, content, created_at) VALUES (?, ?, ?)`
+  const insert = db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO terminal_output (agent_id, content, created_at) VALUES (?, ?, ?)`
+      )
+      .run(agentId, content, now)
+
+    const rowId = Number(result.lastInsertRowid)
+
+    db.prepare(`INSERT INTO terminal_output_fts (rowid, content) VALUES (?, ?)`).run(
+      rowId,
+      content
     )
-    .run(agentId, content, now)
 
-  const rowId = Number(result.lastInsertRowid)
-
-  db.prepare(`INSERT INTO terminal_output_fts (rowid, content) VALUES (?, ?)`).run(
-    rowId,
-    content
-  )
-
-  log.debug('Terminal output inserted', { agentId, rowId })
+    log.debug('Terminal output inserted', { agentId, rowId })
+  })
+  insert()
 }

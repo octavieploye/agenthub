@@ -47,5 +47,11 @@ export function updateProject(db: Database.Database, id: string, input: UpdatePr
 }
 
 export function deleteProject(db: Database.Database, id: string): void {
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  const remove = db.transaction(() => {
+    db.prepare('DELETE FROM project_repos WHERE project_id = ?').run(id)
+    db.prepare('UPDATE tasks SET project_id = NULL WHERE project_id = ?').run(id)
+    db.prepare('UPDATE bugs SET project_id = NULL WHERE project_id = ?').run(id)
+    db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  })
+  remove()
 }

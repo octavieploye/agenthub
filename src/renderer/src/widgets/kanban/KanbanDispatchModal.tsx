@@ -105,7 +105,6 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         repoId: task.repoId,
         name: spawnName.trim() || generateAgentName(task.title),
         cwd,
-        taskDescription: task.title,
         color: '#6B7280',
       })
       if (result.success && result.data) {
@@ -125,23 +124,48 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
       const existingAgent = agents.get(targetAgentId)
       const spawnCwd = existingAgent?.cwd ?? resolveCwd(task, projects, repos)
       const roles = Array.from(selectedRoles)
+      const failedRoles: string[] = []
       for (const role of roles) {
-        await window.agentHub.agents.spawn({
-          repoId: task.repoId,
-          name: `${teamName}-${role}`,
-          cwd: spawnCwd,
-          taskDescription: `[${role}] ${task.title}`,
-          color: '#6B7280',
-        })
+        try {
+          const res = await window.agentHub.agents.spawn({
+            repoId: task.repoId,
+            name: `${teamName}-${role}`,
+            cwd: spawnCwd,
+            taskDescription: `[${role}] ${task.title}`,
+            color: '#6B7280',
+          })
+          if (!res.success) failedRoles.push(role)
+        } catch {
+          failedRoles.push(role)
+        }
+      }
+      if (failedRoles.length > 0) {
+        console.error('Failed to spawn team roles:', failedRoles)
       }
     }
 
+    if (mode === 'spawn') {
+      // Wait for agent to be ready instead of fixed delay
+      let retries = 0
+      const maxRetries = 10
+      while (retries < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        const currentAgents = useAgentStore.getState().agents
+        const spawned = currentAgents.get(targetAgentId)
+        if (spawned && (spawned.status === 'idle' || spawned.status === 'busy')) break
+        retries++
+      }
+    }
     window.agentHub.agents.sendInput(targetAgentId, prompt.trim() + '\r')
 
-    await window.agentHub.tasks.update(task.id, {
-      status: 'in_progress',
-      agentId: targetAgentId,
-    })
+    try {
+      await window.agentHub.tasks.update(task.id, {
+        status: 'in_progress',
+        agentId: targetAgentId,
+      })
+    } catch (err) {
+      console.error('Failed to update task status after dispatch:', err)
+    }
 
     setIsDispatching(false)
     onClose()
@@ -320,7 +344,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
           <button className="btn btn-sm btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn btn-sm btn-primary"
-            disabled={!prompt.trim() || isDispatching}
+            disabled={!prompt.trim() || isDispatching || wouldExceed}
             onClick={handleDispatch}
           >{isDispatching ? 'Dispatching…' : 'Dispatch'}</button>
         </div>

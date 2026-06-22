@@ -11,8 +11,11 @@ let ipcFloodCount = 0
 let ipcFloodConsecutive = 0
 const IPC_FLOOD_THRESHOLD = 100
 
-function startIpcFloodDetector(): void {
-  setInterval(() => {
+let floodInterval: ReturnType<typeof setInterval> | null = null
+let floodUnsub: (() => void) | null = null
+
+function startIpcFloodDetector(): () => void {
+  floodInterval = setInterval(() => {
     if (ipcFloodCount > IPC_FLOOD_THRESHOLD) {
       ipcFloodConsecutive++
       if (ipcFloodConsecutive >= 3) {
@@ -30,9 +33,14 @@ function startIpcFloodDetector(): void {
     ipcFloodCount = 0
   }, 1000)
 
-  window.agentHub.on.agentOutput(() => {
+  floodUnsub = window.agentHub.on.agentOutput(() => {
     ipcFloodCount++
   })
+
+  return () => {
+    if (floodInterval) { clearInterval(floodInterval); floodInterval = null }
+    if (floodUnsub) { floodUnsub(); floodUnsub = null }
+  }
 }
 
 // ── Window-level error hooks ──────────────────────────────────────────────────
@@ -79,7 +87,17 @@ export function watchWebGlContext(container: HTMLElement, agentId: string): void
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export function initCrashLogger(): void {
+let initialized = false
+
+export function initCrashLogger(): () => void {
+  if (initialized) return () => {}
+  initialized = true
+
   hookWindowErrors()
-  startIpcFloodDetector()
+  const cleanupFlood = startIpcFloodDetector()
+
+  return () => {
+    cleanupFlood()
+    initialized = false
+  }
 }

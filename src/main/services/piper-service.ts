@@ -63,13 +63,20 @@ export class PiperService {
   speak(text: string, voiceId: string, rate: number): Promise<Buffer> {
     if (!text.trim()) return Promise.resolve(Buffer.alloc(0))
     return new Promise((resolve, reject) => {
-      const modelPath = path.join(this.deps.voicesDir, `${voiceId}.onnx`)
+      // Security: strip path separators and use basename to prevent path traversal
+      const safeVoiceId = path.basename(voiceId.replace(/[/\\]/g, ''))
+      const modelPath = path.join(this.deps.voicesDir, `${safeVoiceId}.onnx`)
+      // Verify resolved path is within voicesDir
+      if (!modelPath.startsWith(this.deps.voicesDir)) {
+        reject(new Error(`Invalid voice ID: path traversal detected`))
+        return
+      }
       if (!existsSync(modelPath)) {
         reject(new Error(`Voice model not found: ${modelPath}`))
         return
       }
 
-      const sampleRate = this.getSampleRate(voiceId)
+      const sampleRate = this.getSampleRate(safeVoiceId)
       const lengthScale = String(Math.max(0.25, Math.min(4.0, 1.0 / rate)))
       const espeakData = this.resolveEspeakData()
 

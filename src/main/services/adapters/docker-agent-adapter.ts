@@ -1,5 +1,5 @@
 import * as pty from 'node-pty'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import log from 'electron-log/main'
 
 export type DockerAgentRole = 'lead' | 'spawn'
@@ -46,14 +46,16 @@ export class DockerAgentAdapter {
    */
   getClaudePidInContainer(containerId: string): Promise<number | null> {
     return new Promise((resolve) => {
-      exec(
-        `docker exec ${containerId} pgrep -f "claude" | head -1`,
+      execFile(
+        'docker',
+        ['exec', containerId, 'pgrep', '-f', 'claude'],
         (err, stdout) => {
           if (err || !stdout.trim()) {
             resolve(null)
             return
           }
-          const pid = parseInt(stdout.trim(), 10)
+          const firstLine = stdout.trim().split('\n')[0]
+          const pid = parseInt(firstLine ?? '', 10)
           resolve(isNaN(pid) ? null : pid)
         }
       )
@@ -65,7 +67,7 @@ export class DockerAgentAdapter {
    */
   sendSignalInContainer(containerId: string, pid: number, signal: string): Promise<void> {
     return new Promise((resolve) => {
-      exec(`docker exec ${containerId} kill -${signal} ${pid}`, () => resolve())
+      execFile('docker', ['exec', containerId, 'kill', `-${signal}`, String(pid)], () => resolve())
     })
   }
 
@@ -74,7 +76,7 @@ export class DockerAgentAdapter {
    */
   isProcessAliveInContainer(containerId: string, pid: number): Promise<boolean> {
     return new Promise((resolve) => {
-      exec(`docker exec ${containerId} kill -0 ${pid}`, (err) => {
+      execFile('docker', ['exec', containerId, 'kill', '-0', String(pid)], (err) => {
         resolve(!err)
       })
     })

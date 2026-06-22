@@ -20,6 +20,8 @@ export const ModelProviderSchema = z.enum(['anthropic', 'ollama-local', 'ollama-
 
 export const EffortLevelSchema = z.enum(['high', 'medium', 'low'])
 
+export const VoiceModeSchema = z.enum(['off', 'always_on', 'on_complete'])
+
 export const AgentStateSchema = z.object({
   id: z.string(),
   repoId: z.string(),
@@ -37,7 +39,8 @@ export const AgentStateSchema = z.object({
   updatedAt: z.string(),
   progress: z.number().min(0).max(100),
   color: z.string(),
-  executionMode: z.enum(['native', 'docker']).default('native')
+  executionMode: z.enum(['native', 'docker']).default('native'),
+  voiceMode: VoiceModeSchema.default('off')
 })
 
 export const AgentSpawnOptionsSchema = z.object({
@@ -53,5 +56,6 @@ export const AgentSpawnOptionsSchema = z.object({
   skipPermissions: z.boolean().optional(),
   cols: z.number().int().positive().optional(),
   rows: z.number().int().positive().optional(),
-  isLeadAgent: z.boolean().optional()
+  isLeadAgent: z.boolean().optional(),
+  voiceMode: VoiceModeSchema.optional()
 })

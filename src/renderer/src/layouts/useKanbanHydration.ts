@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAgentStore } from '../stores/agent-store'
 import { useProjectStore } from '../stores/project-store'
+import type { AgentLifecycleStatus, StatusConfidence } from '@shared/types/agent.types'
 
 export function useKanbanHydration() {
   const hydrateAgents = useAgentStore((s) => s.hydrateAgents)
@@ -14,8 +15,8 @@ export function useKanbanHydration() {
 
     fetchProjects()
 
-    const unsub = window.agentHub.on.agentStatusChange((agentId, status, confidence) => {
-      updateStatus(agentId, status as never, confidence as never)
+    const unsub = window.agentHub.on.agentStatusChange((agentId: string, status: AgentLifecycleStatus, confidence: StatusConfidence) => {
+      updateStatus(agentId, status, confidence)
     })
 
     return () => unsub()

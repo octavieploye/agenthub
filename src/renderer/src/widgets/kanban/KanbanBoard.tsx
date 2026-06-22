@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTaskStore } from '../../stores/task-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -45,12 +45,22 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   useEffect(() => {
     fetchTasksOnce()
     fetchProjects()
-    window.agentHub.db.getRepos().then((res) => { if (res.success) setRepos(res.data) })
+    window.agentHub.db.getRepos().then((res) => { if (res.success) setRepos(res.data) }).catch((err) => console.error('Failed to fetch repos:', err))
   }, [fetchTasksOnce, fetchProjects])
 
-  useEffect(() => {
-    return window.agentHub.on.tasksUpdated(() => { fetchTasks() })
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debouncedFetchTasks = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => { fetchTasks() }, 500)
   }, [fetchTasks])
+
+  useEffect(() => {
+    const unsub = window.agentHub.on.tasksUpdated(() => { debouncedFetchTasks() })
+    return () => {
+      unsub()
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [debouncedFetchTasks])
 
   function toggleCollapse(status: TaskStatus) {
     setCollapsed((prev) => {

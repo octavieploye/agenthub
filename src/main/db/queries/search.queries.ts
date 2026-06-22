@@ -52,7 +52,7 @@ export function searchRepos(db: Database.Database, query: string): SearchResult[
   const pattern = `%${query}%`
   const rows = db
     .prepare(
-      `SELECT id, name, path FROM repos WHERE name LIKE ? OR path LIKE ? ORDER BY name LIMIT 10`
+      `SELECT id, name, path FROM repos WHERE hidden = 0 AND (name LIKE ? OR path LIKE ?) ORDER BY name LIMIT 10`
     )
     .all(pattern, pattern) as Record<string, unknown>[]
 

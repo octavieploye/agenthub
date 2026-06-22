@@ -50,9 +50,13 @@ export function purgeDeadAgents(db: Database.Database, olderThanHours = 24): num
   const placeholders = ids.map(() => '?').join(',')
 
   const purge = db.transaction(() => {
+    db.prepare(`DELETE FROM terminal_output_fts WHERE rowid IN (SELECT id FROM terminal_output WHERE agent_id IN (${placeholders}))`).run(...ids)
     db.prepare(`DELETE FROM terminal_output WHERE agent_id IN (${placeholders})`).run(...ids)
     db.prepare(`DELETE FROM sbar_handoffs WHERE agent_id IN (${placeholders})`).run(...ids)
     db.prepare(`UPDATE tasks SET agent_id = NULL WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM notes WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`UPDATE bugs SET agent_id = '' WHERE agent_id IN (${placeholders})`).run(...ids)
+    db.prepare(`UPDATE task_events SET agent_id = NULL WHERE agent_id IN (${placeholders})`).run(...ids)
     db.prepare(`DELETE FROM agents WHERE id IN (${placeholders})`).run(...ids)
   })
   purge()
@@ -209,7 +213,19 @@ export function updateAgentModel(
 }
 
 export function deleteAgent(db: Database.Database, id: string): void {
-  db.prepare('DELETE FROM agents WHERE id = ?').run(id)
+  const remove = db.transaction(() => {
+    db.prepare(
+      'DELETE FROM terminal_output_fts WHERE rowid IN (SELECT id FROM terminal_output WHERE agent_id = ?)'
+    ).run(id)
+    db.prepare('DELETE FROM terminal_output WHERE agent_id = ?').run(id)
+    db.prepare('DELETE FROM sbar_handoffs WHERE agent_id = ?').run(id)
+    db.prepare('UPDATE tasks SET agent_id = NULL WHERE agent_id = ?').run(id)
+    db.prepare('DELETE FROM notes WHERE agent_id = ?').run(id)
+    db.prepare('UPDATE bugs SET agent_id = \'\' WHERE agent_id = ?').run(id)
+    db.prepare('UPDATE task_events SET agent_id = NULL WHERE agent_id = ?').run(id)
+    db.prepare('DELETE FROM agents WHERE id = ?').run(id)
+  })
+  remove()
   log.info('Agent deleted', { id })
 }
 

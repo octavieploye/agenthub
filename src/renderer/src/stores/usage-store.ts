@@ -73,21 +73,23 @@ export const useUsageStore = create<UsageStore>((set) => ({
     try {
       const response = await window.agentHub.usage.getSnapshot()
       if (response.success && response.data) {
-        const d = response.data as Record<string, unknown>
+        const d = response.data
+        if (typeof d !== 'object' || d === null) return
+        const raw = d as Record<string, unknown>
         set((state) => {
-          const totalMessages = (d.totalMessages as number) ?? state.totalMessages
-          const plan = (d.plan as SubscriptionPlan) ?? state.plan
+          const totalMessages = typeof raw.totalMessages === 'number' ? raw.totalMessages : state.totalMessages
+          const plan = typeof raw.plan === 'string' ? (raw.plan as SubscriptionPlan) : state.plan
           return {
             plan,
-            totalInputTokens: (d.totalInputTokens as number) ?? state.totalInputTokens,
-            totalOutputTokens: (d.totalOutputTokens as number) ?? state.totalOutputTokens,
+            totalInputTokens: typeof raw.totalInputTokens === 'number' ? raw.totalInputTokens : state.totalInputTokens,
+            totalOutputTokens: typeof raw.totalOutputTokens === 'number' ? raw.totalOutputTokens : state.totalOutputTokens,
             totalCacheCreationTokens:
-              (d.totalCacheCreationTokens as number) ?? state.totalCacheCreationTokens,
-            totalCacheReadTokens: (d.totalCacheReadTokens as number) ?? state.totalCacheReadTokens,
+              typeof raw.totalCacheCreationTokens === 'number' ? raw.totalCacheCreationTokens : state.totalCacheCreationTokens,
+            totalCacheReadTokens: typeof raw.totalCacheReadTokens === 'number' ? raw.totalCacheReadTokens : state.totalCacheReadTokens,
             totalMessages,
-            burnRate: (d.burnRate as number) ?? state.burnRate,
-            lastUpdated: (d.lastUpdated as string) ?? state.lastUpdated,
-            resetDate: (d.resetDate as string) ?? state.resetDate,
+            burnRate: typeof raw.burnRate === 'number' ? raw.burnRate : state.burnRate,
+            lastUpdated: typeof raw.lastUpdated === 'string' ? raw.lastUpdated : state.lastUpdated,
+            resetDate: typeof raw.resetDate === 'string' ? raw.resetDate : state.resetDate,
             quotaPercent: computeQuotaPercent(plan, totalMessages)
           }
         })

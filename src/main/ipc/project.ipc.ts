@@ -12,7 +12,7 @@ interface ProjectInitResult {
   agentsMdCreated: boolean
 }
 
-export function registerProjectHandlers(): void {
+export function registerProjectInitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.PROJECT.INIT,
     async (_event, cwd: unknown): Promise<IpcResponse<ProjectInitResult>> => {

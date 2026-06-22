@@ -15,6 +15,7 @@ interface GitStore {
   loading: boolean
   error: string | null
   hasFetchedForRepo: Set<string>
+  currentRepoPath: string | null
 
   fetchStatus: (repoPath: string) => Promise<void>
   fetchDiff: (repoPath: string, staged?: boolean) => Promise<void>
@@ -40,6 +41,7 @@ export const useGitStore = create<GitStore>((set, get) => ({
   loading: false,
   error: null,
   hasFetchedForRepo: new Set<string>(),
+  currentRepoPath: null,
 
   fetchGitDataOnce: async (repoPath: string) => {
     const { hasFetchedForRepo } = get()
@@ -61,6 +63,10 @@ export const useGitStore = create<GitStore>((set, get) => ({
   },
 
   fetchStatus: async (repoPath: string) => {
+    // Clear stale data when switching repos
+    if (get().currentRepoPath !== repoPath) {
+      set({ status: null, diff: null, log: [], branches: null, currentRepoPath: repoPath })
+    }
     set({ loading: true, error: null })
     try {
       const res = await window.agentHub.git.getStatus(repoPath)

@@ -1,8 +1,14 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
+import { z } from 'zod/v4'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import { success, error } from './ipc-helpers'
+import { success, error, validateInput } from './ipc-helpers'
 import type { SnapshotTrigger } from '../../shared/types/recovery.types'
+
+const snapshotTriggerSchema = z.enum([
+  'periodic', 'agent_spawn', 'agent_kill', 'agent_status_change',
+  'view_switch', 'app_close', 'manual'
+])
 
 let snapshotEngine: {
   takeSnapshot(trigger: SnapshotTrigger): unknown
@@ -20,7 +26,8 @@ export function registerSnapshotHandlers(): void {
       if (!snapshotEngine) {
         return error('SNAPSHOT_NOT_READY', 'Snapshot engine not initialized')
       }
-      const validTrigger = (trigger ?? 'manual') as SnapshotTrigger
+      const parsed = validateInput(snapshotTriggerSchema, trigger ?? 'manual')
+      const validTrigger: SnapshotTrigger = parsed.valid ? parsed.data : 'manual'
       const snapshot = snapshotEngine.takeSnapshot(validTrigger)
       return success(snapshot)
     } catch (err) {

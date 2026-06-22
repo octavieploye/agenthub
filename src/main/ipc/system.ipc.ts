@@ -1,11 +1,12 @@
 import { ipcMain, app, BrowserWindow } from 'electron'
-import { exec } from 'child_process'
-import { writeFileSync, chmodSync, unlinkSync } from 'fs'
+import { execFile, spawn as spawnChild } from 'child_process'
+import { writeFileSync, chmodSync, unlinkSync, existsSync, openSync, closeSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import log from 'electron-log/main'
+import { z } from 'zod/v4'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import { success, error } from './ipc-helpers'
+import { success, error, validateInput } from './ipc-helpers'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 
 export function registerSystemHandlers(): void {
@@ -56,38 +57,45 @@ export function registerSystemHandlers(): void {
     }
   )
 
+  const socketPathSchema = z.string().min(1)
+
   ipcMain.handle(
     IPC_CHANNELS.SYSTEM.OPEN_TERMINAL,
-    async (_event, command: string): Promise<IpcResponse<void>> => {
+    async (_event, socketPath: unknown): Promise<IpcResponse<void>> => {
       try {
-        if (!command.startsWith('node -e')) {
-          return error('INVALID_COMMAND', 'Only node proxy commands are allowed')
+        const parsed = validateInput(socketPathSchema, socketPath)
+        if (!parsed.valid) return parsed.response
+
+        const validatedPath = parsed.data
+        // Security: only allow socket paths in known temp directories
+        const allowedPrefixes = [tmpdir(), '/tmp/', '/private/tmp/']
+        const isAllowed = allowedPrefixes.some(p => validatedPath.startsWith(p))
+        if (!isAllowed || !existsSync(validatedPath)) {
+          return error('INVALID_SOCKET', 'Socket path must be in a temp directory and exist on disk')
         }
 
-        const escapedCommand = command.replace(/'/g, "'\\''")
+        // Construct the command server-side — never accept a full command from renderer
+        const nodeCommand = `require('net').connect('${validatedPath.replace(/'/g, "\\'")}',()=>{process.stdin.pipe(require('net').connect('${validatedPath.replace(/'/g, "\\'")}'));require('net').connect('${validatedPath.replace(/'/g, "\\'")}').pipe(process.stdout)})`
         const platform = process.platform
 
         if (platform === 'darwin') {
           const scriptPath = join(tmpdir(), `agenthub-terminal-${Date.now()}.sh`)
-          writeFileSync(scriptPath, `#!/bin/zsh -l\n${command}\nexec zsh`, { encoding: 'utf-8' })
-          chmodSync(scriptPath, 0o755)
-          exec(`open -a Terminal "${scriptPath}"`, (err) => {
-            if (err) log.warn('Failed to open macOS Terminal:', err.message)
-            // Clean up after a delay to ensure Terminal has read the script
-            setTimeout(() => {
-              try { unlinkSync(scriptPath) } catch { /* ignore */ }
-            }, 5000)
-          })
+          // Use O_CREAT | O_EXCL (wx flag) to prevent TOCTOU race
+          const fd = openSync(scriptPath, 'wx', 0o700)
+          closeSync(fd)
+          writeFileSync(scriptPath, `#!/bin/zsh -l\nnode -e "${nodeCommand.replace(/"/g, '\\"')}"\nexec zsh`, { encoding: 'utf-8' })
+          chmodSync(scriptPath, 0o700)
+          spawnChild('open', ['-a', 'Terminal', scriptPath], { detached: true, stdio: 'ignore' })
+          setTimeout(() => {
+            try { unlinkSync(scriptPath) } catch { /* ignore */ }
+          }, 5000)
         } else if (platform === 'linux') {
-          exec(`which x-terminal-emulator`, (err) => {
+          const shellCmd = `node -e '${nodeCommand.replace(/'/g, "'\\''")}'; exec bash`
+          execFile('which', ['x-terminal-emulator'], (err) => {
             if (!err) {
-              exec(`x-terminal-emulator -e bash -c '${escapedCommand}; exec bash'`, (execErr) => {
-                if (execErr) log.warn('Failed to open x-terminal-emulator:', execErr.message)
-              })
+              spawnChild('x-terminal-emulator', ['-e', 'bash', '-c', shellCmd], { detached: true, stdio: 'ignore' })
             } else {
-              exec(`gnome-terminal -- bash -c '${escapedCommand}; exec bash'`, (execErr) => {
-                if (execErr) log.warn('Failed to open gnome-terminal:', execErr.message)
-              })
+              spawnChild('gnome-terminal', ['--', 'bash', '-c', shellCmd], { detached: true, stdio: 'ignore' })
             }
           })
         } else {

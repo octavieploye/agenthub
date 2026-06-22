@@ -80,6 +80,10 @@ export function getAllSBARs(db: Database.Database): SBARHandoff[] {
 }
 
 export function deleteSBAR(db: Database.Database, id: string): void {
-  db.prepare('DELETE FROM sbar_handoffs WHERE id = ?').run(id)
+  const remove = db.transaction(() => {
+    db.prepare('UPDATE tasks SET sbar_id = NULL WHERE sbar_id = ?').run(id)
+    db.prepare('DELETE FROM sbar_handoffs WHERE id = ?').run(id)
+  })
+  remove()
   log.debug('SBAR handoff deleted', { id })
 }

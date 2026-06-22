@@ -65,7 +65,7 @@ export function getActivityStats(db: Database.Database, since: string): Activity
       COALESCE(SUM(CASE WHEN event_type = 'agent_spawned' THEN 1 ELSE 0 END), 0) as agents_spawned,
       COALESCE(SUM(CASE WHEN event_type = 'agent_completed' THEN 1 ELSE 0 END), 0) as agents_completed,
       COALESCE(SUM(CASE WHEN event_type = 'agent_error' THEN 1 ELSE 0 END), 0) as agents_errored,
-      COALESCE(SUM(CASE WHEN event_type = 'task_status_changed' THEN 1 ELSE 0 END), 0) as tasks_completed,
+      COALESCE(SUM(CASE WHEN event_type = 'task_status_changed' AND details LIKE '%"to":"done"%' THEN 1 ELSE 0 END), 0) as tasks_completed,
       COALESCE(SUM(CASE WHEN event_type = 'bug_created' THEN 1 ELSE 0 END), 0) as bugs_created,
       COALESCE(SUM(CASE WHEN event_type = 'bug_resolved' THEN 1 ELSE 0 END), 0) as bugs_resolved
     FROM activity_log

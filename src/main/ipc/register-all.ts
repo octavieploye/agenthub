@@ -24,7 +24,7 @@ import { registerDockerHandlers } from './docker.ipc'
 import { registerContainersHandlers } from './containers.ipc'
 import { registerFsHandlers } from './fs.ipc'
 import { registerActivityHandlers } from './activity.ipc'
-import { registerProjectHandlers } from './project.ipc'
+import { registerProjectInitHandlers } from './project.ipc'
 import { registerLogHandlers } from './log.ipc'
 
 export function registerAllIpcHandlers(): void {
@@ -53,7 +53,7 @@ export function registerAllIpcHandlers(): void {
   registerContainersHandlers()
   registerFsHandlers()
   registerActivityHandlers()
-  registerProjectHandlers()
+  registerProjectInitHandlers()
   registerLogHandlers()
   log.info('All IPC handlers registered')
 }

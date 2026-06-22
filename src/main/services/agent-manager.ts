@@ -47,7 +47,8 @@ interface ManagedAgent {
   flushTimer: ReturnType<typeof setTimeout> | null
   ipcBatchBuffer: string
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
-  responseCollector: import('child_process').ChildProcess | null
+  /** @deprecated responseCollector is unused — retained for interface stability */
+  responseCollector: null
   cleanTextBuffer: string
   /**
    * Tracks the real parser status immediately — never debounced.
@@ -457,7 +458,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     log.warn('Cloud model missing cloud suffix, appending :cloud', { modelName })
     modelName = `${modelName}-cloud`
   }
-  const modelFlag = modelName ? ` --model ${modelName}` : ''
+  const safeModelName = modelName ? modelName.replace(/'/g, "'\\''") : ''
+  const modelFlag = safeModelName ? ` --model '${safeModelName}'` : ''
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
@@ -494,10 +496,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     setTimeout(() => {
       const mTask = agents.get(agentState.id)
       if (mTask) mTask.cleanTextBuffer = ''
-      const escapedTask = task.replace(/"/g, '\\"')
+      // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
+      const escapedTask = task.replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `claude${modelFlag}${effortFlag}${permFlag} "${escapedTask}"\n`
+      const cmd = `claude${modelFlag}${effortFlag}${permFlag} '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
@@ -805,5 +808,7 @@ export function cleanupAllAgents(): void {
   for (const timer of approvalHoldTimers.values()) clearTimeout(timer)
   approvalHoldTimers.clear()
   approvalEntryTimes.clear()
+  for (const timer of statusDebounceTimers.values()) clearTimeout(timer)
+  statusDebounceTimers.clear()
   log.info('All agents cleaned up')
 }

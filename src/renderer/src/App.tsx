@@ -64,7 +64,8 @@ function App(): React.JSX.Element {
   }
 
   const isKanban = urlParams.get('kanban') === 'true'
-  if (isKanban) return <KanbanLayout />
+  if (isKanban) return <KanbanBreakoutApp />
+
 
   if (isBreakout && breakoutAgentId) {
     return (
@@ -83,6 +84,11 @@ function sendDesktopNotificationFromRenderer(event: TriageEvent): void {
     body: `${event.repoName}: ${event.reason}`,
     silent: true, // sound is handled by Layer 3
   })
+}
+
+function KanbanBreakoutApp(): React.JSX.Element {
+  useEffect(() => { const cleanup = initCrashLogger(); return cleanup }, [])
+  return <KanbanLayout />
 }
 
 function AppMain(): React.JSX.Element {
@@ -346,7 +352,8 @@ function AppMain(): React.JSX.Element {
   // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
     startIpcListener()
-    initCrashLogger()
+    const cleanupCrashLogger = initCrashLogger()
+    return cleanupCrashLogger
   }, [])
 
   // Request desktop notification permission once on mount

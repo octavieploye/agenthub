@@ -1,11 +1,21 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
+import { z } from 'zod/v4'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import { success, error } from './ipc-helpers'
+import { success, error, validateInput } from './ipc-helpers'
 import { getDb } from '../db/connection'
 import { getSBARByAgentId, insertSBAR } from '../db/queries/sbar.queries'
 import { buildRecoveryInfo, acknowledgeRecovery } from '../services/recovery-manager'
-import type { CreateSBARInput } from '../../shared/types/recovery.types'
+
+const createSBARSchema = z.object({
+  agentId: z.string().min(1),
+  agentName: z.string().min(1),
+  repoId: z.string().min(1),
+  situation: z.string().min(1),
+  background: z.string().min(1),
+  assessment: z.string().min(1),
+  recommendation: z.string().min(1)
+})
 
 export function registerRecoveryHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.RECOVERY.GET_INFO, () => {
@@ -30,10 +40,12 @@ export function registerRecoveryHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.RECOVERY.GET_SBAR, (_event, agentId: string) => {
+  ipcMain.handle(IPC_CHANNELS.RECOVERY.GET_SBAR, (_event, agentId: unknown) => {
     try {
+      const parsed = validateInput(z.string().min(1), agentId)
+      if (!parsed.valid) return parsed.response
       const db = getDb()
-      const sbar = getSBARByAgentId(db, agentId)
+      const sbar = getSBARByAgentId(db, parsed.data)
       return success(sbar)
     } catch (err) {
       log.error('Failed to get SBAR', err)
@@ -41,10 +53,12 @@ export function registerRecoveryHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.RECOVERY.CREATE_SBAR, (_event, input: CreateSBARInput) => {
+  ipcMain.handle(IPC_CHANNELS.RECOVERY.CREATE_SBAR, (_event, input: unknown) => {
     try {
+      const parsed = validateInput(createSBARSchema, input)
+      if (!parsed.valid) return parsed.response
       const db = getDb()
-      const sbar = insertSBAR(db, input)
+      const sbar = insertSBAR(db, parsed.data)
       return success(sbar)
     } catch (err) {
       log.error('Failed to create SBAR', err)

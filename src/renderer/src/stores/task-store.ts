@@ -94,7 +94,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.create(input)
       if (response.success) {
         get().addTask(response.data)
-        set({ hasFetched: false })
+
         return response.data
       }
       set({ error: response.error.message })
@@ -115,7 +115,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.update(id, input)
       if (response.success) {
         get().updateTaskLocal(id, input)
-        set({ hasFetched: false })
+
         return true
       }
       set({ error: response.error.message })
@@ -131,7 +131,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const response = await window.agentHub.tasks.delete(id)
       if (response.success) {
         get().removeTask(id)
-        set({ hasFetched: false })
+
         return true
       }
       set({ error: response.error.message })

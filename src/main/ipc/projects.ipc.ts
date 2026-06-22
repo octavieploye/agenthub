@@ -1,71 +1,103 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
+import { z } from 'zod/v4'
 import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getAllProjects, insertProject, updateProject, deleteProject } from '../db/queries/projects.queries'
 import { linkRepoToProject, unlinkRepoFromProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
-import type { CreateProjectInput, UpdateProjectInput } from '../../shared/types/project.types'
+import { validateInput, success, error } from './ipc-helpers'
 
-export function registerProjectHandlers(db: Database.Database): void {
+const createProjectSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional()
+})
+
+const updateProjectSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  path: z.string().optional()
+})
+
+const idSchema = z.string().min(1)
+
+export function registerProjectsHandlers(db: Database.Database): void {
   ipcMain.handle(IPC_CHANNELS.PROJECTS.LIST, () => {
     try {
-      return { success: true, data: getAllProjects(db) }
+      return success(getAllProjects(db))
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.CREATE, (_event, input: CreateProjectInput) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.CREATE, (_event, input: unknown) => {
     try {
-      return { success: true, data: insertProject(db, input) }
+      const parsed = validateInput(createProjectSchema, input)
+      if (!parsed.valid) return parsed.response
+      return success(insertProject(db, parsed.data))
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.UPDATE, (_event, id: string, input: UpdateProjectInput) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.UPDATE, (_event, id: unknown, input: unknown) => {
     try {
-      const updated = updateProject(db, id, input)
+      const idParsed = validateInput(idSchema, id)
+      if (!idParsed.valid) return idParsed.response
+      const inputParsed = validateInput(updateProjectSchema, input)
+      if (!inputParsed.valid) return inputParsed.response
+      const updated = updateProject(db, idParsed.data, inputParsed.data)
       return updated
-        ? { success: true, data: updated }
-        : { success: false, error: { message: 'Project not found' } }
+        ? success(updated)
+        : error('NOT_FOUND', 'Project not found')
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.DELETE, (_event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.DELETE, (_event, id: unknown) => {
     try {
-      deleteProject(db, id)
-      return { success: true }
+      const parsed = validateInput(idSchema, id)
+      if (!parsed.valid) return parsed.response
+      deleteProject(db, parsed.data)
+      return success(undefined)
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.GET_BY_REPO, (_event, repoId: string) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.GET_BY_REPO, (_event, repoId: unknown) => {
     try {
-      return { success: true, data: getProjectsByRepoId(db, repoId) }
+      const parsed = validateInput(idSchema, repoId)
+      if (!parsed.valid) return parsed.response
+      return success(getProjectsByRepoId(db, parsed.data))
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.LINK_REPO, (_event, projectId: string, repoId: string) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.LINK_REPO, (_event, projectId: unknown, repoId: unknown) => {
     try {
-      linkRepoToProject(db, projectId, repoId)
-      return { success: true }
+      const pParsed = validateInput(idSchema, projectId)
+      if (!pParsed.valid) return pParsed.response
+      const rParsed = validateInput(idSchema, repoId)
+      if (!rParsed.valid) return rParsed.response
+      linkRepoToProject(db, pParsed.data, rParsed.data)
+      return success(undefined)
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS.UNLINK_REPO, (_event, projectId: string, repoId: string) => {
+  ipcMain.handle(IPC_CHANNELS.PROJECTS.UNLINK_REPO, (_event, projectId: unknown, repoId: unknown) => {
     try {
-      unlinkRepoFromProject(db, projectId, repoId)
-      return { success: true }
+      const pParsed = validateInput(idSchema, projectId)
+      if (!pParsed.valid) return pParsed.response
+      const rParsed = validateInput(idSchema, repoId)
+      if (!rParsed.valid) return rParsed.response
+      unlinkRepoFromProject(db, pParsed.data, rParsed.data)
+      return success(undefined)
     } catch (err) {
-      return { success: false, error: { message: String(err) } }
+      return error('PROJECTS_ERROR', String(err))
     }
   })
 

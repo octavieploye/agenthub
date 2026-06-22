@@ -1,0 +1,31 @@
+-- Migration 021: FK cascade and CHECK constraint documentation
+--
+-- WHY APPLICATION-LAYER ENFORCEMENT INSTEAD OF SCHEMA CONSTRAINTS:
+--
+-- 1. ON DELETE CASCADE / SET NULL:
+--    SQLite does not support ALTER TABLE ADD CONSTRAINT or ALTER COLUMN.
+--    Adding CASCADE/SET NULL to existing FK constraints requires recreating
+--    every affected table (agents, tasks, bugs, notes, terminal_output,
+--    sbar_handoffs, project_repos, task_events). This is high-risk for a
+--    running system with live data.
+--
+--    Instead, deleteProject(), deleteAgent(), purgeDeadAgents(), and
+--    deleteSBAR() now use transactions that manually clean up referencing
+--    rows before deleting the parent row. This provides the same safety
+--    guarantee without the migration risk.
+--
+-- 2. CHECK constraints on agents.status and tasks.status:
+--    SQLite cannot add CHECK constraints via ALTER TABLE. The application
+--    layer enforces valid status values through Zod schemas in IPC handlers
+--    (see src/shared/schemas/). Schema-level CHECK would be redundant given
+--    that all writes go through validated IPC channels.
+--
+-- 3. Missing FK declarations (bugs.agent_id, bugs.repo_id, activity_log
+--    columns): These columns were created without REFERENCES clauses in
+--    migrations 004 and 012. SQLite cannot add FK constraints after table
+--    creation. Application-layer cleanup in deleteAgent/purgeDeadAgents
+--    covers bugs.agent_id. activity_log is append-only and does not need
+--    cascading deletes.
+--
+-- This migration is intentionally empty (documentation only).
+-- All fixes are in the application query layer.
