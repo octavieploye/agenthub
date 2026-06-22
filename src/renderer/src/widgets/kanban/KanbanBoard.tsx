@@ -8,6 +8,7 @@ import { ProjectManagerModal } from './ProjectManagerModal'
 import { KanbanDispatchModal } from './KanbanDispatchModal'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
+import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'backlog', label: 'Backlog' },
@@ -73,6 +74,11 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     return agents.get(agentId)?.name
   }
 
+  function getAgentStatus(agentId: string | null): AgentLifecycleStatus | undefined {
+    if (!agentId) return undefined
+    return agents.get(agentId)?.status
+  }
+
   function getRepoGlowColor(repoId: string): string | undefined {
     return repos.find((r) => r.id === repoId)?.glowColor
   }
@@ -105,6 +111,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 task={task}
                 agentColor={getAgentColor(task.agentId)}
                 agentName={getAgentName(task.agentId)}
+                agentStatus={getAgentStatus(task.agentId)}
                 repoGlowColor={getRepoGlowColor(task.repoId)}
                 defaultProjectId={selectedProjectId ?? undefined}
                 agents={agentList}
@@ -153,6 +160,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               task={task}
               agentColor={getAgentColor(task.agentId)}
               agentName={getAgentName(task.agentId)}
+              agentStatus={getAgentStatus(task.agentId)}
               repoGlowColor={getRepoGlowColor(task.repoId)}
               defaultProjectId={selectedProjectId ?? undefined}
               agents={agentList}

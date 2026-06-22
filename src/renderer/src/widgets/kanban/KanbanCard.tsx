@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
-import type { AgentState } from '@shared/types/agent.types'
+import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
 import { KanbanCardPopover } from './KanbanCardPopover'
 
 interface KanbanCardProps {
   task: TaskItem
   agentColor?: string
   agentName?: string
+  agentStatus?: AgentLifecycleStatus
   repoGlowColor?: string
   defaultProjectId?: string
   agents?: AgentState[]
@@ -33,6 +34,16 @@ const CATEGORY_CLASS: Record<string, string> = {
 }
 const DEFAULT_CATEGORY_CLASS = 'bg-base-content/8 text-base-content/50 border-base-content/15'
 
+const STATUS_BADGE: Record<string, { label: string; pulse: boolean; class: string }> = {
+  spawning:          { label: 'In Progress', pulse: true,  class: 'text-info' },
+  busy:              { label: 'In Progress', pulse: true,  class: 'text-info' },
+  looping:           { label: 'In Progress', pulse: true,  class: 'text-info' },
+  idle:              { label: 'Idle',        pulse: false, class: 'text-success' },
+  awaiting_approval: { label: 'Idle',        pulse: false, class: 'text-warning' },
+  completed:         { label: 'Done',        pulse: false, class: 'text-base-content/40' },
+  interrupted:       { label: 'Stopped',     pulse: false, class: 'text-base-content/40' },
+}
+
 function cyclePriority(p: TaskPriority): TaskPriority {
   return p === 1 ? 2 : p === 2 ? 3 : 1
 }
@@ -55,7 +66,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -212,6 +223,22 @@ export function KanbanCard({ task, agentColor, agentName, repoGlowColor, default
             {priorityLabel}
           </span>
         </div>
+
+        {/* Agent status badge */}
+        {task.agentId && agentStatus && STATUS_BADGE[agentStatus] && (
+          <div
+            data-testid="agent-status-badge"
+            className={`flex items-center gap-1.5 text-[10px] font-medium ${STATUS_BADGE[agentStatus].class}`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${STATUS_BADGE[agentStatus].pulse ? 'animate-pulse' : ''}`}
+              style={{ backgroundColor: agentColor ?? '#6B7280' }}
+            />
+            <span>{agentName ?? 'Agent'}</span>
+            <span className="text-base-content/30">·</span>
+            <span>{STATUS_BADGE[agentStatus].label}</span>
+          </div>
+        )}
 
         {/* Category + sprint */}
         {(task.category || task.sprintName) && (

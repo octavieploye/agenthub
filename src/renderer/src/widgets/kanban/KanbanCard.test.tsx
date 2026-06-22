@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { KanbanCard } from './KanbanCard'
 import type { TaskItem } from '@shared/types/task.types'
+import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
 const mockTask: TaskItem = {
   id: 'task-1',
@@ -102,6 +103,42 @@ describe('KanbanCard hover popover', () => {
     // Click edit button — popover should close
     fireEvent.click(screen.getByTitle('Edit task'))
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
+  })
+})
+
+describe('KanbanCard — agent status badge', () => {
+  it('does not render status badge when agentId is null', () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} />)
+    expect(screen.queryByTestId('agent-status-badge')).not.toBeInTheDocument()
+  })
+
+  it('renders pulsing badge for busy agent', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(<KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="busy" onEdit={vi.fn()} />)
+    const badge = screen.getByTestId('agent-status-badge')
+    expect(badge).toBeInTheDocument()
+    expect(badge.textContent).toContain('In Progress')
+  })
+
+  it('renders idle badge for idle agent', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(<KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="idle" onEdit={vi.fn()} />)
+    const badge = screen.getByTestId('agent-status-badge')
+    expect(badge.textContent).toContain('Idle')
+  })
+
+  it('renders stopped badge for interrupted agent', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(<KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="interrupted" onEdit={vi.fn()} />)
+    const badge = screen.getByTestId('agent-status-badge')
+    expect(badge.textContent).toContain('Stopped')
+  })
+
+  it('renders done badge for completed agent', () => {
+    const task = { ...mockTask, agentId: 'agent-1' }
+    render(<KanbanCard task={task} agentColor="#3B82F6" agentName="Alpha" agentStatus="completed" onEdit={vi.fn()} />)
+    const badge = screen.getByTestId('agent-status-badge')
+    expect(badge.textContent).toContain('Done')
   })
 })
 
