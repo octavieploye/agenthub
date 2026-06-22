@@ -256,15 +256,21 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
     }
 
-    // BEL character (\x07) — Claude CLI sends this when a response completes
-    // (visible as bell icon in macOS Terminal). Use it to accelerate TTS trigger
-    // by forcing a busy→locked transition immediately, bypassing parser heuristics.
+    // BEL character (\x07) — Claude CLI sends this when a response completes.
+    // Only use as TTS accelerator when the filtered buffer has substantial prose.
+    // BEL can appear in tool stdout (terminal-aware Bash commands), so guard
+    // against false positives by requiring >=10 words of filtered prose.
     if (data.includes('\x07') && managed) {
       if (managed.ttsStatus === 'busy') {
         const rawFiltered = filterTtsResponse(managed.cleanTextBuffer.trim())
-        log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length })
-        managed.ttsStatus = 'locked'
-        managed.ttsTrigger.onStatusChange('busy', 'locked', rawFiltered)
+        const wordCount = rawFiltered.trim().split(/\s+/).filter((w) => w.length > 0).length
+        if (wordCount >= 10) {
+          log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length, wordCount })
+          managed.ttsStatus = 'locked'
+          managed.ttsTrigger.onStatusChange('busy', 'locked', rawFiltered)
+        } else {
+          log.debug('[TTS] BEL detected but insufficient prose, ignoring', { agentId: agentState.id, wordCount })
+        }
       }
     }
 
