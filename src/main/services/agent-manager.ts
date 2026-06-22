@@ -414,9 +414,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   const ttsTrigger = new TtsTrigger({
     debounceMs: 2500,
-    // primed: true  → agent was spawned with a task; first busy→locked is a real response
-    // primed: false → interactive spawn; wait for the first locked→busy before firing
-    primed: !!options.taskDescription?.trim(),
+    // Always start unprimed so the startup banner (first busy→locked) is
+    // silently skipped. The trigger primes itself on the first locked→busy
+    // transition — which happens when the task is sent or the user types.
+    primed: false,
     onBufferReset: () => {
       const current = agents.get(agentState.id)
       if (current) current.cleanTextBuffer = ''

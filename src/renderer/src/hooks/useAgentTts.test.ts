@@ -102,6 +102,51 @@ describe('useAgentTts — onResponseReady', () => {
     expect(hub.tts.speak).not.toHaveBeenCalled()
   })
 
+  it('calls onNotificationSound when voiceMode is off and response arrives', async () => {
+    const agent = makeAgent({ voiceMode: 'off' })
+    const agents = new Map([['agent-1', agent]])
+    const onNotificationSound = vi.fn()
+    renderHook(() => useAgentTts(agents, { onNotificationSound }))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Some response.')
+    })
+
+    expect(onNotificationSound).toHaveBeenCalledOnce()
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+  })
+
+  it('does NOT call onNotificationSound when voiceMode is always_on', async () => {
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const onNotificationSound = vi.fn()
+    renderHook(() => useAgentTts(agents, { onNotificationSound }))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Some response text here that is long enough.')
+    })
+
+    expect(onNotificationSound).not.toHaveBeenCalled()
+    expect(hub.tts.speak).toHaveBeenCalled()
+  })
+
+  it('does NOT call onNotificationSound when voiceMode is speak_up', async () => {
+    const agent = makeAgent({ voiceMode: 'speak_up' })
+    const agents = new Map([['agent-1', agent]])
+    const onNotificationSound = vi.fn()
+    renderHook(() => useAgentTts(agents, { onNotificationSound }))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Some response.')
+    })
+
+    expect(onNotificationSound).not.toHaveBeenCalled()
+    expect(hub.tts.speak).toHaveBeenCalled()
+  })
+
   it('does not speak for unknown agentId', async () => {
     const agent = makeAgent()
     const agents = new Map([['agent-1', agent]])

@@ -3,6 +3,11 @@ import type { AgentState } from '@shared/types/agent.types'
 import { cancelSpeech, extractLastParagraph, isReadableParagraph, speak } from '../services/voice-speaker'
 import { useViewStore } from '../stores/view-store'
 
+export interface AgentTtsOptions {
+  /** Called when voiceMode is 'off' and an agent responds — plays a notification sound instead of speaking. */
+  onNotificationSound?: () => void
+}
+
 export interface AgentTtsActions {
   /** Cmd+Shift+S — stops any in-progress TTS. */
   readActiveAgent: () => void
@@ -27,9 +32,11 @@ async function invokeTts(text: string): Promise<void> {
  * Cmd+Shift+I → reads the full stored response for the focused agent.
  * Cmd+Shift+S → cancels any in-progress speech.
  */
-export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
+export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsOptions): AgentTtsActions {
   const agentsRef = useRef(agents)
   agentsRef.current = agents
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   // Stores the full clean response text per agent for Cmd+Shift+I replay
   const lastResponseText = useRef(new Map<string, string>())
@@ -37,7 +44,12 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
       const agent = agentsRef.current.get(agentId)
-      if (!agent || agent.voiceMode === 'off') return
+      if (!agent) return
+
+      if (agent.voiceMode === 'off') {
+        optionsRef.current?.onNotificationSound?.()
+        return
+      }
 
       if (cleanText.trim()) {
         lastResponseText.current.set(agentId, cleanText)

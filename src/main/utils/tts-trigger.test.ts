@@ -299,3 +299,30 @@ describe('TtsTrigger — task mode (primed: true, default)', () => {
     expect(emit).toHaveBeenCalledWith('Task response.')
   })
 })
+
+describe('TtsTrigger — task-agent startup banner suppression (primed: false)', () => {
+  it('suppresses startup banner prose and emits only the real task response', () => {
+    // Simulates: task agent spawns with primed:false → startup banner has real prose
+    // → banner should be suppressed → task sent → response fires correctly
+    const emit = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, primed: false })
+
+    // Startup banner: Claude outputs "Tips for getting started..." prose
+    trigger.onStatusChange('busy', 'locked', 'Tips for getting started with Claude Code...')
+    vi.advanceTimersByTime(300)
+
+    // Banner prose must NOT be spoken
+    expect(emit).not.toHaveBeenCalled()
+
+    // Task is sent → Claude starts processing
+    trigger.onStatusChange('locked', 'busy', '')
+
+    // Claude responds to the actual task
+    trigger.onStatusChange('busy', 'locked', 'Here is the file listing you requested.')
+    vi.advanceTimersByTime(300)
+
+    // Only the real response fires
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit).toHaveBeenCalledWith('Here is the file listing you requested.')
+  })
+})

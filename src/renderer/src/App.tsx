@@ -160,7 +160,10 @@ function AppMain(): React.JSX.Element {
   )
 
   // Per-agent TTS — reads response text and speaks on busy→completed
-  const { readActiveAgent, readFullResponse } = useAgentTts(agents)
+  // When voice is off, plays a notification sound instead
+  const { readActiveAgent, readFullResponse } = useAgentTts(agents, {
+    onNotificationSound: () => playAgentSound('agent_completed', soundDeps.current)
+  })
 
   const handleToggleVoiceMode = useCallback(
     async (agentId: string, mode: import('@shared/types/agent.types').VoiceMode) => {
