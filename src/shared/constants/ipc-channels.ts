@@ -174,7 +174,10 @@ export const IPC_CHANNELS = {
   KANBAN: {
     OPEN: 'kanban:open',
     UPDATE_POSITION: 'kanban:update-position',
-    SPRINT_INTAKE: 'kanban:sprint-intake'
+    SPRINT_INTAKE: 'kanban:sprint-intake',
+    SPRINT_CONFIRM: 'kanban:sprint-confirm',
+    SPRINT_REJECT: 'kanban:sprint-reject',
+    SPRINT_CONFIRM_DRAFT: 'kanban:sprint-confirm-draft'
   },
   LOG: {
     RENDERER_ERROR: 'log:renderer-error'
@@ -209,6 +212,10 @@ export const IPC_EVENTS = {
   },
   TASKS: {
     UPDATED: 'on-tasks:updated'
+  },
+  KANBAN: {
+    SPRINT_PENDING: 'on-kanban:sprint-pending',
+    DRAFT_READY: 'on-kanban:draft-ready'
   },
   TTS: {
     RESPONSE_READY: 'on-tts:response-ready',

@@ -186,9 +186,12 @@ export interface AgentHubBridge {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void
   }
   kanban: {
-    open: (agentId?: string) => Promise<{ success: boolean }>
-    updatePosition: (taskId: string, position: number) => Promise<{ success: boolean; error?: { message: string } }>
-    sprintIntake: (stories: import('./task.types').CreateTaskInput[]) => Promise<{ success: boolean; data?: import('./task.types').TaskItem[]; error?: { message: string } }>
+    open: (agentId?: string) => Promise<IpcResponse<void>>
+    updatePosition: (taskId: string, position: number) => Promise<IpcResponse<void>>
+    sprintIntake: (stories: unknown[]) => Promise<IpcResponse<unknown>>
+    sprintConfirm: (pendingId: string) => Promise<IpcResponse<void>>
+    sprintReject: (pendingId: string) => Promise<IpcResponse<void>>
+    sprintConfirmDraft: (projectId: string) => Promise<IpcResponse<void>>
   }
   projects: {
     list: () => Promise<IpcResponse<import('./project.types').Project[]>>
@@ -217,5 +220,11 @@ export interface AgentHubBridge {
     agentTriaged: (callback: (result: import('./notification.types').RoutingResult) => void) => () => void
     dockerStatusChange: (callback: () => void) => () => void
     tasksUpdated: (callback: () => void) => () => void
+    sprintPending: (
+      cb: (payload: import('./task.types').SprintPendingPayload) => void
+    ) => () => void
+    draftReady: (
+      cb: (payload: import('./task.types').SprintDraftReadyPayload) => void
+    ) => () => void
   }
 }

@@ -113,3 +113,39 @@ export interface YesterdaySummary {
   tested: number
   bugsResolved: number
 }
+
+export interface SprintStoryInput {
+  localId: string
+  title: string
+  description: string
+  priority: TaskPriority
+  dependsOn?: string[]
+}
+
+export interface SprintEpicInput {
+  name: string
+  targetDate?: string
+  tasks: SprintStoryInput[]
+}
+
+export interface SprintIntakePayload {
+  sprintName: string
+  projectName?: string   // human-readable name — resolved to UUID by SprintWatcher.confirm()
+  repoId: string
+  epics: SprintEpicInput[]
+}
+
+export interface SprintPendingPayload {
+  pendingId: string
+  sprintName: string
+  projectName?: string
+  epicCount: number
+  taskCount: number
+  dependencyCount: number
+  repoId: string
+}
+
+export interface SprintDraftReadyPayload {
+  projectId: string      // the project.id used in the filename sprint-{project.id}.draft.json
+  draftFilename: string  // e.g. 'sprint-abc123.draft.json'
+}

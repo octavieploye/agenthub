@@ -222,7 +222,13 @@ const agentHubBridge = {
     updatePosition: (taskId: string, position: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.KANBAN.UPDATE_POSITION, taskId, position),
     sprintIntake: (stories: unknown[]) =>
-      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_INTAKE, stories)
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_INTAKE, stories),
+    sprintConfirm: (pendingId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM, pendingId),
+    sprintReject: (pendingId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_REJECT, pendingId),
+    sprintConfirmDraft: (projectId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM_DRAFT, projectId)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.LIST),
@@ -320,6 +326,16 @@ const agentHubBridge = {
       const handler = (): void => callback()
       ipcRenderer.on(IPC_EVENTS.TASKS.UPDATED, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.TASKS.UPDATED, handler)
+    },
+    sprintPending: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.KANBAN.SPRINT_PENDING, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.KANBAN.SPRINT_PENDING, handler) }
+    },
+    draftReady: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.KANBAN.DRAFT_READY, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.KANBAN.DRAFT_READY, handler) }
     }
   }
 }
