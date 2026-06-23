@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { SnapshotEngine } from './snapshot-engine'
@@ -21,6 +22,7 @@ import { registerTtsHandlers } from '../ipc/tts.ipc'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { AnamnesisWriter } from './anamnesis-writer'
+import { SprintWatcher } from './sprint-watcher'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { registerProjectsHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
@@ -46,6 +48,8 @@ let piperService: PiperService | null = null
 let dockerService: DockerService | null = null
 let containerManager: ContainerManager | null = null
 let anamnesisWriter: AnamnesisWriter | null = null
+let sprintWatcher: SprintWatcher | null = null
+let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -271,10 +275,15 @@ export function initializeServices(db: Database.Database): void {
   anamnesisWriter = new AnamnesisWriter(db, { anamnesisUrl })
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
 
-  // 16. Kanban IPC handlers
-  registerKanbanHandlers(db, windowManager!)
+  // 16. SprintWatcher — watches sprint-intake dir for new sprint JSON files
+  intakeDir = join(app.getPath('userData'), 'sprint-intake')
+  sprintWatcher = new SprintWatcher()
+  sprintWatcher.start(intakeDir, emitToAllRenderers)
 
-  // 17. Projects IPC handlers
+  // 17. Kanban IPC handlers
+  registerKanbanHandlers(db, windowManager!, sprintWatcher, intakeDir)
+
+  // 18. Projects IPC handlers
   registerProjectsHandlers(db)
 
   log.info('All services initialized')
@@ -298,6 +307,7 @@ export function stopServices(): void {
   voiceService?.dispose()
   piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
+  sprintWatcher?.stop()
   log.info('All services stopped')
 }
 

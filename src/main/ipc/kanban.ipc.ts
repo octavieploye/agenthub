@@ -1,11 +1,18 @@
-import { ipcMain } from 'electron'
+import { ipcMain, BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 import { z } from 'zod/v4'
 import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { updateTaskPosition, insertTask } from '../db/queries/tasks.queries'
 import type { WindowManager } from '../services/window-manager'
+import type { SprintWatcher } from '../services/sprint-watcher'
 import { validateInput, success, error } from './ipc-helpers'
+
+function emitToAllRenderers(channel: string, ...args: unknown[]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(channel, ...args)
+  }
+}
 
 const sprintStorySchema = z.object({
   title: z.string().min(1),
@@ -23,7 +30,12 @@ const updatePositionSchema = z.object({
   position: z.number().int().min(0)
 })
 
-export function registerKanbanHandlers(db: Database.Database, windowManager: WindowManager): void {
+export function registerKanbanHandlers(
+  db: Database.Database,
+  windowManager: WindowManager,
+  sprintWatcher: SprintWatcher,
+  intakeDir: string
+): void {
   ipcMain.handle(IPC_CHANNELS.KANBAN.OPEN, (_event, agentId?: string) => {
     windowManager.createKanbanWindow(agentId)
     return { success: true }
@@ -58,6 +70,33 @@ export function registerKanbanHandlers(db: Database.Database, windowManager: Win
       return success(created)
     } catch (err) {
       return error('KANBAN_ERROR', String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM, (_event, pendingId: string) => {
+    try {
+      sprintWatcher.confirm(db, pendingId, emitToAllRenderers)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: { message: String(err) } }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_REJECT, (_event, pendingId: string) => {
+    try {
+      sprintWatcher.reject(pendingId)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: { message: String(err) } }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM_DRAFT, (_event, projectId: string) => {
+    try {
+      sprintWatcher.confirmDraft(projectId, intakeDir)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: { message: String(err) } }
     }
   })
 
