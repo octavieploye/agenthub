@@ -3,10 +3,12 @@ import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { TaskItem, TaskPriority, TaskStatus, TaskCategory, CreateTaskInput, UpdateTaskInput } from '../../../shared/types/task.types'
 import { insertActivityEvent } from './activity.queries'
+import { getDependencyMap } from './task-dependencies.queries'
 
-function mapRow(row: Record<string, unknown>): TaskItem {
+function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): TaskItem {
+  const id = row.id as string
   return {
-    id: row.id as string,
+    id,
     repoId: row.repo_id as string,
     title: row.title as string,
     description: (row.description as string) ?? '',
@@ -21,6 +23,7 @@ function mapRow(row: Record<string, unknown>): TaskItem {
     projectId: (row.project_id as string) ?? null,
     sectionTargetDate: (row.section_target_date as string) ?? null,
     note: (row.note as string) ?? null,
+    blockedBy: depMap?.get(id) ?? [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -28,7 +31,8 @@ function mapRow(row: Record<string, unknown>): TaskItem {
 
 export function getAllTasks(db: Database.Database): TaskItem[] {
   const rows = db.prepare('SELECT * FROM tasks ORDER BY priority ASC, created_at DESC').all()
-  return rows.map((r) => mapRow(r as Record<string, unknown>))
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
 
 export function getTasksByRepo(db: Database.Database, repoId: string): TaskItem[] {
@@ -66,8 +70,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, note, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -79,6 +83,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.sprintName ?? null,
     input.epicName ?? null,
     input.projectId ?? null,
+    input.sectionTargetDate ?? null,
     input.note ?? null,
     now,
     now
@@ -106,8 +111,9 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     sprintName: input.sprintName ?? null,
     epicName: input.epicName ?? null,
     projectId: input.projectId ?? null,
-    sectionTargetDate: null,
+    sectionTargetDate: input.sectionTargetDate ?? null,
     note: input.note ?? null,
+    blockedBy: [],
     createdAt: now,
     updatedAt: now
   }

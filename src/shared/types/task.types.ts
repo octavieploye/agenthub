@@ -45,6 +45,7 @@ export interface TaskItem {
   projectId: string | null
   sectionTargetDate: string | null
   note: string | null
+  blockedBy: string[]
   createdAt: string
   updatedAt: string
 }
@@ -59,7 +60,10 @@ export interface CreateTaskInput {
   sprintName?: string
   epicName?: string
   projectId?: string | null
+  sectionTargetDate?: string | null
   note?: string | null
+  localId?: string
+  dependsOn?: string[]
 }
 
 export interface UpdateTaskInput {
