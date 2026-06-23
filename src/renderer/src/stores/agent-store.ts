@@ -6,6 +6,7 @@ interface AgentStore {
   activeAgentId: string | null
   setActiveAgent: (id: string | null) => void
   addAgent: (agent: AgentState) => void
+  upsertAgent: (agent: AgentState) => void
   removeAgent: (id: string) => void
   updateStatus: (id: string, status: AgentLifecycleStatus, confidence: StatusConfidence) => void
   updateColor: (id: string, color: string) => void
@@ -27,6 +28,14 @@ export const useAgentStore = create<AgentStore>((set) => ({
       const next = new Map(state.agents)
       next.set(agent.id, agent)
       return { agents: next, activeAgentId: agent.id }
+    }),
+
+  upsertAgent: (agent) =>
+    set((state) => {
+      if (state.agents.has(agent.id)) return state
+      const next = new Map(state.agents)
+      next.set(agent.id, agent)
+      return { agents: next }
     }),
 
   removeAgent: (id) =>

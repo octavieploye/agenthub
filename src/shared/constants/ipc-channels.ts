@@ -191,7 +191,8 @@ export const IPC_EVENTS = {
   AGENTS: {
     STATUS_CHANGE: 'on-agents:status-change',
     OUTPUT: 'on-agents:output',
-    EXIT: 'on-agents:exit'
+    EXIT: 'on-agents:exit',
+    SPAWNED: 'on-agents:spawned'
   },
   NOTIFICATIONS: {
     TRIAGED: 'on-agents:triaged'

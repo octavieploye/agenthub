@@ -109,6 +109,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
       })
       if (result.success && result.data) {
         targetAgentId = result.data.id
+        useAgentStore.getState().upsertAgent(result.data)
       } else {
         setIsDispatching(false)
         return
@@ -144,18 +145,6 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
       }
     }
 
-    if (mode === 'spawn') {
-      // Wait for agent to be ready instead of fixed delay
-      let retries = 0
-      const maxRetries = 10
-      while (retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        const currentAgents = useAgentStore.getState().agents
-        const spawned = currentAgents.get(targetAgentId)
-        if (spawned && (spawned.status === 'idle' || spawned.status === 'busy')) break
-        retries++
-      }
-    }
     window.agentHub.agents.sendInput(targetAgentId, prompt.trim() + '\r')
 
     try {

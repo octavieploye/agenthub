@@ -6,6 +6,7 @@ import type { AgentLifecycleStatus, StatusConfidence } from '@shared/types/agent
 export function useKanbanHydration() {
   const hydrateAgents = useAgentStore((s) => s.hydrateAgents)
   const updateStatus = useAgentStore((s) => s.updateStatus)
+  const upsertAgent = useAgentStore((s) => s.upsertAgent)
   const fetchProjects = useProjectStore((s) => s.fetchProjects)
 
   useEffect(() => {
@@ -15,10 +16,17 @@ export function useKanbanHydration() {
 
     fetchProjects()
 
-    const unsub = window.agentHub.on.agentStatusChange((agentId: string, status: AgentLifecycleStatus, confidence: StatusConfidence) => {
+    const unsubStatus = window.agentHub.on.agentStatusChange((agentId: string, status: AgentLifecycleStatus, confidence: StatusConfidence) => {
       updateStatus(agentId, status, confidence)
     })
 
-    return () => unsub()
-  }, [hydrateAgents, updateStatus, fetchProjects])
+    const unsubSpawned = window.agentHub.on.agentSpawned((agent) => {
+      upsertAgent(agent)
+    })
+
+    return () => {
+      unsubStatus()
+      unsubSpawned()
+    }
+  }, [hydrateAgents, updateStatus, upsertAgent, fetchProjects])
 }

@@ -236,7 +236,8 @@ describe('KanbanDispatchModal — mode toggle', () => {
     render(<KanbanDispatchModal task={task} agentId={null} onClose={vi.fn()} repos={[mockRepo]} />)
     const nameInput = screen.getByLabelText(/agent name/i) as HTMLInputElement
     expect(nameInput.value).toMatch(/Fix login bug/)
-    expect(nameInput.value).toMatch(/2026-06-22/)
+    const today = new Date().toISOString().slice(0, 10)
+    expect(nameInput.value).toContain(today)
   })
 
   it('switches between modes when radio buttons are clicked', () => {

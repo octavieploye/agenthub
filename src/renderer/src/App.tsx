@@ -338,6 +338,15 @@ function AppMain(): React.JSX.Element {
     }
   }, [updateStatus])
 
+  // Register agents spawned from other windows (e.g. Kanban dispatch) without stealing focus
+  useEffect(() => {
+    const upsertAgent = useAgentStore.getState().upsertAgent
+    const unsub = window.agentHub.on.agentSpawned((agent) => {
+      upsertAgent(agent)
+    })
+    return unsub
+  }, [])
+
   // When a breakout window closes, select that agent and switch to terminal view
   useEffect(() => {
     const unsub = window.agentHub.on.breakoutClosed((agentId) => {

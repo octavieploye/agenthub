@@ -38,7 +38,8 @@ function makeAgentHub() {
       list: vi.fn().mockResolvedValue({ success: true, data: [] })
     },
     on: {
-      agentStatusChange: vi.fn(() => vi.fn())
+      agentStatusChange: vi.fn(() => vi.fn()),
+      agentSpawned: vi.fn(() => vi.fn())
     }
   }
 }
@@ -78,10 +79,12 @@ describe('useKanbanHydration', () => {
     expect(hub.on.agentStatusChange).toHaveBeenCalledOnce()
   })
 
-  it('calls the unsub returned by agentStatusChange on unmount', async () => {
-    const unsub = vi.fn()
+  it('calls the unsubs returned by agentStatusChange and agentSpawned on unmount', async () => {
+    const unsubStatus = vi.fn()
+    const unsubSpawned = vi.fn()
     const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
-    hub.on.agentStatusChange = vi.fn(() => unsub)
+    hub.on.agentStatusChange = vi.fn(() => unsubStatus)
+    hub.on.agentSpawned = vi.fn(() => unsubSpawned)
 
     let unmount!: () => void
     await act(async () => {
@@ -89,8 +92,10 @@ describe('useKanbanHydration', () => {
       unmount = result.unmount
     })
 
-    expect(unsub).not.toHaveBeenCalled()
+    expect(unsubStatus).not.toHaveBeenCalled()
+    expect(unsubSpawned).not.toHaveBeenCalled()
     unmount()
-    expect(unsub).toHaveBeenCalledOnce()
+    expect(unsubStatus).toHaveBeenCalledOnce()
+    expect(unsubSpawned).toHaveBeenCalledOnce()
   })
 })

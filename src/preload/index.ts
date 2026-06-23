@@ -282,6 +282,14 @@ const agentHubBridge = {
       ipcRenderer.on(IPC_EVENTS.AGENTS.EXIT, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.AGENTS.EXIT, handler)
     },
+    agentSpawned: (callback: (agent: import('../shared/types/agent.types').AgentState) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        agent: import('../shared/types/agent.types').AgentState
+      ): void => callback(agent)
+      ipcRenderer.on(IPC_EVENTS.AGENTS.SPAWNED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.AGENTS.SPAWNED, handler)
+    },
     breakoutClosed: (callback: (agentId: string) => void) => {
       const handler = (
         _event: Electron.IpcRendererEvent,

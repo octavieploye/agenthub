@@ -456,6 +456,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false
   })
+  emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
 
