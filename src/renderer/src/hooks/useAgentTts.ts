@@ -108,6 +108,7 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       console.warn('[useAgentTts] readFullResponse:', `no stored text for agent ${agentId}`)
       return
     }
+    ttsQueue.clear()
     cancelSpeech()
     invokeTts(text).catch((err) => console.warn('[useAgentTts] readFullResponse error:', err))
   }, [])
