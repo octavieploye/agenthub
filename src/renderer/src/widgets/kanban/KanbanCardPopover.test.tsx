@@ -34,6 +34,7 @@ const defaultProps = {
   onClose: vi.fn(),
   onMouseEnter: vi.fn(),
   onMouseLeave: vi.fn(),
+  agents: [] as AgentState[],
 }
 
 describe('KanbanCardPopover', () => {
@@ -148,32 +149,31 @@ const mockProject: Project = {
 describe('KanbanCardPopover — agent + project selectors', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAgentStore.setState({ agents: new Map([['agent-1', mockAgent]]), activeAgentId: null })
     useProjectStore.setState({ projects: [mockProject], selectedProjectId: null })
   })
 
-  it('renders agent selector with agents from store', () => {
-    render(<KanbanCardPopover {...defaultProps} />)
+  it('renders agent selector with agents from prop', () => {
+    render(<KanbanCardPopover {...defaultProps} agents={[mockAgent]} />)
     const agentSelect = screen.getByLabelText('Agent')
     expect(agentSelect).toBeInTheDocument()
     expect(screen.getByText('Alpha')).toBeInTheDocument()
   })
 
   it('renders project selector with projects from store', () => {
-    render(<KanbanCardPopover {...defaultProps} />)
+    render(<KanbanCardPopover {...defaultProps} agents={[]} />)
     const projectSelect = screen.getByLabelText('Project')
     expect(projectSelect).toBeInTheDocument()
     expect(screen.getByText('AgentHub v2')).toBeInTheDocument()
   })
 
   it('pre-selects defaultProjectId when provided', () => {
-    render(<KanbanCardPopover {...defaultProps} defaultProjectId="proj-1" />)
+    render(<KanbanCardPopover {...defaultProps} agents={[]} defaultProjectId="proj-1" />)
     const projectSelect = screen.getByLabelText('Project') as HTMLSelectElement
     expect(projectSelect.value).toBe('proj-1')
   })
 
   it('includes agentId and projectId in onSave when Save is clicked', () => {
-    render(<KanbanCardPopover {...defaultProps} defaultProjectId="proj-1" />)
+    render(<KanbanCardPopover {...defaultProps} agents={[mockAgent]} defaultProjectId="proj-1" />)
     const agentSelect = screen.getByLabelText('Agent') as HTMLSelectElement
     fireEvent.change(agentSelect, { target: { value: 'agent-1' } })
     fireEvent.click(screen.getByText('Save'))
@@ -184,7 +184,7 @@ describe('KanbanCardPopover — agent + project selectors', () => {
 
   it('sends null agentId when Unassigned is selected', () => {
     const task = { ...mockTask, agentId: 'agent-1' }
-    render(<KanbanCardPopover {...defaultProps} task={task} />)
+    render(<KanbanCardPopover {...defaultProps} task={task} agents={[mockAgent]} />)
     const agentSelect = screen.getByLabelText('Agent') as HTMLSelectElement
     fireEvent.change(agentSelect, { target: { value: '' } })
     fireEvent.click(screen.getByText('Save'))
@@ -197,12 +197,11 @@ describe('KanbanCardPopover — agent + project selectors', () => {
 describe('KanbanCardPopover — inline project create', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAgentStore.setState({ agents: new Map([['agent-1', mockAgent]]), activeAgentId: null })
     useProjectStore.setState({ projects: [mockProject], selectedProjectId: null })
   })
 
   it('shows inline create form when "+ New project…" is selected', () => {
-    render(<KanbanCardPopover {...defaultProps} />)
+    render(<KanbanCardPopover {...defaultProps} agents={[]} />)
     const projectSelect = screen.getByLabelText('Project') as HTMLSelectElement
     fireEvent.change(projectSelect, { target: { value: '__create__' } })
     expect(screen.getByPlaceholderText('Project name…')).toBeInTheDocument()
@@ -210,7 +209,7 @@ describe('KanbanCardPopover — inline project create', () => {
   })
 
   it('hides inline form and resets to No Project when cancelled', () => {
-    render(<KanbanCardPopover {...defaultProps} />)
+    render(<KanbanCardPopover {...defaultProps} agents={[]} />)
     fireEvent.change(screen.getByLabelText('Project'), { target: { value: '__create__' } })
     fireEvent.click(screen.getByText('Cancel create'))
     expect(screen.queryByPlaceholderText('Project name…')).not.toBeInTheDocument()

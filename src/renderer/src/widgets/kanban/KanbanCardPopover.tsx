@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
-import { useAgentStore } from '../../stores/agent-store'
+import type { AgentState } from '@shared/types/agent.types'
 import { useProjectStore } from '../../stores/project-store'
 
 interface KanbanCardPopoverProps {
@@ -13,9 +13,10 @@ interface KanbanCardPopoverProps {
   onMouseEnter: () => void
   onMouseLeave: () => void
   defaultProjectId?: string
+  agents: AgentState[]
 }
 
-export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId }: KanbanCardPopoverProps) {
+export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId, agents }: KanbanCardPopoverProps) {
   const hasFocusRef = useRef(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
@@ -27,8 +28,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [sprintName, setSprintName] = useState(task.sprintName ?? '')
   const [sectionTargetDate, setSectionTargetDate] = useState(task.sectionTargetDate ?? '')
 
-  const agents = useAgentStore((s) => s.agents)
-  const agentList = Array.from(agents.values())
+  const agentList = agents
   const { projects, createProject, linkRepo } = useProjectStore()
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(task.agentId ?? null)
