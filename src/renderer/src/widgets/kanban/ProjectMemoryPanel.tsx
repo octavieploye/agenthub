@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { WorkspaceMemoryEntry } from '@shared/types/workspace-memory.types'
 
 interface ProjectMemoryPanelProps {
@@ -10,11 +10,7 @@ export function ProjectMemoryPanel({ projectId }: ProjectMemoryPanelProps) {
   const [newContent, setNewContent] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    loadEntries()
-  }, [projectId])
-
-  async function loadEntries() {
+  const loadEntries = useCallback(async () => {
     try {
       const response = await window.agentHub.workspaceMemory.list(projectId)
       if (response.success) {
@@ -23,7 +19,11 @@ export function ProjectMemoryPanel({ projectId }: ProjectMemoryPanelProps) {
     } catch (err) {
       console.error('Failed to load workspace memory entries:', err)
     }
-  }
+  }, [projectId])
+
+  useEffect(() => {
+    loadEntries()
+  }, [loadEntries])
 
   async function handlePin() {
     if (!newContent.trim() || busy) return
