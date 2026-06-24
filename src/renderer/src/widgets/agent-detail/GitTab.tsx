@@ -68,15 +68,16 @@ export default function GitTab({ agent }: GitTabProps): React.JSX.Element {
     pull,
     clearError
   } = useGitStore()
-  const fetchGitDataOnce = useGitStore((s) => s.fetchGitDataOnce)
 
   const [section, setSection] = useState<GitSection>('status')
   const [commitMsg, setCommitMsg] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
-    fetchGitDataOnce(repoPath)
-  }, [repoPath, fetchGitDataOnce])
+    fetchStatus(repoPath)
+    fetchLog(repoPath, 20)
+    fetchBranches(repoPath)
+  }, [repoPath, fetchStatus, fetchLog, fetchBranches])
 
   const handleStage = useCallback(
     async (path: string) => {

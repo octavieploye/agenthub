@@ -19,6 +19,7 @@ interface SABarProps {
 
 const VIEW_MODES = [
   { key: 'raid' as const, label: 'Raid' },
+  { key: 'channel' as const, label: 'Channel' },
   { key: 'terminal' as const, label: 'Terminal' },
   { key: 'activity' as const, label: 'Activity' }
 ]
@@ -73,15 +74,31 @@ function HowToIcon(): React.JSX.Element {
   )
 }
 
-function SABar({ agents: _agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcherRef }: SABarProps): React.JSX.Element {
+function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcherRef }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
+  const statusFilter = useViewStore((s) => s.statusFilter)
+  const setStatusFilter = useViewStore((s) => s.setStatusFilter)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
   const toggleSound = useViewStore((s) => s.toggleSound)
   const ttsVolume = useViewStore((s) => s.ttsVolume)
   const setTtsVolume = useViewStore((s) => s.setTtsVolume)
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Count agents by status
+  const statusCounts = agents.reduce<Record<string, number>>((acc, agent) => {
+    acc[agent.status] = (acc[agent.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  const STATUS_DISPLAY: { key: string; label: string }[] = [
+    { key: 'busy', label: 'Busy' },
+    { key: 'idle', label: 'Idle' },
+    { key: 'locked', label: 'Locked' },
+    { key: 'paused', label: 'Paused' },
+    { key: 'completed', label: 'Completed' },
+  ]
 
   return (
     <header
@@ -92,6 +109,29 @@ function SABar({ agents: _agents, onOpenSettings, onOpenSearch, onOpenHowTo, rep
       <div className="flex items-center gap-3">
         <h1 className="text-sm font-mono font-semibold text-primary tracking-wide">AgentHub</h1>
         <RepoSwitcher ref={repoSwitcherRef} />
+      </div>
+
+      {/* Status counters */}
+      <div className="flex items-center gap-1 ml-3">
+        {STATUS_DISPLAY.map(({ key, label }) => {
+          const count = statusCounts[key] ?? 0
+          if (count === 0) return null
+          return (
+            <button
+              key={key}
+              data-testid={`status-counter-${key}`}
+              aria-label={`Filter by ${label}`}
+              onClick={() => setStatusFilter(statusFilter === key ? null : key as import('@shared/types/agent.types').AgentLifecycleStatus)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                statusFilter === key
+                  ? 'bg-primary text-primary-content'
+                  : 'text-base-content/50 hover:text-base-content/80 bg-base-content/5'
+              }`}
+            >
+              {count} {label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Spacer */}

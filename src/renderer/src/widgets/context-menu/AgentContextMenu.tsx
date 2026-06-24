@@ -42,6 +42,9 @@ function AgentContextMenu({
   const canContinue = agent.status === 'completed' || agent.status === 'interrupted'
 
   return (
+    // CSS-SYSTEM: dropdown-panel — solid themed dropdown container. Do NOT use panel-glass here.
+    // panel-glass = glassmorphism for background panels. dropdown-panel = solid for menus/popovers.
+    // Changing this to panel-glass will break the test AND the visual design. See .claude/code-uiux.md.
     <div
       data-testid="context-menu"
       className="dropdown-panel min-w-[160px] fixed"

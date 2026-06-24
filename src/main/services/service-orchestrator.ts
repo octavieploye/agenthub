@@ -19,13 +19,10 @@ import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
 import { VoiceService } from './voice-service'
 import { PiperService } from './piper-service'
-import { registerTtsHandlers } from '../ipc/tts.ipc'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
 import { AnamnesisWriter } from './anamnesis-writer'
 import { SprintWatcher } from './sprint-watcher'
-import { registerKanbanHandlers } from '../ipc/kanban.ipc'
-import { registerProjectsHandlers } from '../ipc/projects.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -240,7 +237,7 @@ export function initializeServices(db: Database.Database): void {
       ? require('path').join(process.resourcesPath, 'voices')
       : require('path').join(process.cwd(), 'resources', 'voices'),
   })
-  registerTtsHandlers()
+  // TTS handlers now registered in register-all.ts
 
   // 13. DockerService — Docker availability detection and image management
   dockerService = new DockerService({
@@ -276,11 +273,7 @@ export function initializeServices(db: Database.Database): void {
   sprintWatcher = new SprintWatcher()
   sprintWatcher.start(intakeDir, emitToAllRenderers)
 
-  // 17. Kanban IPC handlers
-  registerKanbanHandlers(db, windowManager!, sprintWatcher, intakeDir)
-
-  // 18. Projects IPC handlers
-  registerProjectsHandlers(db)
+  // Kanban + Projects IPC handlers now registered in register-all.ts
 
   log.info('All services initialized')
 }
@@ -361,4 +354,12 @@ export function getContainerManager(): ContainerManager | null {
 
 export function getAnamnesisWriter(): AnamnesisWriter | null {
   return anamnesisWriter
+}
+
+export function getSprintWatcher(): SprintWatcher | null {
+  return sprintWatcher
+}
+
+export function getIntakeDir(): string {
+  return intakeDir
 }

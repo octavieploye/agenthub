@@ -9,16 +9,14 @@ export const APP_DEFAULTS = {
 } as const
 
 export const AGENT_COLOR_PALETTE = [
-  '#89b4fa',  // Blue — most distinct on dark
-  '#a6e3a1',  // Green
-  '#fab387',  // Peach
-  '#cba6f7',  // Mauve
-  '#f38ba8',  // Pink
-  '#94e2d5',  // Teal
-  '#f9e2af',  // Yellow
-  '#89dceb',  // Sky
-  '#f5c2e7',  // Rose
-  '#74c7ec',  // Sapphire
-  '#b4befe',  // Lavender
-  '#f2cdcd',  // Flamingo
+  '#3B82F6',  // Blue
+  '#EF4444',  // Red
+  '#10B981',  // Green
+  '#F59E0B',  // Amber
+  '#8B5CF6',  // Violet
+  '#EC4899',  // Pink
+  '#06B6D4',  // Cyan
+  '#F97316',  // Orange
+  '#6366F1',  // Indigo
+  '#14B8A6',  // Teal
 ] as const

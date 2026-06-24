@@ -54,10 +54,13 @@ describe('AgentContextMenu', () => {
       expect(menu.style.top).toBe('300px')
     })
 
-    it('applies panel-glass styling with no hard borders', () => {
+    it('uses dropdown-panel class for solid themed dropdown container', () => {
+      // CSS-SYSTEM: context menus use dropdown-panel (solid neutral bg), NOT panel-glass (glassmorphism).
+      // If this test fails after a styling change, update the component — not the test class expectation.
+      // See .claude/code-uiux.md for the full CSS class decision guide.
       render(<AgentContextMenu {...defaultProps} />)
       const menu = screen.getByTestId('context-menu')
-      expect(menu.className).toMatch(/panel-glass/)
+      expect(menu.className).toMatch(/dropdown-panel/)
       expect(menu.className).not.toMatch(/border-solid/)
     })
   })

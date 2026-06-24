@@ -194,6 +194,7 @@ export interface AgentHubBridge {
     sprintConfirm: (pendingId: string) => Promise<IpcResponse<void>>
     sprintReject: (pendingId: string) => Promise<IpcResponse<void>>
     sprintConfirmDraft: (projectId: string) => Promise<IpcResponse<void>>
+    getDrafts: () => Promise<IpcResponse<{ projectId: string; draftFilename: string }[]>>
   }
   projects: {
     list: () => Promise<IpcResponse<import('./project.types').Project[]>>

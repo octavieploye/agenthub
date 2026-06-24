@@ -48,7 +48,7 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode }
   return (
     <div
       data-testid="unified-view"
-      className="flex-1 min-h-0"
+      className={`flex-1 min-h-0${reducedMotion ? '' : ' animate-zoom'}`}
     >
       <div
         className={`flex-1 h-full transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}

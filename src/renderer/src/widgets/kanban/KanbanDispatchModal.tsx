@@ -107,6 +107,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         cwd,
         color: '#6B7280',
         projectId: task.projectId ?? undefined,
+        taskDescription: prompt.trim(),
       })
       if (result.success && result.data) {
         targetAgentId = result.data.id
@@ -323,19 +324,26 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
               </div>
               {wouldExceed && (
                 <div className="text-xs text-warning bg-warning/10 rounded-lg p-2">
-                  Adding {selectedRoles.size + spawnCount} agent(s) + current agents exceeds 3 active agents (CLAUDE.md rule).
+                  {activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 3 active agents (CLAUDE.md guideline). You can still dispatch.
                 </div>
               )}
             </div>
           )}
         </div>
 
+        {/* Capacity warning — shown outside team section so it's always visible */}
+        {wouldExceed && !teamOpen && (
+          <div className="text-xs text-warning bg-warning/10 rounded-lg p-2">
+            {activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 3 active agents (CLAUDE.md guideline). You can still dispatch.
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn btn-sm btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn btn-sm btn-primary"
-            disabled={!prompt.trim() || isDispatching || wouldExceed}
+            disabled={!prompt.trim() || isDispatching}
             onClick={handleDispatch}
           >{isDispatching ? 'Dispatching…' : 'Dispatch'}</button>
         </div>

@@ -179,7 +179,8 @@ export const IPC_CHANNELS = {
     SPRINT_INTAKE: 'kanban:sprint-intake',
     SPRINT_CONFIRM: 'kanban:sprint-confirm',
     SPRINT_REJECT: 'kanban:sprint-reject',
-    SPRINT_CONFIRM_DRAFT: 'kanban:sprint-confirm-draft'
+    SPRINT_CONFIRM_DRAFT: 'kanban:sprint-confirm-draft',
+    GET_DRAFTS: 'kanban:get-drafts'
   },
   LOG: {
     RENDERER_ERROR: 'log:renderer-error'

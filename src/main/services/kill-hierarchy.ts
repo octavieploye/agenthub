@@ -42,9 +42,10 @@ export async function executeKillHierarchy(
 
   // Step 4: SIGKILL + tree kill — last resort
   callbacks.onWarning(agentId, 'Sending SIGKILL + tree kill — work may be lost')
+  callbacks.sendSignal(pid, 'SIGKILL')
+  // Also attempt tree kill to clean up child processes
   await killProcessTree(pid, 'SIGKILL').catch(() => {
-    // Fallback to direct signal if tree kill fails
-    callbacks.sendSignal(pid, 'SIGKILL')
+    // Ignore — direct SIGKILL already sent above
   })
   callbacks.updateStatus(agentId, 'interrupted', 'confirmed')
 }

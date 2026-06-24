@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
 import { z } from 'zod/v4'
-import type Database from 'better-sqlite3'
+import { readdirSync, existsSync } from 'fs'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { updateTaskPosition, insertTask } from '../db/queries/tasks.queries'
-import type { WindowManager } from '../services/window-manager'
-import type { SprintWatcher } from '../services/sprint-watcher'
+import { getWindowManager, getSprintWatcher, getIntakeDir } from '../services/service-orchestrator'
+import { getDb } from '../db/connection'
 import { validateInput, success, error } from './ipc-helpers'
 import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
 
@@ -25,14 +25,11 @@ const updatePositionSchema = z.object({
   position: z.number().int().min(0)
 })
 
-export function registerKanbanHandlers(
-  db: Database.Database,
-  windowManager: WindowManager,
-  sprintWatcher: SprintWatcher,
-  intakeDir: string
-): void {
+export function registerKanbanHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.KANBAN.OPEN, (_event, agentId?: string) => {
-    windowManager.createKanbanWindow(agentId)
+    const wm = getWindowManager()
+    if (!wm) return error('KANBAN_ERROR', 'WindowManager not initialized')
+    wm.createKanbanWindow(agentId)
     return { success: true }
   })
 
@@ -40,7 +37,7 @@ export function registerKanbanHandlers(
     try {
       const parsed = validateInput(updatePositionSchema, { taskId, position })
       if (!parsed.valid) return parsed.response
-      updateTaskPosition(db, parsed.data.taskId, parsed.data.position)
+      updateTaskPosition(getDb(), parsed.data.taskId, parsed.data.position)
       return success(undefined)
     } catch (err) {
       return error('KANBAN_ERROR', String(err))
@@ -49,6 +46,7 @@ export function registerKanbanHandlers(
 
   ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_INTAKE, (_event, stories: unknown) => {
     try {
+      const db = getDb()
       const parsed = validateInput(sprintIntakeSchema, stories)
       if (!parsed.valid) return parsed.response
       const created = parsed.data.map((s) =>
@@ -75,7 +73,9 @@ export function registerKanbanHandlers(
       return { success: false, error: { message: 'Invalid pendingId format' } }
     }
     try {
-      sprintWatcher.confirm(db, pendingId, emitToAllRenderers)
+      const sw = getSprintWatcher()
+      if (!sw) return { success: false, error: { message: 'SprintWatcher not initialized' } }
+      sw.confirm(getDb(), pendingId, emitToAllRenderers)
       return { success: true }
     } catch (err) {
       return { success: false, error: { message: String(err) } }
@@ -87,7 +87,9 @@ export function registerKanbanHandlers(
       return { success: false, error: { message: 'Invalid pendingId format' } }
     }
     try {
-      sprintWatcher.reject(pendingId)
+      const sw = getSprintWatcher()
+      if (!sw) return { success: false, error: { message: 'SprintWatcher not initialized' } }
+      sw.reject(pendingId)
       return { success: true }
     } catch (err) {
       return { success: false, error: { message: String(err) } }
@@ -100,10 +102,29 @@ export function registerKanbanHandlers(
       return { success: false, error: { message: 'Invalid projectId format' } }
     }
     try {
-      sprintWatcher.confirmDraft(projectId, intakeDir)
+      const sw = getSprintWatcher()
+      if (!sw) return { success: false, error: { message: 'SprintWatcher not initialized' } }
+      sw.confirmDraft(projectId, getIntakeDir())
       return { success: true }
     } catch (err) {
       return { success: false, error: { message: String(err) } }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN.GET_DRAFTS, () => {
+    const dir = getIntakeDir()
+    if (!existsSync(dir)) return { success: true, data: [] }
+    try {
+      const files = readdirSync(dir)
+      const drafts = files
+        .filter((f) => f.match(/^sprint-.+\.draft\.json$/))
+        .map((f) => ({
+          projectId: f.replace(/^sprint-/, '').replace(/\.draft\.json$/, ''),
+          draftFilename: f
+        }))
+      return { success: true, data: drafts }
+    } catch (err) {
+      return error('GET_DRAFTS_ERROR', String(err))
     }
   })
 

@@ -176,9 +176,14 @@ export default function HistoryTab({ agent }: HistoryTabProps): React.JSX.Elemen
   const [copyFeedback, setCopyFeedback] = useState(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const resetFetchFlag = useHistoryStore((s) => s.resetFetchFlag)
+
   useEffect(() => {
     fetchHistoryOnce(agent.id)
-  }, [agent.id, fetchHistoryOnce])
+    return () => {
+      resetFetchFlag(agent.id)
+    }
+  }, [agent.id, fetchHistoryOnce, resetFetchFlag])
 
   const handleSearch = useCallback(
     (query: string) => {

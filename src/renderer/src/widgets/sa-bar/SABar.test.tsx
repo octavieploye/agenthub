@@ -84,10 +84,10 @@ describe('SABar', () => {
   })
 
   describe('view mode toggle', () => {
-    it('renders view mode toggle with two buttons', () => {
+    it('renders view mode toggle buttons', () => {
       render(<SABar agents={mockAgents} />)
       expect(screen.getByTestId('view-mode-raid')).toBeInTheDocument()
-      expect(screen.queryByTestId('view-mode-channel')).not.toBeInTheDocument()
+      expect(screen.getByTestId('view-mode-channel')).toBeInTheDocument()
       expect(screen.getByTestId('view-mode-terminal')).toBeInTheDocument()
     })
 

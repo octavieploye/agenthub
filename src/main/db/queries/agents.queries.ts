@@ -22,7 +22,7 @@ function mapRow(row: Record<string, unknown>): AgentState {
     updatedAt: row.updated_at as string,
     color: (row.color as string) ?? '#3B82F6',
     executionMode: (row.execution_mode as ExecutionMode) ?? 'native',
-    voiceMode: (row.voice_mode as VoiceMode) ?? 'off'
+    voiceMode: (row.voice_mode as VoiceMode) ?? 'always_on'
   }
 }
 
@@ -99,7 +99,7 @@ export function insertAgent(
   const now = new Date().toISOString()
   const color = agent.color ?? '#3B82F6'
   const effortLevel = agent.effortLevel ?? 'medium'
-  const voiceMode = agent.voiceMode ?? 'off'
+  const voiceMode = agent.voiceMode ?? 'always_on'
 
   db.prepare(
     `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at)

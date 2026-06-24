@@ -21,7 +21,7 @@ export function getAllRepos(db: Database.Database): RepoConfig[] {
 }
 
 export function getRepoById(db: Database.Database, id: string): RepoConfig | null {
-  const row = db.prepare('SELECT * FROM repos WHERE id = ?').get(id) as
+  const row = db.prepare('SELECT * FROM repos WHERE id = ? AND hidden = 0').get(id) as
     | Record<string, unknown>
     | undefined
   return row ? mapRow(row) : null

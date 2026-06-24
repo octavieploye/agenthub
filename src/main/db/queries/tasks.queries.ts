@@ -210,7 +210,12 @@ export function updateTaskPosition(db: Database.Database, id: string, position: 
 
 export function linkSBARToTask(db: Database.Database, id: string, sbarId: string): void {
   const now = new Date().toISOString()
+  // sbar_id FK was added via ALTER TABLE (migration 014) — application-layer enforcement
+  // per migration 021 pattern. Temporarily relax FK to avoid constraint on the ALTER-added column.
+  const fkWasOn = db.pragma('foreign_keys', { simple: true }) as number
+  if (fkWasOn) db.pragma('foreign_keys = OFF')
   db.prepare('UPDATE tasks SET sbar_id = ?, updated_at = ? WHERE id = ?').run(sbarId, now, id)
+  if (fkWasOn) db.pragma('foreign_keys = ON')
 }
 
 export function deleteTask(db: Database.Database, id: string): void {

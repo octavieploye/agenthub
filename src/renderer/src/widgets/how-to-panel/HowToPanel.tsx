@@ -15,7 +15,7 @@ interface HowToPanelProps {
 export default function HowToPanel({ isOpen, onClose }: HowToPanelProps): React.JSX.Element | null {
   const [docs, setDocs] = useState<HowToDoc[]>([])
   const [search, setSearch] = useState('')
-  const [openSections, setOpenSections] = useState<Set<number>>(new Set([0]))
+  const [openSections, setOpenSections] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -25,7 +25,8 @@ export default function HowToPanel({ isOpen, onClose }: HowToPanelProps): React.
     window.agentHub.system.listHowTo().then((res) => {
       if (res.success && res.data) {
         setDocs(res.data)
-        setOpenSections(new Set([0]))
+        // Auto-open the first section by default
+        setOpenSections(res.data.length > 0 ? new Set([0]) : new Set())
       }
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -110,34 +111,43 @@ export default function HowToPanel({ isOpen, onClose }: HowToPanelProps): React.
             <div
               key={i}
               data-section
-              className={`border-b border-base-content/10 transition-opacity ${!visible ? 'opacity-40' : ''}`}
+              className={`collapse rounded-none border-b border-base-content/10 transition-opacity ${!visible ? 'opacity-40' : ''} ${isExpanded ? 'collapse-open' : 'collapse-close'}`}
             >
-              <button
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-left hover:bg-base-content/5 transition-colors"
+              <div
+                role="button"
+                className="collapse-title min-h-0 px-4 py-3.5 flex items-center gap-2.5 cursor-pointer hover:bg-base-content/5 transition-colors select-none"
                 onClick={() => toggleSection(i)}
                 aria-expanded={isExpanded}
               >
-                <span className="text-base-content/40 text-[10px] leading-none">{isExpanded ? '▾' : '▸'}</span>
-                {doc.title}
-              </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`w-4 h-4 flex-shrink-0 text-base-content/40 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-[13px] font-semibold">{doc.title}</span>
+              </div>
 
               {isExpanded && (
                 <div
-                  className="px-4 pb-4 text-sm text-base-content/80 leading-relaxed
-                    [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mb-2 [&_h1]:mt-1
-                    [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1
-                    [&_h3]:text-xs [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
-                    [&_p]:mb-2
-                    [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2
-                    [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-2
-                    [&_li]:mb-0.5
-                    [&_code]:bg-base-300 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
-                    [&_pre]:bg-base-300 [&_pre]:rounded [&_pre]:p-2 [&_pre]:mb-2 [&_pre]:text-xs [&_pre]:overflow-x-auto
-                    [&_table]:text-xs [&_table]:w-full [&_table]:mb-2
-                    [&_th]:text-left [&_th]:pb-1 [&_th]:font-semibold [&_th]:border-b [&_th]:border-base-content/10
-                    [&_td]:pr-3 [&_td]:py-0.5 [&_td]:align-top
-                    [&_hr]:border-base-content/10 [&_hr]:my-3
-                    [&_strong]:font-semibold"
+                  className="collapse-content !pb-4 text-[13px] text-base-content/75 leading-[1.7]
+                    [&_h2]:text-[10px] [&_h2]:font-bold [&_h2]:uppercase [&_h2]:tracking-widest [&_h2]:text-base-content/40 [&_h2]:mt-4 [&_h2]:mb-2
+                    [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_h3]:text-base-content/60
+                    [&_p]:mb-3
+                    [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-3 [&_ul]:space-y-1
+                    [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-3 [&_ol]:space-y-1
+                    [&_li]:leading-[1.6]
+                    [&_code]:bg-base-300 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono
+                    [&_pre]:bg-base-300 [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:mb-3 [&_pre]:text-xs [&_pre]:overflow-x-auto [&_pre]:leading-relaxed
+                    [&_table]:text-xs [&_table]:w-full [&_table]:mb-3 [&_table]:border-collapse
+                    [&_th]:text-left [&_th]:pb-1.5 [&_th]:font-semibold [&_th]:border-b [&_th]:border-base-content/10 [&_th]:text-base-content/50
+                    [&_td]:pr-4 [&_td]:py-1 [&_td]:align-top [&_td]:border-b [&_td]:border-base-content/5
+                    [&_hr]:border-base-content/10 [&_hr]:my-4
+                    [&_strong]:font-semibold [&_strong]:text-base-content/90"
                   // Content is from our own trusted filesystem — not user-supplied HTML
                   dangerouslySetInnerHTML={{ __html: marked.parse(stripLeadingH1(doc.content), { async: false }) }}
                 />

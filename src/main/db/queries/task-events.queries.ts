@@ -48,7 +48,7 @@ export function markEventSynced(db: Database.Database, id: string): void {
 
 export function getEventsByTask(db: Database.Database, taskId: string): TaskEvent[] {
   const rows = db
-    .prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC')
+    .prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC, rowid ASC')
     .all(taskId) as Record<string, unknown>[]
   return rows.map(mapEventRow)
 }

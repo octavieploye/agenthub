@@ -10,7 +10,7 @@ Click the **Kanban** icon in the sidebar. The board opens in its own window and 
 
 | Column | Meaning |
 |--------|---------|
-| **Backlog** | Not yet started — default for new tasks |
+| **Backlog** | Not yet started |
 | **Today** | What you intend to work on today |
 | **In Progress** | Actively being worked |
 | **Done** | Code complete |
@@ -21,37 +21,18 @@ Collapse a column by clicking its header. Drag cards between columns.
 
 ## Creating a Task
 
-Click **+ Add task** at the bottom of any column. Fill in:
-
-- **Title** — imperative verb, under 80 chars (e.g. `Add JWT auth`)
-- **Category** — `backend`, `frontend`, `database`, `schema`, `functionality`, or custom
-- **Priority** — High / Medium / Low (defaults to Low)
-- **Note** — private context, file paths, reminders
-
-Press **Enter** to add or **Escape** to cancel.
+Click **+ Add task** at the bottom of any column. Fill in title, category, and priority, then press **Enter**.
 
 ## Editing a Card
 
 **Hover → ✏** — inline edit for title, category, note.
 
-**Hover for ~0.65s** — detail popover slides in. Exposes all fields: Title, Description, Priority, Status, Agent, Project, Category, Note, Epic, Sprint, Target Date. Click **Save** or press **Enter**.
+**Hover for ~0.65s** — detail popover with all fields: Title, Description, Priority, Status, Agent, Project, Category, Note, Epic, Sprint, Target Date.
 
-**Click priority badge** — cycles High → Medium → Low without opening the popover.
+**Click priority badge** — cycles High → Medium → Low instantly.
 
-**Hover → ✕** — delete. Click twice to confirm. No undo.
+**Hover → ✕** — delete (click twice to confirm).
 
 ## Filtering
 
-Use the **Project** and **Agent** dropdowns in the Kanban header to show only relevant cards.
-
-## Task Title Tips
-
-- Imperative verb first: `Add`, `Fix`, `Refactor`, `Write`, `Remove`
-- Under 80 characters
-- Enough context without opening the card: `Fix login redirect after OAuth` not `Fix bug`
-
-## Descriptions
-
-- 1–3 sentences max
-- Focus on *how*: `Update JWT middleware in src/auth/guard.ts to check token expiry before forwarding`
-- If dispatching to an agent, the description lands in the prompt — write it as instructions
+Use the **Project** and **Agent** dropdowns in the Kanban header to filter cards.

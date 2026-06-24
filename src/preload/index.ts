@@ -230,7 +230,9 @@ const agentHubBridge = {
     sprintReject: (pendingId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_REJECT, pendingId),
     sprintConfirmDraft: (projectId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM_DRAFT, projectId)
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM_DRAFT, projectId),
+    getDrafts: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.KANBAN.GET_DRAFTS)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.LIST),

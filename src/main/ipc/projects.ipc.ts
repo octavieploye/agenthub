@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getAllProjects, insertProject, updateProject, deleteProject, getProjectById } from '../db/queries/projects.queries'
 import { linkRepoToProject, unlinkRepoFromProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
+import { getDb } from '../db/connection'
 import { validateInput, success, error } from './ipc-helpers'
 
 const createProjectSchema = z.object({
@@ -23,10 +24,12 @@ const updateProjectSchema = z.object({
 
 const idSchema = z.string().min(1)
 
-export function registerProjectsHandlers(db: Database.Database): void {
+export function registerProjectsHandlers(injectedDb?: Database.Database): void {
+  const resolveDb = (): Database.Database => injectedDb ?? getDb()
+
   ipcMain.handle(IPC_CHANNELS.PROJECTS.LIST, () => {
     try {
-      return success(getAllProjects(db))
+      return success(getAllProjects(resolveDb()))
     } catch (err) {
       return error('PROJECTS_ERROR', String(err))
     }
@@ -36,7 +39,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
     try {
       const parsed = validateInput(createProjectSchema, input)
       if (!parsed.valid) return parsed.response
-      return success(insertProject(db, parsed.data))
+      return success(insertProject(resolveDb(), parsed.data))
     } catch (err) {
       return error('PROJECTS_ERROR', String(err))
     }
@@ -44,6 +47,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS.UPDATE, (_event, id: unknown, input: unknown) => {
     try {
+      const db = resolveDb()
       const idParsed = validateInput(idSchema, id)
       if (!idParsed.valid) return idParsed.response
       const inputParsed = validateInput(updateProjectSchema, input)
@@ -69,6 +73,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS.DELETE, (_event, id: unknown) => {
     try {
+      const db = resolveDb()
       const parsed = validateInput(idSchema, id)
       if (!parsed.valid) return parsed.response
       const project = getProjectById(db, parsed.data)
@@ -86,7 +91,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
     try {
       const parsed = validateInput(idSchema, repoId)
       if (!parsed.valid) return parsed.response
-      return success(getProjectsByRepoId(db, parsed.data))
+      return success(getProjectsByRepoId(resolveDb(), parsed.data))
     } catch (err) {
       return error('PROJECTS_ERROR', String(err))
     }
@@ -94,6 +99,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS.LINK_REPO, (_event, projectId: unknown, repoId: unknown) => {
     try {
+      const db = resolveDb()
       const pParsed = validateInput(idSchema, projectId)
       if (!pParsed.valid) return pParsed.response
       const rParsed = validateInput(idSchema, repoId)
@@ -107,6 +113,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS.UNLINK_REPO, (_event, projectId: unknown, repoId: unknown) => {
     try {
+      const db = resolveDb()
       const pParsed = validateInput(idSchema, projectId)
       if (!pParsed.valid) return pParsed.response
       const rParsed = validateInput(idSchema, repoId)

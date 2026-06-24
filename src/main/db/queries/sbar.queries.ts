@@ -81,7 +81,11 @@ export function getAllSBARs(db: Database.Database): SBARHandoff[] {
 
 export function deleteSBAR(db: Database.Database, id: string): void {
   const remove = db.transaction(() => {
-    db.prepare('UPDATE tasks SET sbar_id = NULL WHERE sbar_id = ?').run(id)
+    // sbar_id column may not exist if kanban migration (014) has not been applied
+    const cols = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]
+    if (cols.some((c) => c.name === 'sbar_id')) {
+      db.prepare('UPDATE tasks SET sbar_id = NULL WHERE sbar_id = ?').run(id)
+    }
     db.prepare('DELETE FROM sbar_handoffs WHERE id = ?').run(id)
   })
   remove()

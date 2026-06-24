@@ -5,6 +5,7 @@ import type { AgentState } from '@shared/types/agent.types'
 interface RecoveryScreenProps {
   recoveryInfo: RecoveryInfo
   onContinue: () => void
+  onResumeAgent?: (agentId: string) => void
   onViewOutput?: (agentId: string) => void
   onDropAgent?: (agentId: string) => void
 }
@@ -47,6 +48,7 @@ function SBARDetail({ handoff }: { handoff: SBARHandoff }): React.JSX.Element {
 export function RecoveryScreen({
   recoveryInfo,
   onContinue,
+  onResumeAgent,
   onViewOutput,
   onDropAgent
 }: RecoveryScreenProps): React.JSX.Element {
@@ -125,6 +127,15 @@ export function RecoveryScreen({
                       <SBARDetail handoff={agent.handoff as SBARHandoff} />
                     )}
                     <div className="flex gap-1.5 mt-2">
+                      {onResumeAgent && (
+                        <button
+                          className="btn-lcars text-xs px-3 py-1 text-success"
+                          onClick={() => onResumeAgent(agent.id)}
+                          data-testid={`resume-${agent.id}`}
+                        >
+                          Resume
+                        </button>
+                      )}
                       {onViewOutput && (
                         <button
                           className="btn-lcars text-xs px-3 py-1"

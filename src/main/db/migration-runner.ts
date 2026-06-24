@@ -19,6 +19,11 @@ export function runMigrations(db: Database.Database, migrationsDir?: string): vo
   const currentVersion = db.pragma('user_version', { simple: true }) as number
   log.info('Current DB version:', currentVersion)
 
+  // Disable FK enforcement during migrations to avoid constraint issues
+  // when creating/altering tables with cross-references.
+  // Callers (e.g. getDb) re-enable FK explicitly after migrations complete.
+  db.pragma('foreign_keys = OFF')
+
   for (const file of files) {
     const match = file.match(/^(\d+)/)
     if (!match) continue

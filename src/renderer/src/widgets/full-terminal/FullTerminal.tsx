@@ -1,16 +1,17 @@
 import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { getXtermTheme } from './theme-bridge'
+import { outputBuffer } from '@renderer/services/output-buffer'
+import { useThemeStore } from '@renderer/stores/theme-store'
 import { watchWebGlContext } from '../../crash-logger'
 import TerminalContextMenu from './TerminalContextMenu'
-import {
-  getOrCreateTerminal,
-  attachToContainer,
-  setVisible,
-  fitTerminal,
-  getTerminal,
-  getSearchAddon,
-  getSerializeAddon,
-} from './terminal-manager'
 
 interface FullTerminalProps {
   agentId: string
@@ -33,6 +34,12 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
 
+  // Terminal refs (stable across renders, cleaned up in effect)
+  const termRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const searchAddonRef = useRef<SearchAddon | null>(null)
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
+
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault()
     setContextMenu({ x: e.clientX, y: e.clientY })
@@ -40,7 +47,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
 
   visibleRef.current = visible
 
-  // Stable refs
+  // Stable refs for callbacks
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
   const onTitleChangeRef = useRef(onTitleChange)
@@ -50,46 +57,102 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
 
   // Search handlers
   const handleSearchNext = useCallback(() => {
-    const addon = getSearchAddon(agentId)
-    if (addon && searchQuery) addon.findNext(searchQuery)
-  }, [searchQuery, agentId])
+    if (searchAddonRef.current && searchQuery) searchAddonRef.current.findNext(searchQuery)
+  }, [searchQuery])
 
   const handleSearchPrev = useCallback(() => {
-    const addon = getSearchAddon(agentId)
-    if (addon && searchQuery) addon.findPrevious(searchQuery)
-  }, [searchQuery, agentId])
+    if (searchAddonRef.current && searchQuery) searchAddonRef.current.findPrevious(searchQuery)
+  }, [searchQuery])
 
   const handleSearchClose = useCallback(() => {
     setSearchOpen(false)
     setSearchQuery('')
-    getSearchAddon(agentId)?.clearDecorations()
-    getTerminal(agentId)?.focus()
-  }, [agentId])
+    searchAddonRef.current?.clearDecorations()
+    termRef.current?.focus()
+  }, [])
 
   // Live search as user types
   useEffect(() => {
     if (searchOpen && searchQuery) {
-      getSearchAddon(agentId)?.findNext(searchQuery)
+      searchAddonRef.current?.findNext(searchQuery)
     }
-  }, [searchQuery, searchOpen, agentId])
+  }, [searchQuery, searchOpen])
 
-  // Attach terminal to container on mount
+  // Theme subscription
+  const theme = useThemeStore((s) => s.theme)
+
+  // Theme sync effect
+  useEffect(() => {
+    if (!termRef.current) return
+    const xtermTheme = getXtermTheme()
+    termRef.current.options.theme = xtermTheme
+  }, [theme])
+
+  // Main terminal lifecycle: create, attach, wire, dispose
   useEffect(() => {
     if (!containerRef.current) return
 
-    const managed = getOrCreateTerminal(agentId, agentColor)
+    const container = containerRef.current
 
-    // Attach to DOM
-    attachToContainer(agentId, containerRef.current)
-    watchWebGlContext(containerRef.current, agentId)
+    // Create terminal with theme
+    const xtermTheme = getXtermTheme()
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: "'SF Mono', Menlo, monospace",
+      lineHeight: 1.19,
+      letterSpacing: 0,
+      theme: xtermTheme,
+      scrollback: 5000,
+      allowProposedApi: true,
+    })
+
+    termRef.current = term
+
+    // Open terminal in DOM
+    term.open(container)
+    watchWebGlContext(container, agentId)
+
+    // Load addons after open
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    fitAddonRef.current = fitAddon
+
+    const searchAddon = new SearchAddon()
+    term.loadAddon(searchAddon)
+    searchAddonRef.current = searchAddon
+
+    const webLinksAddon = new WebLinksAddon()
+    term.loadAddon(webLinksAddon)
+
+    const unicode11Addon = new Unicode11Addon()
+    term.loadAddon(unicode11Addon)
+    term.unicode.activeVersion = '11'
+
+    const serializeAddon = new SerializeAddon()
+    term.loadAddon(serializeAddon)
+    serializeAddonRef.current = serializeAddon
+
+    // Try WebGL
+    let webglAddon: WebglAddon | null = null
+    try {
+      webglAddon = new WebglAddon()
+      term.loadAddon(webglAddon)
+      webglAddon.onContextLoss(() => {
+        webglAddon?.dispose()
+        webglAddon = null
+      })
+    } catch {
+      webglAddon = null
+    }
 
     // Wire keyboard shortcuts (clipboard, search)
-    managed.term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
       const isMeta = e.metaKey || e.ctrlKey
 
-      if (isMeta && e.key === 'c' && managed.term.hasSelection()) {
-        window.agentHub.clipboard.writeText(managed.term.getSelection())
+      if (isMeta && e.key === 'c' && term.hasSelection()) {
+        window.agentHub.clipboard.writeText(term.getSelection())
         return false
       }
 
@@ -99,7 +162,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
         return false
       }
 
-      // Agent navigation shortcuts — let these bubble to App.tsx instead of going to PTY
+      // Agent navigation shortcuts - let these bubble to App.tsx
       const isAlt = e.altKey && !e.metaKey && !e.ctrlKey
       if ((isMeta || isAlt) && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         return false
@@ -108,23 +171,46 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
       if (e.key === 'Escape') {
         setSearchOpen(false)
         setSearchQuery('')
-        getSearchAddon(agentId)?.clearDecorations()
-        managed.term.focus()
+        searchAddon.clearDecorations()
+        term.focus()
         return false
       }
       return true
     })
 
+    // Wire keyboard input to IPC
+    const onDataDisposable = term.onData((data: string) => {
+      window.agentHub.agents.sendInput(agentId, data)
+    })
+
     // Title change
-    const titleDisposable = managed.term.onTitleChange((title: string) => {
+    const titleDisposable = term.onTitleChange((title: string) => {
       onTitleChangeRef.current?.(agentId, title)
     })
 
     // Expose serialize
-    const serializeAddon = getSerializeAddon(agentId)
-    if (serializeAddon) {
-      onSerializeRef.current?.(agentId, () => serializeAddon.serialize())
+    onSerializeRef.current?.(agentId, () => serializeAddon.serialize())
+
+    // Passthrough callback for outputBuffer
+    const passthroughCallback = (data: string): void => {
+      term.write(data)
     }
+
+    // Initial fit + drain buffered output (deferred to rAF + fonts.ready)
+    requestAnimationFrame(() => {
+      document.fonts.ready.then(() => {
+        fitAddon.fit()
+        window.agentHub.agents.resize(agentId, term.cols, term.rows)
+
+        // Drain buffered output
+        const buffered = outputBuffer.drain(agentId, passthroughCallback)
+        if (buffered) {
+          term.write(buffered, () => {
+            // write callback — content flushed
+          })
+        }
+      })
+    })
 
     // ResizeObserver
     let resizeTimer: ReturnType<typeof setTimeout> | null = null
@@ -132,10 +218,11 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
         if (!visibleRef.current) return
-        fitTerminal(agentId)
+        fitAddon.fit()
+        window.agentHub.agents.resize(agentId, term.cols, term.rows)
       }, 150)
     })
-    observer.observe(containerRef.current)
+    observer.observe(container)
 
     onReadyRef.current?.()
 
@@ -143,21 +230,34 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
       if (resizeTimer) clearTimeout(resizeTimer)
       observer.disconnect()
       titleDisposable.dispose()
-      // NOTE: we do NOT destroy the terminal here — it persists in terminal-manager
+      onDataDisposable.dispose()
+      outputBuffer.stopPassthrough(agentId, passthroughCallback)
+      if (webglAddon) {
+        try { webglAddon.dispose() } catch { /* ok */ }
+      }
+      term.dispose()
+      termRef.current = null
+      fitAddonRef.current = null
+      searchAddonRef.current = null
+      serializeAddonRef.current = null
     }
   }, [agentId])
 
-  // Theme sync — DISABLED for debugging
-  // useEffect(() => {
-  //   updateTheme()
-  // }, [theme])
-
-  // Visibility
+  // Visibility: re-fit and focus when becoming visible
   useEffect(() => {
-    setVisible(agentId, visible)
+    if (!visible || !termRef.current || !fitAddonRef.current) return
+
+    requestAnimationFrame(() => {
+      document.fonts.ready.then(() => {
+        if (!fitAddonRef.current || !termRef.current) return
+        fitAddonRef.current.fit()
+        termRef.current.focus()
+        window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
+      })
+    })
   }, [visible, agentId])
 
-  const term = getTerminal(agentId)
+  const term = termRef.current
 
   return (
     <div

@@ -13,9 +13,10 @@ export function getDb(dbPath?: string): Database.Database {
 
   db = new Database(resolvedPath)
   db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
 
   runMigrations(db)
+
+  db.pragma('foreign_keys = ON')
 
   log.info('Database initialized successfully')
   return db

@@ -10,3 +10,4 @@ Update the file (or create a new one) when you add or refactor the feature.
 - [Skills](../docs/how-to/04-skills.md) — prompt templates, running skills from the dropdown
 - [Agents](../docs/how-to/05-agents.md) — spawn, dispatch, breakout terminals, Code Blue, concurrency
 - [Workspace Memory](../docs/how-to/06-workspace-memory.md) — context doc, pinned learnings, SBAR auto-injection, project path setup
+- [AI Team Expert](../docs/how-to/07-ai-team-expert.md) — audit, optimize, and sync AI configs across projects
