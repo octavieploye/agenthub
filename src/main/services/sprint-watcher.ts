@@ -16,6 +16,7 @@ interface PendingEntry {
   filePath: string
   projectId: string
   payload: SprintIntakePayload
+  stagedAt: number
 }
 
 export class SprintWatcher {
@@ -57,9 +58,23 @@ export class SprintWatcher {
       emitFn(IPC_EVENTS.KANBAN.DRAFT_READY, payload)
       log.info('SprintWatcher: draft found on startup', { filename, projectId })
     }
+    // Also stage any .json files left over from a previous session (crash recovery)
+    for (const f of files) {
+      if (f.match(/^sprint-.+\.json$/) && !f.endsWith('.draft.json')) {
+        const filePath = join(intakeDir, f)
+        if (existsSync(filePath)) {
+          this.parseAndStage(f, intakeDir, emitFn)
+        }
+      }
+    }
   }
 
   confirmDraft(projectId: string, intakeDir: string): void {
+    const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/
+    if (!SAFE_ID_RE.test(projectId)) {
+      log.warn('SprintWatcher.confirmDraft: invalid projectId rejected', { projectId })
+      return
+    }
     const draftPath = join(intakeDir, `sprint-${projectId}.draft.json`)
     const finalPath = join(intakeDir, `sprint-${projectId}.json`)
     renameSync(draftPath, finalPath)
@@ -69,6 +84,8 @@ export class SprintWatcher {
 
   parseAndStage(filename: string, intakeDir: string, emitFn: EmitFn): PendingEntry | null {
     if (filename.endsWith('.draft.json')) return null
+
+    this.evictStalePending()
 
     const projectId = filename.replace(/^sprint-/, '').replace(/\.json$/, '')
     const filePath = join(intakeDir, filename)
@@ -90,7 +107,7 @@ export class SprintWatcher {
     }
 
     const pendingId = randomUUID()
-    const entry: PendingEntry = { pendingId, filePath, projectId, payload }
+    const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now() }
     this.pending.set(pendingId, entry)
 
     const taskCount = payload.epics.reduce((n, e) => n + e.tasks.length, 0)
@@ -110,6 +127,17 @@ export class SprintWatcher {
     emitFn(IPC_EVENTS.KANBAN.SPRINT_PENDING, summary)
     log.info('SprintWatcher: sprint staged', { pendingId, sprintName: payload.sprintName, taskCount })
     return entry
+  }
+
+  private evictStalePending(): void {
+    const TTL_MS = 30 * 60 * 1000 // 30 minutes
+    const now = Date.now()
+    for (const [id, entry] of this.pending) {
+      if (now - entry.stagedAt > TTL_MS) {
+        log.info('SprintWatcher: evicting stale pending entry', { id })
+        this.pending.delete(id)
+      }
+    }
   }
 
   confirm(db: Database.Database, pendingId: string, emitFn: EmitFn): void {

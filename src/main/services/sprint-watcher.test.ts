@@ -55,6 +55,30 @@ describe('SprintWatcher.startupScan', () => {
     watcher.startupScan(intakeDir, mockEmit)
     expect(emitted).toHaveLength(0)
   })
+
+  it('stages an existing .json file on startup (crash recovery)', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint CR',
+      repoId: 'r1',
+      epics: [
+        {
+          name: 'Epic A',
+          tasks: [
+            { localId: 'cr1', title: 'Crash task', description: 'leftover from crash', priority: 1 }
+          ]
+        }
+      ]
+    }
+    writeFileSync(join(intakeDir, 'sprint-proj-cr.json'), JSON.stringify(payload), 'utf-8')
+
+    watcher.startupScan(intakeDir, mockEmit)
+
+    const pendingEmits = emitted.filter((e) => e.channel === 'on-kanban:sprint-pending')
+    expect(pendingEmits).toHaveLength(1)
+    const p = pendingEmits[0].payload as SprintPendingPayload
+    expect(p.sprintName).toBe('Sprint CR')
+    expect(p.taskCount).toBe(1)
+  })
 })
 
 describe('SprintWatcher.parseAndStage', () => {
@@ -94,6 +118,50 @@ describe('SprintWatcher.parseAndStage', () => {
     expect(result).toBeNull()
     expect(emitted).toHaveLength(0)
   })
+
+  it('evicts stale pending entries (>30min old) on next parseAndStage call', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Stale',
+      repoId: 'r1',
+      epics: [
+        {
+          name: 'Epic S',
+          tasks: [{ localId: 's1', title: 'Stale task', description: '', priority: 1 }]
+        }
+      ]
+    }
+    // Stage a first entry
+    const filename1 = 'sprint-stale.json'
+    writeFileSync(join(intakeDir, filename1), JSON.stringify(payload), 'utf-8')
+    const entry1 = watcher.parseAndStage(filename1, intakeDir, mockEmit)
+    expect(entry1).not.toBeNull()
+    const staleId = entry1!.pendingId
+
+    // Backdate the stagedAt by 31 minutes using direct map manipulation via cast
+    const pendingMap = (watcher as unknown as { pending: Map<string, { stagedAt: number }> }).pending
+    const staleEntry = pendingMap.get(staleId)!
+    staleEntry.stagedAt = Date.now() - 31 * 60 * 1000
+
+    // Stage a second entry — this triggers eviction of the first
+    const payload2: SprintIntakePayload = {
+      sprintName: 'Sprint Fresh',
+      repoId: 'r1',
+      epics: [
+        {
+          name: 'Epic F',
+          tasks: [{ localId: 'f1', title: 'Fresh task', description: '', priority: 2 }]
+        }
+      ]
+    }
+    const filename2 = 'sprint-fresh.json'
+    writeFileSync(join(intakeDir, filename2), JSON.stringify(payload2), 'utf-8')
+    watcher.parseAndStage(filename2, intakeDir, mockEmit)
+
+    // The stale entry must no longer be in pending
+    expect(pendingMap.has(staleId)).toBe(false)
+    // The fresh entry is still there
+    expect(pendingMap.size).toBe(1)
+  })
 })
 
 describe('SprintWatcher.confirmDraft', () => {
@@ -107,6 +175,18 @@ describe('SprintWatcher.confirmDraft', () => {
 
     expect(existsSync(draftPath)).toBe(false)
     expect(existsSync(finalPath)).toBe(true)
+  })
+
+  it('rejects a path-traversal projectId and does not rename any file', () => {
+    const evilProjectId = '../evil'
+    // Create a file that would be targeted if the guard did not fire
+    const draftPath = join(intakeDir, `sprint-${evilProjectId}.draft.json`)
+    // We deliberately do NOT create the file — the guard must return before renameSync is reached
+    // Calling confirmDraft should return silently without throwing
+    expect(() => watcher.confirmDraft(evilProjectId, intakeDir)).not.toThrow()
+    // The intake dir should still be empty — no file was created or renamed
+    const { readdirSync: rd } = require('fs')
+    expect(rd(intakeDir)).toHaveLength(0)
   })
 })
 

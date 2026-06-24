@@ -92,6 +92,10 @@ export function registerKanbanHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM_DRAFT, (_event, projectId: string) => {
+    const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/
+    if (!SAFE_ID_RE.test(projectId)) {
+      return { success: false, error: { message: 'Invalid projectId format' } }
+    }
     try {
       sprintWatcher.confirmDraft(projectId, intakeDir)
       return { success: true }
