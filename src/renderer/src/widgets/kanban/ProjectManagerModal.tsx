@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useProjectStore } from '../../stores/project-store'
 import type { Project } from '@shared/types/project.types'
 import type { RepoConfig } from '@shared/types/config.types'
+import { ProjectMemoryPanel } from './ProjectMemoryPanel'
 
 interface ProjectManagerModalProps {
   isOpen: boolean
@@ -61,6 +62,7 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
   const [createDescription, setCreateDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [memoryOpenId, setMemoryOpenId] = useState<string | null>(null)
 
   const refreshLinkedMap = useCallback(
     async (currentRepos: RepoConfig[], currentProjects: Project[]) => {
@@ -230,6 +232,10 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
                 onSaveEdit={() => handleUpdate(project.id)}
                 onDelete={() => handleDelete(project.id)}
                 onRepoToggle={(repoId, linked) => handleRepoToggle(project.id, repoId, linked)}
+                memoryOpen={memoryOpenId === project.id}
+                onToggleMemory={() =>
+                  setMemoryOpenId(memoryOpenId === project.id ? null : project.id)
+                }
               />
             ))}
           </ul>
@@ -253,6 +259,8 @@ interface ProjectRowProps {
   onSaveEdit: () => void
   onDelete: () => void
   onRepoToggle: (repoId: string, currentlyLinked: boolean) => void
+  memoryOpen: boolean
+  onToggleMemory: () => void
 }
 
 function ProjectRow({
@@ -267,7 +275,9 @@ function ProjectRow({
   onEditStateChange,
   onSaveEdit,
   onDelete,
-  onRepoToggle
+  onRepoToggle,
+  memoryOpen,
+  onToggleMemory
 }: ProjectRowProps) {
   return (
     <li className="border border-base-300 rounded-lg p-3 flex flex-col gap-2">
@@ -296,6 +306,13 @@ function ProjectRow({
               disabled={busy}
             >
               Delete
+            </button>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={onToggleMemory}
+              disabled={busy}
+            >
+              {memoryOpen ? 'Close Memory' : 'Memory'}
             </button>
           </div>
         </div>
@@ -393,6 +410,8 @@ function ProjectRow({
           </div>
         </div>
       )}
+
+      {memoryOpen && <ProjectMemoryPanel projectId={project.id} />}
     </li>
   )
 }
