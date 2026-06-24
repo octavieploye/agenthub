@@ -25,6 +25,7 @@ export class AnamnesisWriter {
   private circuitOpen = false
   private lastFailureTime = 0
   private flushing = false
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null
 
   private static readonly MAX_FAILURES = 3
   private static readonly BACKOFF_MS = 60_000
@@ -88,6 +89,10 @@ export class AnamnesisWriter {
         markEventSynced(this.db, event.id)
         this.consecutiveFailures = 0
         this.circuitOpen = false
+        if (this.recoveryTimer) {
+          clearTimeout(this.recoveryTimer)
+          this.recoveryTimer = null
+        }
         return true
       } else {
         log.warn('AnamnesisWriter: non-OK response', { status: res.status, eventId: event.id })
@@ -105,8 +110,18 @@ export class AnamnesisWriter {
     this.consecutiveFailures++
     this.lastFailureTime = Date.now()
     if (this.consecutiveFailures >= AnamnesisWriter.MAX_FAILURES) {
-      this.circuitOpen = true
-      log.warn(`AnamnesisWriter: circuit open after ${this.consecutiveFailures} failures, backing off ${AnamnesisWriter.BACKOFF_MS}ms`)
+      this.openCircuit()
     }
+  }
+
+  private openCircuit(): void {
+    if (this.circuitOpen) return
+    this.circuitOpen = true
+    log.warn(`AnamnesisWriter: circuit open after ${this.consecutiveFailures} failures, backing off ${AnamnesisWriter.BACKOFF_MS}ms`)
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null
+      log.info('AnamnesisWriter: circuit retry timer fired')
+      this.flush().catch((err) => log.error('AnamnesisWriter flush error on retry', err))
+    }, AnamnesisWriter.BACKOFF_MS)
   }
 }
