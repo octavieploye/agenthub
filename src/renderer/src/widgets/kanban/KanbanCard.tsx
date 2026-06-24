@@ -18,6 +18,7 @@ interface KanbanCardProps {
   onEdit?: (input: UpdateTaskInput) => void
   onDispatch?: () => void
   onBadgeClick?: () => void
+  blockedByCount?: number
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -67,7 +68,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick }: KanbanCardProps) {
+export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0 }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -258,6 +259,14 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
 
         {/* Footer */}
         <div className="flex items-center gap-1.5">
+          {blockedByCount > 0 && (
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-warning/15 text-warning border-warning/30"
+              title={`Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}`}
+            >
+              Blocked {blockedByCount}
+            </span>
+          )}
           {repoGlowColor && (
             <span
               className="w-2 h-2 rounded-full shrink-0 border border-base-300"

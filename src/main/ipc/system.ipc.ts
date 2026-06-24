@@ -109,5 +109,16 @@ export function registerSystemHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    IPC_CHANNELS.SYSTEM.GET_INTAKE_DIR,
+    async (): Promise<IpcResponse<string>> => {
+      try {
+        return success(join(app.getPath('userData'), 'sprint-intake'))
+      } catch (err) {
+        return error('GET_INTAKE_DIR_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
   log.info('System IPC handlers registered')
 }

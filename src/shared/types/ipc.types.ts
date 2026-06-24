@@ -181,6 +181,7 @@ export interface AgentHubBridge {
     shutdown: () => Promise<IpcResponse<void>>
     minimizeToTray: () => Promise<IpcResponse<void>>
     openTerminal: (command: string) => Promise<IpcResponse<void>>
+    getIntakeDir: () => Promise<IpcResponse<string>>
   }
   log: {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void

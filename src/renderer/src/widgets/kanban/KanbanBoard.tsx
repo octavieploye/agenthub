@@ -6,7 +6,9 @@ import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { ProjectManagerModal } from './ProjectManagerModal'
 import { KanbanDispatchModal } from './KanbanDispatchModal'
-import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
+import { SprintIntakeModal } from './SprintIntakeModal'
+import { SprintPreviewModal } from './SprintPreviewModal'
+import type { TaskItem, TaskStatus, TaskCategory, TaskPriority, SprintDraftReadyPayload } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { useViewStore } from '../../stores/view-store'
@@ -33,6 +35,10 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [dispatchModalTask, setDispatchModalTask] = useState<TaskItem | null>(null)
+  const [sprintIntakeOpen, setSprintIntakeOpen] = useState(false)
+  const [intakeDir, setIntakeDir] = useState('')
+  // Map<projectId, draftFilename>
+  const [draftMap, setDraftMap] = useState<Map<string, string>>(new Map())
   const { setViewMode, setFocusedAgent } = useViewStore()
   const { setActiveAgent } = useAgentStore()
 
@@ -46,6 +52,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     fetchTasksOnce()
     fetchProjects()
     window.agentHub.db.getRepos().then((res) => { if (res.success) setRepos(res.data) }).catch((err) => console.error('Failed to fetch repos:', err))
+    window.agentHub.system.getIntakeDir().then((res) => {
+      if (res.success) setIntakeDir(res.data)
+    })
   }, [fetchTasksOnce, fetchProjects])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -61,6 +70,13 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [debouncedFetchTasks])
+
+  useEffect(() => {
+    return window.agentHub.on.draftReady((raw) => {
+      const payload = raw as SprintDraftReadyPayload
+      setDraftMap((prev) => new Map(prev).set(payload.projectId, payload.draftFilename))
+    })
+  }, [])
 
   function toggleCollapse(status: TaskStatus) {
     setCollapsed((prev) => {
@@ -134,6 +150,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 repoGlowColor={getRepoGlowColor(task.repoId)}
                 defaultProjectId={selectedProjectId ?? undefined}
                 agents={agentList}
+                blockedByCount={task.blockedBy?.length ?? 0}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
@@ -184,6 +201,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               repoGlowColor={getRepoGlowColor(task.repoId)}
               defaultProjectId={selectedProjectId ?? undefined}
               agents={agentList}
+              blockedByCount={task.blockedBy?.length ?? 0}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
@@ -217,6 +235,42 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
+        {/* Sprint ↑ button — behavior depends on whether a draft is ready for the active project */}
+        {(() => {
+          const activeDraft = selectedProjectId ? draftMap.get(selectedProjectId) : undefined
+          if (activeDraft) {
+            return (
+              <div className="flex items-center gap-1.5">
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={async () => {
+                    const res = await window.agentHub.kanban.sprintConfirmDraft(selectedProjectId!)
+                    if (res.success) {
+                      setDraftMap((prev) => {
+                        const next = new Map(prev)
+                        next.delete(selectedProjectId!)
+                        return next
+                      })
+                    }
+                  }}
+                  title="Import sprint draft into Kanban"
+                >
+                  Sprint ↑
+                </button>
+                <span className="text-[10px] text-base-content/50">· draft ready</span>
+              </div>
+            )
+          }
+          return (
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => setSprintIntakeOpen(true)}
+              title="Import sprint from doc"
+            >
+              Sprint ↑
+            </button>
+          )
+        })()}
         <button
           className="btn btn-sm btn-ghost"
           onClick={() => setProjectModalOpen(true)}
@@ -275,6 +329,12 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
           repos={repos}
         />
       )}
+      <SprintIntakeModal
+        isOpen={sprintIntakeOpen}
+        onClose={() => setSprintIntakeOpen(false)}
+        intakeDir={intakeDir}
+      />
+      <SprintPreviewModal />
     </div>
   )
 }
