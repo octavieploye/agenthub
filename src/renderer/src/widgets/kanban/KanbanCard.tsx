@@ -81,6 +81,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
   const cardRef = useRef<HTMLDivElement>(null)
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Close popover and cancel open timer when inline edit activates
   useEffect(() => {
@@ -98,6 +99,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
     return () => {
       if (openTimerRef.current) clearTimeout(openTimerRef.current)
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      if (pinTimerRef.current) clearTimeout(pinTimerRef.current)
     }
   }, [])
 
@@ -168,10 +170,12 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
     if (!defaultProjectId) return
     const content = task.note ? `${task.title}\n${task.note}` : task.title
     try {
-      const res = await window.agentHub.workspaceMemory.pin(defaultProjectId, content)
+      const res = await window.agentHub?.workspaceMemory?.pin(defaultProjectId, content)
+      if (!res) return
       if (res.success) {
         setPinned(true)
-        setTimeout(() => setPinned(false), 2000)
+        if (pinTimerRef.current) clearTimeout(pinTimerRef.current)
+        pinTimerRef.current = setTimeout(() => setPinned(false), 2000)
       }
     } catch {
       // silent fail — pin is best-effort
