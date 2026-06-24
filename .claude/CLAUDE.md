@@ -7,6 +7,7 @@
 @/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/.claude/entities/hephaestus.md
 # [/OPTIMAEUS-UNIVERSAL-IMPORT]
 @.claude/how-to-index.md
+@.claude/skills/index.md
 
 ---
 
@@ -91,6 +92,9 @@ When code in a section exceeds 1000 lines, create these folders:
 - **Test files should clean up after themselves.** Create temp dirs, sockets, or files in `beforeEach` and remove them in `afterEach`. Never leave artifacts on disk.
 
 ## Coding Workflow
+
+- **Before any long task, invoke `pre-task-skill-check`** — check if a relevant skill exists, create one if not.
+- **After any long task**, if errors or misses occurred, update the relevant skill's Pitfalls section and Changelog.
 
 1. **Write a failing test first.**
 2. **Build the implementation.**
