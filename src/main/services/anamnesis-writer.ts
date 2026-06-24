@@ -21,6 +21,14 @@ export class AnamnesisWriter {
   private anamnesisUrl: string
   private fetch: typeof globalThis.fetch
   private authSecret: string
+  private consecutiveFailures = 0
+  private circuitOpen = false
+  private lastFailureTime = 0
+  private flushing = false
+
+  private static readonly MAX_FAILURES = 3
+  private static readonly BACKOFF_MS = 60_000
+  private static readonly FETCH_TIMEOUT_MS = 5_000
 
   constructor(db: Database.Database, deps: AnamnesisWriterDeps) {
     this.db = db
@@ -30,17 +38,31 @@ export class AnamnesisWriter {
   }
 
   onEventInserted(): void {
+    if (this.circuitOpen) return
     this.flush().catch((err) => log.error('AnamnesisWriter flush error', err))
   }
 
   async flush(): Promise<void> {
-    const events = getUnsyncedEvents(this.db)
-    for (const event of events) {
-      await this.sendEvent(event)
+    if (this.flushing) return
+    if (this.circuitOpen) {
+      const elapsed = Date.now() - this.lastFailureTime
+      if (elapsed < AnamnesisWriter.BACKOFF_MS) return
+      log.info('AnamnesisWriter: circuit half-open, retrying')
+    }
+
+    this.flushing = true
+    try {
+      const events = getUnsyncedEvents(this.db)
+      for (const event of events) {
+        const ok = await this.sendEvent(event)
+        if (!ok && this.circuitOpen) return
+      }
+    } finally {
+      this.flushing = false
     }
   }
 
-  private async sendEvent(event: TaskEvent): Promise<void> {
+  private async sendEvent(event: TaskEvent): Promise<boolean> {
     const path = ENDPOINT_MAP[event.eventType]
     const url = `${this.anamnesisUrl}${path}`
     const payload = JSON.parse(event.payloadJson)
@@ -58,16 +80,33 @@ export class AnamnesisWriter {
           eventId: event.id,
           eventType: event.eventType,
           createdAt: event.createdAt
-        })
+        }),
+        signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
       })
 
       if (res.ok) {
         markEventSynced(this.db, event.id)
+        this.consecutiveFailures = 0
+        this.circuitOpen = false
+        return true
       } else {
         log.warn('AnamnesisWriter: non-OK response', { status: res.status, eventId: event.id })
+        this.recordFailure()
+        return false
       }
     } catch (err) {
       log.warn('AnamnesisWriter: Anamnesis unreachable, event queued', { eventId: event.id })
+      this.recordFailure()
+      return false
+    }
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures++
+    this.lastFailureTime = Date.now()
+    if (this.consecutiveFailures >= AnamnesisWriter.MAX_FAILURES) {
+      this.circuitOpen = true
+      log.warn(`AnamnesisWriter: circuit open after ${this.consecutiveFailures} failures, backing off ${AnamnesisWriter.BACKOFF_MS}ms`)
     }
   }
 }
