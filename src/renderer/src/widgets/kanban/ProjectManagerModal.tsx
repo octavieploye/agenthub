@@ -11,6 +11,8 @@ interface ProjectManagerModalProps {
 interface EditState {
   name: string
   description: string
+  path: string
+  contextDoc: string
 }
 
 // projectId -> Set of linked repoIds
@@ -54,7 +56,7 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [linkedReposMap, setLinkedReposMap] = useState<LinkedReposMap>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editState, setEditState] = useState<EditState>({ name: '', description: '' })
+  const [editState, setEditState] = useState<EditState>({ name: '', description: '', path: '', contextDoc: '' })
   const [createName, setCreateName] = useState('')
   const [createDescription, setCreateDescription] = useState('')
   const [busy, setBusy] = useState(false)
@@ -90,12 +92,17 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
 
   function startEdit(project: Project) {
     setEditingId(project.id)
-    setEditState({ name: project.name, description: project.description ?? '' })
+    setEditState({
+      name: project.name,
+      description: project.description ?? '',
+      path: project.path ?? '',
+      contextDoc: project.contextDoc ?? ''
+    })
   }
 
   function cancelEdit() {
     setEditingId(null)
-    setEditState({ name: '', description: '' })
+    setEditState({ name: '', description: '', path: '', contextDoc: '' })
   }
 
   async function handleCreate() {
@@ -121,7 +128,9 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
     setError(null)
     const ok = await updateProject(projectId, {
       name: editState.name.trim(),
-      description: editState.description.trim() || null
+      description: editState.description.trim() || null,
+      path: editState.path.trim() || null,
+      contextDoc: editState.contextDoc.trim() || null
     })
     setBusy(false)
     if (!ok) {
@@ -271,6 +280,11 @@ function ProjectRow({
                 {project.description}
               </span>
             )}
+            {project.path && (
+              <span className="text-xs text-base-content/40 font-mono truncate">
+                {project.path}
+              </span>
+            )}
           </div>
           <div className="flex gap-1 shrink-0">
             <button className="btn btn-xs btn-ghost" onClick={onStartEdit} disabled={busy}>
@@ -303,6 +317,36 @@ function ProjectRow({
             onChange={(e) => onEditStateChange({ ...editState, description: e.target.value })}
             placeholder="Description (optional)"
           />
+
+          {/* Path */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-base-content/60 uppercase tracking-wide">
+              Path <span className="font-normal normal-case">(optional — project root on disk)</span>
+            </label>
+            <input
+              type="text"
+              className="input input-sm input-bordered w-full font-mono"
+              value={editState.path}
+              onChange={(e) => onEditStateChange({ ...editState, path: e.target.value })}
+              placeholder="/Users/you/workspace/my-project"
+              disabled={busy}
+            />
+          </div>
+
+          {/* Context Doc (Layer 0) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-base-content/60 uppercase tracking-wide">
+              Context Doc <span className="font-normal normal-case">(injected into every agent spawn)</span>
+            </label>
+            <textarea
+              className="textarea textarea-bordered textarea-sm w-full resize-y font-mono text-xs"
+              rows={4}
+              value={editState.contextDoc}
+              onChange={(e) => onEditStateChange({ ...editState, contextDoc: e.target.value })}
+              placeholder="# Project Context&#10;Describe the project for AI agents..."
+              disabled={busy}
+            />
+          </div>
 
           {repos.length > 0 && (
             <div className="flex flex-col gap-1">
