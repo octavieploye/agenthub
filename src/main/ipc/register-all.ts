@@ -26,6 +26,7 @@ import { registerFsHandlers } from './fs.ipc'
 import { registerActivityHandlers } from './activity.ipc'
 import { registerProjectInitHandlers } from './project.ipc'
 import { registerLogHandlers } from './log.ipc'
+import { registerWorkspaceMemoryHandlers } from './workspace-memory.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()

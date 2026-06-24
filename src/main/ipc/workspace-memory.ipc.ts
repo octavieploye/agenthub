@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { insertLearning, getLearningsByProject, deleteLearning } from '../db/queries/workspace-memory.queries'
 import { updateProject } from '../db/queries/projects.queries'
+import { getDb } from '../db/connection'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { WorkspaceMemoryEntry } from '../../shared/types/workspace-memory.types'
 import { success, error } from './ipc-helpers'
@@ -46,7 +47,9 @@ export function handleWorkspaceMemorySetContextDoc(db: Database.Database, projec
   }
 }
 
-export function registerWorkspaceMemoryHandlers(db: Database.Database): void {
+export function registerWorkspaceMemoryHandlers(): void {
+  const db = getDb()
+
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_MEMORY.LIST, (_event, projectId: unknown) => {
     if (typeof projectId !== 'string') return error('INVALID_INPUT', 'projectId must be a string')
     return handleWorkspaceMemoryList(db, projectId)

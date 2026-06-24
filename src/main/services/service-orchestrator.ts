@@ -26,7 +26,6 @@ import { AnamnesisWriter } from './anamnesis-writer'
 import { SprintWatcher } from './sprint-watcher'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { registerProjectsHandlers } from '../ipc/projects.ipc'
-import { registerWorkspaceMemoryHandlers } from '../ipc/workspace-memory.ipc'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -282,9 +281,6 @@ export function initializeServices(db: Database.Database): void {
 
   // 18. Projects IPC handlers
   registerProjectsHandlers(db)
-
-  // 19. WorkspaceMemory IPC handlers
-  registerWorkspaceMemoryHandlers(db)
 
   log.info('All services initialized')
 }
