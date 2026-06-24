@@ -68,6 +68,7 @@ const agents = new Map<string, ManagedAgent>()
 const approvalEntryTimes = new Map<string, number>()
 const approvalHoldTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const statusDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const ptyOwners = new Map<string, number>()
 
 const ptyProxy = new PtyProxy({
   logInfo: (message, meta) => log.info(message, meta),
@@ -590,7 +591,15 @@ export function sendInput(agentId: string, data: string): void {
   }
 }
 
-export function resizeAgent(agentId: string, cols: number, rows: number): void {
+export function setPtyOwner(agentId: string, webContentsId: number): void {
+  ptyOwners.set(agentId, webContentsId)
+}
+
+export function clearPtyOwner(agentId: string): void {
+  ptyOwners.delete(agentId)
+}
+
+export function resizeAgent(agentId: string, cols: number, rows: number, _webContentsId?: number): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
   managed.ptyProcess.resize(cols, rows)
