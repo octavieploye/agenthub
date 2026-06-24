@@ -1,4 +1,4 @@
-import { watch, existsSync, mkdirSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'fs'
+import { watch, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, readdirSync, renameSync } from 'fs'
 import type { FSWatcher } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
@@ -22,6 +22,7 @@ interface PendingEntry {
 export class SprintWatcher {
   private watcher: FSWatcher | null = null
   private pending = new Map<string, PendingEntry>()
+  private processing = new Set<string>()
 
   start(intakeDir: string, emitFn: EmitFn): void {
     if (!existsSync(intakeDir)) mkdirSync(intakeDir, { recursive: true })
@@ -85,48 +86,68 @@ export class SprintWatcher {
   parseAndStage(filename: string, intakeDir: string, emitFn: EmitFn): PendingEntry | null {
     if (filename.endsWith('.draft.json')) return null
 
-    this.evictStalePending()
-
-    const projectId = filename.replace(/^sprint-/, '').replace(/\.json$/, '')
     const filePath = join(intakeDir, filename)
-    let payload: SprintIntakePayload
+
+    // Fix A — file size guard
+    const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5 MB
     try {
-      payload = JSON.parse(readFileSync(filePath, 'utf-8')) as SprintIntakePayload
-    } catch (err) {
-      log.warn('SprintWatcher: failed to parse sprint JSON', { filePath, err })
-      return null
-    }
-    if (!payload.sprintName || !payload.repoId || !Array.isArray(payload.epics)) {
-      log.warn('SprintWatcher: invalid sprint JSON structure', { filePath })
-      return null
-    }
-    const errors = validateSprintPayload(payload)
-    if (errors.length > 0) {
-      log.warn('SprintWatcher: sprint payload failed validation', { filePath, errors })
+      const stat = statSync(filePath)
+      if (stat.size > MAX_FILE_BYTES) {
+        log.warn('SprintWatcher: intake file too large, skipping', { filePath, bytes: stat.size })
+        return null
+      }
+    } catch {
       return null
     }
 
-    const pendingId = randomUUID()
-    const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now() }
-    this.pending.set(pendingId, entry)
+    // Fix D — double-fire dedup
+    if (this.processing.has(filePath)) return null
+    this.processing.add(filePath)
+    try {
+      this.evictStalePending()
 
-    const taskCount = payload.epics.reduce((n, e) => n + e.tasks.length, 0)
-    const dependencyCount = payload.epics.reduce(
-      (n, e) => n + e.tasks.reduce((m, t) => m + (t.dependsOn?.length ?? 0), 0),
-      0
-    )
-    const summary: SprintPendingPayload = {
-      pendingId,
-      sprintName: payload.sprintName,
-      projectName: payload.projectName,
-      epicCount: payload.epics.length,
-      taskCount,
-      dependencyCount,
-      repoId: payload.repoId
+      const projectId = filename.replace(/^sprint-/, '').replace(/\.json$/, '')
+      let payload: SprintIntakePayload
+      try {
+        payload = JSON.parse(readFileSync(filePath, 'utf-8')) as SprintIntakePayload
+      } catch (err) {
+        log.warn('SprintWatcher: failed to parse sprint JSON', { filePath, err })
+        return null
+      }
+      if (!payload.sprintName || !payload.repoId || !Array.isArray(payload.epics)) {
+        log.warn('SprintWatcher: invalid sprint JSON structure', { filePath })
+        return null
+      }
+      const validationError = validateSprintPayload(payload)
+      if (validationError !== null) {
+        log.warn('SprintWatcher: sprint payload failed validation', { filePath, error: validationError })
+        return null
+      }
+
+      const pendingId = randomUUID()
+      const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now() }
+      this.pending.set(pendingId, entry)
+
+      const taskCount = payload.epics.reduce((n, e) => n + e.tasks.length, 0)
+      const dependencyCount = payload.epics.reduce(
+        (n, e) => n + e.tasks.reduce((m, t) => m + (t.dependsOn?.length ?? 0), 0),
+        0
+      )
+      const summary: SprintPendingPayload = {
+        pendingId,
+        sprintName: payload.sprintName,
+        projectName: payload.projectName,
+        epicCount: payload.epics.length,
+        taskCount,
+        dependencyCount,
+        repoId: payload.repoId
+      }
+      emitFn(IPC_EVENTS.KANBAN.SPRINT_PENDING, summary)
+      log.info('SprintWatcher: sprint staged', { pendingId, sprintName: payload.sprintName, taskCount })
+      return entry
+    } finally {
+      this.processing.delete(filePath)
     }
-    emitFn(IPC_EVENTS.KANBAN.SPRINT_PENDING, summary)
-    log.info('SprintWatcher: sprint staged', { pendingId, sprintName: payload.sprintName, taskCount })
-    return entry
   }
 
   private evictStalePending(): void {
@@ -215,16 +236,32 @@ export class SprintWatcher {
   }
 }
 
-function validateSprintPayload(payload: SprintIntakePayload): string[] {
-  const errors: string[] = []
+function validateSprintPayload(payload: SprintIntakePayload): string | null {
+  // Fix B — length caps
+  if (payload.sprintName.length > 200) return 'sprintName exceeds 200 characters'
+  if ((payload.projectName?.length ?? 0) > 200) return 'projectName exceeds 200 characters'
+  if (payload.epics.length > 50) return 'too many epics (max 50)'
+
+  let totalTasks = 0
+  for (const epic of payload.epics) {
+    if (epic.name.length > 200) return `epic name exceeds 200 characters: "${epic.name.slice(0, 50)}"`
+    totalTasks += epic.tasks.length
+    if (totalTasks > 200) return 'too many tasks (max 200 across all epics)'
+    for (const task of epic.tasks) {
+      if (task.title.length > 500) return `task title exceeds 500 characters: "${task.title.slice(0, 50)}"`
+      if ((task.description?.length ?? 0) > 10_000) return `task description exceeds 10000 characters for task "${task.title.slice(0, 50)}"`
+    }
+  }
+
+  // Existing structural checks
   const localIds = new Set<string>()
   for (const epic of payload.epics) {
     for (const task of epic.tasks) {
       if (![1, 2, 3].includes(task.priority)) {
-        errors.push(`Task "${task.title}" has invalid priority ${task.priority} (must be 1, 2, or 3)`)
+        return `Task "${task.title}" has invalid priority ${task.priority} (must be 1, 2, or 3)`
       }
       if (localIds.has(task.localId)) {
-        errors.push(`Duplicate localId "${task.localId}"`)
+        return `Duplicate localId "${task.localId}"`
       }
       localIds.add(task.localId)
     }
@@ -233,10 +270,10 @@ function validateSprintPayload(payload: SprintIntakePayload): string[] {
     for (const task of epic.tasks) {
       for (const dep of task.dependsOn ?? []) {
         if (!localIds.has(dep)) {
-          errors.push(`Task "${task.title}" dependsOn unknown localId "${dep}"`)
+          return `Task "${task.title}" dependsOn unknown localId "${dep}"`
         }
       }
     }
   }
-  return errors
+  return null
 }
