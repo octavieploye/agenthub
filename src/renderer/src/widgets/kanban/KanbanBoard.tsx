@@ -52,9 +52,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     fetchTasksOnce()
     fetchProjects()
     window.agentHub.db.getRepos().then((res) => { if (res.success) setRepos(res.data) }).catch((err) => console.error('Failed to fetch repos:', err))
-    window.agentHub.system.getIntakeDir().then((res) => {
-      if (res.success) setIntakeDir(res.data)
-    })
+    window.agentHub.system.getIntakeDir()
+      .then((res) => { if (res.success) setIntakeDir(res.data) })
+      .catch((err) => console.error('Failed to get intake dir:', err))
   }, [fetchTasksOnce, fetchProjects])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
