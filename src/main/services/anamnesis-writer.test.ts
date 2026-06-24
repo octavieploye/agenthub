@@ -216,3 +216,56 @@ it('onEventInserted returns early when circuit is open', async () => {
 
   expect(fetchMock).toHaveBeenCalledTimes(3)
 })
+
+it('flush sends at most BATCH_SIZE (10) events per call', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
+  for (let i = 0; i < 25; i++) {
+    insertTaskEvent(db, {
+      taskId: task.id,
+      eventType: 'CARD_COMPLETED',
+      fromStatus: 'in_progress',
+      toStatus: 'completed',
+      agentId: 'agent-1',
+      payload: { taskTitle: `Task ${i}`, repoId }
+    })
+  }
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+  const writer = new AnamnesisWriter(db, {
+    anamnesisUrl: 'http://localhost:9300',
+    fetch: fetchMock
+  })
+
+  await writer.flush()
+  expect(fetchMock).toHaveBeenCalledTimes(10)
+})
+
+it('flush schedules a second flush when more events remain', async () => {
+  vi.useFakeTimers()
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
+  for (let i = 0; i < 15; i++) {
+    insertTaskEvent(db, {
+      taskId: task.id,
+      eventType: 'CARD_COMPLETED',
+      fromStatus: 'in_progress',
+      toStatus: 'completed',
+      agentId: 'agent-1',
+      payload: { taskTitle: `Task ${i}`, repoId }
+    })
+  }
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+  const writer = new AnamnesisWriter(db, {
+    anamnesisUrl: 'http://localhost:9300',
+    fetch: fetchMock
+  })
+
+  await writer.flush()
+  expect(fetchMock).toHaveBeenCalledTimes(10)
+
+  // run the scheduled follow-up flush
+  await vi.runAllTimersAsync()
+  expect(fetchMock).toHaveBeenCalledTimes(15)
+})

@@ -30,6 +30,7 @@ export class AnamnesisWriter {
   private static readonly MAX_FAILURES = 3
   private static readonly BACKOFF_MS = 60_000
   private static readonly FETCH_TIMEOUT_MS = 5_000
+  private static readonly BATCH_SIZE = 10
 
   constructor(db: Database.Database, deps: AnamnesisWriterDeps) {
     this.db = db
@@ -53,10 +54,19 @@ export class AnamnesisWriter {
 
     this.flushing = true
     try {
-      const events = getUnsyncedEvents(this.db)
-      for (const event of events) {
+      const allEvents = getUnsyncedEvents(this.db)
+      const batch = allEvents.slice(0, AnamnesisWriter.BATCH_SIZE)
+      const remaining = allEvents.length - batch.length
+
+      for (const event of batch) {
         const ok = await this.sendEvent(event)
         if (!ok && this.circuitOpen) return
+      }
+
+      if (remaining > 0) {
+        setTimeout(() => {
+          this.flush().catch((err) => log.error('AnamnesisWriter scheduled flush error', err))
+        }, 0)
       }
     } finally {
       this.flushing = false
