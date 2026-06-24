@@ -28,6 +28,7 @@ function seedAgent(repoId: string): void {
 beforeEach(() => {
   db = new Database(':memory:')
   runMigrations(db, __dirname + '/../migrations')
+  db.pragma('foreign_keys = ON')
 })
 
 afterEach(() => {
