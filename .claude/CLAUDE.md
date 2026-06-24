@@ -237,6 +237,23 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 
 ---
 
+### Security & DevOps
+
+#### `sec-devops`
+
+- Multi-mode security and DevOps auditor. Floats across all phases — not phase-locked.
+- Invoked by: **Lead** (counts as 1 of 3 active agents) or **Human** (exempt from the 3-agent cap).
+- Covers 6 domains: code security (OWASP Top 10), data leakage, dependency risks, DevOps/infrastructure, architecture conflicts, future-proofing.
+- Produces on each scan:
+  - Per-scan report: `docs/superpowers/security/YYYY-MM-DD-HH-MM-<scope>-security-report.md`
+  - Updated aggregate audit trail: `docs/superpowers/security/security-log.md`
+  - Updated agent memory: `.claire/sec-devops.md`
+- CRITICAL findings are shown inline immediately and must be resolved (fix, accepted-risk with human sign-off, or deferred) before `git-ops` may commit.
+- Does NOT fix code. Does NOT modify `.gitignore`. Does NOT change dependency versions.
+- Full protocol: `.claude/commands/sec-devops.md`
+
+---
+
 ### Git Ops
 
 #### `git-ops`
@@ -246,6 +263,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - Should only commit after:
   - Relevant tests pass.
   - Lead approves the change set.
+  - `docs/superpowers/security/security-log.md` contains no open CRITICAL findings. If open CRITICALs exist, escalate to Lead and human before proceeding.
 - Never force-push or rewrite history unless explicitly instructed by the human.
 
 ---
@@ -256,7 +274,10 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - The lead must:
   - Prefer short, focused tasks.
   - Pause or complete existing tasks before spawning new agents.
+- `sec-devops` counts as 1 of the 3-agent cap when spawned by Lead. Human-direct invocations are exempt from the cap.
 - Suggested patterns:
   - Mapping phase: `scout-backend`, `scout-frontend`, `scout-integration`.
+  - Architecture audit: `sec-devops spec <path>` (Lead-spawned, counts as 1 of 3).
   - Implementation phase: `dev-backend`, `dev-frontend`, `dev-integration`.
   - Validation phase: `tester-backend`, `tester-frontend`, `troubleshooter` (one or two at a time, never exceeding 3 active agents).
+  - Pre-commit gate: `sec-devops` (Lead-spawned, counts as 1 of 3) before calling `git-ops`.
