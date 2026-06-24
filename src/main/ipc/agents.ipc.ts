@@ -152,7 +152,7 @@ export function registerAgentHandlers(): void {
         if (!colsValidation.valid) return
         const rowsValidation = validateInput(z.number().int().positive(), rows)
         if (!rowsValidation.valid) return
-        resizeAgent(idValidation.data, colsValidation.data, rowsValidation.data)
+        resizeAgent(idValidation.data, colsValidation.data, rowsValidation.data, _event.sender.id)
       } catch (err) {
         console.error('RESIZE_ERROR', err)
       }

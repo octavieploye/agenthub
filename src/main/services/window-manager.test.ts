@@ -6,6 +6,7 @@ const { mockWindowInstances, windowIdState, MockBrowserWindowCtor } =
 
     interface MockBrowserWindowShape {
       id: number
+      webContents: { id: number }
       isDestroyed: ReturnType<typeof vi.fn>
       focus: ReturnType<typeof vi.fn>
       close: ReturnType<typeof vi.fn>
@@ -20,6 +21,7 @@ const { mockWindowInstances, windowIdState, MockBrowserWindowCtor } =
       windowIdState.counter += 1
       return {
         id: windowIdState.counter,
+        webContents: { id: windowIdState.counter + 1000 },
         isDestroyed: vi.fn(() => false),
         focus: vi.fn(),
         close: vi.fn(),
@@ -165,6 +167,24 @@ describe('WindowManager', () => {
       wm.createBreakout('agent-1', 'Test', '/repo', '#000')
       expect(mockWindowInstances).toHaveLength(2)
     })
+
+    it('calls onBreakoutOpened with agentId and webContentsId when breakout is created', () => {
+      const onBreakoutOpened = vi.fn()
+      const wmWithCb = new WindowManager({ ...deps, onBreakoutOpened })
+      wmWithCb.createBreakout('agent-1', 'Test', '/repo', '#000')
+
+      const win = getLastMockWindow()
+      expect(onBreakoutOpened).toHaveBeenCalledWith('agent-1', win.webContents.id)
+    })
+
+    it('calls onBreakoutOpened only once when reusing existing breakout', () => {
+      const onBreakoutOpened = vi.fn()
+      const wmWithCb = new WindowManager({ ...deps, onBreakoutOpened })
+      wmWithCb.createBreakout('agent-1', 'Test', '/repo', '#000')
+      wmWithCb.createBreakout('agent-1', 'Test', '/repo', '#000') // reuse
+
+      expect(onBreakoutOpened).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('closeBreakout', () => {
@@ -209,6 +229,38 @@ describe('WindowManager', () => {
 
       wm.closeBreakout('agent-1')
       expect(mockWin.close).not.toHaveBeenCalled()
+    })
+
+    it('calls onBreakoutClosed with agentId when window closes via user', () => {
+      const onBreakoutClosed = vi.fn()
+      const wmWithCb = new WindowManager({ ...deps, onBreakoutClosed })
+      wmWithCb.createBreakout('agent-1', 'Test', '/repo', '#000')
+
+      const mockWin = getLastMockWindow()
+      const closedCall = mockWin.on.mock.calls.find(
+        (c: unknown[]) => c[0] === 'closed'
+      )
+      const closedHandler = closedCall![1] as () => void
+      closedHandler()
+
+      expect(onBreakoutClosed).toHaveBeenCalledWith('agent-1')
+    })
+
+    it('calls onBreakoutClosed even on programmatic close (ownership must be released)', () => {
+      const onBreakoutClosed = vi.fn()
+      const wmWithCb = new WindowManager({ ...deps, onBreakoutClosed })
+      wmWithCb.createBreakout('agent-1', 'Test', '/repo', '#000')
+
+      const mockWin = getLastMockWindow()
+      mockWin.close.mockImplementation(() => {
+        const closedCall = mockWin.on.mock.calls.find(
+          (c: unknown[]) => c[0] === 'closed'
+        )
+        ;(closedCall![1] as () => void)()
+      })
+
+      wmWithCb.closeBreakout('agent-1')
+      expect(onBreakoutClosed).toHaveBeenCalledWith('agent-1')
     })
   })
 

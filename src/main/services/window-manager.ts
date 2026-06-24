@@ -7,6 +7,8 @@ import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 interface WindowManagerDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
   emitToAllRenderers?: (channel: string, ...args: unknown[]) => void
+  onBreakoutOpened?: (agentId: string, webContentsId: number) => void
+  onBreakoutClosed?: (agentId: string) => void
 }
 
 export class WindowManager {
@@ -70,10 +72,12 @@ export class WindowManager {
     }
 
     this.breakouts.set(agentId, { window: breakoutWindow, info })
+    this.deps.onBreakoutOpened?.(agentId, breakoutWindow.webContents.id)
 
     breakoutWindow.on('closed', () => {
       this.breakouts.delete(agentId)
       this.deps.logInfo('Breakout window closed', { agentId })
+      this.deps.onBreakoutClosed?.(agentId)
       // Only emit when user closed the window (not programmatic close)
       if (!this.suppressCloseEvent.delete(agentId)) {
         this.deps.emitToAllRenderers?.(IPC_EVENTS.WINDOWS.BREAKOUT_CLOSED, agentId)

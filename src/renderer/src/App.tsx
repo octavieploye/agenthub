@@ -44,7 +44,7 @@ import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
-import { startIpcListener } from './widgets/full-terminal/terminal-manager'
+import { startIpcListener, fitTerminal } from './widgets/full-terminal/terminal-manager'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
@@ -358,6 +358,8 @@ function AppMain(): React.JSX.Element {
       setActiveAgent(agentId)
       setFocusedAgent(agentId)
       useViewStore.getState().setViewMode('terminal')
+      // Re-fit now that PTY ownership returned to main window
+      fitTerminal(agentId)
     })
     return unsub
   }, [setActiveAgent, setFocusedAgent])

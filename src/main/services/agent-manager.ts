@@ -63,27 +63,6 @@ interface ManagedAgent {
 
 const agents = new Map<string, ManagedAgent>()
 
-// PTY resize ownership — agentId → webContents.id of the window allowed to resize
-const ptyOwners = new Map<string, number>()
-
-export function setPtyOwner(agentId: string, webContentsId: number): void {
-  ptyOwners.set(agentId, webContentsId)
-}
-
-export function clearPtyOwner(agentId: string): void {
-  ptyOwners.delete(agentId)
-}
-
-/**
- * Returns true when callerWebContentsId may resize this agent's PTY.
- * True when: no owner registered, or caller is the registered owner.
- */
-export function canResizePty(agentId: string, callerWebContentsId?: number): boolean {
-  const owner = ptyOwners.get(agentId)
-  if (owner === undefined) return true
-  return callerWebContentsId === owner
-}
-
 // Tracks when an agent entered awaiting_approval so we can hold the status
 // visible for at least 500ms before allowing it to be overwritten.
 const approvalEntryTimes = new Map<string, number>()
@@ -410,7 +389,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // to avoid "The database connection is not open" crashes.
     if (isDbShuttingDown()) {
       log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
-      ptyOwners.delete(agentState.id)
       agents.delete(agentState.id)
       return
     }
@@ -438,7 +416,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       wm.closeBreakout(agentState.id)
     }
 
-    ptyOwners.delete(agentState.id)
     agents.delete(agentState.id)
   })
 
@@ -599,10 +576,9 @@ export function sendInput(agentId: string, data: string): void {
   }
 }
 
-export function resizeAgent(agentId: string, cols: number, rows: number, callerWebContentsId?: number): void {
+export function resizeAgent(agentId: string, cols: number, rows: number): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
-  if (!canResizePty(agentId, callerWebContentsId)) return
   managed.ptyProcess.resize(cols, rows)
 }
 

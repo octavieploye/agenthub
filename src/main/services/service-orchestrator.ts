@@ -26,7 +26,7 @@ import { AnamnesisWriter } from './anamnesis-writer'
 import { SprintWatcher } from './sprint-watcher'
 import { registerKanbanHandlers } from '../ipc/kanban.ipc'
 import { registerProjectsHandlers } from '../ipc/projects.ipc'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -201,7 +201,9 @@ export function initializeServices(db: Database.Database): void {
     logInfo: (message: string, meta?: Record<string, unknown>) => {
       log.info(message, meta)
     },
-    emitToAllRenderers
+    emitToAllRenderers,
+    onBreakoutOpened: (agentId, webContentsId) => setPtyOwner(agentId, webContentsId),
+    onBreakoutClosed: (agentId) => clearPtyOwner(agentId)
   })
 
   // 10. SettingsService — app-level settings persistence

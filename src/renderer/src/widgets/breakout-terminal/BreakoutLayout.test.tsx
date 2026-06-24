@@ -89,11 +89,46 @@ describe('BreakoutLayout', () => {
     })
   })
 
-  it('disables input when agent is busy', async () => {
+  it('input is always enabled regardless of agent status', async () => {
+    // Default mock returns status: 'busy'
     render(<BreakoutLayout agentId="agent-1" />)
     await waitFor(() => {
-      expect(screen.getByTestId('breakout-input')).toBeDisabled()
+      expect(screen.getByTestId('breakout-input')).not.toBeDisabled()
     })
+  })
+
+  it('voice transcript injected while agent is busy updates inputValue', async () => {
+    // Agent is busy — input must be enabled so React processes onChange
+    render(<BreakoutLayout agentId="agent-1" />)
+    await waitFor(() => {
+      expect(screen.getByTestId('breakout-input')).toBeInTheDocument()
+    })
+
+    const input = screen.getByTestId('breakout-input') as HTMLInputElement
+
+    // Simulate what useVoiceInput does: set DOM value then dispatch input event
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set
+    nativeSetter?.call(input, 'transcribed text')
+    fireEvent(input, new Event('input', { bubbles: true }))
+
+    expect(input.value).toBe('transcribed text')
+  })
+
+  it('Enter key while agent is busy does not send even with text in input', async () => {
+    render(<BreakoutLayout agentId="agent-1" />)
+    await waitFor(() => {
+      expect(screen.getByTestId('breakout-input')).toBeInTheDocument()
+    })
+
+    const input = screen.getByTestId('breakout-input')
+    fireEvent.change(input, { target: { value: 'queued message' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    // Agent is busy — send must be blocked
+    expect(window.agentHub.agents.sendInput).not.toHaveBeenCalled()
   })
 
   it('enables input when agent is locked', async () => {

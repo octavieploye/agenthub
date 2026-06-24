@@ -139,7 +139,6 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
                 handleSendInput(inputValue)
               }
             }}
-            disabled={!canSendInput}
             placeholder={
               !agent
                 ? 'Loading...'
