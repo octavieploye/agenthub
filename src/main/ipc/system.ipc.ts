@@ -133,8 +133,9 @@ export function registerSystemHandlers(): void {
           .map((filename) => {
             const raw = readFileSync(join(dir, filename), 'utf-8')
             const titleMatch = raw.match(/^#\s+(.+)$/m)
-            const order = parseInt(filename.slice(0, 2), 10) || 99
-            return { title: titleMatch?.[1] ?? filename, order, content: raw }
+            const n = parseInt(filename.slice(0, 2), 10)
+            const order = isNaN(n) ? 99 : n
+            return { title: titleMatch?.[1].trim() ?? filename, order, content: raw }
           })
         return success(docs)
       } catch (err) {
