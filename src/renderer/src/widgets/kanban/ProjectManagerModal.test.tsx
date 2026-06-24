@@ -30,6 +30,11 @@ describe('ProjectManagerModal', () => {
       },
       projects: {
         getByRepo: vi.fn().mockResolvedValue({ success: true, data: [] })
+      },
+      workspaceMemory: {
+        list: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        pin: vi.fn().mockResolvedValue({ success: true, data: null }),
+        unpin: vi.fn().mockResolvedValue({ success: true })
       }
     }
   })
