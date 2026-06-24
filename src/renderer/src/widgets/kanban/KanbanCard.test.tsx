@@ -189,3 +189,51 @@ describe('KanbanCard — dispatch icon', () => {
     expect(onDispatch).toHaveBeenCalledOnce()
   })
 })
+
+describe('KanbanCard pin action', () => {
+  const mockPin = vi.fn()
+
+  beforeEach(() => {
+    mockPin.mockReset()
+    Object.defineProperty(window, 'agentHub', {
+      value: { workspaceMemory: { pin: mockPin } },
+      writable: true
+    })
+  })
+
+  it('shows pin button on completed cards with defaultProjectId', () => {
+    const completedTask: TaskItem = { ...mockTask, status: 'completed' }
+    render(<KanbanCard task={completedTask} defaultProjectId="proj-1" onEdit={vi.fn()} />)
+    expect(screen.getByTestId('pin-button')).toBeInTheDocument()
+  })
+
+  it('does not show pin button on non-completed cards', () => {
+    render(<KanbanCard task={mockTask} defaultProjectId="proj-1" onEdit={vi.fn()} />)
+    // mockTask.status is 'backlog'
+    expect(screen.queryByTestId('pin-button')).not.toBeInTheDocument()
+  })
+
+  it('does not show pin button when no defaultProjectId', () => {
+    const completedTask: TaskItem = { ...mockTask, status: 'completed' }
+    render(<KanbanCard task={completedTask} onEdit={vi.fn()} />)
+    expect(screen.queryByTestId('pin-button')).not.toBeInTheDocument()
+  })
+
+  it('calls workspaceMemory.pin with title when task has no note', async () => {
+    mockPin.mockResolvedValue({ success: true, data: {} })
+    const completedTask: TaskItem = { ...mockTask, status: 'completed', note: null }
+    render(<KanbanCard task={completedTask} defaultProjectId="proj-1" onEdit={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('pin-button'))
+    await vi.waitFor(() => expect(mockPin).toHaveBeenCalledWith('proj-1', 'Fix login bug'))
+  })
+
+  it('calls workspaceMemory.pin with title+note when task has a note', async () => {
+    mockPin.mockResolvedValue({ success: true, data: {} })
+    const completedTask: TaskItem = { ...mockTask, status: 'completed', note: 'Important detail' }
+    render(<KanbanCard task={completedTask} defaultProjectId="proj-1" onEdit={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('pin-button'))
+    await vi.waitFor(() =>
+      expect(mockPin).toHaveBeenCalledWith('proj-1', 'Fix login bug\nImportant detail')
+    )
+  })
+})

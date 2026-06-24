@@ -76,6 +76,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
   const [editNote, setEditNote] = useState('')
   const [popoverVisible, setPopoverVisible] = useState(false)
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [pinned, setPinned] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -159,6 +160,21 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
       onDelete?.()
     } else {
       setConfirmDelete(true)
+    }
+  }
+
+  async function handlePin(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!defaultProjectId) return
+    const content = task.note ? `${task.title}\n${task.note}` : task.title
+    try {
+      const res = await window.agentHub.workspaceMemory.pin(defaultProjectId, content)
+      if (res.success) {
+        setPinned(true)
+        setTimeout(() => setPinned(false), 2000)
+      }
+    } catch {
+      // silent fail — pin is best-effort
     }
   }
 
@@ -311,6 +327,17 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
               onClick={onSBARClick}
               title="View SBAR summary"
             >SBAR</button>
+          )}
+          {task.status === 'completed' && defaultProjectId && (
+            <button
+              className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${pinned ? 'text-success' : 'text-base-content/40 hover:text-success'}`}
+              title={pinned ? 'Pinned!' : 'Pin as learning'}
+              onMouseEnter={(e) => e.stopPropagation()}
+              onClick={handlePin}
+              data-testid="pin-button"
+            >
+              {pinned ? '✓' : '📌'}
+            </button>
           )}
         </div>
       </div>
