@@ -1,6 +1,4 @@
 import { randomUUID } from 'crypto'
-import { existsSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import type { Project, CreateProjectInput, UpdateProjectInput } from '../../../shared/types/project.types'
 
@@ -57,26 +55,11 @@ export function updateProject(db: Database.Database, id: string, input: UpdatePr
 }
 
 export function deleteProject(db: Database.Database, id: string): void {
-  const project = getProjectById(db, id)
-
   const remove = db.transaction(() => {
-    db.prepare('DELETE FROM workspace_memory WHERE project_id = ?').run(id)
     db.prepare('DELETE FROM project_repos WHERE project_id = ?').run(id)
     db.prepare('UPDATE tasks SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('UPDATE bugs SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('DELETE FROM projects WHERE id = ?').run(id)
   })
   remove()
-
-  if (project?.path) {
-    try {
-      const memFile = join(project.path, '.claude', 'workspace_memory.md')
-      if (existsSync(memFile)) unlinkSync(memFile)
-    } catch (cleanupErr) {
-      // non-fatal — log only in development
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('Could not delete workspace_memory.md on project delete:', cleanupErr)
-      }
-    }
-  }
 }

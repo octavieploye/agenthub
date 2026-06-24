@@ -101,14 +101,3 @@ describe('insertProject path field', () => {
     expect(fetched?.path).toBe('/tmp/my-project')
   })
 })
-
-describe('deleteProject cleanup', () => {
-  it('deletes workspace_memory rows for the project', () => {
-    const p = insertProject(db, { name: 'ToClean' })
-    db.prepare(`INSERT INTO workspace_memory (id, project_id, content, created_at, pinned_at) VALUES (?,?,?,?,?)`)
-      .run('wm1', p.id, 'A note', new Date().toISOString(), new Date().toISOString())
-    deleteProject(db, p.id)
-    const rows = db.prepare('SELECT * FROM workspace_memory WHERE project_id = ?').all(p.id)
-    expect(rows).toHaveLength(0)
-  })
-})
