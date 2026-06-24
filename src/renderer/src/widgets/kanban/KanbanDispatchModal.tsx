@@ -106,6 +106,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         name: spawnName.trim() || generateAgentName(task.title),
         cwd,
         color: '#6B7280',
+        projectId: task.projectId ?? undefined,
       })
       if (result.success && result.data) {
         targetAgentId = result.data.id
@@ -134,6 +135,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
             cwd: spawnCwd,
             taskDescription: `[${role}] ${task.title}`,
             color: '#6B7280',
+            projectId: task.projectId ?? undefined,
           })
           if (!res.success) failedRoles.push(role)
         } catch {
