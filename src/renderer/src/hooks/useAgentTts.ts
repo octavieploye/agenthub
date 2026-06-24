@@ -63,15 +63,6 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       const rawLastParagraph = agent.voiceMode === 'always_on' ? extractLastParagraph(cleanText) : null
       // minWords=4: permits real 4-word spoken responses while blocking 1-3 word UI chrome
       const lastParagraph = rawLastParagraph && isReadableParagraph(rawLastParagraph, 4) ? rawLastParagraph : null
-      console.log('[TTS] onResponseReady', {
-        agentId,
-        agentName: agent.name,
-        voiceMode: agent.voiceMode,
-        cleanTextLen: cleanText.length,
-        cleanTextPreview: cleanText.slice(0, 200).replace(/\n/g, '↵'),
-        announcement,
-        lastParagraph: lastParagraph ?? '(none)',
-      })
 
       ttsQueue.enqueue(announcement)
       if (lastParagraph) ttsQueue.enqueue(lastParagraph)
@@ -83,7 +74,6 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       if (agent.voiceMode === 'off') return
 
       const announcement = `${agent.name} is waiting for your approval.`
-      console.log('[TTS] onApprovalNeeded', { agentId, agentName: agent.name, voiceMode: agent.voiceMode })
       ttsQueue.enqueue(announcement)
     })
 

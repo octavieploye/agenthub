@@ -548,7 +548,7 @@ export function sendInput(agentId: string, data: string): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
   managed.hasSentInput = true
-  console.log('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
+  log.debug('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
 
   // Start a fresh TTS capture window when the user submits a request.
   // Resetting here (before the write) clears any echoed typing from the buffer
