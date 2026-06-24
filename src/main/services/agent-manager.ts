@@ -24,7 +24,7 @@ import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
 import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
-import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
+import { getTaskByAgentId, updateTask, linkSBARToTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
 import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
 import { getProjectById } from '../db/queries/projects.queries'
@@ -124,6 +124,20 @@ function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus
       agentId,
       payload: { taskTitle: linkedTask.title, repoId: linkedTask.repoId }
     })
+
+    if (eventType === 'CARD_COMPLETED') {
+      const managed = agents.get(agentId)
+      if (managed) {
+        try {
+          const sbar = createAndStoreSBAR(db, buildSBARContext(managed))
+          linkSBARToTask(db, linkedTask.id, sbar.id)
+          log.debug('SBAR generated and linked to task on CARD_COMPLETED', { taskId: linkedTask.id, sbarId: sbar.id })
+        } catch (err) {
+          log.warn('Failed to generate SBAR on CARD_COMPLETED', { agentId, error: String(err) })
+        }
+      }
+    }
+
     getAnamnesisWriter()?.onEventInserted()
     emitToAllRenderers(IPC_EVENTS.TASKS.UPDATED, { taskId: linkedTask.id })
     log.debug('Kanban card synced', { taskId: linkedTask.id, agentId, taskStatus })
