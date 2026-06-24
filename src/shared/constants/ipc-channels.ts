@@ -133,7 +133,8 @@ export const IPC_CHANNELS = {
     SHUTDOWN: 'system:shutdown',
     MINIMIZE_TO_TRAY: 'system:minimize-to-tray',
     OPEN_TERMINAL: 'system:open-terminal',
-    GET_INTAKE_DIR: 'system:get-intake-dir'
+    GET_INTAKE_DIR: 'system:get-intake-dir',
+    LIST_HOW_TO: 'system:list-how-to',
   },
   VOICE: {
     TRANSCRIBE: 'voice:transcribe',

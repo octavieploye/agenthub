@@ -173,7 +173,8 @@ const agentHubBridge = {
     minimizeToTray: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.MINIMIZE_TO_TRAY),
     openTerminal: (command: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_TERMINAL, command),
-    getIntakeDir: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_INTAKE_DIR)
+    getIntakeDir: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_INTAKE_DIR),
+    listHowTo: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.LIST_HOW_TO),
   },
   log: {
     rendererError: (payload: RendererErrorPayload): void => {

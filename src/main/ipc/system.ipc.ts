@@ -1,6 +1,6 @@
 import { ipcMain, app, BrowserWindow } from 'electron'
 import { execFile, spawn as spawnChild } from 'child_process'
-import { writeFileSync, chmodSync, unlinkSync, existsSync, openSync, closeSync } from 'fs'
+import { writeFileSync, chmodSync, unlinkSync, existsSync, openSync, closeSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import log from 'electron-log/main'
@@ -8,6 +8,7 @@ import { z } from 'zod/v4'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error, validateInput } from './ipc-helpers'
 import type { IpcResponse } from '../../shared/types/ipc.types'
+import type { HowToDoc } from '../../shared/types/how-to.types'
 
 export function registerSystemHandlers(): void {
   ipcMain.handle(
@@ -116,6 +117,28 @@ export function registerSystemHandlers(): void {
         return success(join(app.getPath('userData'), 'sprint-intake'))
       } catch (err) {
         return error('GET_INTAKE_DIR_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.SYSTEM.LIST_HOW_TO,
+    (): IpcResponse<HowToDoc[]> => {
+      try {
+        const dir = join(app.getAppPath(), 'docs', 'how-to')
+        if (!existsSync(dir)) return success([])
+        const docs = readdirSync(dir)
+          .filter((f) => f.endsWith('.md'))
+          .sort()
+          .map((filename) => {
+            const raw = readFileSync(join(dir, filename), 'utf-8')
+            const titleMatch = raw.match(/^#\s+(.+)$/m)
+            const order = parseInt(filename.slice(0, 2), 10) || 99
+            return { title: titleMatch?.[1] ?? filename, order, content: raw }
+          })
+        return success(docs)
+      } catch (err) {
+        return error('LIST_HOW_TO_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

@@ -182,6 +182,7 @@ export interface AgentHubBridge {
     minimizeToTray: () => Promise<IpcResponse<void>>
     openTerminal: (command: string) => Promise<IpcResponse<void>>
     getIntakeDir: () => Promise<IpcResponse<string>>
+    listHowTo: () => Promise<IpcResponse<import('./how-to.types').HowToDoc[]>>
   }
   log: {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void
