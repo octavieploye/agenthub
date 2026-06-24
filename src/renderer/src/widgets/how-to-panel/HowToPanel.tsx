@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { marked } from 'marked'
 import type { HowToDoc } from '@shared/types/how-to.types'
 
+const stripLeadingH1 = (content: string): string => {
+  // The accordion header already shows the title — remove the redundant leading # heading
+  return content.replace(/^\s*#[^\n]*\n?/, '')
+}
+
 interface HowToPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -36,11 +41,6 @@ export default function HowToPanel({ isOpen, onClose }: HowToPanelProps): React.
   if (!isOpen) return null
 
   const term = search.trim().toLowerCase()
-
-  const stripLeadingH1 = (content: string): string => {
-    // The accordion header already shows the title — remove the redundant leading # heading
-    return content.replace(/^#[^\n]*\n?/, '')
-  }
 
   const entries = docs.map((doc, i) => {
     const titleMatch = doc.title.toLowerCase().includes(term)
@@ -139,7 +139,7 @@ export default function HowToPanel({ isOpen, onClose }: HowToPanelProps): React.
                     [&_hr]:border-base-content/10 [&_hr]:my-3
                     [&_strong]:font-semibold"
                   // Content is from our own trusted filesystem — not user-supplied HTML
-                  dangerouslySetInnerHTML={{ __html: marked.parse(stripLeadingH1(doc.content)) as string }}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(stripLeadingH1(doc.content), { async: false }) }}
                 />
               )}
             </div>
