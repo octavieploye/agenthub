@@ -57,5 +57,6 @@ export const AgentSpawnOptionsSchema = z.object({
   cols: z.number().int().positive().optional(),
   rows: z.number().int().positive().optional(),
   isLeadAgent: z.boolean().optional(),
-  voiceMode: VoiceModeSchema.optional()
+  voiceMode: VoiceModeSchema.optional(),
+  projectId: z.string().optional()
 })

@@ -58,4 +58,5 @@ export interface AgentSpawnOptions {
   skipPermissions?: boolean
   isLeadAgent?: boolean
   voiceMode?: VoiceMode
+  projectId?: string        // triggers workspace_memory.md injection at spawn
 }

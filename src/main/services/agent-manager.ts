@@ -27,6 +27,8 @@ import { TtsTrigger } from '../utils/tts-trigger'
 import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
 import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
+import { getProjectById } from '../db/queries/projects.queries'
+import { writeWorkspaceMemory } from './workspace-memory-writer'
 
 const AGENT_TO_TASK_STATUS: Partial<Record<string, TaskStatus>> = {
   busy: 'in_progress',
@@ -60,6 +62,27 @@ interface ManagedAgent {
 }
 
 const agents = new Map<string, ManagedAgent>()
+
+// PTY resize ownership — agentId → webContents.id of the window allowed to resize
+const ptyOwners = new Map<string, number>()
+
+export function setPtyOwner(agentId: string, webContentsId: number): void {
+  ptyOwners.set(agentId, webContentsId)
+}
+
+export function clearPtyOwner(agentId: string): void {
+  ptyOwners.delete(agentId)
+}
+
+/**
+ * Returns true when callerWebContentsId may resize this agent's PTY.
+ * True when: no owner registered, or caller is the registered owner.
+ */
+export function canResizePty(agentId: string, callerWebContentsId?: number): boolean {
+  const owner = ptyOwners.get(agentId)
+  if (owner === undefined) return true
+  return callerWebContentsId === owner
+}
 
 // Tracks when an agent entered awaiting_approval so we can hold the status
 // visible for at least 500ms before allowing it to be overwritten.
@@ -210,6 +233,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
   updateAgentPid(db, agentState.id, ptyProcess.pid, null)
   agentState.pid = ptyProcess.pid
+
+  // Inject workspace memory before PTY receives the claude command (500ms window)
+  if (options.projectId) {
+    const project = getProjectById(db, options.projectId)
+    if (project?.path) {
+      writeWorkspaceMemory(db, options.projectId, project.path)
+    }
+  }
 
   insertActivityEvent(db, {
     eventType: 'agent_spawned',
@@ -379,6 +410,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // to avoid "The database connection is not open" crashes.
     if (isDbShuttingDown()) {
       log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
+      ptyOwners.delete(agentState.id)
       agents.delete(agentState.id)
       return
     }
@@ -406,6 +438,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       wm.closeBreakout(agentState.id)
     }
 
+    ptyOwners.delete(agentState.id)
     agents.delete(agentState.id)
   })
 
@@ -566,9 +599,10 @@ export function sendInput(agentId: string, data: string): void {
   }
 }
 
-export function resizeAgent(agentId: string, cols: number, rows: number): void {
+export function resizeAgent(agentId: string, cols: number, rows: number, callerWebContentsId?: number): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
+  if (!canResizePty(agentId, callerWebContentsId)) return
   managed.ptyProcess.resize(cols, rows)
 }
 
@@ -623,6 +657,7 @@ export function killAgent(agentId: string): void {
       const holdTimer = approvalHoldTimers.get(agentId)
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
+      ptyOwners.delete(agentId)
       agents.delete(agentId)
     }
   }).catch((err) => {
@@ -643,6 +678,7 @@ export function killAgent(agentId: string): void {
       const holdTimer = approvalHoldTimers.get(agentId)
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
+      ptyOwners.delete(agentId)
       agents.delete(agentId)
     }
   })
@@ -819,6 +855,7 @@ export function cleanupAllAgents(): void {
     }
   }
   agents.clear()
+  ptyOwners.clear()
   for (const timer of approvalHoldTimers.values()) clearTimeout(timer)
   approvalHoldTimers.clear()
   approvalEntryTimes.clear()
