@@ -6,6 +6,7 @@ import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { insertTask } from '../db/queries/tasks.queries'
 import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
+import { getRepoExistsById, getSprintTaskCount } from '../db/queries/sprint-watcher.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { SprintIntakePayload, SprintPendingPayload, SprintDraftReadyPayload } from '../../shared/types/task.types'
 
@@ -78,7 +79,15 @@ export class SprintWatcher {
     }
     const draftPath = join(intakeDir, `sprint-${projectId}.draft.json`)
     const finalPath = join(intakeDir, `sprint-${projectId}.json`)
-    renameSync(draftPath, finalPath)
+    try {
+      renameSync(draftPath, finalPath)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        log.info('SprintWatcher.confirmDraft: draft already gone, treating as confirmed', { projectId })
+        return
+      }
+      throw err
+    }
     log.info('SprintWatcher.confirmDraft: renamed draft to json', { projectId })
     // fs.watch will detect the new .json file and call parseAndStage automatically
   }
@@ -169,17 +178,13 @@ export class SprintWatcher {
     }
     const { filePath, projectId, payload } = entry
 
-    const repo = db.prepare('SELECT id FROM repos WHERE id = ?').get(payload.repoId)
-    if (!repo) {
+    if (!getRepoExistsById(db, payload.repoId)) {
       throw new Error(
         `Sprint import failed: repoId "${payload.repoId}" does not exist. Re-run the decomposition agent with a valid repo selected.`
       )
     }
 
-    const existing = db
-      .prepare('SELECT COUNT(*) as c FROM tasks WHERE sprint_name = ? AND repo_id = ?')
-      .get(payload.sprintName, payload.repoId) as { c: number }
-    if (existing.c > 0) {
+    if (getSprintTaskCount(db, payload.sprintName, payload.repoId) > 0) {
       throw new Error(
         `Sprint "${payload.sprintName}" already has tasks in this repo. Discard this import or rename the sprint before re-importing.`
       )

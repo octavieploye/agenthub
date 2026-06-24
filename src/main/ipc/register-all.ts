@@ -56,5 +56,6 @@ export function registerAllIpcHandlers(): void {
   registerActivityHandlers()
   registerProjectInitHandlers()
   registerLogHandlers()
+  registerWorkspaceMemoryHandlers()
   log.info('All IPC handlers registered')
 }

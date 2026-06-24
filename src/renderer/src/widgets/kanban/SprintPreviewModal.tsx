@@ -9,7 +9,7 @@ export function SprintPreviewModal() {
 
   useEffect(() => {
     return window.agentHub.on.sprintPending((payload) => {
-      setPending(payload as SprintPendingPayload)
+      setPending(payload)
       setError(null)
     })
   }, [])

@@ -3,24 +3,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import BreakoutLayout from './BreakoutLayout'
 import type { AgentState, ModelProvider } from '@shared/types/agent.types'
 
-// Mock FullTerminal
-vi.mock('../full-terminal/FullTerminal', () => ({
-  default: ({ agentId, visible }: { agentId: string; visible: boolean }) => (
-    <div data-testid="full-terminal" data-agent-id={agentId} data-visible={String(visible)} />
+function stubTerminal(agentId: string, color?: string) {
+  return (
+    <div
+      data-testid="full-terminal"
+      data-agent-id={agentId}
+      data-visible="true"
+      data-color={color}
+    />
   )
-}))
-
-// Mock theme store
-vi.mock('../../stores/theme-store', () => ({
-  useThemeStore: vi.fn((selector) =>
-    selector({ theme: 'mocha', setTheme: vi.fn() })
-  )
-}))
-
-// Mock VoiceInputButton (requires VoiceInputProvider context)
-vi.mock('../voice-input-button/VoiceInputButton', () => ({
-  VoiceInputButton: () => <div data-testid="voice-input-button" />
-}))
+}
 
 function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -68,14 +60,14 @@ describe('BreakoutLayout', () => {
   })
 
   it('renders loading state then agent info', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByText('test-agent')).toBeInTheDocument()
     })
   })
 
   it('renders the full terminal component', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('full-terminal')).toBeInTheDocument()
     })
@@ -83,7 +75,7 @@ describe('BreakoutLayout', () => {
   })
 
   it('renders the input bar', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).toBeInTheDocument()
     })
@@ -91,7 +83,7 @@ describe('BreakoutLayout', () => {
 
   it('input is always enabled regardless of agent status', async () => {
     // Default mock returns status: 'busy'
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).not.toBeDisabled()
     })
@@ -99,7 +91,7 @@ describe('BreakoutLayout', () => {
 
   it('voice transcript injected while agent is busy updates inputValue', async () => {
     // Agent is busy — input must be enabled so React processes onChange
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).toBeInTheDocument()
     })
@@ -118,7 +110,7 @@ describe('BreakoutLayout', () => {
   })
 
   it('Enter key while agent is busy does not send even with text in input', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).toBeInTheDocument()
     })
@@ -136,7 +128,7 @@ describe('BreakoutLayout', () => {
       success: true,
       data: createMockAgent({ status: 'locked' })
     })
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).not.toBeDisabled()
     })
@@ -147,7 +139,7 @@ describe('BreakoutLayout', () => {
       success: true,
       data: createMockAgent({ status: 'locked' })
     })
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-input')).not.toBeDisabled()
     })
@@ -162,7 +154,7 @@ describe('BreakoutLayout', () => {
       success: true,
       data: createMockAgent({ status: 'idle' })
     })
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByTestId('breakout-send')).toBeInTheDocument()
     })
@@ -173,21 +165,21 @@ describe('BreakoutLayout', () => {
   })
 
   it('shows agent status', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByText('busy')).toBeInTheDocument()
     })
   })
 
   it('shows repo name from cwd', async () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByText('project')).toBeInTheDocument()
     })
   })
 
   it('subscribes to status changes', () => {
-    render(<BreakoutLayout agentId="agent-1" />)
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     expect(window.agentHub.on.agentStatusChange).toHaveBeenCalled()
   })
 })

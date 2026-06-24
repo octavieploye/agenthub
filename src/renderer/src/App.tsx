@@ -171,7 +171,7 @@ function AppMain(): React.JSX.Element {
 
   // Per-agent TTS — reads response text and speaks on busy→completed
   // When voice is off, plays a notification sound instead
-  const { readActiveAgent, readFullResponse } = useAgentTts(agents, {
+  const { stopActiveSpeech, readFullResponse } = useAgentTts(agents, {
     onNotificationSound: () => playAgentSound('agent_locked', soundDeps.current)
   })
 
@@ -508,7 +508,7 @@ function AppMain(): React.JSX.Element {
         // Cmd+Shift+S — cancel any in-progress TTS
         if (e.key === 'S' && e.shiftKey) {
           e.preventDefault()
-          readActiveAgent()
+          stopActiveSpeech()
         }
 
         // Cmd+Shift+I — read full response for the focused agent (or most recent)
@@ -1105,7 +1105,7 @@ function AppMain(): React.JSX.Element {
                       onDetachTerminal={handleDetachTerminal}
                       proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
                       onTabChange={setActiveDetailTab}
-                      onReadResponse={readActiveAgent}
+                      onReadResponse={stopActiveSpeech}
                     />
                     {activeDetailTab === 'terminal' && (
                       <InlineTaskInput

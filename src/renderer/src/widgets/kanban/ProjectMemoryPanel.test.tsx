@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { ProjectMemoryPanel } from './ProjectMemoryPanel'
 import type { WorkspaceMemoryEntry } from '@shared/types/workspace-memory.types'
@@ -7,16 +7,13 @@ const mockList = vi.fn()
 const mockPin = vi.fn()
 const mockUnpin = vi.fn()
 
-beforeAll(() => {
+beforeEach(() => {
   Object.defineProperty(window, 'agentHub', {
     value: {
       workspaceMemory: { list: mockList, pin: mockPin, unpin: mockUnpin }
     },
     writable: true
   })
-})
-
-beforeEach(() => {
   mockList.mockClear()
   mockPin.mockClear()
   mockUnpin.mockClear()

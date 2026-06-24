@@ -21,7 +21,10 @@ export function SprintIntakeModal({ isOpen, onClose, intakeDir }: SprintIntakeMo
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      setSelectedRepoId('')
+      return
+    }
     window.agentHub.db.getRepos().then((res) => {
       if (res.success) {
         setRepos(res.data)
@@ -31,7 +34,7 @@ export function SprintIntakeModal({ isOpen, onClose, intakeDir }: SprintIntakeMo
     window.agentHub.projects.list().then((res) => {
       if (res.success) setProjects(res.data)
     })
-  }, [isOpen])
+  }, [isOpen, selectedRepoId])
 
   function handleProjectChange(projectId: string): void {
     setSelectedProjectId(projectId)

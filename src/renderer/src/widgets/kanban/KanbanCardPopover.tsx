@@ -39,6 +39,18 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectCreating, setNewProjectCreating] = useState(false)
 
+  const handleCreateAndAssign = async () => {
+    setNewProjectCreating(true)
+    const created = await createProject({ name: newProjectName.trim() })
+    if (created) {
+      await linkRepo(created.id, task.repoId)
+      setSelectedProjectId(created.id)
+    }
+    setNewProjectName('')
+    setShowInlineCreate(false)
+    setNewProjectCreating(false)
+  }
+
   function handleSave() {
     if (!title.trim()) return
     onSave({
@@ -186,17 +198,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
               <button
                 className="btn btn-xs btn-primary flex-1"
                 disabled={!newProjectName.trim() || newProjectCreating}
-                onClick={async () => {
-                  setNewProjectCreating(true)
-                  const created = await createProject({ name: newProjectName.trim() })
-                  if (created) {
-                    await linkRepo(created.id, task.repoId)
-                    setSelectedProjectId(created.id)
-                  }
-                  setNewProjectName('')
-                  setShowInlineCreate(false)
-                  setNewProjectCreating(false)
-                }}
+                onClick={handleCreateAndAssign}
               >Create & assign</button>
               <button
                 className="btn btn-xs btn-ghost"

@@ -11,7 +11,7 @@ export interface AgentTtsOptions {
 
 export interface AgentTtsActions {
   /** Cmd+Shift+S — stops any in-progress TTS. */
-  readActiveAgent: () => void
+  stopActiveSpeech: () => void
   /** Cmd+Shift+I — reads the full stored response for the given agent. */
   readFullResponse: (agentId: string | null) => void
 }
@@ -83,7 +83,7 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
     }
   }, [])
 
-  const readActiveAgent = useCallback(() => {
+  const stopActiveSpeech = useCallback(() => {
     ttsQueue.clear()
     cancelSpeech()
   }, [])
@@ -103,5 +103,5 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
     invokeTts(text).catch((err) => console.warn('[useAgentTts] readFullResponse error:', err))
   }, [])
 
-  return { readActiveAgent, readFullResponse }
+  return { stopActiveSpeech, readFullResponse }
 }

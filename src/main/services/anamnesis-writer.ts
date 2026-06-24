@@ -76,7 +76,14 @@ export class AnamnesisWriter {
   private async sendEvent(event: TaskEvent): Promise<boolean> {
     const path = ENDPOINT_MAP[event.eventType]
     const url = `${this.anamnesisUrl}${path}`
-    const payload = JSON.parse(event.payloadJson)
+    let payload: unknown
+    try {
+      payload = JSON.parse(event.payloadJson)
+    } catch (parseErr) {
+      log.warn('AnamnesisWriter: corrupted payloadJson, skipping event', { eventId: event.id, err: String(parseErr) })
+      this.recordFailure()
+      return false
+    }
 
     try {
       const res = await this.fetch(url, {

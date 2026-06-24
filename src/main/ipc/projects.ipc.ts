@@ -50,14 +50,18 @@ export function registerProjectsHandlers(db: Database.Database): void {
       if (!inputParsed.valid) return inputParsed.response
 
       const existing = getProjectById(db, idParsed.data)
+      const updated = updateProject(db, idParsed.data, inputParsed.data)
+      if (!updated) return error('NOT_FOUND', 'Project not found')
+
       if (existing?.path && inputParsed.data.path !== undefined && inputParsed.data.path !== existing.path) {
-        rmSync(join(existing.path, '.claude', 'workspace_memory.md'), { force: true })
+        try {
+          rmSync(join(existing.path, '.claude', 'workspace_memory.md'), { force: true })
+        } catch (fsErr) {
+          log.warn('PROJECTS.UPDATE: failed to remove old workspace_memory.md', String(fsErr))
+        }
       }
 
-      const updated = updateProject(db, idParsed.data, inputParsed.data)
-      return updated
-        ? success(updated)
-        : error('NOT_FOUND', 'Project not found')
+      return success(updated)
     } catch (err) {
       return error('PROJECTS_ERROR', String(err))
     }

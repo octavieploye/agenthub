@@ -20,6 +20,7 @@ const mockTask: TaskItem = {
   projectId: null,
   sectionTargetDate: null,
   note: null,
+  blockedBy: [],
   createdAt: '2026-06-21T00:00:00Z',
   updatedAt: '2026-06-21T00:00:00Z',
 }

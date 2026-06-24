@@ -6,7 +6,12 @@ import type { AgentState } from '@shared/types/agent.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { isLightColor } from '../agent-detail/color-utils'
 
-function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
+interface BreakoutLayoutProps {
+  agentId: string
+  renderTerminal?: (agentId: string, color?: string) => React.ReactNode
+}
+
+function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const [agent, setAgent] = useState<AgentState | null>(null)
   const [inputValue, setInputValue] = useState('')
@@ -21,7 +26,7 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
   useEffect(() => {
     window.agentHub.agents.getState(agentId).then((res) => {
       if (res.success && res.data) {
-        setAgent(res.data as AgentState)
+        setAgent(res.data)
       }
     })
   }, [agentId])
@@ -34,8 +39,8 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
           prev
             ? {
                 ...prev,
-                status: status as AgentState['status'],
-                confidence: confidence as AgentState['confidence']
+                status,
+                confidence
               }
             : prev
         )
@@ -121,7 +126,9 @@ function BreakoutLayout({ agentId }: { agentId: string }): React.JSX.Element {
 
       {/* Terminal */}
       <div className="flex-1 min-h-0">
-        <FullTerminal agentId={agentId} agentColor={agent?.color} visible={true} />
+        {renderTerminal
+          ? renderTerminal(agentId, agent?.color)
+          : <FullTerminal agentId={agentId} agentColor={agent?.color} visible={true} />}
       </div>
 
       {/* Inline input */}
