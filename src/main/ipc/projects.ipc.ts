@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
+import { existsSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod/v4'
 import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import { getAllProjects, insertProject, updateProject, deleteProject } from '../db/queries/projects.queries'
+import { getAllProjects, insertProject, updateProject, deleteProject, getProjectById } from '../db/queries/projects.queries'
 import { linkRepoToProject, unlinkRepoFromProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
 import { validateInput, success, error } from './ipc-helpers'
 
@@ -46,6 +48,17 @@ export function registerProjectsHandlers(db: Database.Database): void {
       if (!idParsed.valid) return idParsed.response
       const inputParsed = validateInput(updateProjectSchema, input)
       if (!inputParsed.valid) return inputParsed.response
+
+      const existing = getProjectById(db, idParsed.data)
+      if (existing?.path && inputParsed.data.path !== undefined && inputParsed.data.path !== existing.path) {
+        try {
+          const memFile = join(existing.path, '.claude', 'workspace_memory.md')
+          if (existsSync(memFile)) unlinkSync(memFile)
+        } catch (cleanupErr) {
+          log.warn('Could not delete stale workspace_memory.md on path change:', cleanupErr)
+        }
+      }
+
       const updated = updateProject(db, idParsed.data, inputParsed.data)
       return updated
         ? success(updated)
