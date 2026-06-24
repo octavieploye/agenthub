@@ -141,34 +141,36 @@ export class SprintWatcher {
     const resolvedProjectId = projectRow ? projectId : null
 
     const localIdToRealId = new Map<string, string>()
-    for (const epic of payload.epics) {
-      for (const story of epic.tasks) {
-        const task = insertTask(db, {
-          repoId: payload.repoId,
-          title: story.title,
-          description: story.description,
-          priority: story.priority,
-          status: 'backlog',
-          sprintName: payload.sprintName,
-          epicName: epic.name,
-          projectId: resolvedProjectId,
-          sectionTargetDate: epic.targetDate ?? null
-        })
-        if (story.localId) localIdToRealId.set(story.localId, task.id)
-      }
-    }
-
-    for (const epic of payload.epics) {
-      for (const story of epic.tasks) {
-        if (!story.dependsOn?.length || !story.localId) continue
-        const taskId = localIdToRealId.get(story.localId)
-        if (!taskId) continue
-        for (const depLocalId of story.dependsOn) {
-          const dependsOnId = localIdToRealId.get(depLocalId)
-          if (dependsOnId) insertTaskDependency(db, taskId, dependsOnId)
+    db.transaction(() => {
+      for (const epic of payload.epics) {
+        for (const story of epic.tasks) {
+          const task = insertTask(db, {
+            repoId: payload.repoId,
+            title: story.title,
+            description: story.description,
+            priority: story.priority,
+            status: 'backlog',
+            sprintName: payload.sprintName,
+            epicName: epic.name,
+            projectId: resolvedProjectId,
+            sectionTargetDate: epic.targetDate ?? null
+          })
+          if (story.localId) localIdToRealId.set(story.localId, task.id)
         }
       }
-    }
+
+      for (const epic of payload.epics) {
+        for (const story of epic.tasks) {
+          if (!story.dependsOn?.length || !story.localId) continue
+          const taskId = localIdToRealId.get(story.localId)
+          if (!taskId) continue
+          for (const depLocalId of story.dependsOn) {
+            const dependsOnId = localIdToRealId.get(depLocalId)
+            if (dependsOnId) insertTaskDependency(db, taskId, dependsOnId)
+          }
+        }
+      }
+    })()
 
     try { unlinkSync(filePath) } catch { /* file already gone */ }
     this.pending.delete(pendingId)
