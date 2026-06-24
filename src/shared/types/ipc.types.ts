@@ -204,6 +204,12 @@ export interface AgentHubBridge {
     linkRepo: (projectId: string, repoId: string) => Promise<IpcResponse<void>>
     unlinkRepo: (projectId: string, repoId: string) => Promise<IpcResponse<void>>
   }
+  workspaceMemory: {
+    list: (projectId: string) => Promise<IpcResponse<import('./workspace-memory.types').WorkspaceMemoryEntry[]>>
+    pin: (projectId: string, content: string) => Promise<IpcResponse<import('./workspace-memory.types').WorkspaceMemoryEntry>>
+    unpin: (id: string) => Promise<IpcResponse<void>>
+    setContextDoc: (projectId: string, contextDoc: string | null) => Promise<IpcResponse<void>>
+  }
   tts: {
     speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) => Promise<import('./ipc.types').IpcResponse<void>>
     stop: () => Promise<import('./ipc.types').IpcResponse<void>>

@@ -1,16 +1,8 @@
 import { randomUUID } from 'crypto'
 import type Database from 'better-sqlite3'
+import type { WorkspaceMemoryEntry } from '../../../shared/types/workspace-memory.types'
 
-export interface WorkspaceMemoryEntry {
-  id: string
-  projectId: string
-  content: string
-  sourceId: string | null
-  createdAt: string
-  pinnedAt: string
-  anamnesisId: string | null
-  syncedToAnamnesis: number
-}
+export type { WorkspaceMemoryEntry }
 
 export interface SBARSummary {
   taskTitle: string

@@ -241,6 +241,16 @@ const agentHubBridge = {
     linkRepo: (projectId: string, repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.LINK_REPO, projectId, repoId),
     unlinkRepo: (projectId: string, repoId: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS.UNLINK_REPO, projectId, repoId)
   },
+  workspaceMemory: {
+    list: (projectId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_MEMORY.LIST, projectId),
+    pin: (projectId: string, content: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_MEMORY.PIN, projectId, content),
+    unpin: (id: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_MEMORY.UNPIN, id),
+    setContextDoc: (projectId: string, contextDoc: string | null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_MEMORY.SET_CONTEXT_DOC, projectId, contextDoc)
+  },
   tts: {
     speak: (opts: { text: string; voiceId: string; rate: number; volume: number }) =>
       ipcRenderer.invoke(IPC_CHANNELS.TTS.SPEAK, opts),

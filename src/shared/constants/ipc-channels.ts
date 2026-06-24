@@ -190,6 +190,12 @@ export const IPC_CHANNELS = {
     STATUS: 'tts:status',
     LIST_VOICES: 'tts:list-voices',
   },
+  WORKSPACE_MEMORY: {
+    LIST:            'workspace-memory:list',
+    PIN:             'workspace-memory:pin',
+    UNPIN:           'workspace-memory:unpin',
+    SET_CONTEXT_DOC: 'workspace-memory:set-context-doc'
+  },
 } as const
 
 export const IPC_EVENTS = {
