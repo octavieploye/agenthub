@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
@@ -18,6 +19,13 @@ interface KanbanCardPopoverProps {
 
 export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId, agents }: KanbanCardPopoverProps) {
   const hasFocusRef = useRef(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => { setVisible(true) })
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task.priority)
@@ -73,7 +81,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
     <div
       data-testid="card-popover"
       style={{ top: position.top, left: position.left, width: 340, zIndex: 9999 }}
-      className="fixed bg-base-200 border border-base-300 rounded-xl shadow-2xl flex flex-col gap-3 p-4 max-h-[80vh] overflow-y-auto"
+      className={`fixed bg-base-200 border border-base-300 rounded-xl shadow-2xl flex flex-col gap-3 p-4 max-h-[80vh] overflow-y-auto transition-all duration-[180ms] ease-out ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
       onFocus={() => { hasFocusRef.current = true }}
       onBlur={() => { hasFocusRef.current = false }}
       onMouseEnter={onMouseEnter}
@@ -86,7 +94,9 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
           aria-label="Close popover"
           className="btn btn-xs btn-ghost h-5 min-h-0 px-1 shrink-0"
           onClick={onClose}
-        >✕</button>
+        >
+          <X size={12} />
+        </button>
       </div>
 
       {/* Title */}

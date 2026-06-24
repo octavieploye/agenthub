@@ -121,6 +121,19 @@ describe('KanbanCardPopover', () => {
     expect(defaultProps.onMouseLeave).toHaveBeenCalledOnce()
   })
 
+  it('close button renders a Lucide SVG icon, not the \u2715 text character', () => {
+    render(<KanbanCardPopover {...defaultProps} />)
+    const closeBtn = screen.getByLabelText('Close popover')
+    expect(closeBtn.textContent?.trim()).not.toBe('\u2715')
+    expect(closeBtn.querySelector('svg')).not.toBeNull()
+  })
+
+  it('root element has CSS transition class for animation', () => {
+    render(<KanbanCardPopover {...defaultProps} />)
+    const panel = screen.getByTestId('card-popover')
+    expect(panel.className).toContain('transition-all')
+  })
+
   it('calls onSave with empty description when description is cleared', () => {
     render(<KanbanCardPopover {...defaultProps} />)
     const descriptionTextarea = screen.getByDisplayValue('Users cannot log in after token refresh')
