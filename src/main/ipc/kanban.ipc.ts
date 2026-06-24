@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import log from 'electron-log/main'
 import { z } from 'zod/v4'
 import type Database from 'better-sqlite3'
@@ -7,12 +7,7 @@ import { updateTaskPosition, insertTask } from '../db/queries/tasks.queries'
 import type { WindowManager } from '../services/window-manager'
 import type { SprintWatcher } from '../services/sprint-watcher'
 import { validateInput, success, error } from './ipc-helpers'
-
-function emitToAllRenderers(channel: string, ...args: unknown[]): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, ...args)
-  }
-}
+import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
 
 const sprintStorySchema = z.object({
   title: z.string().min(1),
@@ -73,7 +68,12 @@ export function registerKanbanHandlers(
     }
   })
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_CONFIRM, (_event, pendingId: string) => {
+    if (typeof pendingId !== 'string' || !UUID_RE.test(pendingId)) {
+      return { success: false, error: { message: 'Invalid pendingId format' } }
+    }
     try {
       sprintWatcher.confirm(db, pendingId, emitToAllRenderers)
       return { success: true }
@@ -83,6 +83,9 @@ export function registerKanbanHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.KANBAN.SPRINT_REJECT, (_event, pendingId: string) => {
+    if (typeof pendingId !== 'string' || !UUID_RE.test(pendingId)) {
+      return { success: false, error: { message: 'Invalid pendingId format' } }
+    }
     try {
       sprintWatcher.reject(pendingId)
       return { success: true }

@@ -1,5 +1,5 @@
 import * as pty from 'node-pty'
-import { BrowserWindow } from 'electron'
+import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
 import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
@@ -82,13 +82,6 @@ function buildSBARContext(managed: ManagedAgent): AgentContext {
   }
 }
 
-function emitToAllRenderers(channel: string, ...args: unknown[]): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args)
-    }
-  }
-}
 
 function getNotificationConfig(): NotificationRouterConfig {
   return {

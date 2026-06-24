@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Notification } from 'electron'
+import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import log from 'electron-log/main'
@@ -56,13 +57,6 @@ function getMainWindow(): BrowserWindow | null {
   return windows[0] ?? null
 }
 
-function emitToAllRenderers(channel: string, ...args: unknown[]): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args)
-    }
-  }
-}
 
 export function initializeServices(db: Database.Database): void {
   // Purge dead agents older than 24h to prevent DB bloat
