@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import log from 'electron-log/main'
-import { existsSync, unlinkSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod/v4'
 import type Database from 'better-sqlite3'
@@ -51,12 +51,7 @@ export function registerProjectsHandlers(db: Database.Database): void {
 
       const existing = getProjectById(db, idParsed.data)
       if (existing?.path && inputParsed.data.path !== undefined && inputParsed.data.path !== existing.path) {
-        try {
-          const memFile = join(existing.path, '.claude', 'workspace_memory.md')
-          if (existsSync(memFile)) unlinkSync(memFile)
-        } catch (cleanupErr) {
-          log.warn('Could not delete stale workspace_memory.md on path change:', cleanupErr)
-        }
+        rmSync(join(existing.path, '.claude', 'workspace_memory.md'), { force: true })
       }
 
       const updated = updateProject(db, idParsed.data, inputParsed.data)
@@ -72,6 +67,10 @@ export function registerProjectsHandlers(db: Database.Database): void {
     try {
       const parsed = validateInput(idSchema, id)
       if (!parsed.valid) return parsed.response
+      const project = getProjectById(db, parsed.data)
+      if (project?.path) {
+        rmSync(join(project.path, '.claude', 'workspace_memory.md'), { force: true })
+      }
       deleteProject(db, parsed.data)
       return success(undefined)
     } catch (err) {
