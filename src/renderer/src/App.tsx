@@ -23,6 +23,7 @@ import { KanbanLayout } from './layouts/KanbanLayout'
 import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
+import HowToPanel from './widgets/how-to-panel/HowToPanel'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import { OutputReplayModal } from './widgets/output-replay/OutputReplayModal'
 import { ContinuationDialog } from './widgets/continuation-dialog/ContinuationDialog'
@@ -153,6 +154,9 @@ function AppMain(): React.JSX.Element {
 
   // Help modal
   const [helpOpen, setHelpOpen] = useState(false)
+
+  // How-to panel
+  const [howToOpen, setHowToOpen] = useState(false)
 
   // CLI version mismatch banner
   const [cliVersionBanner, setCliVersionBanner] = useState<{ hostVersion: string; imageVersion: string } | null>(null)
@@ -992,6 +996,7 @@ function AppMain(): React.JSX.Element {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenGit={() => setGitPanelOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
+          onOpenHowTo={() => setHowToOpen(true)}
           onOpenSearch={() => setTerminalSearchOpen(true)}
           repoSwitcherRef={repoSwitcherRef}
         />
@@ -1319,6 +1324,9 @@ function AppMain(): React.JSX.Element {
 
       {/* Help modal */}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+
+      {/* How-to panel */}
+      <HowToPanel isOpen={howToOpen} onClose={() => setHowToOpen(false)} />
 
       {outputReplayAgent && (
         <OutputReplayModal
