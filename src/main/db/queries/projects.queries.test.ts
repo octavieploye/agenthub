@@ -73,3 +73,33 @@ describe('project path field', () => {
     expect(fetched?.path).toBeNull()
   })
 })
+
+describe('contextDoc field', () => {
+  it('insertProject returns contextDoc as null', () => {
+    const p = insertProject(db, { name: 'Test' })
+    expect(p.contextDoc).toBeNull()
+  })
+
+  // Skipped until Task 3 adds migration 024 (context_doc column)
+  it.skip('updateProject persists contextDoc', () => {
+    const p = insertProject(db, { name: 'Test' })
+    const updated = updateProject(db, p.id, { contextDoc: 'This project builds the auth system.' })
+    expect(updated?.contextDoc).toBe('This project builds the auth system.')
+  })
+
+  // Skipped until Task 3 adds migration 024 (context_doc column)
+  it.skip('updateProject clears contextDoc when set to null', () => {
+    const p = insertProject(db, { name: 'Test' })
+    updateProject(db, p.id, { contextDoc: 'Some context' })
+    const cleared = updateProject(db, p.id, { contextDoc: null })
+    expect(cleared?.contextDoc).toBeNull()
+  })
+})
+
+describe('insertProject path field', () => {
+  it('stores path when provided in CreateProjectInput', () => {
+    const p = insertProject(db, { name: 'Rooted', path: '/tmp/my-project' })
+    const fetched = getProjectById(db, p.id)
+    expect(fetched?.path).toBe('/tmp/my-project')
+  })
+})

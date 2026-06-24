@@ -14,8 +14,9 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
-  description: z.string().optional(),
-  path: z.string().optional()
+  description: z.string().nullable().optional(),
+  path: z.string().nullable().optional(),
+  contextDoc: z.string().nullable().optional()
 })
 
 const idSchema = z.string().min(1)
