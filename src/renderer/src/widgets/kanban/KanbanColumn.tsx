@@ -87,7 +87,7 @@ export function KanbanColumn({
         onClick={onToggleCollapse}
       >
         <span className="font-semibold text-sm">{label}</span>
-        <span className="badge badge-sm">{tasks.length}</span>
+        <span className="badge badge-sm badge-neutral">{tasks.length}</span>
       </div>
       {!collapsed && (
         <div className="flex flex-col gap-2 p-2 min-h-[80px]">

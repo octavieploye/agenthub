@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Settings } from 'lucide-react'
 import { useTaskStore } from '../../stores/task-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -55,7 +56,21 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     window.agentHub.system.getIntakeDir()
       .then((res) => { if (res.success) setIntakeDir(res.data) })
       .catch((err) => console.error('Failed to get intake dir:', err))
-  }, [fetchTasksOnce, fetchProjects])
+    if (typeof window.agentHub.kanban.getDrafts === 'function') {
+      window.agentHub.kanban.getDrafts()
+        .then((res) => {
+          if (res.success && res.data.length > 0) {
+            setDraftMap((prev) => {
+              const next = new Map(prev)
+              for (const { projectId, draftFilename } of res.data) next.set(projectId, draftFilename)
+              return next
+            })
+            selectProject(res.data[0].projectId)
+          }
+        })
+        .catch((err) => console.error('Failed to get existing drafts:', err))
+    }
+  }, [fetchTasksOnce, fetchProjects, selectProject])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const debouncedFetchTasks = useCallback(() => {
@@ -75,8 +90,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     return window.agentHub.on.draftReady((raw) => {
       const payload = raw as SprintDraftReadyPayload
       setDraftMap((prev) => new Map(prev).set(payload.projectId, payload.draftFilename))
+      selectProject(payload.projectId)
     })
-  }, [])
+  }, [selectProject])
 
   function toggleCollapse(status: TaskStatus) {
     setCollapsed((prev) => {
@@ -137,7 +153,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
       if (!milestoneDate) {
         return (
           <div key={section}>
-            <div className="text-xs text-base-content/40 font-semibold px-1 pt-2 pb-1 uppercase tracking-wide">
+            <div className="divider divider-xs my-0 text-[10px] text-base-content/40 font-semibold uppercase tracking-wide">
               {section}
             </div>
             {sectionTasks.map((task) => (
@@ -276,7 +292,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
           onClick={() => setProjectModalOpen(true)}
           title="Manage projects"
         >
-          ⚙
+          <Settings size={14} />
         </button>
         <select
           className="select select-sm select-bordered"
