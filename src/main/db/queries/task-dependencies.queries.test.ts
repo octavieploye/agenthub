@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../migration-runner'
-import { insertTask, getAllTasks } from './tasks.queries'
+import { insertTask, getAllTasks, getTasksByRepo, getTaskById } from './tasks.queries'
 import { insertTaskDependency, getDependencyMap } from './task-dependencies.queries'
 
 let db: Database.Database
@@ -67,6 +67,35 @@ describe('getAllTasks blockedBy integration', () => {
     const tasks = getAllTasks(db)
     const taskA = tasks.find((t) => t.id === t1.id)!
     const taskB = tasks.find((t) => t.id === t2.id)!
+
+    expect(taskA.blockedBy).toEqual([])
+    expect(taskB.blockedBy).toEqual([t1.id])
+  })
+})
+
+describe('getTasksByRepo blockedBy integration', () => {
+  it('returns the blocked task with blockedBy populated, not []', () => {
+    const t1 = insertTask(db, { repoId, title: 'Task A' })
+    const t2 = insertTask(db, { repoId, title: 'Task B' })
+    insertTaskDependency(db, t2.id, t1.id)
+
+    const tasks = getTasksByRepo(db, repoId)
+    const taskA = tasks.find((t) => t.id === t1.id)!
+    const taskB = tasks.find((t) => t.id === t2.id)!
+
+    expect(taskA.blockedBy).toEqual([])
+    expect(taskB.blockedBy).toEqual([t1.id])
+  })
+})
+
+describe('getTaskById blockedBy integration', () => {
+  it('returns a task with blockedBy populated when it has a dependency', () => {
+    const t1 = insertTask(db, { repoId, title: 'Task A' })
+    const t2 = insertTask(db, { repoId, title: 'Task B' })
+    insertTaskDependency(db, t2.id, t1.id)
+
+    const taskA = getTaskById(db, t1.id)!
+    const taskB = getTaskById(db, t2.id)!
 
     expect(taskA.blockedBy).toEqual([])
     expect(taskB.blockedBy).toEqual([t1.id])

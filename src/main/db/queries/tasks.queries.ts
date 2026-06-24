@@ -39,21 +39,28 @@ export function getTasksByRepo(db: Database.Database, repoId: string): TaskItem[
   const rows = db
     .prepare('SELECT * FROM tasks WHERE repo_id = ? ORDER BY priority ASC, created_at DESC')
     .all(repoId)
-  return rows.map((r) => mapRow(r as Record<string, unknown>))
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
 
 export function getTasksByStatus(db: Database.Database, status: TaskStatus): TaskItem[] {
   const rows = db
     .prepare('SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at DESC')
     .all(status)
-  return rows.map((r) => mapRow(r as Record<string, unknown>))
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
 
 export function getTaskById(db: Database.Database, id: string): TaskItem | null {
   const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
     | Record<string, unknown>
     | undefined
-  return row ? mapRow(row) : null
+  if (!row) return null
+  const deps = db
+    .prepare('SELECT depends_on_id FROM task_dependencies WHERE task_id = ?')
+    .all(id) as { depends_on_id: string }[]
+  const depMap = new Map([[id, deps.map((d) => d.depends_on_id)]])
+  return mapRow(row, depMap)
 }
 
 export function getTaskByAgentId(db: Database.Database, agentId: string): TaskItem | null {
@@ -62,7 +69,13 @@ export function getTaskByAgentId(db: Database.Database, agentId: string): TaskIt
       "SELECT * FROM tasks WHERE agent_id = ? AND status NOT IN ('completed', 'tested') LIMIT 1"
     )
     .get(agentId) as Record<string, unknown> | undefined
-  return row ? mapRow(row) : null
+  if (!row) return null
+  const id = row.id as string
+  const deps = db
+    .prepare('SELECT depends_on_id FROM task_dependencies WHERE task_id = ?')
+    .all(id) as { depends_on_id: string }[]
+  const depMap = new Map([[id, deps.map((d) => d.depends_on_id)]])
+  return mapRow(row, depMap)
 }
 
 export function insertTask(db: Database.Database, input: CreateTaskInput): TaskItem {
@@ -212,7 +225,8 @@ export function searchTasks(db: Database.Database, query: string): TaskItem[] {
       `SELECT * FROM tasks WHERE title LIKE ? OR description LIKE ? ORDER BY priority ASC, created_at DESC`
     )
     .all(pattern, pattern)
-  return rows.map((r) => mapRow(r as Record<string, unknown>))
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
 
 export function getCompletedTasksSince(db: Database.Database, since: string): TaskItem[] {
@@ -221,5 +235,6 @@ export function getCompletedTasksSince(db: Database.Database, since: string): Ta
       `SELECT * FROM tasks WHERE status IN ('completed', 'tested') AND updated_at >= ? ORDER BY updated_at DESC`
     )
     .all(since)
-  return rows.map((r) => mapRow(r as Record<string, unknown>))
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
