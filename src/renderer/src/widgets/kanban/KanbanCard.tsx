@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText } from 'lucide-react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
@@ -22,9 +23,9 @@ interface KanbanCardProps {
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
-  1: 'bg-error/15 text-error border-error/30',
-  2: 'bg-warning/15 text-warning border-warning/30',
-  3: 'bg-base-content/8 text-base-content/50 border-base-content/15'
+  1: 'badge-error',
+  2: 'badge-warning',
+  3: 'badge-ghost'
 }
 
 const CATEGORY_CLASS: Record<string, string> = {
@@ -68,7 +69,10 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left }
 }
 
-export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents, onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0 }: KanbanCardProps) {
+export function KanbanCard({
+  task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents,
+  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0
+}: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -83,7 +87,6 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Close popover and cancel open timer when inline edit activates
   useEffect(() => {
     if (editing) {
       if (openTimerRef.current) {
@@ -94,7 +97,6 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
     }
   }, [editing])
 
-  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (openTimerRef.current) clearTimeout(openTimerRef.current)
@@ -104,9 +106,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
   }, [])
 
   function scheduleClose() {
-    closeTimerRef.current = setTimeout(() => {
-      setPopoverVisible(false)
-    }, 150)
+    closeTimerRef.current = setTimeout(() => { setPopoverVisible(false) }, 150)
   }
 
   function cancelClose() {
@@ -123,7 +123,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
       const rect = cardRef.current.getBoundingClientRect()
       setPopoverPos(computePopoverPosition(rect))
       setPopoverVisible(true)
-    }, 650)
+    }, 900)
   }
 
   function handleCardMouseLeave() {
@@ -135,8 +135,15 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
   }
 
   function handleDragStart(e: React.DragEvent) {
-    e.dataTransfer.setData('taskId', task.id)
-    e.dataTransfer.effectAllowed = 'move'
+    if (openTimerRef.current) {
+      clearTimeout(openTimerRef.current)
+      openTimerRef.current = null
+    }
+    setPopoverVisible(false)
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('taskId', task.id)
+      e.dataTransfer.effectAllowed = 'move'
+    }
   }
 
   function startEdit() {
@@ -146,9 +153,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
     setEditing(true)
   }
 
-  function cancelEdit() {
-    setEditing(false)
-  }
+  function cancelEdit() { setEditing(false) }
 
   function submitEdit() {
     if (!editTitle.trim()) return
@@ -158,11 +163,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
 
   function handleDeleteClick(e: React.MouseEvent) {
     e.stopPropagation()
-    if (confirmDelete) {
-      onDelete?.()
-    } else {
-      setConfirmDelete(true)
-    }
+    if (confirmDelete) { onDelete?.() } else { setConfirmDelete(true) }
   }
 
   async function handlePin(e: React.MouseEvent) {
@@ -199,7 +200,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
         <input
           list={`edit-cat-${task.id}`}
           className="input input-xs input-bordered w-full"
-          placeholder="Category…"
+          placeholder="Category..."
           value={editCategory}
           onChange={(e) => setEditCategory(e.target.value)}
         />
@@ -211,7 +212,7 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
         <textarea
           className="textarea textarea-xs textarea-bordered w-full resize-none"
           rows={2}
-          placeholder="Note…"
+          placeholder="Note..."
           value={editNote}
           onChange={(e) => setEditNote(e.target.value)}
         />
@@ -227,122 +228,140 @@ export function KanbanCard({ task, agentColor, agentName, agentStatus, repoGlowC
     <>
       <div
         ref={cardRef}
-        draggable
-        onDragStart={handleDragStart}
-        onMouseEnter={handleCardMouseEnter}
-        onMouseLeave={() => { handleCardMouseLeave(); setConfirmDelete(false) }}
-        className="relative group rounded-lg bg-base-100 border border-base-300 shadow-sm cursor-grab active:cursor-grabbing px-3 py-2.5 flex flex-col gap-2 hover:border-base-content/20 transition-colors"
+        className="card bg-base-100 border border-base-300 shadow-sm group hover:border-base-content/20 transition-colors"
         style={repoGlowColor ? { borderLeftColor: repoGlowColor, borderLeftWidth: 3 } : undefined}
       >
-        {/* Title row */}
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
-          <span
-            className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${priorityClass} ${onPriorityChange ? 'cursor-pointer hover:opacity-70' : ''}`}
-            title={onPriorityChange ? 'Click to cycle priority' : undefined}
-            onClick={onPriorityChange ? (e) => { e.stopPropagation(); onPriorityChange(cyclePriority(task.priority)) } : undefined}
-          >
-            {priorityLabel}
-          </span>
+        {/* Drag handle strip — only draggable element; does not trigger hover popover */}
+        <div
+          data-testid="drag-handle"
+          draggable
+          onDragStart={handleDragStart}
+          className="flex items-center justify-center h-4 border-b border-base-300/50 cursor-grab active:cursor-grabbing hover:bg-base-200/60 transition-colors"
+        >
+          <GripHorizontal size={14} className="text-base-content/20" />
         </div>
 
-        {/* Agent status badge */}
-        {task.agentId && agentStatus && STATUS_BADGE[agentStatus] && (
-          <div
-            data-testid="agent-status-badge"
-            className={`flex items-center gap-1.5 text-[10px] font-medium ${STATUS_BADGE[agentStatus].class}${onBadgeClick ? ' cursor-pointer' : ''}`}
-            onClick={onBadgeClick ? (e) => { e.stopPropagation(); onBadgeClick() } : undefined}
-          >
+        {/* Card body — hover triggers popover */}
+        <div
+          data-testid="card-body"
+          onMouseEnter={handleCardMouseEnter}
+          onMouseLeave={() => { handleCardMouseLeave(); setConfirmDelete(false) }}
+          className="px-3 py-2 flex flex-col gap-2"
+        >
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-sm font-medium leading-snug line-clamp-2 flex-1">{task.title}</span>
             <span
-              className={`w-1.5 h-1.5 rounded-full ${STATUS_BADGE[agentStatus].pulse ? 'animate-pulse' : ''}`}
-              style={{ backgroundColor: agentColor ?? '#6B7280' }}
-            />
-            <span>{agentName ?? 'Agent'}</span>
-            <span className="text-base-content/30">·</span>
-            <span>{STATUS_BADGE[agentStatus].label}</span>
+              className={`badge badge-xs shrink-0 ${priorityClass} ${onPriorityChange ? 'cursor-pointer hover:opacity-70' : ''}`}
+              title={onPriorityChange ? 'Click to cycle priority' : undefined}
+              onClick={onPriorityChange ? (e) => { e.stopPropagation(); onPriorityChange(cyclePriority(task.priority)) } : undefined}
+            >
+              {priorityLabel}
+            </span>
           </div>
-        )}
 
-        {/* Category + sprint */}
-        {(task.category || task.sprintName) && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {task.category && (
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}>
-                {CATEGORY_LABEL[task.category] ?? task.category}
+          {/* Agent status badge */}
+          {task.agentId && agentStatus && STATUS_BADGE[agentStatus] && (
+            <div
+              data-testid="agent-status-badge"
+              className={`flex items-center gap-1.5 text-[10px] font-medium ${STATUS_BADGE[agentStatus].class}${onBadgeClick ? ' cursor-pointer' : ''}`}
+              onClick={onBadgeClick ? (e) => { e.stopPropagation(); onBadgeClick() } : undefined}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${STATUS_BADGE[agentStatus].pulse ? 'animate-pulse' : ''}`}
+                style={{ backgroundColor: agentColor ?? '#6B7280' }}
+              />
+              <span>{agentName ?? 'Agent'}</span>
+              <span className="text-base-content/30">·</span>
+              <span>{STATUS_BADGE[agentStatus].label}</span>
+            </div>
+          )}
+
+          {/* Category + sprint */}
+          {(task.category || task.sprintName) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {task.category && (
+                <span className={`badge badge-xs ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}>
+                  {CATEGORY_LABEL[task.category] ?? task.category}
+                </span>
+              )}
+              {task.sprintName && (
+                <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
+              )}
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center gap-1.5">
+            {blockedByCount > 0 && (
+              <span
+                className="badge badge-xs bg-warning/15 text-warning border-warning/30"
+                title={`Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}`}
+              >
+                Blocked {blockedByCount}
               </span>
             )}
-            {task.sprintName && (
-              <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
+            {repoGlowColor && (
+              <span
+                className="w-2 h-2 rounded-full shrink-0 border border-base-300"
+                style={{ backgroundColor: repoGlowColor }}
+                title="Repo"
+              />
+            )}
+            {agentColor && (
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agentColor }} title={agentName} />
+            )}
+            {task.note && <FileText size={10} className="text-base-content/40" />}
+            <span className="text-[10px] text-base-content/35 ml-auto">{STATUS_LABEL[task.status]}</span>
+            {onEdit && (
+              <button
+                className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-base-content/40 hover:text-base-content"
+                title="Edit task"
+                onMouseEnter={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); startEdit() }}
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+            {onDispatch && (
+              <button
+                className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-warning/60 hover:text-warning"
+                title="Dispatch to agent"
+                onMouseEnter={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onDispatch() }}
+              >
+                <Zap size={12} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
+                title={confirmDelete ? 'Click again to confirm' : 'Delete task'}
+                onMouseEnter={(e) => e.stopPropagation()}
+                onClick={handleDeleteClick}
+              >
+                {confirmDelete ? <Check size={12} /> : <X size={12} />}
+              </button>
+            )}
+            {task.sbarId && onSBARClick && (
+              <button
+                className="btn btn-xs btn-ghost py-0 h-5 min-h-0 text-[10px]"
+                onClick={onSBARClick}
+                title="View SBAR summary"
+              >SBAR</button>
+            )}
+            {task.status === 'completed' && defaultProjectId && (
+              <button
+                className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${pinned ? 'text-success' : 'text-base-content/40 hover:text-success'}`}
+                title={pinned ? 'Pinned!' : 'Pin as learning'}
+                onMouseEnter={(e) => e.stopPropagation()}
+                onClick={handlePin}
+                data-testid="pin-button"
+              >
+                {pinned ? <Check size={12} /> : <Pin size={12} />}
+              </button>
             )}
           </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center gap-1.5">
-          {blockedByCount > 0 && (
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-warning/15 text-warning border-warning/30"
-              title={`Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}`}
-            >
-              Blocked {blockedByCount}
-            </span>
-          )}
-          {repoGlowColor && (
-            <span
-              className="w-2 h-2 rounded-full shrink-0 border border-base-300"
-              style={{ backgroundColor: repoGlowColor }}
-              title="Repo"
-            />
-          )}
-          {agentColor && (
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: agentColor }} title={agentName} />
-          )}
-          {task.note && (
-            <span className="text-[10px] text-base-content/40">✎</span>
-          )}
-          <span className="text-[10px] text-base-content/35 ml-auto">{STATUS_LABEL[task.status]}</span>
-          {onEdit && (
-            <button
-              className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-base-content/40 hover:text-base-content"
-              title="Edit task"
-              onMouseEnter={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); startEdit() }}
-            >✏</button>
-          )}
-          {onDispatch && (
-            <button
-              className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 text-warning/60 hover:text-warning"
-              title="Dispatch to agent"
-              onMouseEnter={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDispatch() }}
-            >⚡</button>
-          )}
-          {onDelete && (
-            <button
-              className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${confirmDelete ? 'text-error' : 'text-base-content/40 hover:text-error'}`}
-              title={confirmDelete ? 'Click again to confirm' : 'Delete task'}
-              onMouseEnter={(e) => e.stopPropagation()}
-              onClick={handleDeleteClick}
-            >{confirmDelete ? '✓' : '✕'}</button>
-          )}
-          {task.sbarId && onSBARClick && (
-            <button
-              className="btn btn-xs btn-ghost py-0 h-5 min-h-0 text-[10px]"
-              onClick={onSBARClick}
-              title="View SBAR summary"
-            >SBAR</button>
-          )}
-          {task.status === 'completed' && defaultProjectId && (
-            <button
-              className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${pinned ? 'text-success' : 'text-base-content/40 hover:text-success'}`}
-              title={pinned ? 'Pinned!' : 'Pin as learning'}
-              onMouseEnter={(e) => e.stopPropagation()}
-              onClick={handlePin}
-              data-testid="pin-button"
-            >
-              {pinned ? '✓' : '📌'}
-            </button>
-          )}
         </div>
       </div>
 

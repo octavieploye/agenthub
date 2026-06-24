@@ -40,45 +40,45 @@ describe('KanbanCard hover popover', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows popover after 650ms hover on card', async () => {
+  it('shows popover after 900ms hover on card body', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const card = screen.getByText('Fix login bug').closest('[draggable]')!
-    fireEvent.mouseEnter(card)
+    const cardBody = screen.getByTestId('card-body')
+    fireEvent.mouseEnter(cardBody)
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
-    await act(async () => { vi.advanceTimersByTime(650) })
+    await act(async () => { vi.advanceTimersByTime(900) })
     expect(screen.getByTestId('card-popover')).toBeInTheDocument()
   })
 
-  it('does not show popover if mouse leaves before 650ms', async () => {
+  it('does not show popover if mouse leaves card body before 900ms', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const card = screen.getByText('Fix login bug').closest('[draggable]')!
-    fireEvent.mouseEnter(card)
+    const cardBody = screen.getByTestId('card-body')
+    fireEvent.mouseEnter(cardBody)
     await act(async () => { vi.advanceTimersByTime(400) })
-    fireEvent.mouseLeave(card)
-    await act(async () => { vi.advanceTimersByTime(300) })
+    fireEvent.mouseLeave(cardBody)
+    await act(async () => { vi.advanceTimersByTime(600) })
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
   })
 
-  it('closes popover 150ms after mouse leaves both card and popover', async () => {
+  it('closes popover 150ms after mouse leaves both card body and popover', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const card = screen.getByText('Fix login bug').closest('[draggable]')!
-    fireEvent.mouseEnter(card)
-    await act(async () => { vi.advanceTimersByTime(650) })
+    const cardBody = screen.getByTestId('card-body')
+    fireEvent.mouseEnter(cardBody)
+    await act(async () => { vi.advanceTimersByTime(900) })
     expect(screen.getByTestId('card-popover')).toBeInTheDocument()
-    fireEvent.mouseLeave(card)
+    fireEvent.mouseLeave(cardBody)
     await act(async () => { vi.advanceTimersByTime(149) })
     expect(screen.getByTestId('card-popover')).toBeInTheDocument()
     await act(async () => { vi.advanceTimersByTime(1) })
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
   })
 
-  it('keeps popover open when mouse moves from card into popover', async () => {
+  it('keeps popover open when mouse moves from card body into popover', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const card = screen.getByText('Fix login bug').closest('[draggable]')!
-    fireEvent.mouseEnter(card)
-    await act(async () => { vi.advanceTimersByTime(650) })
+    const cardBody = screen.getByTestId('card-body')
+    fireEvent.mouseEnter(cardBody)
+    await act(async () => { vi.advanceTimersByTime(900) })
     const popover = screen.getByTestId('card-popover')
-    fireEvent.mouseLeave(card)
+    fireEvent.mouseLeave(cardBody)
     fireEvent.mouseEnter(popover)
     await act(async () => { vi.advanceTimersByTime(300) })
     expect(screen.getByTestId('card-popover')).toBeInTheDocument()
@@ -86,23 +86,55 @@ describe('KanbanCard hover popover', () => {
 
   it('does not open popover when card is in inline edit mode', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    // Enter inline edit mode by clicking the edit button
     fireEvent.click(screen.getByTitle('Edit task'))
-    // The draggable card is no longer rendered in edit mode
     expect(screen.queryByTitle('Edit task')).not.toBeInTheDocument()
-    // Timer advance — no popover should appear
-    await act(async () => { vi.advanceTimersByTime(700) })
+    await act(async () => { vi.advanceTimersByTime(950) })
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
   })
 
   it('closes popover when inline edit is activated while popover is open', async () => {
     render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const card = screen.getByText('Fix login bug').closest('[draggable]')!
-    fireEvent.mouseEnter(card)
-    await act(async () => { vi.advanceTimersByTime(650) })
+    const cardBody = screen.getByTestId('card-body')
+    fireEvent.mouseEnter(cardBody)
+    await act(async () => { vi.advanceTimersByTime(900) })
     expect(screen.getByTestId('card-popover')).toBeInTheDocument()
-    // Click edit button — popover should close
     fireEvent.click(screen.getByTitle('Edit task'))
+    expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
+  })
+
+  it('renders a drag handle strip with data-testid="drag-handle"', () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} />)
+    expect(screen.getByTestId('drag-handle')).toBeInTheDocument()
+  })
+
+  it('drag handle has draggable attribute', () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} />)
+    const handle = screen.getByTestId('drag-handle')
+    expect(handle).toHaveAttribute('draggable', 'true')
+  })
+
+  it('card body does not have draggable attribute', () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} />)
+    const cardBody = screen.getByTestId('card-body')
+    expect(cardBody).not.toHaveAttribute('draggable')
+  })
+
+  it('hovering drag handle for 950ms does not open popover', async () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    const handle = screen.getByTestId('drag-handle')
+    fireEvent.mouseEnter(handle)
+    await act(async () => { vi.advanceTimersByTime(950) })
+    expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
+  })
+
+  it('drag start on handle cancels pending hover timer', async () => {
+    render(<KanbanCard task={mockTask} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    const cardBody = screen.getByTestId('card-body')
+    const handle = screen.getByTestId('drag-handle')
+    fireEvent.mouseEnter(cardBody)
+    await act(async () => { vi.advanceTimersByTime(500) })
+    fireEvent.dragStart(handle)
+    await act(async () => { vi.advanceTimersByTime(500) })
     expect(screen.queryByTestId('card-popover')).not.toBeInTheDocument()
   })
 })
@@ -210,7 +242,6 @@ describe('KanbanCard pin action', () => {
 
   it('does not show pin button on non-completed cards', () => {
     render(<KanbanCard task={mockTask} defaultProjectId="proj-1" onEdit={vi.fn()} />)
-    // mockTask.status is 'backlog'
     expect(screen.queryByTestId('pin-button')).not.toBeInTheDocument()
   })
 
