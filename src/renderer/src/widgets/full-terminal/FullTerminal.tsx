@@ -14,6 +14,21 @@ import { watchWebGlContext } from '../../crash-logger'
 import { registerTerminal, unregisterTerminal } from './terminal-manager'
 import TerminalContextMenu from './TerminalContextMenu'
 
+// Hardcoded Catppuccin Mocha theme — guaranteed to work without CSS variables.
+// Matches the Phase 5 mock and d3b9d9f "TERMINAL IS FIXED" commit.
+const CATPPUCCIN_MOCHA = {
+  background: '#1e1e2e',
+  foreground: '#cdd6f4',
+  cursor: '#f5e0dc',
+  cursorAccent: '#1e1e2e',
+  selectionBackground: '#585b70',
+  black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af',
+  blue: '#89b4fa', magenta: '#f5c2e7', cyan: '#94e2d5', white: '#bac2de',
+  brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1',
+  brightYellow: '#f9e2af', brightBlue: '#89b4fa', brightMagenta: '#f5c2e7',
+  brightCyan: '#94e2d5', brightWhite: '#a6adc8',
+}
+
 interface FullTerminalProps {
   agentId: string
   agentColor?: string
@@ -82,11 +97,18 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
   // Theme subscription
   const theme = useThemeStore((s) => s.theme)
 
-  // Theme sync effect
+  // Theme sync effect — apply DaisyUI theme AFTER initial render
   useEffect(() => {
     if (!termRef.current) return
-    const xtermTheme = getXtermTheme()
-    termRef.current.options.theme = xtermTheme
+    try {
+      const xtermTheme = getXtermTheme()
+      // Only apply if theme-bridge returned real colors (not all #000000)
+      if (xtermTheme.background && xtermTheme.background !== '#000000') {
+        termRef.current.options.theme = xtermTheme
+      }
+    } catch {
+      // Theme bridge failed — keep Catppuccin fallback
+    }
   }, [theme])
 
   // Main terminal lifecycle: create, attach, wire, dispose
@@ -95,27 +117,27 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
 
     const container = containerRef.current
 
-    // Create terminal with theme
-    const xtermTheme = getXtermTheme()
+    // Create terminal with hardcoded Catppuccin theme (guaranteed to work).
+    // DaisyUI CSS variable theme is applied afterward via theme sync effect.
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: "'SF Mono', Menlo, monospace",
       lineHeight: 1.19,
       letterSpacing: 0,
-      theme: xtermTheme,
+      theme: CATPPUCCIN_MOCHA,
       scrollback: 5000,
       allowProposedApi: true,
     })
 
     termRef.current = term
 
-    // Open terminal in DOM and register for cross-terminal search
+    // Phase 5 sequence: open FIRST, then load addons
     term.open(container)
     registerTerminal(agentId, term)
     watchWebGlContext(container, agentId)
 
-    // Load addons after open
+    // Load addons AFTER open — matching Phase 5 mock
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     fitAddonRef.current = fitAddon
@@ -135,7 +157,6 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     term.loadAddon(serializeAddon)
     serializeAddonRef.current = serializeAddon
 
-    // Try WebGL
     let webglAddon: WebglAddon | null = null
     try {
       webglAddon = new WebglAddon()
@@ -202,7 +223,10 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
       term.write(buffered)
     }
 
-    // Defer fit to rAF + fonts.ready (layout-only, not data flow)
+    // Synchronous fit first (like d3b9d9f), then rAF re-fit for accuracy after fonts load
+    fitAddon.fit()
+    window.agentHub.agents.resize(agentId, term.cols, term.rows)
+
     requestAnimationFrame(() => {
       document.fonts.ready.then(() => {
         if (!fitAddonRef.current || !termRef.current) return

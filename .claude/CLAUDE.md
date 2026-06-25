@@ -30,6 +30,11 @@ This management tool is designed to orchestrate multiple AI agents (specifically
 - **USER IS THE SOURCE OF TRUTH. USER IS ABOVE ALL THE .MD FILES AND AI KNOWLEDGE**
 - **NEVER ASSUME** — always countercheck answers with facts.
 - **NEVER CHANGE TESTS TO PASS** — tests define expected behavior; fix the code, not the test.
+  - If refactored code no longer satisfies an existing test assertion, that is a **signal**, not an obstacle.
+  - **Either the test was wrong** — fix it in a *separate, prior* commit with explicit justification in the commit message explaining why the old assertion was incorrect.
+  - **Or your code broke a contract** — fix the code to satisfy the test, not the other way around.
+  - **"Update test to match new code"** is never a valid commit message or rationale.
+  - **Test assertion changes and implementation changes must never appear in the same commit.** This is enforced by git-ops (see Test Relaxation Gate in `.claude/commands/git-commit.md`).
 - **ERRORS ARE SYMPTOMS** — always look for the root cause, not the surface fix. do not code unless you can 100% countercheck that your fix will work
 - **NEVER EDIT `.gitignore`** — Do not modify, overwrite, or remove entries from `.gitignore` under any circumstances. You may suggest additions to the user, but never make changes yourself. Only the user can approve and apply `.gitignore` changes.
 - **YOU SHOULD TYPE-CHECKING ALL OF YOUR CHANGES**
@@ -90,6 +95,7 @@ When code in a section exceeds 1000 lines, create these folders:
 - **If a test is hard to write without mocks, the code has a design problem.** Fix the design (dependency injection, interfaces, smaller functions) instead of papering over it with mocks.
 - **Integration tests over unit tests.** Prefer tests that prove the system works end-to-end. A test that starts a real Unix socket server and connects a real client is worth ten tests with mocked `net.createServer`.
 - **Test files should clean up after themselves.** Create temp dirs, sockets, or files in `beforeEach` and remove them in `afterEach`. Never leave artifacts on disk.
+- **ALWAYS run tests via `npm test` — NEVER use `npx vitest` directly.** The `pretest` script rebuilds `better-sqlite3` against the system Node.js version. Running `npx vitest` bypasses this hook and will fail with a `NODE_MODULE_VERSION` mismatch because `postinstall` compiles the native module for Electron's Node. Use `npm test` or `npm test -- path/to/file.test.ts` to run specific files.
 
 ## Coding Workflow
 
