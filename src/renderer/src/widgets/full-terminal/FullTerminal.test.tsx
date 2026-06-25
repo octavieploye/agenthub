@@ -108,6 +108,11 @@ vi.mock('./TerminalContextMenu', () => ({
   default: () => null
 }))
 
+vi.mock('./terminal-manager', () => ({
+  registerTerminal: vi.fn(),
+  unregisterTerminal: vi.fn()
+}))
+
 /* ---------- Mock ResizeObserver (not in jsdom) ---------- */
 let resizeObserverCallback: (() => void) | null = null
 class MockResizeObserver {
@@ -205,7 +210,7 @@ describe('FullTerminal', () => {
     await act(() => flushRafAndFonts())
 
     expect(mockOutputBuffer.drain).toHaveBeenCalledWith('agent-1', expect.any(Function))
-    expect(mockTerminalInstance.write).toHaveBeenCalledWith('buffered-data-here', expect.any(Function))
+    expect(mockTerminalInstance.write).toHaveBeenCalledWith('buffered-data-here')
   })
 
   it('does not write empty buffer on mount', async () => {

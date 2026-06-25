@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
-import { startIpcListener } from '../full-terminal/terminal-manager'
+import { outputBuffer } from '@renderer/services/output-buffer'
 import type { AgentState } from '@shared/types/agent.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { isLightColor } from '../agent-detail/color-utils'
@@ -17,9 +17,9 @@ function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Start IPC listener (breakout windows skip AppMain where startIpcListener() normally lives)
+  // Start output buffer IPC listener (breakout windows skip AppMain where outputBuffer.start() normally lives)
   useEffect(() => {
-    startIpcListener()
+    outputBuffer.start()
   }, [])
 
   // Fetch agent state on mount

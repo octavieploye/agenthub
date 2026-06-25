@@ -11,6 +11,7 @@ import { getXtermTheme } from './theme-bridge'
 import { outputBuffer } from '@renderer/services/output-buffer'
 import { useThemeStore } from '@renderer/stores/theme-store'
 import { watchWebGlContext } from '../../crash-logger'
+import { registerTerminal, unregisterTerminal } from './terminal-manager'
 import TerminalContextMenu from './TerminalContextMenu'
 
 interface FullTerminalProps {
@@ -22,7 +23,7 @@ interface FullTerminalProps {
   onSerialize?: (agentId: string, serialize: () => string) => void
 }
 
-function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
+function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef(visible)
 
@@ -109,8 +110,9 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
 
     termRef.current = term
 
-    // Open terminal in DOM
+    // Open terminal in DOM and register for cross-terminal search
     term.open(container)
+    registerTerminal(agentId, term)
     watchWebGlContext(container, agentId)
 
     // Load addons after open
@@ -191,24 +193,21 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
     // Expose serialize
     onSerializeRef.current?.(agentId, () => serializeAddon.serialize())
 
-    // Passthrough callback for outputBuffer
+    // Drain buffered output and register passthrough IMMEDIATELY so no data is lost
     const passthroughCallback = (data: string): void => {
       term.write(data)
     }
+    const buffered = outputBuffer.drain(agentId, passthroughCallback)
+    if (buffered) {
+      term.write(buffered)
+    }
 
-    // Initial fit + drain buffered output (deferred to rAF + fonts.ready)
+    // Defer fit to rAF + fonts.ready (layout-only, not data flow)
     requestAnimationFrame(() => {
       document.fonts.ready.then(() => {
+        if (!fitAddonRef.current || !termRef.current) return
         fitAddon.fit()
         window.agentHub.agents.resize(agentId, term.cols, term.rows)
-
-        // Drain buffered output
-        const buffered = outputBuffer.drain(agentId, passthroughCallback)
-        if (buffered) {
-          term.write(buffered, () => {
-            // write callback — content flushed
-          })
-        }
       })
     })
 
@@ -232,6 +231,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
       titleDisposable.dispose()
       onDataDisposable.dispose()
       outputBuffer.stopPassthrough(agentId, passthroughCallback)
+      unregisterTerminal(agentId)
       if (webglAddon) {
         try { webglAddon.dispose() } catch { /* ok */ }
       }

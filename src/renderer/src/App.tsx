@@ -44,7 +44,7 @@ import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
-import { startIpcListener, fitTerminal } from './widgets/full-terminal/terminal-manager'
+import { outputBuffer } from './services/output-buffer'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
@@ -240,8 +240,8 @@ function AppMain(): React.JSX.Element {
         pendingMissionComplete.delete(agentId)
       }
 
-      // Clean up persistent terminal for this agent
-      import('./widgets/full-terminal/terminal-manager').then(m => m.destroyTerminal(agentId))
+      // Clean up output buffer for this agent
+      outputBuffer.clear(agentId)
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
@@ -358,15 +358,13 @@ function AppMain(): React.JSX.Element {
       setActiveAgent(agentId)
       setFocusedAgent(agentId)
       useViewStore.getState().setViewMode('terminal')
-      // Re-fit now that PTY ownership returned to main window
-      fitTerminal(agentId)
     })
     return unsub
   }, [setActiveAgent, setFocusedAgent])
 
-  // Start terminal IPC listener immediately so no data is lost
+  // Start output buffer IPC listener immediately so no data is lost
   useEffect(() => {
-    startIpcListener()
+    outputBuffer.start()
     const cleanupCrashLogger = initCrashLogger()
     return cleanupCrashLogger
   }, [])
