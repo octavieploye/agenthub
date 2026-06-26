@@ -395,6 +395,23 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     if (approval) { clearTimeout(approval); approvalHoldTimers.delete(agentState.id) }
     approvalEntryTimes.delete(agentState.id)
 
+    // Flush remaining IPC batch so the last ~16ms of output is not lost
+    const managed = agents.get(agentState.id)
+    if (managed) {
+      if (managed.ipcBatchTimer) {
+        clearTimeout(managed.ipcBatchTimer)
+        managed.ipcBatchTimer = null
+        if (managed.ipcBatchBuffer.length > 0) {
+          emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, managed.ipcBatchBuffer)
+          managed.ipcBatchBuffer = ''
+        }
+      }
+      if (managed.flushTimer) {
+        clearTimeout(managed.flushTimer)
+        managed.flushTimer = null
+      }
+    }
+
     // Flush any remaining output
     flushOutputBuffer(agentState.id)
 

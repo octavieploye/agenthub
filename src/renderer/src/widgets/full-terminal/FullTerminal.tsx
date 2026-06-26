@@ -103,9 +103,11 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     if (!termRef.current) return
     try {
       const xtermTheme = getXtermTheme()
-      // Only apply if theme-bridge returned real colors (not #000000 for bg or fg)
-      if (xtermTheme.background && xtermTheme.background !== '#000000' &&
-          xtermTheme.foreground && xtermTheme.foreground !== '#000000') {
+      // Reject if ANY color resolved to #000000 — means CSS variable was not yet available.
+      // Only check string values (skips undefined/number properties).
+      const colors = Object.values(xtermTheme).filter((v): v is string => typeof v === 'string')
+      const hasUnresolved = colors.some(c => c === '#000000')
+      if (!hasUnresolved) {
         termRef.current.options.theme = xtermTheme
       }
     } catch {

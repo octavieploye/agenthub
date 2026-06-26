@@ -323,6 +323,43 @@ describe('FullTerminal', () => {
     expect(mockOnDataDisposable.dispose).toHaveBeenCalled()
   })
 
+  it('does not apply theme when any ANSI color is #000000 (CSS var unresolved)', async () => {
+    const { getXtermTheme } = await import('./theme-bridge')
+    const mockedGetTheme = vi.mocked(getXtermTheme)
+
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    render(<FullTerminal agentId="agent-1" visible={true} />)
+
+    // After mount, theme sync effect ran once with valid mockTheme
+    // Now return a theme where bg/fg are valid but an ANSI color is #000000
+    mockedGetTheme.mockReturnValue({
+      background: '#1a1a2e',
+      foreground: '#e0e0e0',
+      cursor: 'transparent',
+      cursorAccent: 'transparent',
+      red: '#000000', // CSS variable failed to resolve
+      green: '#50fa7b',
+      yellow: '#f1fa8c',
+      blue: '#6272a4',
+      magenta: '#ff79c6',
+      cyan: '#8be9fd',
+      white: '#e0e0e0',
+      black: '#44475a',
+      selectionBackground: '#6478ee44'
+    })
+
+    // Record theme before change — should be valid from initial mount
+    const themeBefore = mockTerminalInstance.options.theme
+
+    act(() => {
+      useThemeStore.getState().setTheme('neon-noir')
+    })
+
+    // Theme should NOT have been updated — red was #000000
+    expect(mockTerminalInstance.options.theme).toBe(themeBefore)
+  })
+
   it('Cmd+V keydown does not call sendInput directly — paste routes through onData only', async () => {
     mockClipboard.readText.mockReturnValue('pasted text')
     const { default: FullTerminal } = await import('./FullTerminal')
