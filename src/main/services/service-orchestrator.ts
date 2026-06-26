@@ -21,7 +21,9 @@ import { VoiceService } from './voice-service'
 import { PiperService } from './piper-service'
 import { DockerService } from './docker-service'
 import { ContainerManager } from './container-manager'
-import { AnamnesisWriter } from './anamnesis-writer'
+import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
+import type { IForgejoAdapter } from './adapters/forgejo-adapter'
+import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapters/adapter-factory'
 import { SprintWatcher } from './sprint-watcher'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
@@ -45,7 +47,8 @@ let voiceService: VoiceService | null = null
 let piperService: PiperService | null = null
 let dockerService: DockerService | null = null
 let containerManager: ContainerManager | null = null
-let anamnesisWriter: AnamnesisWriter | null = null
+let anamnesisWriter: IAnamnesisAdapter | null = null
+let forgejoAdapter: IForgejoAdapter | null = null
 let sprintWatcher: SprintWatcher | null = null
 let intakeDir = ''
 
@@ -263,10 +266,15 @@ export function initializeServices(db: Database.Database): void {
     containerManager = null
   })
 
-  // 15. AnamnesisWriter — Kanban → Anamnesis event pipeline
+  // 15. Anamnesis + Forgejo adapters — null in standalone, real in system mode
+  const appMode = resolveAppMode()
   const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
-  anamnesisWriter = new AnamnesisWriter(db, { anamnesisUrl })
+  anamnesisWriter = createAnamnesisAdapter(appMode, db, { anamnesisUrl })
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
+
+  const forgejoUrl = process.env['FORGEJO_URL'] ?? 'http://localhost:3000'
+  const forgejoToken = process.env['FORGEJO_TOKEN'] ?? ''
+  forgejoAdapter = createForgejoAdapter(appMode, { baseUrl: forgejoUrl, token: forgejoToken })
 
   // 16. SprintWatcher — watches sprint-intake dir for new sprint JSON files
   intakeDir = join(app.getPath('userData'), 'sprint-intake')
@@ -352,8 +360,12 @@ export function getContainerManager(): ContainerManager | null {
   return containerManager
 }
 
-export function getAnamnesisWriter(): AnamnesisWriter | null {
+export function getAnamnesisWriter(): IAnamnesisAdapter | null {
   return anamnesisWriter
+}
+
+export function getForgejoAdapter(): IForgejoAdapter | null {
+  return forgejoAdapter
 }
 
 export function getSprintWatcher(): SprintWatcher | null {
