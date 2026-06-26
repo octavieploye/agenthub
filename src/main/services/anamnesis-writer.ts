@@ -2,6 +2,7 @@ import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { getUnsyncedEvents, markEventSynced } from '../db/queries/task-events.queries'
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
+import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 
 const ENDPOINT_MAP: Record<TaskEventType, string> = {
   CARD_TRANSITION: '/memory/episodic',
@@ -16,7 +17,7 @@ interface AnamnesisWriterDeps {
   authSecret?: string
 }
 
-export class AnamnesisWriter {
+export class AnamnesisWriter implements IAnamnesisAdapter {
   private db: Database.Database
   private anamnesisUrl: string
   private fetch: typeof globalThis.fetch
