@@ -19,8 +19,8 @@ import TerminalContextMenu from './TerminalContextMenu'
 const CATPPUCCIN_MOCHA = {
   background: '#1e1e2e',
   foreground: '#cdd6f4',
-  cursor: '#f5e0dc',
-  cursorAccent: '#1e1e2e',
+  cursor: 'transparent',
+  cursorAccent: 'transparent',
   selectionBackground: '#585b70',
   black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af',
   blue: '#89b4fa', magenta: '#f5c2e7', cyan: '#94e2d5', white: '#bac2de',
@@ -120,10 +120,9 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     // Create terminal with hardcoded Catppuccin theme (guaranteed to work).
     // DaisyUI CSS variable theme is applied afterward via theme sync effect.
     const term = new Terminal({
-      cursorBlink: true,
-      cursorInactiveStyle: 'none',
+      cursorBlink: false,
       fontSize: 13,
-      fontFamily: "'SF Mono', Menlo, monospace",
+      fontFamily: "'JetBrains Mono Variable', 'SF Mono', Menlo, monospace",
       lineHeight: 1.19,
       letterSpacing: 0,
       theme: CATPPUCCIN_MOCHA,

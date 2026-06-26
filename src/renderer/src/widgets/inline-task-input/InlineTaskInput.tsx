@@ -39,19 +39,16 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
   const inputRef = useRef<HTMLInputElement>(null)
   const { disabled, placeholder } = getInputConfig(agent.status)
 
-  // Keep a ref in sync so handleSubmit always reads the latest value,
-  // even if React hasn't re-rendered yet (e.g. after voice transcription
-  // sets the value via native setter — the state update is queued but
-  // the user can click Send before the re-render).
-  const inputValueRef = useRef(inputValue)
-  inputValueRef.current = inputValue
-
   const handleSubmit = useCallback(() => {
-    const trimmed = inputValueRef.current.trim()
+    // Read directly from the DOM element so voice transcription values
+    // are captured even before React re-renders the controlled input.
+    const el = inputRef.current
+    const trimmed = (el?.value ?? inputValue).trim()
     if (!trimmed) return
     onSendInput(agent.id, trimmed + '\r')
     setInputValue('')
-  }, [agent.id, onSendInput])
+    if (el) el.value = ''
+  }, [agent.id, onSendInput, inputValue])
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {

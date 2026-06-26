@@ -159,7 +159,7 @@ function FilePreviewLayout({ filePath, repoPath, repoName }: FilePreviewLayoutPr
                   scrollBeyondLastLine: false,
                   wordWrap: 'on',
                   fontSize: 12,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'JetBrains Mono Variable', monospace",
                   lineNumbers: 'on',
                   glyphMargin: false,
                   folding: true,
