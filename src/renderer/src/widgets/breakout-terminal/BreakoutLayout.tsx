@@ -63,6 +63,15 @@ function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React
     [agentId]
   )
 
+  const handleVoiceAutoSend = useCallback(() => {
+    const el = inputRef.current
+    const text = el?.value ?? ''
+    if (text.trim()) {
+      handleSendInput(text)
+      if (el) el.value = ''
+    }
+  }, [handleSendInput])
+
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {
       e.preventDefault()
@@ -156,7 +165,7 @@ function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React
             className="input input-sm input-bordered flex-1 bg-base-200/50 text-sm"
             style={{ borderColor: `${agent?.color ?? '#3B82F6'}40` }}
           />
-          <VoiceInputButton inputRef={inputRef} />
+          <VoiceInputButton inputRef={inputRef} onAutoSend={handleVoiceAutoSend} />
           <button
             data-testid="breakout-send"
             onClick={() => handleSendInput(inputValue)}

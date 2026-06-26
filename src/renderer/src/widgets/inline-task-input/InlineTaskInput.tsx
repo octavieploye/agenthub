@@ -112,7 +112,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"
       />
-      <VoiceInputButton inputRef={inputRef} />
+      <VoiceInputButton inputRef={inputRef} onAutoSend={handleSubmit} />
       <button
         data-testid="inline-send-button"
         className="btn btn-sm text-xs"

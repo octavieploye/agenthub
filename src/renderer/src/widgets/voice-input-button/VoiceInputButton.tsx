@@ -4,12 +4,13 @@ import { useVoiceInputContext } from '../../contexts/VoiceInputContext'
 
 interface VoiceInputButtonProps {
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+  onAutoSend?: () => void
   className?: string
 }
 
-export function VoiceInputButton({ inputRef, className = '' }: VoiceInputButtonProps) {
+export function VoiceInputButton({ inputRef, onAutoSend, className = '' }: VoiceInputButtonProps) {
   const id = useId()
-  const { isListening, isProcessing, micError, toggleListening } = useVoiceInput(inputRef)
+  const { isListening, isProcessing, micError, toggleListening } = useVoiceInput({ inputRef, onAutoSend })
   const { register, unregister } = useVoiceInputContext()
 
   useEffect(() => {
