@@ -121,6 +121,7 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     // DaisyUI CSS variable theme is applied afterward via theme sync effect.
     const term = new Terminal({
       cursorBlink: true,
+      cursorInactiveStyle: 'none',
       fontSize: 13,
       fontFamily: "'SF Mono', Menlo, monospace",
       lineHeight: 1.19,
@@ -135,7 +136,6 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     // Phase 5 sequence: open FIRST, then load addons
     term.open(container)
     registerTerminal(agentId, term)
-    watchWebGlContext(container, agentId)
 
     // Load addons AFTER open — matching Phase 5 mock
     const fitAddon = new FitAddon()
@@ -161,9 +161,18 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     try {
       webglAddon = new WebglAddon()
       term.loadAddon(webglAddon)
+      // Monitor WebGL context loss AFTER addon creates its canvas
+      watchWebGlContext(container, agentId)
       webglAddon.onContextLoss(() => {
         webglAddon?.dispose()
         webglAddon = null
+        // Force DOM fallback renderer to repaint all visible content.
+        // Without this, the terminal stays blank after WebGL context loss
+        // until an external resize event (e.g. opening DevTools) triggers fit().
+        if (fitAddonRef.current && termRef.current) {
+          fitAddonRef.current.fit()
+          termRef.current.refresh(0, termRef.current.rows - 1)
+        }
       })
     } catch {
       webglAddon = null
