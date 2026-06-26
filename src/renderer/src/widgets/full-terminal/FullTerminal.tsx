@@ -55,6 +55,7 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
   const fitAddonRef = useRef<FitAddon | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const serializeAddonRef = useRef<SerializeAddon | null>(null)
+  const needsRecoveryRef = useRef(false)
 
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault()
@@ -165,12 +166,13 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
       webglAddon.onContextLoss(() => {
         webglAddon?.dispose()
         webglAddon = null
-        // Force DOM fallback renderer to repaint all visible content.
-        // Without this, the terminal stays blank after WebGL context loss
-        // until an external resize event (e.g. opening DevTools) triggers fit().
         if (fitAddonRef.current && termRef.current) {
-          fitAddonRef.current.fit()
-          termRef.current.refresh(0, termRef.current.rows - 1)
+          if (visibleRef.current) {
+            fitAddonRef.current.fit()
+            termRef.current.refresh(0, termRef.current.rows - 1)
+          } else {
+            needsRecoveryRef.current = true
+          }
         }
       })
     } catch {
@@ -275,7 +277,7 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     }
   }, [agentId])
 
-  // Visibility: re-fit and focus when becoming visible
+  // Visibility: re-fit, refresh, and focus when becoming visible
   useEffect(() => {
     if (!visible || !termRef.current || !fitAddonRef.current) return
 
@@ -283,8 +285,10 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
       document.fonts.ready.then(() => {
         if (!fitAddonRef.current || !termRef.current) return
         fitAddonRef.current.fit()
+        termRef.current.refresh(0, termRef.current.rows - 1)
         termRef.current.focus()
         window.agentHub.agents.resize(agentId, termRef.current.cols, termRef.current.rows)
+        needsRecoveryRef.current = false
       })
     })
   }, [visible, agentId])

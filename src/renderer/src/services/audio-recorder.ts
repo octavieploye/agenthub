@@ -1,6 +1,8 @@
 export class AudioRecorderService {
   private audioContext: AudioContext | null = null
   private stream: MediaStream | null = null
+  private source: MediaStreamAudioSourceNode | null = null
+  private processor: ScriptProcessorNode | null = null
   private samples: Float32Array[] = []
   private recording = false
 
@@ -18,23 +20,31 @@ export class AudioRecorderService {
     })
 
     this.audioContext = new AudioContext({ sampleRate: 16000 })
-    const source = this.audioContext.createMediaStreamSource(this.stream)
+    this.source = this.audioContext.createMediaStreamSource(this.stream)
 
-    const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
-    processor.onaudioprocess = (event) => {
+    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1)
+    this.processor.onaudioprocess = (event) => {
       if (!this.recording) return
       const input = event.inputBuffer.getChannelData(0)
       this.samples.push(new Float32Array(input))
     }
 
-    source.connect(processor)
-    processor.connect(this.audioContext.destination)
+    this.source.connect(this.processor)
+    this.processor.connect(this.audioContext.destination)
     this.recording = true
   }
 
   async stopRecording(): Promise<ArrayBuffer> {
     this.recording = false
 
+    if (this.source) {
+      this.source.disconnect()
+      this.source = null
+    }
+    if (this.processor) {
+      this.processor.disconnect()
+      this.processor = null
+    }
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop())
       this.stream = null

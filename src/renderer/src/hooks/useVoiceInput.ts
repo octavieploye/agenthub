@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { AudioRecorderService } from '../services/audio-recorder'
 
 // Trigger words per locale — Whisper could feed detected language in the future
@@ -34,6 +34,17 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
   const [micError, setMicError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorderService | null>(null)
   const isListeningRef = useRef(false)
+
+  // Cleanup on unmount — stop recording if component unmounts mid-recording
+  useEffect(() => {
+    return () => {
+      if (isListeningRef.current && recorderRef.current) {
+        recorderRef.current.stopRecording().catch(() => {})
+        recorderRef.current = null
+        isListeningRef.current = false
+      }
+    }
+  }, [])
 
   const startListening = useCallback(async () => {
     if (isListeningRef.current || isProcessing) return
