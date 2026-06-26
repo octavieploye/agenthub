@@ -25,10 +25,10 @@ export function createAnamnesisAdapter(
 
 export function createForgejoAdapter(
   mode: AppMode,
-  opts: { baseUrl: string; token: string }
+  opts: { baseUrl: string; token: string; fetch?: typeof globalThis.fetch }
 ): IForgejoAdapter {
   if (mode === 'system') {
-    return new ForgejoAdapter(opts.baseUrl, opts.token)
+    return new ForgejoAdapter(opts.baseUrl, opts.token, { fetch: opts.fetch })
   }
   return new NullForgejoAdapter()
 }

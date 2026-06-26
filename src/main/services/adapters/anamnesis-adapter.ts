@@ -1,3 +1,4 @@
+// src/main/services/adapters/anamnesis-adapter.ts
 
 export interface IAnamnesisAdapter {
   onEventInserted(): void

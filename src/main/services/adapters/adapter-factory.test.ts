@@ -1,5 +1,5 @@
 // src/main/services/adapters/adapter-factory.test.ts
-import { it, expect, afterEach } from 'vitest'
+import { it, expect, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../../db/migration-runner'
 import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapter-factory'
@@ -52,4 +52,11 @@ it('createForgejoAdapter returns NullForgejoAdapter in standalone mode', () => {
 it('createForgejoAdapter returns ForgejoAdapter in system mode', () => {
   const adapter = createForgejoAdapter('system', { baseUrl: 'http://forgejo.local:3000', token: 'tok' })
   expect(adapter).toBeInstanceOf(ForgejoAdapter)
+})
+
+it('createForgejoAdapter in system mode forwards fetch dep to ForgejoAdapter', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+  const adapter = createForgejoAdapter('system', { baseUrl: 'http://forgejo.local:3000', token: 'tok', fetch: fetchMock })
+  expect(await adapter.isAvailable()).toBe(true)
+  expect(fetchMock).toHaveBeenCalledTimes(1)
 })
