@@ -2,148 +2,90 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { useThemeStore } from '@renderer/stores/theme-store'
 
-/* ---------- Mock xterm ---------- */
-const mockOnDataDisposable = { dispose: vi.fn() }
-const mockOnTitleChangeDisposable = { dispose: vi.fn() }
-const mockTerminalInstance = {
-  open: vi.fn(),
-  loadAddon: vi.fn(),
-  write: vi.fn(),
-  resize: vi.fn(),
-  focus: vi.fn(),
-  refresh: vi.fn(),
-  clear: vi.fn(),
-  selectAll: vi.fn(),
-  onData: vi.fn(() => mockOnDataDisposable),
-  onTitleChange: vi.fn(() => mockOnTitleChangeDisposable),
+/* ---------- Mock terminal-manager ---------- */
+// terminal-manager depends on xterm (requires real DOM/canvas) — mock at this boundary.
+const mockTitleDisposable = { dispose: vi.fn() }
+const mockTerm = {
   attachCustomKeyEventHandler: vi.fn(),
+  onTitleChange: vi.fn(() => mockTitleDisposable),
   hasSelection: vi.fn(() => false),
   getSelection: vi.fn(() => ''),
-  dispose: vi.fn(),
-  element: document.createElement('div'),
-  options: {} as Record<string, unknown>,
-  unicode: { activeVersion: '6' },
-  cols: 80,
-  rows: 30
-}
-
-vi.mock('@xterm/xterm', () => {
-  const MockTerminal = vi.fn(function (this: unknown, opts: Record<string, unknown>) {
-    mockTerminalInstance.options = { ...opts }
-    Object.assign(this as Record<string, unknown>, mockTerminalInstance)
-    return mockTerminalInstance
-  })
-  return { Terminal: MockTerminal }
-})
-
-vi.mock('@xterm/addon-webgl', () => {
-  const MockWebglAddon = vi.fn(function () {
-    return { dispose: vi.fn(), onContextLoss: vi.fn() }
-  })
-  return { WebglAddon: MockWebglAddon }
-})
-
-const mockFitAddonInstance = { fit: vi.fn(), dispose: vi.fn(), proposeDimensions: vi.fn(() => ({ cols: 80, rows: 30 })) }
-vi.mock('@xterm/addon-fit', () => {
-  const MockFitAddon = vi.fn(function () {
-    return mockFitAddonInstance
-  })
-  return { FitAddon: MockFitAddon }
-})
-
-vi.mock('@xterm/addon-search', () => {
-  const MockSearchAddon = vi.fn(function () {
-    return { findNext: vi.fn(), findPrevious: vi.fn(), clearDecorations: vi.fn(), dispose: vi.fn() }
-  })
-  return { SearchAddon: MockSearchAddon }
-})
-
-vi.mock('@xterm/addon-web-links', () => {
-  const MockWebLinksAddon = vi.fn(function () {
-    return { dispose: vi.fn() }
-  })
-  return { WebLinksAddon: MockWebLinksAddon }
-})
-
-vi.mock('@xterm/addon-serialize', () => {
-  const MockSerializeAddon = vi.fn(function () {
-    return { serialize: vi.fn(() => ''), dispose: vi.fn() }
-  })
-  return { SerializeAddon: MockSerializeAddon }
-})
-
-vi.mock('@xterm/addon-unicode11', () => {
-  const MockUnicode11Addon = vi.fn(function () {
-    return { dispose: vi.fn() }
-  })
-  return { Unicode11Addon: MockUnicode11Addon }
-})
-
-/* ---------- Mock output-buffer ---------- */
-const mockOutputBuffer = {
-  start: vi.fn(),
-  stop: vi.fn(),
-  drain: vi.fn((_agentId: string, _callback: (data: string) => void) => ''),
-  stopPassthrough: vi.fn(),
+  focus: vi.fn(),
   clear: vi.fn(),
-  clearAll: vi.fn()
+  selectAll: vi.fn(),
+  element: document.createElement('div'),
+  cols: 80,
+  rows: 24,
 }
 
-vi.mock('@renderer/services/output-buffer', () => ({
-  outputBuffer: mockOutputBuffer
-}))
-
-/* ---------- Mock theme bridge ---------- */
-const mockTheme = {
-  background: '#1a1a2e',
-  foreground: '#e0e0e0',
-  cursor: '#6478ee'
+const mockManagedTerminal = {
+  term: mockTerm,
+  fitAddon: { fit: vi.fn() },
+  searchAddon: { findNext: vi.fn(), findPrevious: vi.fn(), clearDecorations: vi.fn() },
+  serializeAddon: { serialize: vi.fn(() => '') },
+  webglAddon: null,
+  opened: false,
+  container: null,
+  pendingWrites: [],
 }
 
-vi.mock('./theme-bridge', () => ({
-  getXtermTheme: vi.fn(() => ({ ...mockTheme }))
+const mockGetOrCreateTerminal = vi.fn(() => mockManagedTerminal)
+const mockAttachToContainer = vi.fn()
+const mockDetachFromContainer = vi.fn()
+const mockSetVisible = vi.fn()
+const mockFitTerminal = vi.fn()
+const mockUpdateTheme = vi.fn()
+const mockDestroyTerminal = vi.fn()
+const mockGetTerminal = vi.fn(() => mockTerm)
+const mockGetSearchAddon = vi.fn(() => mockManagedTerminal.searchAddon)
+const mockGetSerializeAddon = vi.fn(() => mockManagedTerminal.serializeAddon)
+
+vi.mock('./terminal-manager', () => ({
+  getOrCreateTerminal: (...args: unknown[]) => mockGetOrCreateTerminal(...args),
+  attachToContainer: (...args: unknown[]) => mockAttachToContainer(...args),
+  detachFromContainer: (...args: unknown[]) => mockDetachFromContainer(...args),
+  setVisible: (...args: unknown[]) => mockSetVisible(...args),
+  fitTerminal: (...args: unknown[]) => mockFitTerminal(...args),
+  updateTheme: (...args: unknown[]) => mockUpdateTheme(...args),
+  destroyTerminal: (...args: unknown[]) => mockDestroyTerminal(...args),
+  getTerminal: (...args: unknown[]) => mockGetTerminal(...args),
+  getSearchAddon: (...args: unknown[]) => mockGetSearchAddon(...args),
+  getSerializeAddon: (...args: unknown[]) => mockGetSerializeAddon(...args),
+  searchAllTerminals: vi.fn(() => []),
+  startIpcListener: vi.fn(),
 }))
 
 vi.mock('./TerminalContextMenu', () => ({
-  default: () => null
-}))
-
-vi.mock('./terminal-manager', () => ({
-  registerTerminal: vi.fn(),
-  unregisterTerminal: vi.fn()
+  default: () => null,
 }))
 
 /* ---------- Mock ResizeObserver (not in jsdom) ---------- */
-let resizeObserverCallback: (() => void) | null = null
 class MockResizeObserver {
   observe = vi.fn()
   unobserve = vi.fn()
   disconnect = vi.fn()
-  constructor(callback: () => void) {
-    resizeObserverCallback = callback
-  }
+  constructor(_callback: () => void) {}
 }
 global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
 /* ---------- Mock IPC ---------- */
 const mockAgents = {
   sendInput: vi.fn(),
-  resize: vi.fn()
+  resize: vi.fn(),
 }
 
 const mockClipboard = {
   writeText: vi.fn(),
-  readText: vi.fn(() => '')
+  readText: vi.fn(() => ''),
 }
 
 Object.defineProperty(window, 'agentHub', {
   value: { on: { agentOutput: vi.fn(() => vi.fn()) }, agents: mockAgents, clipboard: mockClipboard },
-  writable: true
+  writable: true,
 })
 
 /* ---------- Mock requestAnimationFrame ---------- */
 let rafCallbacks: (() => void)[] = []
-const originalRaf = globalThis.requestAnimationFrame
 globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
   rafCallbacks.push(cb as () => void)
   return 0
@@ -155,10 +97,8 @@ function flushRaf(): void {
   cbs.forEach((cb) => cb())
 }
 
-/** Flush rAF + document.fonts.ready microtask chain */
 async function flushRafAndFonts(): Promise<void> {
   flushRaf()
-  // document.fonts.ready is a resolved promise — flush its .then() microtask
   await Promise.resolve()
   await Promise.resolve()
 }
@@ -166,17 +106,13 @@ async function flushRafAndFonts(): Promise<void> {
 /* ---------- Mock document.fonts (not in jsdom) ---------- */
 Object.defineProperty(document, 'fonts', {
   value: { ready: Promise.resolve() },
-  writable: true
+  writable: true,
 })
 
 describe('FullTerminal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     rafCallbacks = []
-    resizeObserverCallback = null
-    mockTerminalInstance.options = {}
-    mockTerminalInstance.cols = 80
-    mockTerminalInstance.rows = 24
     useThemeStore.setState({ theme: 'mocha' })
     document.documentElement.setAttribute('data-theme', 'mocha')
   })
@@ -185,63 +121,46 @@ describe('FullTerminal', () => {
     vi.clearAllMocks()
   })
 
-  it('creates a new Terminal on mount and opens it in the container', async () => {
+  it('calls getOrCreateTerminal and attachToContainer on mount', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
-    expect(mockTerminalInstance.open).toHaveBeenCalledWith(expect.any(HTMLElement))
+    expect(mockGetOrCreateTerminal).toHaveBeenCalledWith('agent-1')
+    expect(mockAttachToContainer).toHaveBeenCalledWith('agent-1', expect.any(HTMLElement))
   })
 
-  it('disposes the terminal on unmount', async () => {
+  it('calls detachFromContainer on unmount (does NOT destroy terminal)', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { unmount } = render(<FullTerminal agentId="agent-1" visible={true} />)
     unmount()
 
-    expect(mockTerminalInstance.dispose).toHaveBeenCalled()
+    expect(mockDetachFromContainer).toHaveBeenCalledWith('agent-1')
+    expect(mockDestroyTerminal).not.toHaveBeenCalled()
   })
 
-  it('replays buffered output on mount via drain()', async () => {
-    mockOutputBuffer.drain.mockReturnValueOnce('buffered-data-here')
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    render(<FullTerminal agentId="agent-1" visible={true} />)
-    await act(() => flushRafAndFonts())
-
-    expect(mockOutputBuffer.drain).toHaveBeenCalledWith('agent-1', expect.any(Function))
-    expect(mockTerminalInstance.write).toHaveBeenCalledWith('buffered-data-here')
-  })
-
-  it('does not write empty buffer on mount', async () => {
-    mockOutputBuffer.drain.mockReturnValueOnce('')
+  it('wires keyboard handler on mount', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
-    expect(mockTerminalInstance.write).not.toHaveBeenCalled()
+    expect(mockTerm.attachCustomKeyEventHandler).toHaveBeenCalledWith(expect.any(Function))
   })
 
-  it('stops passthrough on unmount', async () => {
+  it('wires onTitleChange and disposes it on unmount', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { unmount } = render(<FullTerminal agentId="agent-1" visible={true} />)
+
+    expect(mockTerm.onTitleChange).toHaveBeenCalledWith(expect.any(Function))
+
     unmount()
 
-    expect(mockOutputBuffer.stopPassthrough).toHaveBeenCalledWith('agent-1', expect.any(Function))
+    expect(mockTitleDisposable.dispose).toHaveBeenCalled()
   })
 
-  it('calls resize IPC after initial fit in requestAnimationFrame', async () => {
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    render(<FullTerminal agentId="agent-1" visible={true} />)
-    await act(() => flushRafAndFonts())
-
-    expect(mockFitAddonInstance.fit).toHaveBeenCalled()
-    expect(mockAgents.resize).toHaveBeenCalledWith('agent-1', 80, 24)
-  })
-
-  it('re-fits and focuses when visible changes to true', async () => {
+  it('calls setVisible when visible changes to true', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { rerender } = render(<FullTerminal agentId="agent-1" visible={false} />)
@@ -251,124 +170,66 @@ describe('FullTerminal', () => {
     rerender(<FullTerminal agentId="agent-1" visible={true} />)
     await act(() => flushRafAndFonts())
 
-    expect(mockFitAddonInstance.fit).toHaveBeenCalled()
-    expect(mockTerminalInstance.focus).toHaveBeenCalled()
+    expect(mockSetVisible).toHaveBeenCalledWith('agent-1', true)
   })
 
-  it('updates terminal theme when DaisyUI theme changes', async () => {
+  it('calls updateTheme when DaisyUI theme changes', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
+    vi.clearAllMocks()
     act(() => {
       useThemeStore.getState().setTheme('neon-noir')
     })
 
-    // The theme effect should have set options.theme
-    expect(mockTerminalInstance.options.theme).toBeDefined()
+    expect(mockUpdateTheme).toHaveBeenCalled()
   })
 
-  it('disposes old terminal and creates new one when agentId changes', async () => {
+  it('detaches old agent and attaches new one when agentId changes', async () => {
     const { default: FullTerminal } = await import('./FullTerminal')
 
     const { rerender } = render(<FullTerminal agentId="agent-1" visible={true} />)
     await act(() => flushRafAndFonts())
 
-    // First mount creates terminal
-    expect(mockTerminalInstance.open).toHaveBeenCalledTimes(1)
-
+    vi.clearAllMocks()
     rerender(<FullTerminal agentId="agent-2" visible={true} />)
     await act(() => flushRafAndFonts())
 
-    // Old terminal disposed, new one created
-    expect(mockTerminalInstance.dispose).toHaveBeenCalled()
-    expect(mockOutputBuffer.stopPassthrough).toHaveBeenCalledWith('agent-1', expect.any(Function))
-    expect(mockOutputBuffer.drain).toHaveBeenCalledWith('agent-2', expect.any(Function))
+    expect(mockDetachFromContainer).toHaveBeenCalledWith('agent-1')
+    expect(mockGetOrCreateTerminal).toHaveBeenCalledWith('agent-2')
+    expect(mockAttachToContainer).toHaveBeenCalledWith('agent-2', expect.any(HTMLElement))
   })
 
-  it('wires keyboard input to sendInput IPC', async () => {
+  it('exposes serialize callback via onSerialize prop', async () => {
+    const onSerialize = vi.fn()
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    render(<FullTerminal agentId="agent-1" visible={true} onSerialize={onSerialize} />)
+
+    expect(onSerialize).toHaveBeenCalledWith('agent-1', expect.any(Function))
+  })
+
+  it('calls onReady on mount', async () => {
+    const onReady = vi.fn()
+    const { default: FullTerminal } = await import('./FullTerminal')
+
+    render(<FullTerminal agentId="agent-1" visible={true} onReady={onReady} />)
+
+    expect(onReady).toHaveBeenCalled()
+  })
+
+  it('Cmd+C copies selection via clipboard IPC', async () => {
+    mockTerm.hasSelection.mockReturnValue(true)
+    mockTerm.getSelection.mockReturnValue('selected text')
     const { default: FullTerminal } = await import('./FullTerminal')
 
     render(<FullTerminal agentId="agent-1" visible={true} />)
 
-    // onData should have been called with a callback
-    expect(mockTerminalInstance.onData).toHaveBeenCalledWith(expect.any(Function))
+    const keyHandler = mockTerm.attachCustomKeyEventHandler.mock.calls[0][0]
+    const result = keyHandler({ type: 'keydown', metaKey: true, ctrlKey: false, key: 'c', altKey: false, shiftKey: false })
 
-    // Simulate typing
-    const onDataCallback = mockTerminalInstance.onData.mock.calls[0][0]
-    onDataCallback('hello')
-
-    expect(mockAgents.sendInput).toHaveBeenCalledWith('agent-1', 'hello')
-  })
-
-  it('disconnects resize observer on unmount', async () => {
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    const { unmount } = render(<FullTerminal agentId="agent-1" visible={true} />)
-
-    // Get the MockResizeObserver instance
-    const observer = MockResizeObserver.prototype
-    unmount()
-
-    // disconnect is called on unmount (on the instance, not prototype)
-    expect(mockTerminalInstance.dispose).toHaveBeenCalled()
-  })
-
-  it('disposes onData handler on unmount', async () => {
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    const { unmount } = render(<FullTerminal agentId="agent-1" visible={true} />)
-    unmount()
-
-    expect(mockOnDataDisposable.dispose).toHaveBeenCalled()
-  })
-
-  it('does not apply theme when any ANSI color is #000000 (CSS var unresolved)', async () => {
-    const { getXtermTheme } = await import('./theme-bridge')
-    const mockedGetTheme = vi.mocked(getXtermTheme)
-
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    render(<FullTerminal agentId="agent-1" visible={true} />)
-
-    // After mount, theme sync effect ran once with valid mockTheme
-    // Now return a theme where bg/fg are valid but an ANSI color is #000000
-    mockedGetTheme.mockReturnValue({
-      background: '#1a1a2e',
-      foreground: '#e0e0e0',
-      cursor: 'transparent',
-      cursorAccent: 'transparent',
-      red: '#000000', // CSS variable failed to resolve
-      green: '#50fa7b',
-      yellow: '#f1fa8c',
-      blue: '#6272a4',
-      magenta: '#ff79c6',
-      cyan: '#8be9fd',
-      white: '#e0e0e0',
-      black: '#44475a',
-      selectionBackground: '#6478ee44'
-    })
-
-    // Record theme before change — should be valid from initial mount
-    const themeBefore = mockTerminalInstance.options.theme
-
-    act(() => {
-      useThemeStore.getState().setTheme('neon-noir')
-    })
-
-    // Theme should NOT have been updated — red was #000000
-    expect(mockTerminalInstance.options.theme).toBe(themeBefore)
-  })
-
-  it('Cmd+V keydown does not call sendInput directly — paste routes through onData only', async () => {
-    mockClipboard.readText.mockReturnValue('pasted text')
-    const { default: FullTerminal } = await import('./FullTerminal')
-
-    render(<FullTerminal agentId="agent-1" visible={true} />)
-
-    const keyHandler = mockTerminalInstance.attachCustomKeyEventHandler.mock.calls[0][0]
-    keyHandler({ type: 'keydown', metaKey: true, ctrlKey: false, key: 'v' })
-
-    expect(mockAgents.sendInput).not.toHaveBeenCalled()
+    expect(result).toBe(false)
+    expect(mockClipboard.writeText).toHaveBeenCalledWith('selected text')
   })
 })

@@ -289,7 +289,9 @@ const agentHubBridge = {
         _event: Electron.IpcRendererEvent,
         agentId: string,
         data: string
-      ): void => callback(agentId, data)
+      ): void => {
+        callback(agentId, data)
+      }
       ipcRenderer.on(IPC_EVENTS.AGENTS.OUTPUT, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.AGENTS.OUTPUT, handler)
     },

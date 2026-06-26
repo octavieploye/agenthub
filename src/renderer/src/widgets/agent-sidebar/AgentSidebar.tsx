@@ -41,47 +41,29 @@ interface GlowResult {
 }
 
 function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | null {
+  const color = agent.color
+
   switch (agent.status) {
     case 'completed': {
-      const green = 'oklch(0.72 0.2 145)'
       return {
-        boxShadow: '',  // animation handles box-shadow via glow-blip-soft (forwards)
-        cssVar: green,
+        boxShadow: '',
+        cssVar: color,
         glowClass: 'glow-blip-soft',
       }
     }
 
     case 'awaiting_approval': {
-      const red = 'oklch(0.62 0.22 25)'
       if (isEscalated) {
         return {
-          boxShadow: `0 0 20px ${red}, 0 0 50px color-mix(in srgb, ${red} 50%, transparent)`,
-          cssVar: red,
+          boxShadow: `0 0 20px ${color}, 0 0 50px ${color}80`,
+          cssVar: color,
           glowClass: 'glow-blip-fast',
         }
       }
       return {
-        boxShadow: `0 0 12px ${red}, 0 0 30px color-mix(in srgb, ${red} 35%, transparent)`,
-        cssVar: red,
+        boxShadow: `0 0 12px ${color}, 0 0 30px ${color}60`,
+        cssVar: color,
         glowClass: 'glow-blip-fast',
-      }
-    }
-
-    case 'locked': {
-      const blue = 'oklch(0.65 0.18 240)'
-      return {
-        boxShadow: `0 0 10px ${blue}, 0 0 24px color-mix(in srgb, ${blue} 30%, transparent)`,
-        cssVar: blue,
-        glowClass: 'glow-blip',
-      }
-    }
-
-    case 'busy': {
-      const blue = 'oklch(0.65 0.18 240)'
-      return {
-        boxShadow: `0 0 6px color-mix(in srgb, ${blue} 40%, transparent)`,
-        cssVar: blue,
-        glowClass: '',
       }
     }
 
@@ -220,7 +202,8 @@ function AgentCard({
 
   const colorWashStyle: React.CSSProperties = {
     backgroundImage: `linear-gradient(to right, ${agent.color}0d 0%, transparent 60%)`,
-  }
+    '--agent-color': agent.color,
+  } as React.CSSProperties
 
   const opacityStyle: React.CSSProperties = isPaused ? { opacity: 0.6 } : {}
 
@@ -459,39 +442,6 @@ function AgentCard({
         </div>
       )}
 
-      {/* S2.7 — Status progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-[0.75rem] overflow-hidden">
-        <div
-          className={`h-full transition-all duration-300 ease${
-            agent.status === 'awaiting_approval' || agent.status === 'locked'
-              ? ' animate-breathe'
-              : agent.status === 'completed'
-              ? ' progress-bar-fade'
-              : ''
-          }`}
-          style={{
-            width:
-              agent.status === 'busy' ? `${Math.max(2, Math.min(100, agent.progress))}%` :
-              agent.status === 'error' || agent.status === 'looping' ? '100%' :
-              agent.status === 'awaiting_approval' || agent.status === 'locked' ? '100%' :
-              agent.status === 'completed' ? '100%' :
-              '100%',
-            backgroundColor:
-              agent.status === 'error' || agent.status === 'looping'
-                ? 'var(--color-error)'
-                : agent.status === 'completed'
-                ? 'var(--color-success, #22c55e)'
-                : agent.status === 'idle' || agent.status === 'paused'
-                ? undefined
-                : agent.color,
-            opacity:
-              agent.status === 'idle' || agent.status === 'paused' ? 0.2 : undefined,
-            ...(agent.status === 'idle' || agent.status === 'paused'
-              ? { backgroundColor: agent.color }
-              : {}),
-          }}
-        />
-      </div>
     </div>
   )
 }

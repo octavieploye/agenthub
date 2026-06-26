@@ -44,7 +44,7 @@ import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
-import { outputBuffer } from './services/output-buffer'
+import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
@@ -240,8 +240,7 @@ function AppMain(): React.JSX.Element {
         pendingMissionComplete.delete(agentId)
       }
 
-      // Clean up output buffer for this agent
-      outputBuffer.clear(agentId)
+      // Terminal persists in terminal-manager — no cleanup needed on exit
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
@@ -362,9 +361,9 @@ function AppMain(): React.JSX.Element {
     return unsub
   }, [setActiveAgent, setFocusedAgent])
 
-  // Start output buffer IPC listener immediately so no data is lost
+  // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
-    outputBuffer.start()
+    startIpcListener()
     const cleanupCrashLogger = initCrashLogger()
     return cleanupCrashLogger
   }, [])
