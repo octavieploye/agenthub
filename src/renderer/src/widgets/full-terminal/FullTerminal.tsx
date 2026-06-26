@@ -103,8 +103,9 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
     if (!termRef.current) return
     try {
       const xtermTheme = getXtermTheme()
-      // Only apply if theme-bridge returned real colors (not all #000000)
-      if (xtermTheme.background && xtermTheme.background !== '#000000') {
+      // Only apply if theme-bridge returned real colors (not #000000 for bg or fg)
+      if (xtermTheme.background && xtermTheme.background !== '#000000' &&
+          xtermTheme.foreground && xtermTheme.foreground !== '#000000') {
         termRef.current.options.theme = xtermTheme
       }
     } catch {
@@ -168,8 +169,13 @@ function FullTerminal({ agentId, agentColor: _agentColor, visible, onReady, onTi
         webglAddon = null
         if (fitAddonRef.current && termRef.current) {
           if (visibleRef.current) {
-            fitAddonRef.current.fit()
-            termRef.current.refresh(0, termRef.current.rows - 1)
+            // Defer refresh to next frame so DOM renderer can initialize after WebGL disposal
+            const t = termRef.current
+            const f = fitAddonRef.current
+            requestAnimationFrame(() => {
+              f.fit()
+              t.refresh(0, t.rows - 1)
+            })
           } else {
             needsRecoveryRef.current = true
           }

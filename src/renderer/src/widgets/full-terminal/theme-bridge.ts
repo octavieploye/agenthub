@@ -75,8 +75,8 @@ export function getXtermTheme(): ITheme {
   return {
     background,
     foreground,
-    cursor: primary,
-    cursorAccent: background,
+    cursor: 'transparent',
+    cursorAccent: 'transparent',
     selectionBackground,
     black: base300,
     red: error,
