@@ -52,6 +52,9 @@ export function purgeDeadAgents(db: Database.Database, olderThanHours = 24): num
   const purge = db.transaction(() => {
     db.prepare(`DELETE FROM terminal_output_fts WHERE rowid IN (SELECT id FROM terminal_output WHERE agent_id IN (${placeholders}))`).run(...ids)
     db.prepare(`DELETE FROM terminal_output WHERE agent_id IN (${placeholders})`).run(...ids)
+    // Nullify tasks.sbar_id before deleting sbar_handoffs to avoid FK violation
+    // (migration 014 adds sbar_id REFERENCES sbar_handoffs(id) on tasks)
+    db.prepare(`UPDATE tasks SET sbar_id = NULL WHERE sbar_id IN (SELECT id FROM sbar_handoffs WHERE agent_id IN (${placeholders}))`).run(...ids)
     db.prepare(`DELETE FROM sbar_handoffs WHERE agent_id IN (${placeholders})`).run(...ids)
     db.prepare(`UPDATE tasks SET agent_id = NULL WHERE agent_id IN (${placeholders})`).run(...ids)
     db.prepare(`DELETE FROM notes WHERE agent_id IN (${placeholders})`).run(...ids)
