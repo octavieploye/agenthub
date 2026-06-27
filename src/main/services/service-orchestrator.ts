@@ -27,7 +27,7 @@ import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './
 import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, spawnAgent, resumeAgent, respawnAgent } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -96,6 +96,33 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       break
     case 'deny':
       sendInput(msg.requestId, 'n\n')
+      break
+    case 'spawn_agent': {
+      try {
+        spawnAgent({
+          repoId: '',
+          name: msg.name,
+          cwd: msg.repo,
+          taskDescription: msg.task,
+        })
+      } catch (err) {
+        log.error('Telegram spawn_agent failed', { err })
+      }
+      break
+    }
+    case 'resume':
+      try {
+        resumeAgent(msg.agentId)
+      } catch (err) {
+        log.error('Telegram resume failed', { agentId: msg.agentId, err })
+      }
+      break
+    case 'respawn':
+      try {
+        respawnAgent(msg.agentId)
+      } catch (err) {
+        log.error('Telegram respawn failed', { agentId: msg.agentId, err })
+      }
       break
   }
 }

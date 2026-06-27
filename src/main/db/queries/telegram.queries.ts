@@ -51,11 +51,16 @@ export function getTelegramPrefs(
   }
 }
 
+const VALID_PREF_KEYS: ReadonlySet<string> = new Set([
+  'notify_completed', 'notify_failed', 'notify_awaiting_approval', 'notify_needs_input'
+])
+
 export function setTelegramPref(
   db: Database.Database,
   key: keyof TelegramNotificationPrefs,
   value: boolean
 ): void {
+  if (!VALID_PREF_KEYS.has(key)) throw new Error(`Invalid pref key: ${key}`)
   const col = key // key is already a valid column name
   db.prepare(
     `INSERT INTO telegram_notification_prefs (id, ${col}, notify_completed, notify_failed,

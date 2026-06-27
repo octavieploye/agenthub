@@ -37,8 +37,12 @@ export function registerTelegramIpc(): void {
     key: keyof TelegramNotificationPrefs,
     value: boolean
   ) => {
-    setTelegramPref(getDb(), key, value)
-    return { success: true }
+    try {
+      setTelegramPref(getDb(), key, value)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.SEND_TEST, async () => {

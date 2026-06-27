@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { GeneralTab } from './tabs/GeneralTab'
 import { NotificationsTab } from './tabs/NotificationsTab'
+import TelegramTab from './tabs/TelegramTab'
 import { AdvancedTab } from './tabs/AdvancedTab'
 import { DockerTab } from './tabs/DockerTab'
 import { VoiceTab } from './tabs/VoiceTab'
 
-type SettingsTab = 'general' | 'notifications' | 'voice' | 'advanced' | 'docker'
+type SettingsTab = 'general' | 'notifications' | 'telegram' | 'voice' | 'advanced' | 'docker'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -30,7 +31,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
         </div>
         {/* Tab bar */}
         <div className="flex border-b border-base-content/10 px-4">
-          {(['general', 'notifications', 'voice', 'advanced', 'docker'] as SettingsTab[]).map((tab) => (
+          {(['general', 'notifications', 'telegram', 'voice', 'advanced', 'docker'] as SettingsTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -48,6 +49,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
         <div className="max-h-[60vh] overflow-y-auto p-4">
           {activeTab === 'general' && <GeneralTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'telegram' && <TelegramTab />}
           {activeTab === 'voice' && <VoiceTab />}
           {activeTab === 'advanced' && <AdvancedTab />}
           {activeTab === 'docker' && <DockerTab />}
