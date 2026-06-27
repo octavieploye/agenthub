@@ -1,0 +1,4 @@
+{
+  "patterns": [],
+  "_schema": "{ theme: string, first_seen: YYYY-MM-DD, count: number, sessions: [YYYY-MM-DD-session-NNN] }"
+}
