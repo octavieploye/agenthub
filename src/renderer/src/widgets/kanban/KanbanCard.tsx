@@ -28,14 +28,14 @@ const PRIORITY_CLASS: Record<TaskPriority, string> = {
   3: 'badge-ghost'
 }
 
-const CATEGORY_CLASS: Record<string, string> = {
-  backend:       'bg-violet-500/15 text-violet-400 border-violet-500/25',
-  frontend:      'bg-sky-500/15 text-sky-400 border-sky-500/25',
-  database:      'bg-amber-500/15 text-amber-400 border-amber-500/25',
-  schema:        'bg-teal-500/15 text-teal-400 border-teal-500/25',
-  functionality: 'bg-green-500/15 text-green-400 border-green-500/25'
+const CATEGORY_DOT_COLOR: Record<string, string> = {
+  backend:       '#8B5CF6',
+  frontend:      '#38BDF8',
+  database:      '#F59E0B',
+  schema:        '#2DD4BF',
+  functionality: '#22C55E',
 }
-const DEFAULT_CATEGORY_CLASS = 'bg-base-content/8 text-base-content/50 border-base-content/15'
+const DEFAULT_DOT_COLOR = '#6B7280'
 
 const STATUS_BADGE: Record<string, { label: string; pulse: boolean; class: string }> = {
   spawning:          { label: 'In Progress', pulse: true,  class: 'text-info' },
@@ -277,29 +277,27 @@ export function KanbanCard({
             </div>
           )}
 
-          {/* Category + sprint */}
-          {(task.category || task.sprintName) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {task.category && (
-                <span className={`badge badge-xs ${CATEGORY_CLASS[task.category] ?? DEFAULT_CATEGORY_CLASS}`}>
-                  {CATEGORY_LABEL[task.category] ?? task.category}
-                </span>
-              )}
-              {task.sprintName && (
-                <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
-              )}
-            </div>
+          {/* Sprint label */}
+          {task.sprintName && (
+            <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
           )}
 
           {/* Footer */}
           <div className="flex items-center gap-1.5">
             {blockedByCount > 0 && (
               <span
-                className="badge badge-xs bg-warning/15 text-warning border-warning/30"
+                className="text-[10px] text-warning shrink-0"
                 title={`Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}`}
               >
-                Blocked {blockedByCount}
+                ⚠ {blockedByCount}
               </span>
+            )}
+            {task.category && (
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: CATEGORY_DOT_COLOR[task.category] ?? DEFAULT_DOT_COLOR }}
+                title={CATEGORY_LABEL[task.category] ?? task.category}
+              />
             )}
             {repoGlowColor && (
               <span

@@ -78,7 +78,7 @@ export function KanbanColumn({
 
   return (
     <div
-      className="flex flex-col min-w-[200px] max-w-[260px] bg-base-200 rounded-lg"
+      className="flex flex-col min-w-[170px] max-w-[260px] flex-1 bg-base-200 rounded-lg"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
