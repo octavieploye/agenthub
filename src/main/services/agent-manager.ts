@@ -29,6 +29,8 @@ import { insertTaskEvent } from '../db/queries/task-events.queries'
 import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
 import { getProjectById } from '../db/queries/projects.queries'
 import { writeWorkspaceMemory } from './workspace-memory-writer'
+import type { TelegramNotificationPayload } from '../../shared/types/telegram.types'
+import { getTelegramPrefs } from '../db/queries/telegram.queries'
 
 const AGENT_TO_TASK_STATUS: Partial<Record<string, TaskStatus>> = {
   busy: 'in_progress',
@@ -86,12 +88,28 @@ function buildSBARContext(managed: ManagedAgent): AgentContext {
 }
 
 
+// Telegram notifier — injected by service-orchestrator to avoid circular imports
+type TelegramNotifier = (payload: TelegramNotificationPayload) => void
+let _telegramNotifier: TelegramNotifier | null = null
+
+export function setTelegramNotifier(fn: TelegramNotifier | null): void {
+  _telegramNotifier = fn
+}
+
 function getNotificationConfig(): NotificationRouterConfig {
+  let telegramEnabled = false
+  try {
+    const db = getDb()
+    const user = db.prepare('SELECT 1 FROM telegram_allowlist LIMIT 1').get()
+    telegramEnabled = Boolean(user) && _telegramNotifier !== null
+  } catch {
+    // migration not yet applied or DB not ready
+  }
   return {
     desktopEnabled: true,
     soundEnabled: true,
     voiceEnabled: false,
-    telegramEnabled: false
+    telegramEnabled,
   }
 }
 
@@ -107,6 +125,28 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   const triageEvent = triageAgentEvent(triageInput)
   const routingResult = routeNotification(triageEvent, getNotificationConfig())
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
+
+  if (routingResult.layers.includes('telegram') && _telegramNotifier) {
+    const db = getDb()
+    const prefs = getTelegramPrefs(db)
+    const payloadType: TelegramNotificationPayload['type'] =
+      agent.status === 'awaiting_approval' ? 'awaiting_approval' :
+      agent.status === 'locked' ? 'needs_input' :
+      agent.status === 'completed' ? 'completed' : 'failed'
+
+    const prefKey = `notify_${payloadType}` as keyof typeof prefs
+    if (prefs[prefKey]) {
+      _telegramNotifier({
+        type: payloadType,
+        agentId: agent.id,
+        agentName: agent.name,
+        repo: agent.cwd.split('/').pop() ?? agent.cwd,
+        summary: (agent.taskDescription ?? '').slice(0, 200),
+        requestId: agent.id,
+        timestamp: new Date().toISOString(),
+      })
+    }
+  }
 }
 
 function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus: string): void {

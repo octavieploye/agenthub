@@ -30,6 +30,7 @@ import { registerWorkspaceMemoryHandlers } from './workspace-memory.ipc'
 import { registerKanbanHandlers } from './kanban.ipc'
 import { registerProjectsHandlers } from './projects.ipc'
 import { registerTtsHandlers } from './tts.ipc'
+import { registerTelegramIpc } from './telegram.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -63,5 +64,6 @@ export function registerAllIpcHandlers(): void {
   registerKanbanHandlers()
   registerProjectsHandlers()
   registerTtsHandlers()
+  registerTelegramIpc()
   log.info('All IPC handlers registered')
 }

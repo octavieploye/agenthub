@@ -25,12 +25,15 @@ import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import type { IForgejoAdapter } from './adapters/forgejo-adapter'
 import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapters/adapter-factory'
 import { SprintWatcher } from './sprint-watcher'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner } from './agent-manager'
+import { TelegramSidecarService } from './telegram-sidecar-service'
+import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
+import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 
 let snapshotEngine: SnapshotEngine | null = null
 let claudeMonitor: ClaudeMonitor | null = null
@@ -50,6 +53,7 @@ let containerManager: ContainerManager | null = null
 let anamnesisWriter: IAnamnesisAdapter | null = null
 let forgejoAdapter: IForgejoAdapter | null = null
 let sprintWatcher: SprintWatcher | null = null
+let telegramSidecarService: TelegramSidecarService | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -57,6 +61,44 @@ function getMainWindow(): BrowserWindow | null {
   return windows[0] ?? null
 }
 
+function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMsg): void {
+  if (msg.type !== 'command') return
+  switch (msg.command) {
+    case 'get_status': {
+      const agents = listAgents().map(a => ({
+        id: a.id,
+        name: a.name,
+        status: a.status,
+        repo: a.cwd.split('/').pop() ?? a.cwd,
+      }))
+      telegramSidecarService?.sendAgentList(agents)
+      break
+    }
+    case 'get_repos': {
+      const repos = getAllRepos(db).map(r => ({
+        name: r.name ?? r.path.split('/').pop() ?? r.path,
+        path: r.path,
+      }))
+      telegramSidecarService?.sendRepoList(repos)
+      break
+    }
+    case 'send_task':
+      sendInput(msg.agentId, msg.message + '\n')
+      break
+    case 'pause':
+      pauseAgent(msg.agentId)
+      break
+    case 'stop':
+      killAgent(msg.agentId)
+      break
+    case 'approve':
+      sendInput(msg.requestId, 'y\n')
+      break
+    case 'deny':
+      sendInput(msg.requestId, 'n\n')
+      break
+  }
+}
 
 export function initializeServices(db: Database.Database): void {
   // Purge dead agents older than 24h to prevent DB bloat
@@ -281,6 +323,42 @@ export function initializeServices(db: Database.Database): void {
   sprintWatcher = new SprintWatcher()
   sprintWatcher.start(intakeDir, emitToAllRenderers)
 
+  // 17. TelegramSidecarService — Telegram bot child process
+  const scriptPath = app.isPackaged
+    ? require('path').join(process.resourcesPath, 'telegram-sidecar', 'index.js')
+    : require('path').join(process.cwd(), 'src', 'main', 'telegram-sidecar', 'index.js')
+
+  telegramSidecarService = new TelegramSidecarService({
+    scriptPath,
+    nodePath: process.execPath,
+    db,
+    logInfo: (msg, meta) => log.info(msg, meta),
+    logError: (msg, meta) => log.error(msg, meta),
+    onBlockedSender: (userId) => {
+      emitToAllRenderers(IPC_EVENTS.TELEGRAM.BLOCKED_SENDER, { telegramUserId: userId })
+    },
+    onFirstContact: (_userId, _chatId) => {
+      emitToAllRenderers(IPC_EVENTS.TELEGRAM.FIRST_CONTACT_LINKED, {})
+    },
+    onCommand: (msg) => {
+      if (msg.type !== 'command') return
+      handleTelegramCommand(db, msg)
+    },
+  })
+
+  // Inject telegram notifier into agent-manager (avoids circular import)
+  setTelegramNotifier((payload) => {
+    telegramSidecarService?.notify(payload)
+  })
+
+  // Auto-start if token is saved (user connected before)
+  const existingUser = db.prepare('SELECT 1 FROM telegram_allowlist LIMIT 1').get()
+  if (existingUser) {
+    telegramSidecarService.start().catch((err) => {
+      log.warn('Telegram sidecar auto-start failed (token may not be stored)', err)
+    })
+  }
+
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
   log.info('All services initialized')
@@ -305,6 +383,8 @@ export function stopServices(): void {
   piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   sprintWatcher?.stop()
+  telegramSidecarService?.stop()
+  setTelegramNotifier(null)
   log.info('All services stopped')
 }
 
@@ -370,6 +450,10 @@ export function getForgejoAdapter(): IForgejoAdapter | null {
 
 export function getSprintWatcher(): SprintWatcher | null {
   return sprintWatcher
+}
+
+export function getTelegramSidecarService(): TelegramSidecarService | null {
+  return telegramSidecarService
 }
 
 export function getIntakeDir(): string {

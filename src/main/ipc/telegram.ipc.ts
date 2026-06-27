@@ -1,20 +1,17 @@
 import { ipcMain } from 'electron'
-import type Database from 'better-sqlite3'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import type { TelegramSidecarService } from '../services/telegram-sidecar-service'
-import { getTelegramPrefs, setTelegramPref } from '../db/queries/telegram.queries'
 import type { TelegramNotificationPrefs } from '../../shared/types/telegram.types'
+import { getDb } from '../db/connection'
+import { getTelegramPrefs, setTelegramPref } from '../db/queries/telegram.queries'
+import { getTelegramSidecarService } from '../services/service-orchestrator'
 
-export function registerTelegramIpc(
-  db: Database.Database,
-  getService: () => TelegramSidecarService | null
-): void {
+export function registerTelegramIpc(): void {
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_STATUS, () => {
-    return getService()?.getStatus() ?? { connected: false }
+    return getTelegramSidecarService()?.getStatus() ?? { connected: false }
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.SAVE_TOKEN, async (_event, token: string) => {
-    const svc = getService()
+    const svc = getTelegramSidecarService()
     if (!svc) return { success: false, error: 'Service not initialised' }
     try {
       await svc.start(token)
@@ -25,14 +22,14 @@ export function registerTelegramIpc(
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.DISCONNECT, async () => {
-    const svc = getService()
+    const svc = getTelegramSidecarService()
     if (!svc) return { success: true }
     await svc.disconnect()
     return { success: true }
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_PREFS, () => {
-    return getTelegramPrefs(db)
+    return getTelegramPrefs(getDb())
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.SET_PREF, (
@@ -40,12 +37,12 @@ export function registerTelegramIpc(
     key: keyof TelegramNotificationPrefs,
     value: boolean
   ) => {
-    setTelegramPref(db, key, value)
+    setTelegramPref(getDb(), key, value)
     return { success: true }
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.SEND_TEST, async () => {
-    const svc = getService()
+    const svc = getTelegramSidecarService()
     if (!svc?.isRunning()) return { success: false, error: 'Not connected' }
     svc.notify({
       type: 'completed',
