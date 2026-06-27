@@ -16,6 +16,7 @@ function createDeps(
   return {
     playSound: vi.fn(),
     isSoundEnabled: vi.fn().mockReturnValue(true),
+    getMasterVolume: vi.fn().mockReturnValue(1.0),
     ...overrides
   }
 }
@@ -260,6 +261,42 @@ describe('Sound Alert Service', () => {
       for (const status of mappedStatuses) {
         expect(statusToSoundEvent(status)).not.toBeNull()
       }
+    })
+  })
+
+  // ── master volume scaling ─────────────────────────────────────────────────
+
+  describe('master volume scaling', () => {
+    it('calls getMasterVolume when sound plays', () => {
+      const getMasterVolume = vi.fn().mockReturnValue(1.0)
+      deps = createDeps({ getMasterVolume })
+      playAgentSound('agent_completed', deps)
+      expect(getMasterVolume).toHaveBeenCalled()
+    })
+
+    it('scales playback volume by master volume (0.5 master × 0.5 base = 0.25)', () => {
+      deps = createDeps({ getMasterVolume: vi.fn().mockReturnValue(0.5) })
+      playAgentSound('agent_completed', deps)
+      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.25)
+    })
+
+    it('scales code_blue (1.0 base) by master volume 0.5 to give 0.5', () => {
+      deps = createDeps({ getMasterVolume: vi.fn().mockReturnValue(0.5) })
+      playAgentSound('code_blue', deps)
+      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.5)
+    })
+
+    it('master volume 0.0 results in 0 volume passed to playSound', () => {
+      deps = createDeps({ getMasterVolume: vi.fn().mockReturnValue(0.0) })
+      playAgentSound('agent_spawned', deps)
+      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.0)
+    })
+
+    it('does NOT call getMasterVolume when sound is disabled', () => {
+      const getMasterVolume = vi.fn().mockReturnValue(1.0)
+      deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false), getMasterVolume })
+      playAgentSound('agent_completed', deps)
+      expect(getMasterVolume).not.toHaveBeenCalled()
     })
   })
 

@@ -15,6 +15,8 @@ interface SABarProps {
   onOpenHowTo?: () => void
   onOpenSearch?: () => void
   repoSwitcherRef?: React.RefObject<RepoSwitcherHandle | null>
+  /** Called when the user mutes via the toolbar — use to cancel active TTS speech */
+  onMasterMute?: () => void
 }
 
 const VIEW_MODES = [
@@ -74,17 +76,33 @@ function HowToIcon(): React.JSX.Element {
   )
 }
 
-function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcherRef }: SABarProps): React.JSX.Element {
+function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcherRef, onMasterMute }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const statusFilter = useViewStore((s) => s.statusFilter)
   const setStatusFilter = useViewStore((s) => s.setStatusFilter)
   const soundEnabled = useViewStore((s) => s.soundEnabled)
   const toggleSound = useViewStore((s) => s.toggleSound)
+  const voiceEnabled = useViewStore((s) => s.voiceEnabled)
+  const toggleVoice = useViewStore((s) => s.toggleVoice)
   const ttsVolume = useViewStore((s) => s.ttsVolume)
   const setTtsVolume = useViewStore((s) => s.setTtsVolume)
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wasVoiceEnabled = useRef(false)
+
+  function handleSoundToggle(): void {
+    if (soundEnabled) {
+      // Muting: capture voice state, stop all audio
+      wasVoiceEnabled.current = voiceEnabled
+      if (voiceEnabled) toggleVoice()
+      onMasterMute?.()
+    } else {
+      // Unmuting: restore voice if it was on before mute
+      if (wasVoiceEnabled.current) toggleVoice()
+    }
+    toggleSound()
+  }
 
   // Count agents by status
   const statusCounts = agents.reduce<Record<string, number>>((acc, agent) => {
@@ -185,7 +203,7 @@ function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcher
         >
           <button
             data-testid="sound-toggle"
-            onClick={toggleSound}
+            onClick={handleSoundToggle}
             className="p-1.5 rounded-md text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
             title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
             aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
@@ -204,7 +222,7 @@ function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcher
                 onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
                 className="h-20 w-1 accent-primary cursor-pointer"
                 style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
-                aria-label="TTS volume"
+                aria-label="Master volume"
               />
               <span className="text-[9px] text-base-content/40">{Math.round(ttsVolume * 100)}%</span>
             </div>

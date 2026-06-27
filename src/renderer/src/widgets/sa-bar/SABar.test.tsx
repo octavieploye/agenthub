@@ -7,6 +7,15 @@ import SABar from './SABar'
 const mockSetViewMode = vi.fn()
 const mockSetStatusFilter = vi.fn()
 const mockToggleSound = vi.fn()
+const mockToggleVoice = vi.fn()
+const mockSetTtsVolume = vi.fn()
+
+// Mutable so individual tests can override soundEnabled / voiceEnabled
+const mockStore = {
+  soundEnabled: true,
+  voiceEnabled: true,
+  ttsVolume: 0.7,
+}
 
 vi.mock('@renderer/stores/view-store', () => ({
   useViewStore: vi.fn((selector) => {
@@ -15,8 +24,12 @@ vi.mock('@renderer/stores/view-store', () => ({
       setViewMode: mockSetViewMode,
       statusFilter: null,
       setStatusFilter: mockSetStatusFilter,
-      soundEnabled: true,
-      toggleSound: mockToggleSound
+      soundEnabled: mockStore.soundEnabled,
+      toggleSound: mockToggleSound,
+      voiceEnabled: mockStore.voiceEnabled,
+      toggleVoice: mockToggleVoice,
+      ttsVolume: mockStore.ttsVolume,
+      setTtsVolume: mockSetTtsVolume,
     }
     return typeof selector === 'function' ? selector(state) : state
   })
@@ -73,6 +86,9 @@ describe('SABar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockStore.soundEnabled = true
+    mockStore.voiceEnabled = true
+    mockStore.ttsVolume = 0.7
     window.agentHub = {
       docker: {
         status: vi.fn().mockResolvedValue({ success: true, data: { available: true, version: '24.0', imageReady: true, imageTag: 'agenthub-cli:latest', activeContainerCount: 0 } })
@@ -114,6 +130,76 @@ describe('SABar', () => {
       render(<SABar agents={mockAgents} />)
       fireEvent.click(screen.getByTestId('sound-toggle'))
       expect(mockToggleSound).toHaveBeenCalled()
+    })
+  })
+
+  describe('master mute — muting (soundEnabled: true → false)', () => {
+    it('calls onMasterMute when muting', () => {
+      const onMasterMute = vi.fn()
+      render(<SABar agents={mockAgents} onMasterMute={onMasterMute} />)
+      fireEvent.click(screen.getByTestId('sound-toggle'))
+      expect(onMasterMute).toHaveBeenCalledOnce()
+    })
+
+    it('calls toggleVoice when muting and voice is enabled', () => {
+      mockStore.voiceEnabled = true
+      render(<SABar agents={mockAgents} />)
+      fireEvent.click(screen.getByTestId('sound-toggle'))
+      expect(mockToggleVoice).toHaveBeenCalledOnce()
+    })
+
+    it('does NOT call toggleVoice when muting and voice is already disabled', () => {
+      mockStore.voiceEnabled = false
+      render(<SABar agents={mockAgents} />)
+      fireEvent.click(screen.getByTestId('sound-toggle'))
+      expect(mockToggleVoice).not.toHaveBeenCalled()
+    })
+
+    it('does not require onMasterMute prop — gracefully absent', () => {
+      expect(() => {
+        render(<SABar agents={mockAgents} />)
+        fireEvent.click(screen.getByTestId('sound-toggle'))
+      }).not.toThrow()
+    })
+  })
+
+  describe('master mute — unmuting (soundEnabled: false → true)', () => {
+    it('restores voice (calls toggleVoice) when unmuting after voice was on', () => {
+      // Start: sound on, voice on → mute (click 1) → captures wasVoiceEnabled=true, disables voice
+      mockStore.soundEnabled = true
+      mockStore.voiceEnabled = true
+      render(<SABar agents={mockAgents} />)
+      fireEvent.click(screen.getByTestId('sound-toggle')) // mute
+
+      // Simulate state: sound now off (toggleSound was called), voice now off (toggleVoice was called)
+      mockStore.soundEnabled = false
+      mockStore.voiceEnabled = false
+
+      fireEvent.click(screen.getByTestId('sound-toggle')) // unmute
+
+      // toggleVoice called once for mute + once for unmute restore = 2 total
+      expect(mockToggleVoice).toHaveBeenCalledTimes(2)
+    })
+
+    it('does NOT restore voice when unmuting if voice was off before mute', () => {
+      mockStore.soundEnabled = true
+      mockStore.voiceEnabled = false
+      render(<SABar agents={mockAgents} />)
+      fireEvent.click(screen.getByTestId('sound-toggle')) // mute (voice was off, not captured)
+
+      mockStore.soundEnabled = false
+      fireEvent.click(screen.getByTestId('sound-toggle')) // unmute
+
+      // toggleVoice never called (voice was off before mute, nothing to restore)
+      expect(mockToggleVoice).not.toHaveBeenCalled()
+    })
+
+    it('does NOT call onMasterMute when unmuting', () => {
+      mockStore.soundEnabled = false
+      const onMasterMute = vi.fn()
+      render(<SABar agents={mockAgents} onMasterMute={onMasterMute} />)
+      fireEvent.click(screen.getByTestId('sound-toggle')) // unmuting
+      expect(onMasterMute).not.toHaveBeenCalled()
     })
   })
 

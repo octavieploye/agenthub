@@ -166,7 +166,10 @@ function AppMain(): React.JSX.Element {
 
   // Sound alert deps (Howler.js backed, reads soundEnabled from view-store)
   const soundDeps = useRef(
-    createSoundAlertDeps(() => useViewStore.getState().soundEnabled)
+    createSoundAlertDeps(
+      () => useViewStore.getState().soundEnabled,
+      () => useViewStore.getState().ttsVolume
+    )
   )
 
   // Per-agent TTS — reads response text and speaks on busy→completed
@@ -998,6 +1001,7 @@ function AppMain(): React.JSX.Element {
           onOpenHowTo={() => setHowToOpen(true)}
           onOpenSearch={() => setTerminalSearchOpen(true)}
           repoSwitcherRef={repoSwitcherRef}
+          onMasterMute={stopActiveSpeech}
         />
         <button
           className="btn btn-sm btn-ghost"

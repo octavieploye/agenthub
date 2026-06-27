@@ -5,6 +5,7 @@ import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 export interface SoundAlertDeps {
   playSound: (src: string, volume: number) => void
   isSoundEnabled: () => boolean
+  getMasterVolume: () => number
 }
 
 export const SOUND_MAP: Record<AgentSoundEvent, { src: string; volume: number }> = {
@@ -29,7 +30,7 @@ export function playAgentSound(event: AgentSoundEvent, deps: SoundAlertDeps): bo
   }
 
   const { src, volume } = SOUND_MAP[event]
-  deps.playSound(src, volume)
+  deps.playSound(src, volume * deps.getMasterVolume())
   return true
 }
 
@@ -53,9 +54,13 @@ export function playSoundHowler(src: string, volume: number): void {
   howl.play()
 }
 
-export function createSoundAlertDeps(isSoundEnabled: () => boolean): SoundAlertDeps {
+export function createSoundAlertDeps(
+  isSoundEnabled: () => boolean,
+  getMasterVolume: () => number
+): SoundAlertDeps {
   return {
     playSound: playSoundHowler,
-    isSoundEnabled
+    isSoundEnabled,
+    getMasterVolume
   }
 }
