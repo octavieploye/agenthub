@@ -3,6 +3,17 @@ import { renderHook, act } from '@testing-library/react'
 import { useAgentTts } from './useAgentTts'
 import type { AgentState } from '@shared/types/agent.types'
 
+// ─── Mock view-store (soundEnabled + voiceEnabled gate) ──────────────────────
+
+const mockViewState = { soundEnabled: true, voiceEnabled: true, ttsVolume: 0.7, ttsRate: 1.0, piperVoiceId: '' }
+
+vi.mock('@renderer/stores/view-store', () => ({
+  useViewStore: Object.assign(
+    vi.fn(),
+    { getState: () => mockViewState }
+  )
+}))
+
 // ─── Minimal window.agentHub stub ────────────────────────────────────────────
 
 type ResponseReadyCb = (agentId: string, text: string) => void
@@ -56,6 +67,8 @@ function makeAgent(overrides: Partial<AgentState> = {}): AgentState {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  mockViewState.soundEnabled = true
+  mockViewState.voiceEnabled = true
   const hub = makeAgentHub()
   ;(window as unknown as Record<string, unknown>).agentHub = hub
 })
@@ -287,6 +300,70 @@ describe('useAgentTts — approval announcement', () => {
 
   it('does NOT speak approval when voiceMode is off', async () => {
     const agent = makeAgent({ voiceMode: 'off' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+  })
+})
+
+describe('useAgentTts — master mute (soundEnabled gate)', () => {
+  it('skips TTS and notification when soundEnabled is false', async () => {
+    mockViewState.soundEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const onNotificationSound = vi.fn()
+    renderHook(() => useAgentTts(agents, { onNotificationSound }))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Some response text.')
+    })
+
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+    expect(onNotificationSound).not.toHaveBeenCalled()
+  })
+
+  it('skips approval announcement when soundEnabled is false', async () => {
+    mockViewState.soundEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+  })
+})
+
+describe('useAgentTts — voiceEnabled gate', () => {
+  it('falls back to notification sound when voiceEnabled is false (agent voiceMode always_on)', async () => {
+    mockViewState.voiceEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const onNotificationSound = vi.fn()
+    renderHook(() => useAgentTts(agents, { onNotificationSound }))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Some response text.')
+    })
+
+    expect(onNotificationSound).toHaveBeenCalledOnce()
+    expect(hub.tts.speak).not.toHaveBeenCalled()
+  })
+
+  it('skips approval TTS when voiceEnabled is false', async () => {
+    mockViewState.voiceEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
     const agents = new Map([['agent-1', agent]])
     renderHook(() => useAgentTts(agents))
     const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub

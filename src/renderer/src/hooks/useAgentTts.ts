@@ -47,10 +47,13 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
 
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
+      const { soundEnabled, voiceEnabled } = useViewStore.getState()
+      if (!soundEnabled) return
+
       const agent = agentsRef.current.get(agentId)
       if (!agent) return
 
-      if (agent.voiceMode === 'off') {
+      if (agent.voiceMode === 'off' || !voiceEnabled) {
         optionsRef.current?.onNotificationSound?.()
         return
       }
@@ -69,9 +72,12 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
     })
 
     const unsubApproval = window.agentHub.tts.onApprovalNeeded((agentId) => {
+      const { soundEnabled, voiceEnabled } = useViewStore.getState()
+      if (!soundEnabled) return
+
       const agent = agentsRef.current.get(agentId)
       if (!agent) return
-      if (agent.voiceMode === 'off') return
+      if (agent.voiceMode === 'off' || !voiceEnabled) return
 
       const announcement = `${agent.name} is waiting for your approval.`
       ttsQueue.enqueue(announcement)
