@@ -219,6 +219,17 @@ export interface AgentHubBridge {
     onResponseReady: (cb: (agentId: string, text: string) => void) => () => void
     onApprovalNeeded: (cb: (agentId: string) => void) => () => void
   }
+  telegram: {
+    getStatus: () => Promise<import('./telegram.types').TelegramStatus>
+    saveToken: (token: string) => Promise<{ success: boolean; error?: string }>
+    disconnect: () => Promise<{ success: boolean }>
+    getPrefs: () => Promise<import('./telegram.types').TelegramNotificationPrefs>
+    setPref: (key: string, value: boolean) => Promise<{ success: boolean; error?: string }>
+    sendTest: () => Promise<{ success: boolean; error?: string }>
+    onFirstContactLinked: (callback: () => void) => () => void
+    onBlockedSender: (callback: (payload: unknown) => void) => () => void
+    onConnectionStatusChanged: (callback: () => void) => () => void
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void

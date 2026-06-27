@@ -271,6 +271,29 @@ const agentHubBridge = {
       return () => ipcRenderer.removeListener(IPC_EVENTS.TTS.APPROVAL_NEEDED, handler)
     },
   },
+  telegram: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_STATUS),
+    saveToken: (token: string) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SAVE_TOKEN, token),
+    disconnect: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.DISCONNECT),
+    getPrefs: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_PREFS),
+    setPref: (key: string, value: boolean) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SET_PREF, key, value),
+    sendTest: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SEND_TEST),
+    onFirstContactLinked: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.TELEGRAM.FIRST_CONTACT_LINKED, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.TELEGRAM.FIRST_CONTACT_LINKED, handler) }
+    },
+    onBlockedSender: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.TELEGRAM.BLOCKED_SENDER, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.TELEGRAM.BLOCKED_SENDER, handler) }
+    },
+    onConnectionStatusChanged: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.TELEGRAM.CONNECTION_STATUS_CHANGED, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.TELEGRAM.CONNECTION_STATUS_CHANGED, handler) }
+    },
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void
