@@ -197,6 +197,14 @@ export const IPC_CHANNELS = {
     UNPIN:           'workspace-memory:unpin',
     SET_CONTEXT_DOC: 'workspace-memory:set-context-doc'
   },
+  TELEGRAM: {
+    GET_STATUS:   'telegram:get-status',
+    SAVE_TOKEN:   'telegram:save-token',
+    DISCONNECT:   'telegram:disconnect',
+    GET_PREFS:    'telegram:get-prefs',
+    SET_PREF:     'telegram:set-pref',
+    SEND_TEST:    'telegram:send-test',
+  },
 } as const
 
 export const IPC_EVENTS = {
@@ -229,5 +237,10 @@ export const IPC_EVENTS = {
   TTS: {
     RESPONSE_READY: 'on-tts:response-ready',
     APPROVAL_NEEDED: 'on-tts:approval-needed',
+  },
+  TELEGRAM: {
+    BLOCKED_SENDER:           'on-telegram:blocked-sender',
+    FIRST_CONTACT_LINKED:     'on-telegram:first-contact-linked',
+    CONNECTION_STATUS_CHANGED:'on-telegram:connection-status-changed',
   },
 } as const
