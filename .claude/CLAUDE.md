@@ -24,7 +24,7 @@ This management tool is designed to orchestrate multiple AI agents (specifically
   plain user-facing language — step-by-step instructions, no implementation details.
   Update `.claude/how-to-index.md` if you create a new file.
 
-- **ROLE OF THIS FILE** - describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you,please alert the developer working with you and indicate that this is the case in the AgentMD(code-dev1.md,code-dev2.md,code-tester.md,code-reviewer.md,code-expert.md,code-uiux.md..etc) file to help prevent future agents from having the same issue
+- **ROLE OF THIS FILE** - describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you,please alert the developer working with you and indicate that this is the case in the AgentMD(scout-backend.md,scout-frontend.md,dev-backend.md,dev-frontend.md,uiux-senior.md,tester-backend.md,tester-frontend.md..etc) file to help prevent future agents from having the same issue
 - **DO NOT TAKE ANY ACTION** - report any confusion and discrepencies before taking any further action when coding from sprints or from previous code. If more than 2 you list them and show them to the user for review
 
 - **USER IS THE SOURCE OF TRUTH. USER IS ABOVE ALL THE .MD FILES AND AI KNOWLEDGE**
@@ -64,6 +64,8 @@ Key files to read when debugging crashes:
 - **This applies to all agents.** No agent has authority to change dependency versions autonomously.
 
 ## Code Best Practices
+
+- **NEVER place source files (JS/TS) in `resources/bin/`** — that directory is gitignored and reserved for compiled native binaries (piper, whisper-cli, espeak-ng). Putting source code there means it will never be committed. All source code belongs in `src/`. Sidecar scripts live in `src/main/<name>/index.js`. This rule has no exceptions.
 
 - **Do not be conservative** — write complete MVP code. Minimum code leads to functions and functionalities not being wired properly.
 - **Once functionality is coded, verify it is wired properly and migrations pass.**
@@ -112,19 +114,7 @@ When code in a section exceeds 1000 lines, create these folders:
 - **NEVER use "URSSAF"** in any code, documentation, commit message, comment, or file. This is a portfolio project — no employer names in the codebase.
 
 
-- **YOU SHOULD TYPE-CHECKING ALL OF YOUR CHANGES**
-
-
-
-## Dependency & Version Management
-
-- **NEVER downgrade or change a dependency version without user approval.** 
-
-- **This applies to all agents.** No agent has authority to change dependency versions autonomously.
-  
-****AGENT TEAM**
-
-# CLAUDE.md
+## Agent Team
 
 ## Default Agent Team
 
@@ -257,7 +247,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - Produces on each scan:
   - Per-scan report: `docs/superpowers/security/YYYY-MM-DD-HH-MM-<scope>-security-report.md`
   - Updated aggregate audit trail: `docs/superpowers/security/security-log.md`
-  - Updated agent memory: `.claire/sec-devops.md`
+  - Updated agent memory: `.claude/sec-devops.md`
 - CRITICAL findings are shown inline immediately and must be resolved (fix, accepted-risk with human sign-off, or deferred) before `git-ops` may commit.
 - Does NOT fix code. Does NOT modify `.gitignore`. Does NOT change dependency versions.
 - Full protocol: `.claude/commands/sec-devops.md`
@@ -278,6 +268,31 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 
 ---
 
+### Senior UIUX Designer
+
+#### `uiux-senior`
+
+- Owns UX architecture, design system, interaction patterns, and accessibility.
+- Produces:
+  - Component specifications and layout proposals.
+  - Design critique reports (friction points, hierarchy issues, accessibility gaps).
+  - Input to brainstorming and Non-Tech Review Panels.
+- Collaborates closely with `dev-frontend`, `architect`, and `persona-nontechuser`.
+- Does NOT write React or Tailwind code — produces specs that `dev-frontend` implements.
+
+---
+
+### Non-Tech User Persona
+
+#### `persona-nontechuser`
+
+- Morphs into the persona of a 40-50 year old non-technical user: AI-curious, wants value with minimal friction and learning curve, fluent with smartphones but not developer tools.
+- Provides feedback on: cognitive load, discoverability, jargon, onboarding friction, feature naming, step count to reach value.
+- **Only invoked during brainstorming sessions** — never during implementation.
+- Always paired with `architect`, `uiux-senior`, and `dev-frontend` in the Non-Tech Review Panel.
+
+---
+
 ## Concurrency Rules
 
 - At any moment, at most **3** teammates (including scouts, devs, testers, troubleshooter, architect, git-ops) should be active.
@@ -291,3 +306,4 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
   - Implementation phase: `dev-backend`, `dev-frontend`, `dev-integration`.
   - Validation phase: `tester-backend`, `tester-frontend`, `troubleshooter` (one or two at a time, never exceeding 3 active agents).
   - Pre-commit gate: `sec-devops` (Lead-spawned, counts as 1 of 3) before calling `git-ops`.
+  - Non-tech review (brainstorming): `persona-nontechuser` + `architect` + `uiux-senior` + `dev-frontend` — Lead is excluded from the 3-agent cap during this panel.
