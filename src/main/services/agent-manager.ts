@@ -22,7 +22,6 @@ import type { NotificationRouterConfig } from '../../shared/types/notification.t
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
-import { filterTelegramResponse } from '../utils/telegram-response-filter'
 import { HeadlessTerminalBuffer } from '../utils/headless-terminal-buffer'
 import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
@@ -143,7 +142,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
   if (routingResult.layers.includes('telegram') && _telegramNotifier) {
-    // --- [Telegram Debug] cleanTextBuffer pipeline (legacy — Telegram now uses headless terminal path) ---
+    // --- [Telegram Debug] log raw → stripped → filtered pipeline ---
     const _dbgManaged = agents.get(agent.id)
     if (_dbgManaged) {
       const _dbgRaw = _dbgManaged.cleanTextBuffer
@@ -211,39 +210,43 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           managed.telegramSendTimer = setTimeout(() => {
             if (managed) managed.telegramSendTimer = null
 
-            if (payloadType === 'awaiting_approval') {
-              // Approval messages don't need agent prose — send immediately
-              if (_telegramNotifier) _telegramNotifier(payload)
-              return
-            }
-
-            // Flush the headless terminal write queue, then extract clean text
-            managed.headlessTerminal.flush(() => {
+            // Re-filter cleanTextBuffer — with CUP→\n in stripAnsi, line
+            // structure is preserved so filterTtsResponse classifies correctly.
+            let freshProse = ''
+            if (managed && payloadType !== 'awaiting_approval') {
               try {
-                const extracted = managed.headlessTerminal.extractText()
-                const filtered = filterTelegramResponse(extracted).trim()
-                log.debug('[Telegram] headless extract', {
+                const refiltered = filterTtsResponse(managed.cleanTextBuffer.trim()).trim()
+                log.debug('[Telegram] delayed re-filter', {
                   agentId: agent.id,
-                  extractedLen: extracted.length,
-                  filteredLen: filtered.length,
-                  filteredPreview: filtered.slice(-200).replace(/\n/g, '↵'),
+                  bufLen: managed.cleanTextBuffer.length,
+                  refilteredLen: refiltered.length,
+                  refilteredPreview: refiltered.slice(0, 200).replace(/\n/g, '↵'),
                 })
-
-                if (filtered) {
-                  const summary = filtered.slice(-2000)
-                  payload.summary = summary
-                  if (payload.question !== undefined) {
-                    payload.question = summary
-                  }
+                if (refiltered) {
+                  managed.lastFilteredProse = refiltered
+                  freshProse = refiltered.slice(-300)
                 }
               } catch (e) {
-                log.warn('[Telegram] headless extract failed, using original payload', {
-                  agentId: agent.id,
-                  error: String(e),
-                })
+                log.warn('[Telegram] delayed re-filter failed', { agentId: agent.id, error: String(e) })
               }
-              if (_telegramNotifier) _telegramNotifier(payload)
-            })
+            }
+
+            // Fall back to lastFilteredProse from TTS capture
+            if (!freshProse) {
+              freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+            }
+
+            try {
+              if (freshProse && payloadType !== 'awaiting_approval') {
+                payload.summary = freshProse.slice(-120)
+              }
+              if (freshProse && payload.question !== undefined) {
+                payload.question = freshProse
+              }
+            } catch (e) {
+              log.warn('[Telegram] payload update failed, sending with original', { agentId: agent.id, error: String(e) })
+            }
+            if (_telegramNotifier) _telegramNotifier(payload)
           }, 3000)
         }
       }
