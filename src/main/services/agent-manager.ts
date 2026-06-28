@@ -208,38 +208,59 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
 
         if (managed) {
           managed.telegramSendTimer = setTimeout(() => {
-            try {
-              if (managed) managed.telegramSendTimer = null
+            if (managed) managed.telegramSendTimer = null
 
-              // Re-extract from headless terminal — write() is async, so BEL-time
-              // extraction may have read the buffer before data was processed.
-              // After 3s all writes are guaranteed flushed.
-              let freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
-              if (!freshProse && managed && payloadType !== 'awaiting_approval') {
-                try {
-                  const terminalText = managed.headlessTerminal.extractText()
-                  const refiltered = filterTtsResponse(terminalText).trim()
-                  if (refiltered) {
-                    freshProse = refiltered.slice(-300)
-                    managed.lastFilteredProse = refiltered
-                  }
-                } catch (e) {
-                  log.warn('[Telegram] headless terminal extraction failed, using fallback', { agentId: agent.id, error: String(e) })
+            // Flush the headless terminal write queue, THEN extract.
+            // Terminal.write() is async — without flush, extractText()
+            // reads stale/incomplete buffer. flush() writes an empty
+            // string with callback, guaranteeing all prior writes are
+            // fully processed before we read.
+            const sendNotification = (extractedProse?: string) => {
+              try {
+                let freshProse = extractedProse ?? managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+
+                if (freshProse && payloadType !== 'awaiting_approval') {
+                  payload.summary = freshProse.slice(-120)
                 }
+                if (freshProse && payload.question !== undefined) {
+                  payload.question = freshProse
+                }
+              } catch (e) {
+                log.warn('[Telegram] payload update failed, sending with original', { agentId: agent.id, error: String(e) })
               }
-
-              // Update the payload summary/question with the freshest prose
-              if (freshProse && payloadType !== 'awaiting_approval') {
-                payload.summary = freshProse.slice(-120)
-              }
-              if (freshProse && payload.question !== undefined) {
-                payload.question = freshProse
-              }
-            } catch (e) {
-              log.warn('[Telegram] delayed send prep failed, sending with original payload', { agentId: agent.id, error: String(e) })
+              if (_telegramNotifier) _telegramNotifier(payload)
             }
 
-            if (_telegramNotifier) _telegramNotifier(payload)
+            if (managed && payloadType !== 'awaiting_approval') {
+              try {
+                managed.headlessTerminal.flush(() => {
+                  try {
+                    const terminalText = managed.headlessTerminal.extractText()
+                    const refiltered = filterTtsResponse(terminalText).trim()
+                    log.debug('[Telegram] headless flush+extract', {
+                      agentId: agent.id,
+                      terminalTextLen: terminalText.length,
+                      refilteredLen: refiltered.length,
+                      refilteredPreview: refiltered.slice(0, 200).replace(/\n/g, '↵'),
+                    })
+                    if (refiltered) {
+                      managed.lastFilteredProse = refiltered
+                      sendNotification(refiltered.slice(-300))
+                    } else {
+                      sendNotification()
+                    }
+                  } catch (e) {
+                    log.warn('[Telegram] headless extraction failed after flush', { agentId: agent.id, error: String(e) })
+                    sendNotification()
+                  }
+                })
+              } catch (e) {
+                log.warn('[Telegram] headless flush failed', { agentId: agent.id, error: String(e) })
+                sendNotification()
+              }
+            } else {
+              sendNotification()
+            }
           }, 3000)
         }
       }
@@ -416,18 +437,15 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
 
     // BEL character (\x07) — Claude CLI sends this when a response completes.
-    // Only use as TTS accelerator when the filtered buffer has substantial prose.
-    // BEL can appear in tool stdout (terminal-aware Bash commands), so guard
-    // against false positives by requiring >=3 words of filtered prose.
+    // Use cleanTextBuffer for TTS status transitions (immediate, best-effort).
+    // Telegram extraction uses the 3s-delayed headless flush path instead —
+    // Terminal.write() is async so BEL-time reads are unreliable.
     if (data.includes('\x07') && managed) {
       if (managed.ttsStatus === 'busy') {
-        // Extract clean text from headless terminal — correctly rendered, no fragmentation
-        const terminalText = managed.headlessTerminal.extractText()
-        const rawFiltered = filterTtsResponse(terminalText)
+        const rawFiltered = filterTtsResponse(managed.cleanTextBuffer.trim())
         const wordCount = rawFiltered.trim().split(/\s+/).filter((w) => w.length > 0).length
         if (wordCount >= 3) {
           log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length, wordCount })
-          managed.lastFilteredProse = rawFiltered
           managed.ttsStatus = 'locked'
           managed.ttsTrigger.onStatusChange('busy', 'locked', rawFiltered)
         } else {
@@ -455,8 +473,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         if (mgd.ttsStatus !== newStatus) {
           const ttsPrev = mgd.ttsStatus
           mgd.ttsStatus = newStatus
-          const terminalText = mgd.headlessTerminal.extractText()
-          const rawFiltered = filterTtsResponse(terminalText)
+          const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
           if (rawFiltered.trim() && mgd.hasSentInput) {
             mgd.lastFilteredProse = rawFiltered
           }

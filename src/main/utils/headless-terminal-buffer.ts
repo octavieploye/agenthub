@@ -34,6 +34,16 @@ export class HeadlessTerminalBuffer {
     return lines.join('\n').replace(/\n+$/, '')
   }
 
+  /**
+   * Flush all queued writes, then invoke callback.
+   * Terminal.write() is async — data is queued and processed in batches.
+   * Writing an empty string with a callback guarantees all prior writes
+   * have been fully processed before the callback fires.
+   */
+  flush(callback: () => void): void {
+    this.terminal.write('', callback)
+  }
+
   /** Resize the virtual terminal (call when the real PTY is resized) */
   resize(cols: number, rows: number): void {
     this.terminal.resize(cols, rows)
