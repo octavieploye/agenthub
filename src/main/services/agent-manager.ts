@@ -63,6 +63,8 @@ interface ManagedAgent {
   hasSentInput: boolean
   /** Last filtered LLM prose captured by TTS — survives buffer resets for Telegram. */
   lastFilteredProse: string
+  /** Delayed Telegram send timer — 3s after status change to let TTS capture prose. */
+  telegramSendTimer: ReturnType<typeof setTimeout> | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -185,7 +187,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           ? filteredProse
           : task
 
-        _telegramNotifier({
+        const payload: TelegramNotificationPayload = {
           type: payloadType,
           agentId: agent.id,
           agentName: agent.name,
@@ -195,7 +197,30 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           proposedAction: payloadType === 'awaiting_approval' ? `Agent needs permission to run a tool.\n\nTask: ${task}` : undefined,
           requestId: agent.id,
           timestamp: new Date().toISOString(),
-        })
+        }
+
+        // Cancel any pending Telegram send for this agent (debounce rapid status changes)
+        const existingTimer = managed?.telegramSendTimer
+        if (existingTimer) clearTimeout(existingTimer)
+
+        if (managed) {
+          managed.telegramSendTimer = setTimeout(() => {
+            if (managed) managed.telegramSendTimer = null
+
+            // Re-read lastFilteredProse — TTS has had 3s to finish capturing
+            const freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+
+            // Update the payload summary/question with the freshest prose
+            if (freshProse && payloadType !== 'awaiting_approval') {
+              payload.summary = freshProse.slice(-120)
+            }
+            if (freshProse && payload.question !== undefined) {
+              payload.question = freshProse
+            }
+
+            if (_telegramNotifier) _telegramNotifier(payload)
+          }, 3000)
+        }
       }
     }
   }
@@ -496,6 +521,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
     // Flush remaining IPC batch so the last ~16ms of output is not lost
     const managed = agents.get(agentState.id)
+    if (managed?.telegramSendTimer) {
+      clearTimeout(managed.telegramSendTimer)
+      managed.telegramSendTimer = null
+    }
     if (managed) {
       if (managed.ipcBatchTimer) {
         clearTimeout(managed.ipcBatchTimer)
@@ -590,7 +619,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     cleanTextBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false,
-    lastFilteredProse: ''
+    lastFilteredProse: '',
+    telegramSendTimer: null
   })
   emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
@@ -763,6 +793,10 @@ export function killAgent(agentId: string): void {
     // If the onExit handler hasn't already cleaned up, do it now
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
+      if (mgd.telegramSendTimer) {
+        clearTimeout(mgd.telegramSendTimer)
+        mgd.telegramSendTimer = null
+      }
       const previousStatusOnKill = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -784,6 +818,10 @@ export function killAgent(agentId: string): void {
     } catch { /* already dead */ }
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
+      if (mgd.telegramSendTimer) {
+        clearTimeout(mgd.telegramSendTimer)
+        mgd.telegramSendTimer = null
+      }
       const previousStatusOnKillCatch = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -965,6 +1003,7 @@ export function cleanupAllAgents(): void {
     try {
       if (managed.flushTimer) clearTimeout(managed.flushTimer)
       if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
+      if (managed.telegramSendTimer) clearTimeout(managed.telegramSendTimer)
       flushOutputBuffer(id)
       managed.ptyProcess.kill()
     } catch {
