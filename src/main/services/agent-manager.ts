@@ -22,6 +22,7 @@ import type { NotificationRouterConfig } from '../../shared/types/notification.t
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
 import { filterTtsResponse } from '../utils/tts-response-filter'
+import { HeadlessTerminalBuffer } from '../utils/headless-terminal-buffer'
 import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
 import { getTaskByAgentId, updateTask, linkSBARToTask } from '../db/queries/tasks.queries'
@@ -65,6 +66,8 @@ interface ManagedAgent {
   lastFilteredProse: string
   /** Delayed Telegram send timer — 3s after status change to let TTS capture prose. */
   telegramSendTimer: ReturnType<typeof setTimeout> | null
+  /** Headless xterm terminal for clean text extraction (Telegram, TTS) */
+  headlessTerminal: HeadlessTerminalBuffer
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -205,17 +208,35 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
 
         if (managed) {
           managed.telegramSendTimer = setTimeout(() => {
-            if (managed) managed.telegramSendTimer = null
+            try {
+              if (managed) managed.telegramSendTimer = null
 
-            // Re-read lastFilteredProse — TTS has had 3s to finish capturing
-            const freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+              // Re-extract from headless terminal — write() is async, so BEL-time
+              // extraction may have read the buffer before data was processed.
+              // After 3s all writes are guaranteed flushed.
+              let freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+              if (!freshProse && managed && payloadType !== 'awaiting_approval') {
+                try {
+                  const terminalText = managed.headlessTerminal.extractText()
+                  const refiltered = filterTtsResponse(terminalText).trim()
+                  if (refiltered) {
+                    freshProse = refiltered.slice(-300)
+                    managed.lastFilteredProse = refiltered
+                  }
+                } catch (e) {
+                  log.warn('[Telegram] headless terminal extraction failed, using fallback', { agentId: agent.id, error: String(e) })
+                }
+              }
 
-            // Update the payload summary/question with the freshest prose
-            if (freshProse && payloadType !== 'awaiting_approval') {
-              payload.summary = freshProse.slice(-120)
-            }
-            if (freshProse && payload.question !== undefined) {
-              payload.question = freshProse
+              // Update the payload summary/question with the freshest prose
+              if (freshProse && payloadType !== 'awaiting_approval') {
+                payload.summary = freshProse.slice(-120)
+              }
+              if (freshProse && payload.question !== undefined) {
+                payload.question = freshProse
+              }
+            } catch (e) {
+              log.warn('[Telegram] delayed send prep failed, sending with original payload', { agentId: agent.id, error: String(e) })
             }
 
             if (_telegramNotifier) _telegramNotifier(payload)
@@ -383,6 +404,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
       // Buffer output for batched DB persistence
       managed.outputBuffer += data
+      // Feed raw PTY data to headless terminal for clean text extraction
+      managed.headlessTerminal.write(data)
       // Accumulate ANSI-stripped text for TTS response capture
       managed.cleanTextBuffer += stripAnsi(data)
       if (!managed.flushTimer) {
@@ -395,12 +418,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // BEL character (\x07) — Claude CLI sends this when a response completes.
     // Only use as TTS accelerator when the filtered buffer has substantial prose.
     // BEL can appear in tool stdout (terminal-aware Bash commands), so guard
-    // against false positives by requiring >=10 words of filtered prose.
+    // against false positives by requiring >=3 words of filtered prose.
     if (data.includes('\x07') && managed) {
       if (managed.ttsStatus === 'busy') {
-        const rawFiltered = filterTtsResponse(managed.cleanTextBuffer.trim())
+        // Extract clean text from headless terminal — correctly rendered, no fragmentation
+        const terminalText = managed.headlessTerminal.extractText()
+        const rawFiltered = filterTtsResponse(terminalText)
         const wordCount = rawFiltered.trim().split(/\s+/).filter((w) => w.length > 0).length
-        if (wordCount >= 10) {
+        if (wordCount >= 3) {
           log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length, wordCount })
           managed.lastFilteredProse = rawFiltered
           managed.ttsStatus = 'locked'
@@ -430,7 +455,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         if (mgd.ttsStatus !== newStatus) {
           const ttsPrev = mgd.ttsStatus
           mgd.ttsStatus = newStatus
-          const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
+          const terminalText = mgd.headlessTerminal.extractText()
+          const rawFiltered = filterTtsResponse(terminalText)
           if (rawFiltered.trim() && mgd.hasSentInput) {
             mgd.lastFilteredProse = rawFiltered
           }
@@ -549,6 +575,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // to avoid "The database connection is not open" crashes.
     if (isDbShuttingDown()) {
       log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
+      managed?.headlessTerminal.dispose()
       agents.delete(agentState.id)
       return
     }
@@ -576,6 +603,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       wm.closeBreakout(agentState.id)
     }
 
+    managed?.headlessTerminal.dispose()
     agents.delete(agentState.id)
   })
 
@@ -620,7 +648,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false,
     lastFilteredProse: '',
-    telegramSendTimer: null
+    telegramSendTimer: null,
+    headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30)
   })
   emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
@@ -751,6 +780,7 @@ export function resizeAgent(agentId: string, cols: number, rows: number, _webCon
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
   managed.ptyProcess.resize(cols, rows)
+  managed.headlessTerminal.resize(cols, rows)
 }
 
 export function killAgent(agentId: string): void {
@@ -809,6 +839,7 @@ export function killAgent(agentId: string): void {
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
+      mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
   }).catch((err) => {
@@ -834,6 +865,7 @@ export function killAgent(agentId: string): void {
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
+      mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
   })
@@ -1005,6 +1037,7 @@ export function cleanupAllAgents(): void {
       if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
       if (managed.telegramSendTimer) clearTimeout(managed.telegramSendTimer)
       flushOutputBuffer(id)
+      managed.headlessTerminal.dispose()
       managed.ptyProcess.kill()
     } catch {
       log.warn('Failed to kill agent during cleanup', { id })

@@ -9,12 +9,6 @@ export function stripAnsi(text: string): string {
   return text
     // Cursor-right (\x1b[nC) → equivalent spaces so word-wrapped lines stay readable
     .replace(/\x1b\[(\d+)C/g, (_m, n) => ' '.repeat(Number(n)))
-    // Cursor-positioning CSI sequences → newline (preserves line structure for
-    // downstream regex that uses ^ anchors).  Covers: cursor home (\x1b[H),
-    // cursor up/down (\x1b[nA / \x1b[nB), cursor position (\x1b[n;mH / \x1b[n;mf),
-    // cursor horizontal absolute (\x1b[nG), cursor next/prev line (\x1b[nE / \x1b[nF),
-    // cursor vertical absolute (\x1b[nd).
-    .replace(/\x1b\[\d*(?:;\d+)*[ABHfGEFd]/g, '\n')
     // CSI sequences: parameter bytes 0x30–0x3F (0-9 ; < = > ?), optional intermediate
     // bytes 0x20–0x2F, final byte 0x40–0x7E.  Covers SGR, DEC private modes (?),
     // kitty keyboard protocol (>), and other extended sequences.
