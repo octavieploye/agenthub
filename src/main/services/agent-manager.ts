@@ -148,12 +148,16 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       const prefs = getTelegramPrefs(db)
       const prefKey = `notify_${payloadType}` as keyof typeof prefs
       if (prefs[prefKey]) {
-        // Extract last meaningful output for summary/question
+        // Extract last meaningful output — filterTtsResponse strips thinking
+        // lines, spinners, tool-call chrome, and prompt artifacts
         const managed = agents.get(agent.id)
-        const lastOutput = managed
-          ? stripAnsi(managed.cleanTextBuffer).trim().slice(-200)
-          : ''
-        const summary = lastOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
+        const rawText = managed ? stripAnsi(managed.cleanTextBuffer).trim() : ''
+        const filteredProse = filterTtsResponse(rawText).slice(-200)
+        // For approval, extract the actual prompt from raw output (last few lines)
+        const approvalContext = payloadType === 'awaiting_approval'
+          ? rawText.split('\n').filter(l => l.trim()).slice(-5).join('\n').slice(-300)
+          : undefined
+        const summary = filteredProse || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
         _telegramNotifier({
           type: payloadType,
@@ -162,7 +166,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           repo: agent.cwd.split('/').pop() ?? agent.cwd,
           summary,
           question: payloadType === 'needs_input' ? summary : undefined,
-          proposedAction: payloadType === 'awaiting_approval' ? summary : undefined,
+          proposedAction: approvalContext ?? (payloadType === 'awaiting_approval' ? summary : undefined),
           requestId: agent.id,
           timestamp: new Date().toISOString(),
         })

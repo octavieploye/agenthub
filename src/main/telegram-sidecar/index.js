@@ -44,8 +44,12 @@ function telegramPost(method, params) {
   })
 }
 
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 async function sendMessage(chatId, text, replyMarkup) {
-  const params = { chat_id: chatId, text, parse_mode: 'HTML' }
+  const params = { chat_id: chatId, text: escapeHtml(text), parse_mode: 'HTML' }
   if (replyMarkup) params.reply_markup = replyMarkup
   return telegramPost('sendMessage', params)
 }
