@@ -23,6 +23,16 @@ const APPROVAL_PROMPT_RE = /^\?\s/
 const UPDATE_BANNER_RE = /update available/i
 // Shell command lines echoed by the PTY (agent launch commands)
 const SHELL_COMMAND_RE = /^(clear\s*;|claude\s+--|[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+\s)/
+// oh-my-zsh startup messages and theme loading
+const OH_MY_ZSH_RE = /^\[oh-my-zsh\]/i
+// Lines containing clear; or claude -- ANYWHERE (not just line start) —
+// catches prompt-prefixed command echoes like "» cclear; claude ..."
+const COMMAND_ANYWHERE_RE = /clear\s*;|claude\s+--/
+// Common shell prompt lines: path + git info + prompt char patterns
+// Matches oh-my-zsh themes (sunrise, robbyrussell, agnoster, etc.)
+const SHELL_PROMPT_RE = /[»›❯%\$#]\s*(clear|claude|cd|npm|git|ls|cat|echo)\b/
+// Lines that are just a shell prompt (no command) — ends with prompt char
+const BARE_PROMPT_RE = /^[\s\-─═~]*[\w\/.@:-]*\s*[‹«\[({].*[›»\])}]\s*[»›❯%\$#]\s*$/
 // Matches any line whose first word is a Claude CLI thinking-mode indicator,
 // including verbose forms: "Thinking…", "Thinking with high effort", "Thinking about…"
 // Claude CLI uses many whimsical spinner words — match known ones + generic "Word…" pattern
@@ -64,6 +74,10 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   if (APPROVAL_PROMPT_RE.test(trimmed)) return 'prompt'
   if (PERMISSION_PROMPT_RE.test(trimmed)) return 'prompt'
   if (SHELL_COMMAND_RE.test(trimmed)) return 'prompt'
+  if (OH_MY_ZSH_RE.test(trimmed)) return 'prompt'
+  if (COMMAND_ANYWHERE_RE.test(trimmed)) return 'prompt'
+  if (SHELL_PROMPT_RE.test(trimmed)) return 'prompt'
+  if (BARE_PROMPT_RE.test(trimmed)) return 'prompt'
   if (SINGLE_WORD_ELLIPSIS_RE.test(trimmed)) return 'spinner'
   // Short fragments (< 4 word-chars) with no real words — corrupted terminal output
   if (trimmed.replace(/[^a-zA-Z0-9]/g, '').length < 4 && !/\b\w{3,}\b/.test(trimmed)) return 'banner'

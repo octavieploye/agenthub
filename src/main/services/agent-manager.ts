@@ -406,7 +406,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           const ttsPrev = mgd.ttsStatus
           mgd.ttsStatus = newStatus
           const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
-          if (rawFiltered.trim()) mgd.lastFilteredProse = rawFiltered
+          if (rawFiltered.trim() && mgd.hasSentInput) {
+            mgd.lastFilteredProse = rawFiltered
+          }
           log.debug('[TTS] parser transition', {
             agentId: agentState.id,
             prev: ttsPrev,

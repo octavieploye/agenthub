@@ -259,4 +259,30 @@ describe('filterTtsResponse', () => {
     ].join('\n')
     expect(filterTtsResponse(input)).toBe('Hello! How can I help you today?')
   })
+
+  // ── oh-my-zsh and prompt-prefixed command echoes ─────────────────────
+  it('strips oh-my-zsh theme loading lines', () => {
+    expect(filterTtsResponse("[oh-my-zsh] Random theme 'sunrise' loaded")).toBe('')
+  })
+
+  it('strips prompt-prefixed command echoes with clear; or claude --', () => {
+    expect(filterTtsResponse(
+      "--- optimaeus-projects/optimaeus ‹main*➔ ?› » cclear; claude --model 'claude-sonnet-4-6' --effort low 'say hello'"
+    )).toBe('')
+  })
+
+  it('strips bare oh-my-zsh prompt lines (path + git info + prompt char)', () => {
+    expect(filterTtsResponse('--- optimaeus-projects/optimaeus ‹main*➔ ?› »')).toBe('')
+  })
+
+  it('strips full oh-my-zsh startup noise and keeps only prose', () => {
+    const input = [
+      "[oh-my-zsh] Random theme 'sunrise' loaded",
+      '',
+      "--- optimaeus-projects/optimaeus ‹main*➔ ?› » cclear; claude --model 'claude-sonnet-4-6' --effort low 'say hello'",
+      '',
+      'Hello! I am happy to assist.',
+    ].join('\n')
+    expect(filterTtsResponse(input)).toBe('Hello! I am happy to assist.')
+  })
 })
