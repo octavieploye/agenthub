@@ -5,7 +5,7 @@ import type { TelegramStatus, TelegramNotificationPrefs } from '@shared/types/te
 type WizardStep = 1 | 2 | 3
 type TabState = 'not-connected' | 'wizard' | 'connected'
 
-const TOKEN_PATTERN = /^\d{8,10}:AA[A-Za-z0-9_\-]{35}$/
+const TOKEN_PATTERN = /^\d{8,10}:[A-Za-z0-9_\-]{35,}$/
 
 export default function TelegramTab(): React.JSX.Element {
   const [tabState, setTabState] = useState<TabState>('not-connected')
