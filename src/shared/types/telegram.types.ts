@@ -48,6 +48,7 @@ export interface TelegramStatus {
 // JSON-RPC: AgentHub main → sidecar (via stdin)
 export type TelegramToSidecarMsg =
   | { type: 'config'; botToken: string }
+  | { type: 'set_user'; telegramUserId: number; chatId: number }
   | { type: 'notify'; payload: TelegramNotificationPayload }
   | { type: 'approval_result'; requestId: string; decision: 'approved' | 'denied' }
   | { type: 'agent_list'; agents: TelegramAgentEntry[] }

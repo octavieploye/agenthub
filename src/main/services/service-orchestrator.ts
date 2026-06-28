@@ -27,7 +27,8 @@ import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './
 import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, spawnAgent, resumeAgent, respawnAgent } from './agent-manager'
+import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -83,7 +84,7 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       break
     }
     case 'send_task':
-      sendInput(msg.agentId, msg.message + '\n')
+      sendInput(msg.agentId, msg.message + '\r')
       break
     case 'pause':
       pauseAgent(msg.agentId)
@@ -371,6 +372,14 @@ export function initializeServices(db: Database.Database): void {
       if (msg.type !== 'command') return
       handleTelegramCommand(db, msg)
     },
+    onReady: () => {
+      // Push current agent list as soon as sidecar is ready
+      const agents = listAgents().map(a => ({
+        id: a.id, name: a.name, status: a.status,
+        repo: a.cwd.split('/').pop() ?? a.cwd,
+      }))
+      telegramSidecarService?.sendAgentList(agents)
+    },
   })
 
   // Inject telegram notifier into agent-manager (avoids circular import)
@@ -378,10 +387,22 @@ export function initializeServices(db: Database.Database): void {
     telegramSidecarService?.notify(payload)
   })
 
+  // Keep sidecar agent cache in sync on every agent status change
+  setTelegramAgentSync(() => {
+    if (!telegramSidecarService?.isRunning()) return
+    const agents = listAgents().map(a => ({
+      id: a.id, name: a.name, status: a.status,
+      repo: a.cwd.split('/').pop() ?? a.cwd,
+    }))
+    telegramSidecarService.sendAgentList(agents)
+  })
+
   // Auto-start if token is saved (user connected before)
-  const existingUser = db.prepare('SELECT 1 FROM telegram_allowlist LIMIT 1').get()
-  if (existingUser) {
-    telegramSidecarService.start().catch((err) => {
+  const existingTelegramUser = getTelegramAllowedUser(db)
+  if (existingTelegramUser) {
+    telegramSidecarService.start().then(() => {
+      telegramSidecarService!.sendUser(existingTelegramUser.telegram_user_id, existingTelegramUser.chat_id)
+    }).catch((err) => {
       log.warn('Telegram sidecar auto-start failed (token may not be stored)', err)
     })
   }
@@ -412,6 +433,7 @@ export function stopServices(): void {
   sprintWatcher?.stop()
   telegramSidecarService?.stop()
   setTelegramNotifier(null)
+  setTelegramAgentSync(null)
   log.info('All services stopped')
 }
 

@@ -500,6 +500,11 @@ rl.on('line', async (line) => {
       schedulePoll()
       break
 
+    case 'set_user':
+      allowedUserId = msg.telegramUserId
+      allowedChatId = msg.chatId
+      break
+
     case 'notify':
       await sendNotification(msg.payload)
       break

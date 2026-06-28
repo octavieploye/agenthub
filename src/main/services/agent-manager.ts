@@ -96,6 +96,14 @@ export function setTelegramNotifier(fn: TelegramNotifier | null): void {
   _telegramNotifier = fn
 }
 
+// Telegram agent-list sync — pushes updated agent list to sidecar on every status change
+type TelegramAgentSync = () => void
+let _telegramAgentSync: TelegramAgentSync | null = null
+
+export function setTelegramAgentSync(fn: TelegramAgentSync | null): void {
+  _telegramAgentSync = fn
+}
+
 function getNotificationConfig(): NotificationRouterConfig {
   let telegramEnabled = false
   try {
@@ -127,26 +135,43 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
   if (routingResult.layers.includes('telegram') && _telegramNotifier) {
-    const db = getDb()
-    const prefs = getTelegramPrefs(db)
-    const payloadType: TelegramNotificationPayload['type'] =
-      agent.status === 'awaiting_approval' ? 'awaiting_approval' :
-      agent.status === 'locked' ? 'needs_input' :
-      agent.status === 'completed' ? 'completed' : 'failed'
+    const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
+      completed: 'completed',
+      error: 'failed',
+      looping: 'failed',
+      awaiting_approval: 'awaiting_approval',
+      locked: 'needs_input',
+    }
+    const payloadType = STATUS_TO_PAYLOAD[agent.status]
+    if (payloadType) {
+      const db = getDb()
+      const prefs = getTelegramPrefs(db)
+      const prefKey = `notify_${payloadType}` as keyof typeof prefs
+      if (prefs[prefKey]) {
+        // Extract last meaningful output for summary/question
+        const managed = agents.get(agent.id)
+        const lastOutput = managed
+          ? stripAnsi(managed.cleanTextBuffer).trim().slice(-200)
+          : ''
+        const summary = lastOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
-    const prefKey = `notify_${payloadType}` as keyof typeof prefs
-    if (prefs[prefKey]) {
-      _telegramNotifier({
-        type: payloadType,
-        agentId: agent.id,
-        agentName: agent.name,
-        repo: agent.cwd.split('/').pop() ?? agent.cwd,
-        summary: (agent.taskDescription ?? '').slice(0, 200),
-        requestId: agent.id,
-        timestamp: new Date().toISOString(),
-      })
+        _telegramNotifier({
+          type: payloadType,
+          agentId: agent.id,
+          agentName: agent.name,
+          repo: agent.cwd.split('/').pop() ?? agent.cwd,
+          summary,
+          question: payloadType === 'needs_input' ? summary : undefined,
+          proposedAction: payloadType === 'awaiting_approval' ? summary : undefined,
+          requestId: agent.id,
+          timestamp: new Date().toISOString(),
+        })
+      }
     }
   }
+
+  // Keep sidecar agent cache in sync on every status change
+  _telegramAgentSync?.()
 }
 
 function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus: string): void {

@@ -25,6 +25,7 @@ export interface TelegramSidecarDeps {
   onBlockedSender: (telegramUserId: number) => void
   onFirstContact: (telegramUserId: number, chatId: number) => void
   onCommand: (msg: TelegramFromSidecarMsg) => void
+  onReady?: () => void
 }
 
 export class TelegramSidecarService {
@@ -45,6 +46,26 @@ export class TelegramSidecarService {
       throw new Error('Encryption not available on this system')
     }
     this.encryptedToken = safeStorage.encryptString(token)
+    // Persist to DB so it survives app restarts
+    this.deps.db.prepare(
+      'UPDATE telegram_allowlist SET encrypted_token = ? WHERE id = (SELECT id FROM telegram_allowlist LIMIT 1)'
+    ).run(this.encryptedToken.toString('base64'))
+  }
+
+  private loadTokenFromDb(): boolean {
+    const row = this.deps.db.prepare(
+      'SELECT encrypted_token FROM telegram_allowlist LIMIT 1'
+    ).get() as { encrypted_token: string | null } | undefined
+    if (!row?.encrypted_token) return false
+    try {
+      this.encryptedToken = Buffer.from(row.encrypted_token, 'base64')
+      // Verify it can be decrypted (keychain still valid)
+      safeStorage.decryptString(this.encryptedToken)
+      return true
+    } catch {
+      this.encryptedToken = null
+      return false
+    }
   }
 
   private getDecryptedToken(): string | null {
@@ -59,6 +80,7 @@ export class TelegramSidecarService {
   async start(token?: string): Promise<void> {
     if (this.isRunning()) return
     if (token) await this.saveToken(token)
+    if (!this.encryptedToken) this.loadTokenFromDb()
     const decrypted = this.getDecryptedToken()
     if (!decrypted) throw new Error('No bot token stored')
 
@@ -114,15 +136,21 @@ export class TelegramSidecarService {
     this.send({ type: 'repo_list', repos })
   }
 
+  sendUser(telegramUserId: number, chatId: number): void {
+    this.send({ type: 'set_user', telegramUserId, chatId })
+  }
+
   async disconnect(): Promise<void> {
     this.stop()
     this.encryptedToken = null
-    clearTelegramAllowlist(this.deps.db)
+    clearTelegramAllowlist(this.deps.db) // also deletes the persisted encrypted_token
   }
 
   getStatus(): TelegramStatus {
     const user = getTelegramAllowedUser(this.deps.db)
-    if (!user || !this.encryptedToken) return { connected: false }
+    if (!user) return { connected: false }
+    if (!this.encryptedToken) this.loadTokenFromDb()
+    if (!this.encryptedToken) return { connected: false }
     const maskedUserId = '···' + String(user.telegram_user_id).slice(-4)
     const prefs = getTelegramPrefs(this.deps.db)
     return { connected: true, maskedUserId, prefs }
@@ -137,12 +165,19 @@ export class TelegramSidecarService {
     switch (msg.type) {
       case 'ready':
         this.deps.logInfo('telegram sidecar ready')
+        this.deps.onReady?.()
         break
       case 'blocked_sender':
         this.deps.onBlockedSender(msg.telegramUserId)
         break
       case 'first_contact':
         insertTelegramAllowedUser(this.deps.db, msg.telegramUserId, msg.chatId)
+        // Persist the encrypted token now that the allowlist row exists
+        if (this.encryptedToken) {
+          this.deps.db.prepare(
+            'UPDATE telegram_allowlist SET encrypted_token = ? WHERE telegram_user_id = ?'
+          ).run(this.encryptedToken.toString('base64'), msg.telegramUserId)
+        }
         this.deps.onFirstContact(msg.telegramUserId, msg.chatId)
         break
       case 'command':
