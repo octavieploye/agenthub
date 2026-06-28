@@ -226,16 +226,16 @@ describe('Notification Router', () => {
       expect(result.layers).not.toContain('telegram')
     })
 
-    it('does NOT include telegram for medium triage level', () => {
+    it('includes telegram for medium triage level when enabled', () => {
       const event = makeTriageEvent({ triageLevel: 'medium' })
       const result: RoutingResult = routeNotification(event, allEnabled())
-      expect(result.layers).not.toContain('telegram')
+      expect(result.layers).toContain('telegram')
     })
 
-    it('does NOT include telegram for high triage level', () => {
+    it('includes telegram for high triage level when enabled', () => {
       const event = makeTriageEvent({ triageLevel: 'high' })
       const result: RoutingResult = routeNotification(event, allEnabled())
-      expect(result.layers).not.toContain('telegram')
+      expect(result.layers).toContain('telegram')
     })
 
     it('includes telegram for critical triage level when enabled', () => {

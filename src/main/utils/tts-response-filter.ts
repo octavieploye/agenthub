@@ -11,24 +11,33 @@ const BRAILLE_SPINNER_RE = /^[\u2800-\u28FF\s]+$/
 // Spinner chars alone on a line, OR spinner char + space + description text
 // e.g. "✻ Implementing free-text categories…" (Claude CLI tool-call progress lines)
 const DECORATIVE_SPINNER_RE = /^[✻✳✢✺✶✽·\s]+$|^[✻✳✢✺✶✽·]\s+\S/
-const TOOL_CALL_START_RE = /^[●○]/
+const TOOL_CALL_START_RE = /^[●○⧉]|⧉\s/
 const TOOL_CONTINUATION_RE = /^[⎿├└]/
-const TOOL_STATUS_RE = /^[✓✗⏺]/
+const TOOL_STATUS_RE = /^[✓✗⏺⏵]/
 const BOX_DRAWING_RE = /^[╭╮╰╯│─]/
 // Block-element characters used in Claude Code startup banner (▐▛▜▌▝▘█ etc.)
 const BLOCK_ELEMENT_BANNER_RE = /^[\u2580-\u259F\s]+$/
-const PROMPT_CHROME_RE = /^❯\s*$/
+// ❯ followed by anything (Claude CLI user prompt with input echo)
+const PROMPT_CHROME_RE = /^❯(\s|$)/
 const APPROVAL_PROMPT_RE = /^\?\s/
 const UPDATE_BANNER_RE = /update available/i
+// Shell command lines echoed by the PTY (agent launch commands)
+const SHELL_COMMAND_RE = /^(clear\s*;|claude\s+--|[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+\s)/
 // Matches any line whose first word is a Claude CLI thinking-mode indicator,
 // including verbose forms: "Thinking…", "Thinking with high effort", "Thinking about…"
-const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking)\b/i
+// Claude CLI uses many whimsical spinner words — match known ones + generic "Word…" pattern
+const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking|Reticulating|Pondering|Conjuring|Synthesizing|Analyzing|Processing|Generating|Formulating|Composing|Evaluating|Computing|Rendering|Compiling)\b/i
 // Claude CLI keyboard shortcut footer lines rendered after each response.
 // Examples (after ANSI stripping):
 //   "Esc to interrupt  Ctrl+T to hide task  agent-manager.ts"
 //   "esc to cancel  tab to amend"
 // These always start with a key name immediately followed by " to ".
-const KEYBOARD_HINT_RE = /^(esc|ctrl\+\w+)\s+to\s+/i
+// Keyboard hints can appear at line start or after a separator (· esc to interrupt)
+const KEYBOARD_HINT_RE = /^[·•]?\s*(esc|ctrl\+\w+|shift\+\w+|tab)\s+to\s+/i
+// Claude CLI permission/bypass prompt lines
+const PERMISSION_PROMPT_RE = /bypass permissions|shift\+tab to cycle/i
+// Safety net for single-word spinner lines ending with ellipsis (e.g. "Reticulating…")
+const SINGLE_WORD_ELLIPSIS_RE = /^[A-Z]\w+…$/
 // Safety net: any line that still begins with an escape character after stripAnsi
 const RESIDUAL_ESCAPE_RE = /^\x1b/
 
@@ -53,6 +62,11 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   if (KEYBOARD_HINT_RE.test(trimmed)) return 'prompt'
   if (PROMPT_CHROME_RE.test(line)) return 'prompt'
   if (APPROVAL_PROMPT_RE.test(trimmed)) return 'prompt'
+  if (PERMISSION_PROMPT_RE.test(trimmed)) return 'prompt'
+  if (SHELL_COMMAND_RE.test(trimmed)) return 'prompt'
+  if (SINGLE_WORD_ELLIPSIS_RE.test(trimmed)) return 'spinner'
+  // Short fragments (< 4 word-chars) with no real words — corrupted terminal output
+  if (trimmed.replace(/[^a-zA-Z0-9]/g, '').length < 4 && !/\b\w{3,}\b/.test(trimmed)) return 'banner'
 
   // Indented line immediately following a tool call → tool result block
   if ((prevKind === 'tool_call' || prevKind === 'tool_result') && /^\s{2,}/.test(line)) {
@@ -63,7 +77,14 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
 }
 
 export function filterTtsResponse(text: string): string {
-  const lines = text.split('\n')
+  // Strip non-SGR escape sequences that survive strip-ansi:
+  // \x1B=, \x1B>, \x1B(B, \x1B[?1;2c, \x1B[I, \x1B[O, CSI sequences
+  const cleaned = text
+    .replace(/\x1b\[[^a-zA-Z]*[a-zA-Z]/g, '')  // CSI sequences (\x1B[...letter)
+    .replace(/\x1b[()][A-Z0-9]/g, '')           // Character set designations
+    .replace(/\x1b[=><!]/g, '')                  // DEC private modes
+    .replace(/\x1b./g, '')                       // Any remaining 2-byte escapes
+  const lines = cleaned.split('\n')
   const output: string[] = []
   let prevKind: LineKind = 'empty'
   let inFencedBlock = false

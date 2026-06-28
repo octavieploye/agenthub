@@ -125,6 +125,17 @@ export class TelegramSidecarService {
   }
 
   notify(payload: TelegramNotificationPayload): void {
+    this.deps.logInfo('[Telegram Debug] sidecar notify payload', {
+      type: payload.type,
+      agentId: payload.agentId,
+      agentName: payload.agentName,
+      repo: payload.repo,
+      summaryLen: payload.summary?.length ?? 0,
+      summaryFirst500: (payload.summary ?? '').slice(0, 500),
+      hasQuestion: Boolean(payload.question),
+      questionFirst200: (payload.question ?? '').slice(0, 200),
+      hasProposedAction: Boolean(payload.proposedAction),
+    })
     this.send({ type: 'notify', payload })
   }
 

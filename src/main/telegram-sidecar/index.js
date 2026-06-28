@@ -45,13 +45,20 @@ function telegramPost(method, params) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // Strip control characters (U+0000-U+001F) except \n and \t — these silently kill Telegram messages
+  return str
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 async function sendMessage(chatId, text, replyMarkup) {
   const params = { chat_id: chatId, text: escapeHtml(text), parse_mode: 'HTML' }
   if (replyMarkup) params.reply_markup = replyMarkup
-  return telegramPost('sendMessage', params)
+  const res = await telegramPost('sendMessage', params)
+  if (!res.ok) {
+    sendToParent({ type: 'error', error: `sendMessage failed: ${res.description || JSON.stringify(res)}` })
+  }
+  return res
 }
 
 async function editMessageText(chatId, messageId, text) {

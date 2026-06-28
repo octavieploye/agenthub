@@ -221,4 +221,42 @@ describe('filterTtsResponse', () => {
 
     expect(filterTtsResponse(input)).toBe(expected)
   })
+
+  // ── PTY session noise (real data from Telegram debug logs) ──────────
+  it('strips shell command lines', () => {
+    expect(filterTtsResponse("clear; claude --model 'claude-sonnet-4-6' --effort low 'say hello'")).toBe('')
+  })
+
+  it('strips user@host prompt lines', () => {
+    expect(filterTtsResponse('octaviesmacpro@macbookpro  ~/workspace/optimaeus  ↱ main')).toBe('')
+  })
+
+  it('strips ❯ prompt with echoed input', () => {
+    expect(filterTtsResponse('❯ say hello                                         ')).toBe('')
+  })
+
+  it('strips non-SGR escape sequences from lines', () => {
+    // \x1B= is DECKPAM (2 bytes), \x1B> is DECKPNM, \x1B[?1;2c is DA response
+    const input = '\x1B=\x1B>Hello world\x1B[?1;2c'
+    expect(filterTtsResponse(input)).toBe('Hello world')
+  })
+
+  it('extracts prose from full PTY session dump', () => {
+    const input = [
+      "clear; claude --model 'claude-sonnet-4-6' --effort low 'say hello'",
+      '',
+      'octaviesmacpro@macbookpro  ~/workspace/optimaeus  ↱ main',
+      '╭─── Claude Code v2.1.83 ───╮',
+      '│  Welcome back Master      │',
+      '╰───────────────────────────╯',
+      '',
+      'Thinking…',
+      '',
+      'Hello! How can I help you today?',
+      '',
+      '❯ say hello                                              ',
+      'esc to cancel  tab to amend',
+    ].join('\n')
+    expect(filterTtsResponse(input)).toBe('Hello! How can I help you today?')
+  })
 })

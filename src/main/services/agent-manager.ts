@@ -61,6 +61,8 @@ interface ManagedAgent {
   ttsTrigger: TtsTrigger
   /** True once the user (or task auto-send) has written input to this agent's PTY. */
   hasSentInput: boolean
+  /** Last filtered LLM prose captured by TTS — survives buffer resets for Telegram. */
+  lastFilteredProse: string
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -135,6 +137,22 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
   if (routingResult.layers.includes('telegram') && _telegramNotifier) {
+    // --- [Telegram Debug] log raw → stripped → filtered pipeline ---
+    const _dbgManaged = agents.get(agent.id)
+    if (_dbgManaged) {
+      const _dbgRaw = _dbgManaged.cleanTextBuffer
+      const _dbgStripped = stripAnsi(_dbgRaw).trim()
+      const _dbgFiltered = filterTtsResponse(_dbgStripped)
+      log.info('[Telegram Debug] cleanTextBuffer pipeline', {
+        agentId: agent.id,
+        agentStatus: agent.status,
+        lastFilteredProseLen: _dbgManaged.lastFilteredProse.length,
+        lastFilteredProseFirst300: _dbgManaged.lastFilteredProse.slice(0, 300),
+        bufferLen: _dbgRaw.length,
+        filteredLen: _dbgFiltered.length,
+        filteredFirst300: _dbgFiltered.slice(0, 300),
+      })
+    }
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
       completed: 'completed',
       error: 'failed',
@@ -148,16 +166,24 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       const prefs = getTelegramPrefs(db)
       const prefKey = `notify_${payloadType}` as keyof typeof prefs
       if (prefs[prefKey]) {
-        // Extract last meaningful output — filterTtsResponse strips thinking
-        // lines, spinners, tool-call chrome, and prompt artifacts
         const managed = agents.get(agent.id)
-        const rawText = managed ? stripAnsi(managed.cleanTextBuffer).trim() : ''
-        const filteredProse = filterTtsResponse(rawText).slice(-200)
-        // For approval, extract the actual prompt from raw output (last few lines)
-        const approvalContext = payloadType === 'awaiting_approval'
-          ? rawText.split('\n').filter(l => l.trim()).slice(-5).join('\n').slice(-300)
-          : undefined
-        const summary = filteredProse || (agent.taskDescription ?? '').slice(0, 200) || agent.name
+        const task = (agent.taskDescription ?? '').slice(0, 200) || agent.name
+
+        // Use lastFilteredProse (captured by TTS before buffer reset) instead of
+        // re-filtering cleanTextBuffer which is stale/refilled with terminal chrome
+        // after TTS clears it.
+        let filteredProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
+        if (!filteredProse && managed) {
+          // Fallback: try the current buffer (may work for non-TTS paths)
+          const rawText = stripAnsi(managed.cleanTextBuffer).trim()
+          filteredProse = filterTtsResponse(rawText).slice(-300)
+        }
+
+        // completed/failed/needs_input: agent's prose response is useful
+        // awaiting_approval: buffer is permission UI chrome — use task only
+        const summary = (payloadType !== 'awaiting_approval' && filteredProse)
+          ? filteredProse
+          : task
 
         _telegramNotifier({
           type: payloadType,
@@ -165,8 +191,8 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           agentName: agent.name,
           repo: agent.cwd.split('/').pop() ?? agent.cwd,
           summary,
-          question: payloadType === 'needs_input' ? summary : undefined,
-          proposedAction: approvalContext ?? (payloadType === 'awaiting_approval' ? summary : undefined),
+          question: payloadType === 'needs_input' ? (filteredProse || task) : undefined,
+          proposedAction: payloadType === 'awaiting_approval' ? `Agent needs permission to run a tool.\n\nTask: ${task}` : undefined,
           requestId: agent.id,
           timestamp: new Date().toISOString(),
         })
@@ -351,6 +377,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         const wordCount = rawFiltered.trim().split(/\s+/).filter((w) => w.length > 0).length
         if (wordCount >= 10) {
           log.debug('[TTS] BEL detected — accelerating locked transition', { agentId: agentState.id, filteredLen: rawFiltered.length, wordCount })
+          managed.lastFilteredProse = rawFiltered
           managed.ttsStatus = 'locked'
           managed.ttsTrigger.onStatusChange('busy', 'locked', rawFiltered)
         } else {
@@ -379,6 +406,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           const ttsPrev = mgd.ttsStatus
           mgd.ttsStatus = newStatus
           const rawFiltered = filterTtsResponse(mgd.cleanTextBuffer.trim())
+          if (rawFiltered.trim()) mgd.lastFilteredProse = rawFiltered
           log.debug('[TTS] parser transition', {
             agentId: agentState.id,
             prev: ttsPrev,
@@ -543,6 +571,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         current.cleanTextBuffer = ''
         return
       }
+      current.lastFilteredProse = text
       current.cleanTextBuffer = ''
       log.info('[TTS] emitting RESPONSE_READY', {
         agentId: agentState.id,
@@ -558,7 +587,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ipcBatchBuffer: '', ipcBatchTimer: null,
     cleanTextBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
-    hasSentInput: false
+    hasSentInput: false,
+    lastFilteredProse: ''
   })
   emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
