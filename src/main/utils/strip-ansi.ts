@@ -9,6 +9,11 @@ export function stripAnsi(text: string): string {
   return text
     // Cursor-right (\x1b[nC) → equivalent spaces so word-wrapped lines stay readable
     .replace(/\x1b\[(\d+)C/g, (_m, n) => ' '.repeat(Number(n)))
+    // Cursor Position (CUP: \x1b[row;colH) and HVP (\x1b[row;colf) → newline.
+    // TUI apps like Claude CLI use CUP to position text on different screen rows.
+    // Converting to \n preserves line structure that the general CSI regex below
+    // would otherwise destroy by stripping these sequences without replacement.
+    .replace(/\x1b\[\d*(?:;\d*)?[Hf]/g, '\n')
     // CSI sequences: parameter bytes 0x30–0x3F (0-9 ; < = > ?), optional intermediate
     // bytes 0x20–0x2F, final byte 0x40–0x7E.  Covers SGR, DEC private modes (?),
     // kitty keyboard protocol (>), and other extended sequences.

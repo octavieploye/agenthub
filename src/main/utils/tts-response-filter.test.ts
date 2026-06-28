@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { filterTtsResponse } from './tts-response-filter'
+import { stripAnsi } from './strip-ansi'
 
 describe('filterTtsResponse', () => {
   // ── KEEP: plain prose ───────────────────────────────────────────────
@@ -284,5 +285,41 @@ describe('filterTtsResponse', () => {
       'Hello! I am happy to assist.',
     ].join('\n')
     expect(filterTtsResponse(input)).toBe('Hello! I am happy to assist.')
+  })
+
+  // ── CUP-separated lines (after stripAnsi converts CUP → \n) ──────
+  it('extracts response when CUP sequences produced newline-separated lines', () => {
+    // Simulates what stripAnsi now produces: CUP → \n gives each TUI region
+    // its own line, so filterTtsResponse can classify them independently.
+    // stripAnsi imported at top of file
+    // Raw PTY: banner at row 1, spinner at row 5, response overwrites at row 5, prompt at row 30
+    const rawPty = [
+      '\x1b[1;1H\x1b[1m╭─── Claude Code ───╮\x1b[0m',
+      '\x1b[2;1H\x1b[1m│ Welcome back     │\x1b[0m',
+      '\x1b[3;1H\x1b[1m╰──────────────────╯\x1b[0m',
+      '\x1b[5;1HThinking…',
+      '\x1b[5;1HHello! I would be happy to help you today.',
+      '\x1b[30;1H❯ ',
+    ].join('')
+    const stripped = stripAnsi(rawPty)
+    const result = filterTtsResponse(stripped)
+    expect(result).toBe('Hello! I would be happy to help you today.')
+  })
+
+  it('handles spinner overwrite followed by multi-line response via CUP', () => {
+    // stripAnsi imported at top of file
+    const rawPty = [
+      '\x1b[3;1HAnalyzing…',
+      '\x1b[3;1HThe root cause is in the parser.',
+      '\x1b[4;1H',
+      '\x1b[5;1HHere is the fix:',
+      '\x1b[30;1Hesc to cancel  tab to amend',
+    ].join('')
+    const stripped = stripAnsi(rawPty)
+    const result = filterTtsResponse(stripped)
+    expect(result).toContain('The root cause is in the parser.')
+    expect(result).toContain('Here is the fix:')
+    expect(result).not.toContain('Analyzing')
+    expect(result).not.toContain('esc to cancel')
   })
 })

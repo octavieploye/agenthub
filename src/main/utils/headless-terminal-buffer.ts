@@ -9,7 +9,11 @@ export class HeadlessTerminalBuffer {
 
   /** Feed raw PTY data (with ANSI sequences) into the virtual terminal */
   write(data: string): void {
-    this.terminal.write(data)
+    // Strip alternate screen buffer switches — Claude CLI uses alternate screen
+    // for its TUI, and when it exits the response content is discarded.
+    // Keeping all content in the primary buffer lets extractText() read it.
+    const cleaned = data.replace(/\x1b\[\?(?:1049|1047|47)[hl]/g, '')
+    this.terminal.write(cleaned)
   }
 
   /**
