@@ -151,7 +151,6 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       error: 'failed',
       looping: 'failed',
       awaiting_approval: 'awaiting_approval',
-      locked: 'needs_input',
     }
     const payloadType = STATUS_TO_PAYLOAD[agent.status]
     if (payloadType) {
@@ -703,7 +702,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = task.replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag} '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
