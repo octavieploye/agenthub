@@ -22,6 +22,3 @@ MODEL_SMALL_CEILING=1.5    # Haiku, Mistral-7B class
 ## Token Estimation
 CHARS_PER_TOKEN=4     # Proxy: 1 token ≈ 4 characters in English
 
-## LLM Settings
-TOKEN_OPT_MODEL="${TOKEN_OPT_MODEL:-claude-haiku-4-5-20251001}"
-ANTHROPIC_API_VERSION="2023-06-01"

@@ -5,6 +5,9 @@ description: Use when reviewing AI instruction files for token waste, before app
 
 # Token Optimizer
 
+**YOU are the LLM.** This skill guides you through auditing and rewriting AI instruction files.
+The shell script (`token-audit.sh`) handles only mechanical operations — file discovery, token counting, gate status, archiving. All analysis and rewriting is done by you.
+
 ## When to Use
 - Manually: when you want to audit .claude/ instruction files for waste
 - Automatically: invoked by PostToolUse (stuck), Stop (session-end), and cron (Friday 8am)
@@ -34,15 +37,46 @@ TES > 1.0 → improvement
 TES < 1.0 → regression (stop, review)
 ```
 
-## 5-Gate Analysis Procedure
+## 5-Gate Pipeline
 
-Run gates in order. Never skip. Never apply without all gates passing.
+Run gates in order. Never skip. Never apply without both gates passing.
 
-1. **--dry-run** — Generate preview in tmp/token-preview/. Show diff + token counts + TES per file. Human reviews.
-2. **--judge** — LLM-as-judge scores intent preservation: PASS / PARTIAL / FAIL. MANDATORY. Blocks on FAIL or PARTIAL.
-3. **--baseline** — Capture current instruction behavior on test-scenarios.md (run once, stored in .token-audit-baselines/).
-4. **--test** — Run proposed instructions on same scenarios. Compare to baseline. MANDATORY. Blocks on REGRESSION.
-5. **--apply** — Move originals to human/, write optimized versions. Only available after gates 2+4 PASS.
+### Gate 1 — Scan (`--dry-run`)
+```bash
+.claude/skills/token-optimizer/token-audit.sh --dry-run
+```
+Shows each LLM-directed file with its current token count and CR target.
+
+### Gate 2 — Rewrite (YOU)
+For each file from the scan:
+1. Read the file
+2. Rewrite it to the CR target — remove narrative, rationale, examples that don't change agent behavior; use imperative sentences; preserve ALL behavioral directives exactly
+3. Write your proposed version to: `tmp/token-preview/<rel>.proposed.md`
+   - Example: file `.claude/CLAUDE.md` → proposed at `tmp/token-preview/.claude/CLAUDE.md.proposed.md`
+
+### Gate 3 — Judge (YOU) → mark gate
+After rewriting, judge your own output:
+- **PASS**: all rules, constraints, and behavioral requirements are preserved
+- **PARTIAL**: minor nuance loss but core behavior preserved → revise and retry
+- **FAIL**: any behavioral directive missing or weakened → revise and retry
+
+Once all files score PASS:
+```bash
+.claude/skills/token-optimizer/token-audit.sh --mode=set-gate --gate=judge --verdict=PASS
+```
+
+### Gate 4 — Behavioral test (YOU) → mark gate
+Read `test-scenarios.md`. For each scenario, simulate an agent following your proposed instructions and verify the compliance check passes. If all scenarios pass:
+```bash
+.claude/skills/token-optimizer/token-audit.sh --mode=set-gate --gate=test --verdict=PASS
+```
+If any scenario regresses: revise the proposed file and repeat from Gate 3.
+
+### Gate 5 — Apply
+```bash
+.claude/skills/token-optimizer/token-audit.sh --apply
+```
+Archives originals to `human/`, writes optimized versions in place. Blocked unless both gate 3 and gate 4 are PASS.
 
 ## Report Format
 
@@ -51,11 +85,3 @@ Each report includes:
 2. Drift Flags — human/ vs live version divergence
 3. Recommendations — ranked by TES impact, with exact token savings
 
-## Stuck Detection (PostToolUse mode)
-
-Agent is stuck when in last N tool calls:
-- Same tool type 3+ consecutive times, no Write/Edit/Bash in between
-- OR 5+ tool calls since last file modification
-- OR same error pattern in 2 consecutive tool outputs
-
-When stuck detected: surface this skill for token-efficiency review of current session context.

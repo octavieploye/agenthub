@@ -10,3 +10,4 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [vibe-marketing-validation](vibe-marketing-validation/SKILL.md) — Run the L7V 9-prompt AI validation playbook: niche discovery, product spec, mockups, landing page, Meta ads, and self-improving loop — before building anything
 - [trustworthy-sources](trustworthy-sources/SKILL.md) — Evaluate whether a source is credible enough to cite as evidence for a factual, design, or business decision (5-source convergence rule, corporate ≠ trustworthy)
 - [token-optimizer](token-optimizer/SKILL.md) — Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline
+- [market-modeling](../workflow-team-library/market-modeling/manifest.md) — Five-tradition market intelligence: harvest → five-lens analysis → shadow review → synthesis

@@ -6,14 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${TOKEN_OPT_PROJECT:-$(pwd)}"
 CRITERIA="${PROJECT_ROOT}/.claude/skills/token-optimizer/criteria.md"
 [[ ! -f "$CRITERIA" ]] && CRITERIA="${SCRIPT_DIR}/criteria.md"
-source <(grep -E '^(CR_|QR_|CHARS_PER_TOKEN|TOKEN_OPT_MODEL)' "$CRITERIA")
+source <(grep -E '^(CR_|QR_|CHARS_PER_TOKEN)' "$CRITERIA")
 
-STATE_FILE="${PROJECT_ROOT}/.token-audit-state"
-BASELINES_DIR="${PROJECT_ROOT}/.token-audit-baselines"
 PREVIEW_DIR="${PROJECT_ROOT}/tmp/token-preview"
 TEST_RESULTS_DIR="${PROJECT_ROOT}/tmp/token-test-results"
 AUDIT_LOG="${PROJECT_ROOT}/.claude/token-audit-log.md"
-REPORT_DIR="${PROJECT_ROOT}/docs/token-reports"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 count_tokens() {
@@ -59,138 +56,71 @@ cr_target_for_class() {
   esac
 }
 
-call_claude() {
-  local system="$1"
-  local user="$2"
-  local model="${TOKEN_OPT_MODEL:-claude-haiku-4-5-20251001}"
-  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    echo "ERROR: ANTHROPIC_API_KEY not set" >&2
-    exit 1
-  fi
-  curl --http1.1 -s https://api.anthropic.com/v1/messages \
-    -H "x-api-key: $ANTHROPIC_API_KEY" \
-    -H "anthropic-version: ${ANTHROPIC_API_VERSION:-2023-06-01}" \
-    -H "content-type: application/json" \
-    -d "$(jq -n \
-      --arg model "$model" \
-      --arg system "$system" \
-      --arg user "$user" \
-      '{model:$model,max_tokens:4096,system:$system,messages:[{role:"user",content:$user}]}')" \
-  | jq -r 'if .type == "error" then "ERROR: " + .error.message else .content[0].text end'
-}
-
-# ── Dry-run mode ─────────────────────────────────────────────────────────────
+# ── Dry-run mode (scan only — no LLM) ────────────────────────────────────────
+# Shows token counts and CR targets. The running agent reads each file and
+# writes proposed versions to tmp/token-preview/<rel>.proposed.md.
 mode_dry_run() {
-  mkdir -p "$PREVIEW_DIR"
-  echo "=== DRY-RUN PREVIEW ==="
+  echo "=== TOKEN SCAN ==="
   echo ""
+  local total=0
   while IFS= read -r file; do
-    local class cr_target tokens_before tokens_after rel proposed_dir proposed_file cr tes REWRITE_PROMPT
+    local class cr_target tokens rel
     class=$(classify_file "$file")
     [[ "$class" == "human" ]] && continue
     cr_target=$(cr_target_for_class "$class")
-    tokens_before=$(count_tokens "$file")
+    tokens=$(count_tokens "$file")
     rel="${file#$PROJECT_ROOT/}"
-
-    REWRITE_PROMPT="You are a token optimizer for AI instruction files.
-Rewrite the following $class instruction content at a ${cr_target}x compression ratio.
-Rules: preserve ALL behavioral directives exactly. Remove narrative prose, rationale, examples unless they change agent behavior. Use imperative sentences. No markdown headers unless structurally necessary.
-Output ONLY the rewritten content, no preamble.
-
-CONTENT:
-$(cat "$file")"
-
-    proposed_dir="$PREVIEW_DIR/$(dirname "$rel")"
-    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
-    mkdir -p "$proposed_dir"
-
-    call_claude "You are a token-efficiency expert." "$REWRITE_PROMPT" > "$proposed_file"
-    tokens_after=$(count_tokens "$proposed_file")
-    if [[ "$tokens_after" -eq 0 ]]; then
-      echo "  ERROR: empty LLM response for $rel — skipping" >&2
-      rm -f "$proposed_file"
-      continue
-    fi
-    cr=$(awk "BEGIN {printf \"%.1f\", $tokens_before/$tokens_after}")
-    tes=$(awk "BEGIN {printf \"%.2f\", $cr * 0.98}")  # assume QR=0.98 for preview
-
+    total=$((total + tokens))
     echo "[$class] $rel"
-    echo "  Before: $tokens_before tokens | After: $tokens_after tokens | CR: ${cr}x | TES: $tes"
-    echo "  Preview: $proposed_file"
+    echo "  Tokens: $tokens | CR target: ${cr_target}x | Goal: $(awk "BEGIN {printf \"%d\", $tokens / $cr_target}") tokens"
     echo ""
   done < <(find_llm_files)
-  echo "Review previews in: $PREVIEW_DIR"
-  echo "Next: run --judge to score intent preservation"
+  echo "Total LLM-directed tokens: $total"
+  echo ""
+  echo "Next steps (agent-driven):"
+  echo "  1. Read each file above and rewrite it to the CR target"
+  echo "  2. Save each proposed version to: $PREVIEW_DIR/<rel>.proposed.md"
+  echo "  3. Judge intent preservation: run --mode=set-gate --gate=judge --verdict=PASS"
+  echo "  4. Run behavioral scenarios from test-scenarios.md manually"
+  echo "  5. If all pass: run --mode=set-gate --gate=test --verdict=PASS"
+  echo "  6. Run --apply to archive originals and write optimized versions"
 }
 
-# ── Judge mode ────────────────────────────────────────────────────────────────
-mode_judge() {
-  local all_pass=true
-  while IFS= read -r file; do
-    local class rel proposed_file judge_file result verdict JUDGE_PROMPT
-    class=$(classify_file "$file")
-    [[ "$class" == "human" ]] && continue
-    rel="${file#$PROJECT_ROOT/}"
-    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
-    judge_file="$PREVIEW_DIR/${rel}.judge.txt"
-
-    [[ ! -f "$proposed_file" ]] && {
-      echo "SKIP: $rel — no preview found. Run --dry-run first."
-      continue
-    }
-
-    JUDGE_PROMPT="Compare these two AI instruction texts.
-ORIGINAL:
-$(cat "$file")
-
-PROPOSED (compressed):
-$(cat "$proposed_file")
-
-Evaluate: does the PROPOSED version preserve all behavioral directives from the ORIGINAL?
-- PASS: all rules, constraints, and behavioral requirements are preserved
-- PARTIAL: minor loss of nuance but core behavior preserved
-- FAIL: one or more behavioral directives are missing or weakened
-
-Respond with exactly one line: PASS, PARTIAL, or FAIL
-Then a blank line.
-Then a brief explanation (max 3 sentences)."
-
-    result=$(call_claude "You are an AI instruction quality auditor." "$JUDGE_PROMPT")
-    verdict=$(echo "$result" | head -1 | tr -d '[:space:]')
-
-    if [[ ! "$verdict" =~ ^(PASS|PARTIAL|FAIL)$ ]]; then
-      echo "ERROR: invalid verdict '$verdict' for $rel — API error or unexpected response. Treating as FAIL." >&2
-      echo "FAIL" > "$judge_file"
-      all_pass=false
-      continue
-    fi
-
-    mkdir -p "$(dirname "$judge_file")"
-    echo "$verdict" > "$judge_file"
-    echo "$result" | tail -n +3 >> "$judge_file"
-
-    echo "[$verdict] $rel"
-    [[ "$verdict" == "FAIL" || "$verdict" == "PARTIAL" ]] && all_pass=false
-  done < <(find_llm_files)
-
-  if [[ "$all_pass" == "true" ]]; then
-    echo "PASS" > "$PREVIEW_DIR/.judge-gate-status"
-    echo ""
-    echo "JUDGE GATE: PASS — all files scored PASS"
-    echo "Next: run --baseline (first time) then --test"
-  else
-    echo ""
-    echo "JUDGE GATE: FAIL — one or more files scored PARTIAL or FAIL"
-    echo "Adjust compression ratio in criteria.md and re-run --dry-run"
+# ── Set-gate mode ─────────────────────────────────────────────────────────────
+# Agent calls this after doing its own analysis to mark a gate PASS or FAIL.
+# Usage: token-audit.sh --mode=set-gate --gate=judge --verdict=PASS
+mode_set_gate() {
+  if [[ -z "${GATE_NAME:-}" || -z "${GATE_VERDICT:-}" ]]; then
+    echo "Usage: token-audit.sh --mode=set-gate --gate=<judge|test> --verdict=<PASS|FAIL>"
     exit 1
   fi
+  if [[ ! "${GATE_VERDICT}" =~ ^(PASS|FAIL)$ ]]; then
+    echo "ERROR: --verdict must be PASS or FAIL, got: ${GATE_VERDICT}"
+    exit 1
+  fi
+  case "${GATE_NAME}" in
+    judge)
+      mkdir -p "$PREVIEW_DIR"
+      echo "${GATE_VERDICT}" > "$PREVIEW_DIR/.judge-gate-status"
+      echo "Judge gate set: ${GATE_VERDICT}"
+      ;;
+    test)
+      mkdir -p "$TEST_RESULTS_DIR"
+      echo "${GATE_VERDICT}" > "$TEST_RESULTS_DIR/.gate-status"
+      echo "Test gate set: ${GATE_VERDICT}"
+      ;;
+    *)
+      echo "ERROR: unknown gate '${GATE_NAME}'. Valid: judge, test"
+      exit 1
+      ;;
+  esac
 }
 
 # ── Session-end mode ──────────────────────────────────────────────────────────
 mode_session_end() {
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M')
-  local total_before=0 total_after=0
+  local total_before=0
 
   mkdir -p "$(dirname "$AUDIT_LOG")"
 
@@ -216,114 +146,6 @@ mode_session_end() {
   echo "Session-end audit complete. Log: $AUDIT_LOG"
 }
 
-# ── Baseline mode ────────────────────────────────────────────────────────────
-mode_baseline() {
-  mkdir -p "$BASELINES_DIR"
-  local scenarios_file="$PROJECT_ROOT/.claude/skills/token-optimizer/test-scenarios.md"
-  [[ ! -f "$scenarios_file" ]] && scenarios_file="${SCRIPT_DIR}/test-scenarios.md"
-
-  # Build combined system prompt from all LLM-directed files
-  local sys_prompt=""
-  while IFS= read -r file; do
-    sys_prompt+="$(cat "$file")"$'\n\n'
-  done < <(find_llm_files)
-
-  # Extract scenarios and capture baselines
-  local scenario_id="" scenario_prompt="" scenario_check=""
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^##\ (GENERIC|PROJ)-[0-9]+ ]]; then
-      [[ -n "$scenario_id" && -n "$scenario_prompt" ]] && {
-        local resp
-        resp=$(call_claude "$sys_prompt" "$scenario_prompt")
-        echo "$resp" > "$BASELINES_DIR/${scenario_id}.baseline.txt"
-        echo "$scenario_check" > "$BASELINES_DIR/${scenario_id}.check.txt"
-        echo "$scenario_prompt" > "$BASELINES_DIR/${scenario_id}.prompt.txt"
-        echo "Captured baseline: $scenario_id"
-      }
-      scenario_id=$(echo "$line" | grep -oE '(GENERIC|PROJ)-[0-9]+')
-      scenario_prompt="" scenario_check=""
-    elif [[ "$line" =~ ^Prompt:\ (.*) ]]; then
-      scenario_prompt="${BASH_REMATCH[1]}"
-    elif [[ "$line" =~ ^Compliance\ check:\ (.*) ]]; then
-      scenario_check="${BASH_REMATCH[1]}"
-    fi
-  done < "$scenarios_file"
-  # Capture last scenario
-  [[ -n "$scenario_id" && -n "$scenario_prompt" ]] && {
-    local resp
-    resp=$(call_claude "$sys_prompt" "$scenario_prompt")
-    echo "$resp" > "$BASELINES_DIR/${scenario_id}.baseline.txt"
-    echo "$scenario_check" > "$BASELINES_DIR/${scenario_id}.check.txt"
-    echo "$scenario_prompt" > "$BASELINES_DIR/${scenario_id}.prompt.txt"
-    echo "Captured baseline: $scenario_id"
-  }
-  echo "Baseline captured. Run --test after --dry-run + --judge PASS."
-}
-
-# ── Test mode ─────────────────────────────────────────────────────────────────
-mode_test() {
-  local timestamp run_dir all_pass=true
-  timestamp=$(date '+%Y-%m-%d-%H-%M')
-  run_dir="$TEST_RESULTS_DIR/$timestamp"
-  mkdir -p "$run_dir"
-
-  # Build system prompt from PROPOSED files (fall back to original if no proposed)
-  local sys_prompt=""
-  while IFS= read -r file; do
-    local rel proposed_file
-    rel="${file#$PROJECT_ROOT/}"
-    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
-    if [[ -f "$proposed_file" ]]; then
-      sys_prompt+="$(cat "$proposed_file")"$'\n\n'
-    else
-      sys_prompt+="$(cat "$file")"$'\n\n'
-    fi
-  done < <(find_llm_files)
-
-  for baseline_file in "$BASELINES_DIR"/*.baseline.txt; do
-    [[ -f "$baseline_file" ]] || continue
-    local scenario_id check_file check baseline_resp proposed_resp verdict
-    scenario_id=$(basename "$baseline_file" .baseline.txt)
-    check_file="$BASELINES_DIR/${scenario_id}.check.txt"
-    check=$(cat "$check_file" 2>/dev/null || echo "response is consistent with original")
-    baseline_resp=$(cat "$baseline_file")
-
-    local prompt_file user_prompt
-    prompt_file="$BASELINES_DIR/${scenario_id}.prompt.txt"
-    [[ ! -f "$prompt_file" ]] && { echo "SKIP: $scenario_id — no prompt file"; continue; }
-    user_prompt=$(cat "$prompt_file")
-
-    proposed_resp=$(call_claude "$sys_prompt" "$user_prompt")
-
-    local COMPARE_PROMPT
-    COMPARE_PROMPT="BASELINE response (original instructions):
-$baseline_resp
-
-PROPOSED response (optimized instructions):
-$proposed_resp
-
-Compliance check required: $check
-
-Does the PROPOSED response comply with the same check as BASELINE?
-Answer: COMPLIANT or REGRESSION (one word only, first line)"
-
-    verdict=$(call_claude "You are a behavioral compliance auditor." "$COMPARE_PROMPT" | head -1 | tr -d '[:space:]')
-    echo "$verdict — $scenario_id" | tee "$run_dir/${scenario_id}.result.txt"
-    [[ "$verdict" != "COMPLIANT" ]] && all_pass=false
-  done
-
-  local gate_status="PASS"
-  [[ "$all_pass" == "false" ]] && gate_status="FAIL"
-  echo "$gate_status" > "$TEST_RESULTS_DIR/.gate-status"
-  echo ""
-  echo "BEHAVIORAL TEST GATE: $gate_status"
-  [[ "$gate_status" == "FAIL" ]] && {
-    echo "One or more scenarios showed REGRESSION. Increase CR conservatively and re-run from --dry-run."
-    exit 1
-  }
-  echo "Next: run --apply to write changes"
-}
-
 # ── Apply mode ────────────────────────────────────────────────────────────────
 mode_apply() {
   local judge_status_file="$PREVIEW_DIR/.judge-gate-status"
@@ -335,8 +157,8 @@ mode_apply() {
 
   if [[ "$judge_ok" == "false" || "$test_ok" == "false" ]]; then
     echo "BLOCKED: --apply requires both gates to PASS."
-    [[ "$judge_ok" == "false" ]] && echo "  Run --judge first (gate not passed)"
-    [[ "$test_ok" == "false" ]] && echo "  Run --test first (gate not passed or FAIL)"
+    [[ "$judge_ok" == "false" ]] && echo "  Run --mode=set-gate --gate=judge --verdict=PASS after reviewing proposed files"
+    [[ "$test_ok" == "false" ]] && echo "  Run --mode=set-gate --gate=test --verdict=PASS after validating scenarios"
     exit 1
   fi
 
@@ -356,7 +178,7 @@ mode_apply() {
     human_dest="$PROJECT_ROOT/human/$rel"
     mkdir -p "$(dirname "$human_dest")"
     cp "$file" "$human_dest"
-    # Add header to archived version (POSIX-compatible: no sed -i portability issues)
+    # Add header to archived version (POSIX-compatible temp-file pattern)
     local header="# [HUMAN VERSION] Agent version: $rel | Last optimized: $(date '+%Y-%m-%d')"
     { echo "$header"; echo ""; cat "$human_dest"; } > "${human_dest}.tmp" && mv "${human_dest}.tmp" "$human_dest"
 
@@ -377,15 +199,17 @@ mode_apply() {
 
 # ── Main dispatcher ───────────────────────────────────────────────────────────
 MODE=""
+GATE_NAME=""
+GATE_VERDICT=""
+
 for arg in "$@"; do
   case "$arg" in
-    --mode=*)        MODE="${arg#--mode=}" ;;
-    --count-tokens)  MODE="count-tokens" ;;
-    --dry-run)       MODE="dry-run" ;;
-    --judge)         MODE="judge" ;;
-    --baseline)      MODE="baseline" ;;
-    --test)          MODE="test" ;;
-    --apply)         MODE="apply" ;;
+    --mode=*)    MODE="${arg#--mode=}" ;;
+    --count-tokens) MODE="count-tokens" ;;
+    --dry-run)   MODE="dry-run" ;;
+    --apply)     MODE="apply" ;;
+    --gate=*)    GATE_NAME="${arg#--gate=}" ;;
+    --verdict=*) GATE_VERDICT="${arg#--verdict=}" ;;
   esac
 done
 
@@ -397,60 +221,9 @@ fi
 
 case "$MODE" in
   session-end)  mode_session_end ;;
-  stuck-check)
-    # Read existing window before appending (use POSIX-compatible loop for bash 3.2)
-    WINDOW=()
-    if [[ -f "$STATE_FILE" ]]; then
-      while IFS= read -r line; do
-        WINDOW+=("$line")
-      done < "$STATE_FILE"
-    fi
-    N="${#WINDOW[@]}"
-
-    if [[ "$N" -gt 0 ]]; then
-      # Condition 1: 3+ consecutive same tool (no intervening write)
-      LAST_TOOL=$(echo "${WINDOW[$((N-1))]}" | cut -d'|' -f2)
-      CONSECUTIVE=1
-      for (( i=N-2; i>=0; i-- )); do
-        ENTRY="${WINDOW[$i]}"
-        W=$(echo "$ENTRY" | cut -d'|' -f3)
-        T=$(echo "$ENTRY" | cut -d'|' -f2)
-        [[ "$W" == "1" ]] && break
-        [[ "$T" == "$LAST_TOOL" ]] && CONSECUTIVE=$((CONSECUTIVE+1)) || break
-      done
-      if [[ "$CONSECUTIVE" -ge 3 ]]; then
-        echo "TOKEN-OPT: Agent may be stuck — $CONSECUTIVE consecutive $LAST_TOOL calls with no output. Consider invoking token-optimizer skill." >&2
-        exit 1
-      fi
-
-      # Condition 2: 5+ calls since last write
-      CALLS_SINCE_WRITE=0
-      for (( i=N-1; i>=0; i-- )); do
-        W=$(echo "${WINDOW[$i]}" | cut -d'|' -f3)
-        [[ "$W" == "1" ]] && break
-        CALLS_SINCE_WRITE=$((CALLS_SINCE_WRITE+1))
-      done
-      if [[ "$CALLS_SINCE_WRITE" -ge 5 ]]; then
-        echo "TOKEN-OPT: $CALLS_SINCE_WRITE tool calls since last file write. Agent may be stuck." >&2
-        exit 1
-      fi
-    fi
-
-    # Append current call to state
-    TOOL="${TOOL_NAME:-Unknown}"
-    HAD_WRITE=0
-    [[ "$TOOL" =~ ^(Write|Edit|Bash)$ ]] && HAD_WRITE=1
-    mkdir -p "$(dirname "$STATE_FILE")"
-    echo "$(date +%s)|$TOOL|$HAD_WRITE" >> "$STATE_FILE"
-    # Keep only last 10 entries
-    tail -10 "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-    exit 0
-    ;;
   full)         mode_session_end ;;
   dry-run)      mode_dry_run ;;
-  judge)        mode_judge ;;
-  baseline)     mode_baseline ;;
-  test)         mode_test ;;
+  set-gate)     mode_set_gate ;;
   apply)        mode_apply ;;
-  *)            echo "Usage: token-audit.sh --mode=<stuck-check|session-end|full|dry-run|judge|baseline|test|apply>" ; exit 1 ;;
+  *)            echo "Usage: token-audit.sh --mode=<session-end|dry-run|set-gate|apply>" ; exit 1 ;;
 esac
