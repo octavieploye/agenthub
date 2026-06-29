@@ -64,8 +64,10 @@ interface ManagedAgent {
    */
   ttsStatus: string
   ttsTrigger: TtsTrigger
-  /** True once the user (or task auto-send) has written input to this agent's PTY. */
+  /** True once the user (or task auto-send) has written input to this agent's PTY — gates TTS. */
   hasSentInput: boolean
+  /** True only when the user has manually typed a follow-up in the terminal (not auto-send, not system action). */
+  hasManualFollowUp: boolean
   /** Last filtered LLM prose captured by TTS — used by TTS only. */
   lastFilteredProse: string
   /** Delayed Telegram status notification — 3s debounce for rapid status changes. */
@@ -147,12 +149,12 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
 
   // One-shot task completion: agent with taskDescription goes busy→locked (returned to prompt)
   // Triage gives locked 'low' priority which doesn't reach telegram layer, so send directly
-  // Only fire on first completion (before user sends follow-up input)
+  // Only fire on first completion (before user sends manual follow-up input)
   const managed = agents.get(agent.id)
   const isOneShotDone = agent.status === 'locked'
     && previousStatus === 'busy'
     && Boolean(agent.taskDescription)
-    && managed !== undefined && !managed.hasSentInput
+    && managed !== undefined && !managed.hasManualFollowUp
 
   if ((routingResult.layers.includes('telegram') || isOneShotDone) && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
@@ -631,6 +633,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     cleanTextBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false,
+    hasManualFollowUp: false,
     lastFilteredProse: '',
     telegramSendTimer: null,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30)
@@ -734,7 +737,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 export function sendInput(agentId: string, data: string, opts?: { isSystemAction?: boolean }): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
-  if (!opts?.isSystemAction) managed.hasSentInput = true
+  if (!opts?.isSystemAction) {
+    managed.hasSentInput = true
+    managed.hasManualFollowUp = true
+  }
   log.debug('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
 
   // Start a fresh TTS capture window when the user submits a request.
