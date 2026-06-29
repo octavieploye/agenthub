@@ -90,7 +90,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "",
+        "matcher": "Bash|Write|Edit|Read|Grep|Glob|WebFetch|WebSearch|Agent|TaskCreate|TaskUpdate",
         "hooks": [
           {
             "type": "command",

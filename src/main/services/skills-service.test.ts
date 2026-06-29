@@ -160,6 +160,26 @@ describe('SkillsService', () => {
       expect(skills[0].category).toBe('testing')
     })
 
+    it('derives id from parent directory for SKILL.md files in subdirectories', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/home/testuser/.claude/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/home/testuser/.claude/skills') return ['team-business']
+        if (dir === '/home/testuser/.claude/skills/team-business') return ['SKILL.md']
+        return []
+      })
+      mockStatSync.mockImplementation((path: string) => ({
+        isDirectory: () => path === '/home/testuser/.claude/skills/team-business'
+      }))
+      mockReadFileSync.mockReturnValue('# Team Business\nBusiness research and strategy')
+
+      const skills = service.listSkills()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].id).toBe('team-business')
+      expect(skills[0].category).toBe('team-business')
+    })
+
     it('merges global and project skills', () => {
       mockExistsSync.mockReturnValue(true)
       mockReaddirSync.mockImplementation((dir: string) => {

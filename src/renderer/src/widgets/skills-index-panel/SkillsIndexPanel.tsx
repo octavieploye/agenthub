@@ -27,6 +27,7 @@ export default function SkillsIndexPanel({
 }: SkillsIndexPanelProps): React.JSX.Element | null {
   const { skills, loading, searchFilter, fetchSkills, setSearchFilter } = useSkillsStore()
   const [sentSkillId, setSentSkillId] = useState<string | null>(null)
+  const [insertedSkillId, setInsertedSkillId] = useState<string | null>(null)
   const [tooltipSkillId, setTooltipSkillId] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -61,10 +62,19 @@ export default function SkillsIndexPanel({
   const handleSendSkill = useCallback(
     (skill: SkillItem) => {
       if (!activeAgentId) return
-      // Send the skill slash-command to the active agent's terminal
       window.agentHub.agents.sendInput(activeAgentId, '/' + skill.id + '\r')
       setSentSkillId(skill.id)
       setTimeout(() => setSentSkillId(null), 1200)
+    },
+    [activeAgentId]
+  )
+
+  const handleInsertSkill = useCallback(
+    (skill: SkillItem) => {
+      if (!activeAgentId) return
+      window.agentHub.agents.sendInput(activeAgentId, '/' + skill.id)
+      setInsertedSkillId(skill.id)
+      setTimeout(() => setInsertedSkillId(null), 1200)
     },
     [activeAgentId]
   )
@@ -148,20 +158,13 @@ export default function SkillsIndexPanel({
 
                 <div className="flex flex-col gap-0.5">
                   {categorySkills.map((skill) => (
-                    <div key={skill.id} className="relative group">
-                      <button
-                        data-testid={`skill-send-${skill.id}`}
-                        onClick={() => handleSendSkill(skill)}
-                        disabled={!activeAgentId}
-                        className="w-full text-left px-2 py-2 rounded-md hover:bg-base-content/5 active:bg-base-content/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <div className="flex items-center gap-2 pr-6">
+                    <div key={skill.id} className="relative group rounded-md hover:bg-base-content/5 transition-colors">
+                      {/* Skill info row — click anywhere except action buttons */}
+                      <div className="px-2 pt-2 pb-1">
+                        <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-base-content/80 flex-1 truncate">
                             {skill.name}
                           </span>
-                          {sentSkillId === skill.id && (
-                            <span className="text-[10px] text-success font-mono shrink-0">sent</span>
-                          )}
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
                               skill.source === 'global'
@@ -177,26 +180,58 @@ export default function SkillsIndexPanel({
                             {skill.description}
                           </p>
                         )}
-                      </button>
+                      </div>
 
-                      {/* Info tooltip trigger — top-right of the row */}
-                      {skill.description && (
-                        <div className="absolute top-1.5 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="relative">
+                      {/* Action buttons row */}
+                      <div className="flex items-center gap-1 px-2 pb-1.5">
+                        <button
+                          data-testid={`skill-send-${skill.id}`}
+                          onClick={() => handleSendSkill(skill)}
+                          disabled={!activeAgentId}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Send to agent and execute"
+                        >
+                          {sentSkillId === skill.id ? (
+                            <span className="text-success">sent</span>
+                          ) : (
+                            <>
+                              <SendIcon />
+                              Send
+                            </>
+                          )}
+                        </button>
+                        <button
+                          data-testid={`skill-insert-${skill.id}`}
+                          onClick={() => handleInsertSkill(skill)}
+                          disabled={!activeAgentId}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-base-content/8 text-base-content/60 hover:bg-base-content/12 hover:text-base-content/80 active:bg-base-content/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Insert into prompt (edit before sending)"
+                        >
+                          {insertedSkillId === skill.id ? (
+                            <span className="text-success">added</span>
+                          ) : (
+                            <>
+                              <InsertIcon />
+                              + Prompt
+                            </>
+                          )}
+                        </button>
+
+                        {/* Info tooltip */}
+                        {skill.description && (
+                          <div className="relative ml-auto">
                             <button
                               data-testid={`skill-info-${skill.id}`}
                               onMouseEnter={() => setTooltipSkillId(skill.id)}
                               onMouseLeave={() => setTooltipSkillId(null)}
                               className="p-0.5 rounded text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5 transition-colors"
                               aria-label={`Info for ${skill.name}`}
-                              onClick={(e) => e.stopPropagation()}
                             >
                               <InfoIcon />
                             </button>
 
-                            {/* Tooltip */}
                             {tooltipSkillId === skill.id && (
-                              <div className="absolute right-0 top-6 w-56 p-3 rounded-lg bg-base-300 border border-base-content/15 shadow-xl z-[400] pointer-events-none">
+                              <div className="absolute right-0 bottom-6 w-56 p-3 rounded-lg bg-base-300 border border-base-content/15 shadow-xl z-[400] pointer-events-none">
                                 <p className="text-xs font-semibold text-base-content mb-1">{skill.name}</p>
                                 <p className="text-[11px] text-base-content/70 leading-relaxed">
                                   {skill.description}
@@ -209,8 +244,8 @@ export default function SkillsIndexPanel({
                               </div>
                             )}
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -220,7 +255,7 @@ export default function SkillsIndexPanel({
 
         {/* Footer */}
         <div className="px-4 py-2 border-t border-base-content/10 shrink-0 flex items-center gap-2">
-          <span className="text-[10px] text-base-content/30 flex-1">Click skill to send as task</span>
+          <span className="text-[10px] text-base-content/30 flex-1">Send executes · + Prompt to edit first</span>
           <span className="text-[10px] text-base-content/30 font-mono">{filteredSkills.length} skills</span>
         </div>
       </div>
@@ -252,6 +287,24 @@ function InfoIcon(): React.JSX.Element {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  )
+}
+
+function SendIcon(): React.JSX.Element {
+  return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  )
+}
+
+function InsertIcon(): React.JSX.Element {
+  return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <polyline points="19 12 12 19 5 12" />
     </svg>
   )
 }

@@ -149,7 +149,8 @@ export class SkillsService {
 
   private parseSkillFile(filePath: string, rootDir: string, source: 'global' | 'project'): SkillItem {
     const ext = extname(filePath)
-    const id = basename(filePath).replace(/\.[^.]+$/, '')
+    const baseName = basename(filePath).replace(/\.[^.]+$/, '')
+    const id = baseName.toUpperCase() === 'SKILL' ? basename(dirname(filePath)) : baseName
     const relDir = relative(rootDir, dirname(filePath))
     const category = relDir || 'general'
     const format = ext.slice(1) // strip leading dot
