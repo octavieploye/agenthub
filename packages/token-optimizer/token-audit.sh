@@ -131,7 +131,55 @@ fi
 
 case "$MODE" in
   session-end)  mode_session_end ;;
-  stuck-check)  echo "stub: stuck-check (Task 4)" ; exit 0 ;;
+  stuck-check)
+    # Read existing window before appending (use POSIX-compatible loop for bash 3.2)
+    WINDOW=()
+    if [[ -f "$STATE_FILE" ]]; then
+      while IFS= read -r line; do
+        WINDOW+=("$line")
+      done < "$STATE_FILE"
+    fi
+    N="${#WINDOW[@]}"
+
+    if [[ "$N" -gt 0 ]]; then
+      # Condition 1: 3+ consecutive same tool (no intervening write)
+      LAST_TOOL=$(echo "${WINDOW[$((N-1))]}" | cut -d'|' -f2)
+      CONSECUTIVE=1
+      for (( i=N-2; i>=0; i-- )); do
+        ENTRY="${WINDOW[$i]}"
+        W=$(echo "$ENTRY" | cut -d'|' -f3)
+        T=$(echo "$ENTRY" | cut -d'|' -f2)
+        [[ "$W" == "1" ]] && break
+        [[ "$T" == "$LAST_TOOL" ]] && CONSECUTIVE=$((CONSECUTIVE+1)) || break
+      done
+      if [[ "$CONSECUTIVE" -ge 3 ]]; then
+        echo "TOKEN-OPT: Agent may be stuck — $CONSECUTIVE consecutive $LAST_TOOL calls with no output. Consider invoking token-optimizer skill." >&2
+        exit 1
+      fi
+
+      # Condition 2: 5+ calls since last write
+      CALLS_SINCE_WRITE=0
+      for (( i=N-1; i>=0; i-- )); do
+        W=$(echo "${WINDOW[$i]}" | cut -d'|' -f3)
+        [[ "$W" == "1" ]] && break
+        CALLS_SINCE_WRITE=$((CALLS_SINCE_WRITE+1))
+      done
+      if [[ "$CALLS_SINCE_WRITE" -ge 5 ]]; then
+        echo "TOKEN-OPT: $CALLS_SINCE_WRITE tool calls since last file write. Agent may be stuck." >&2
+        exit 1
+      fi
+    fi
+
+    # Append current call to state
+    TOOL="${TOOL_NAME:-Unknown}"
+    HAD_WRITE=0
+    [[ "$TOOL" =~ ^(Write|Edit|Bash)$ ]] && HAD_WRITE=1
+    mkdir -p "$(dirname "$STATE_FILE")"
+    echo "$(date +%s)|$TOOL|$HAD_WRITE" >> "$STATE_FILE"
+    # Keep only last 10 entries
+    tail -10 "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+    exit 0
+    ;;
   full)         mode_session_end ;;
   dry-run)      echo "stub: dry-run (Task 3 follow-up)" ; exit 0 ;;
   judge)        echo "stub: judge (Task 5)" ; exit 0 ;;
