@@ -13,6 +13,7 @@ interface SABarProps {
   onOpenGit?: () => void
   onOpenHelp?: () => void
   onOpenHowTo?: () => void
+  onOpenSkillsIndex?: () => void
   onOpenSearch?: () => void
   repoSwitcherRef?: React.RefObject<RepoSwitcherHandle | null>
   /** Called when the user mutes via the toolbar — use to cancel active TTS speech */
@@ -65,6 +66,15 @@ function SettingsIcon(): React.JSX.Element {
   )
 }
 
+function SkillsIndexIcon(): React.JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  )
+}
+
 function HowToIcon(): React.JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -76,7 +86,7 @@ function HowToIcon(): React.JSX.Element {
   )
 }
 
-function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcherRef, onMasterMute }: SABarProps): React.JSX.Element {
+function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, onOpenSkillsIndex, repoSwitcherRef, onMasterMute }: SABarProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const setViewMode = useViewStore((s) => s.setViewMode)
   const statusFilter = useViewStore((s) => s.statusFilter)
@@ -228,6 +238,19 @@ function SABar({ agents, onOpenSettings, onOpenSearch, onOpenHowTo, repoSwitcher
             </div>
           )}
         </div>
+
+        {/* Skills Index */}
+        {onOpenSkillsIndex && (
+          <button
+            data-testid="sa-skills-index"
+            onClick={onOpenSkillsIndex}
+            className="p-1.5 rounded-md text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+            title="Skills Index (⌘L)"
+            aria-label="Open skills index"
+          >
+            <SkillsIndexIcon />
+          </button>
+        )}
 
         {/* Settings */}
         {onOpenSettings && (

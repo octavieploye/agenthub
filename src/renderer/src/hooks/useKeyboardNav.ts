@@ -5,7 +5,8 @@ import { useAgentStore } from '@renderer/stores/agent-store'
 export interface KeyboardNavCallbacks {
   onSpawnDialog: () => void
   onCommandPalette: () => void
-onEscape: () => void
+  onSkillsIndex: () => void
+  onEscape: () => void
   onExpandFocused: () => void
   onContextMenuFocused: () => void
   onDeleteFocused: () => void
@@ -59,6 +60,13 @@ export function useKeyboardNav(callbacks: KeyboardNavCallbacks): void {
       if (meta && e.key === 'k') {
         e.preventDefault()
         callbacksRef.current.onCommandPalette()
+        return
+      }
+
+      // Cmd+L — skills index
+      if (meta && e.key === 'l') {
+        e.preventDefault()
+        callbacksRef.current.onSkillsIndex()
         return
       }
 

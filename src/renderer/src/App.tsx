@@ -24,6 +24,7 @@ import SettingsPanel from './widgets/settings-panel/SettingsPanel'
 import TerminalSearchPanel from './widgets/terminal-search/TerminalSearchPanel'
 import HelpModal from './widgets/help-modal/HelpModal'
 import HowToPanel from './widgets/how-to-panel/HowToPanel'
+import SkillsIndexPanel from './widgets/skills-index-panel/SkillsIndexPanel'
 import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import { OutputReplayModal } from './widgets/output-replay/OutputReplayModal'
 import { ContinuationDialog } from './widgets/continuation-dialog/ContinuationDialog'
@@ -157,6 +158,9 @@ function AppMain(): React.JSX.Element {
 
   // How-to panel
   const [howToOpen, setHowToOpen] = useState(false)
+
+  // Skills index panel
+  const [skillsIndexOpen, setSkillsIndexOpen] = useState(false)
 
   // CLI version mismatch banner
   const [cliVersionBanner, setCliVersionBanner] = useState<{ hostVersion: string; imageVersion: string } | null>(null)
@@ -471,6 +475,7 @@ function AppMain(): React.JSX.Element {
   useKeyboardNav({
     onSpawnDialog: () => setSpawnDialogOpen(true),
     onCommandPalette: () => setCommandPaletteOpen((prev) => !prev),
+    onSkillsIndex: () => setSkillsIndexOpen((prev) => !prev),
     onEscape: () => {
       setCommandPaletteOpen(false)
       setContextMenu(null)
@@ -999,6 +1004,7 @@ function AppMain(): React.JSX.Element {
           onOpenGit={() => setGitPanelOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenHowTo={() => setHowToOpen(true)}
+          onOpenSkillsIndex={() => setSkillsIndexOpen(true)}
           onOpenSearch={() => setTerminalSearchOpen(true)}
           repoSwitcherRef={repoSwitcherRef}
           onMasterMute={stopActiveSpeech}
@@ -1330,6 +1336,14 @@ function AppMain(): React.JSX.Element {
 
       {/* How-to panel */}
       <HowToPanel isOpen={howToOpen} onClose={() => setHowToOpen(false)} />
+
+      {/* Skills index panel */}
+      <SkillsIndexPanel
+        isOpen={skillsIndexOpen}
+        onClose={() => setSkillsIndexOpen(false)}
+        activeAgentId={activeAgentId}
+        repoPath={activeAgentId ? agents.get(activeAgentId)?.cwd : undefined}
+      />
 
       {outputReplayAgent && (
         <OutputReplayModal
