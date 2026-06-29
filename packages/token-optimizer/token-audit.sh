@@ -161,6 +161,7 @@ Then a brief explanation (max 3 sentences)."
   done < <(find_llm_files)
 
   if [[ "$all_pass" == "true" ]]; then
+    echo "PASS" > "$PREVIEW_DIR/.judge-gate-status"
     echo ""
     echo "JUDGE GATE: PASS — all files scored PASS"
     echo "Next: run --baseline (first time) then --test"
@@ -310,6 +311,57 @@ Answer: COMPLIANT or REGRESSION (one word only, first line)"
   echo "Next: run --apply to write changes"
 }
 
+# ── Apply mode ────────────────────────────────────────────────────────────────
+mode_apply() {
+  local judge_status_file="$PREVIEW_DIR/.judge-gate-status"
+  local test_status_file="$TEST_RESULTS_DIR/.gate-status"
+
+  local judge_ok=false test_ok=false
+  [[ -f "$judge_status_file" ]] && grep -q "^PASS$" "$judge_status_file" && judge_ok=true
+  [[ -f "$test_status_file" ]] && grep -q "^PASS$" "$test_status_file" && test_ok=true
+
+  if [[ "$judge_ok" == "false" || "$test_ok" == "false" ]]; then
+    echo "BLOCKED: --apply requires both gates to PASS."
+    [[ "$judge_ok" == "false" ]] && echo "  Run --judge first (gate not passed)"
+    [[ "$test_ok" == "false" ]] && echo "  Run --test first (gate not passed or FAIL)"
+    exit 1
+  fi
+
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M')
+  mkdir -p "$(dirname "$AUDIT_LOG")"
+
+  while IFS= read -r file; do
+    local class rel proposed_file human_dest
+    class=$(classify_file "$file")
+    [[ "$class" == "human" ]] && continue
+    rel="${file#$PROJECT_ROOT/}"
+    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
+    [[ ! -f "$proposed_file" ]] && continue
+
+    # Archive original to human/
+    human_dest="$PROJECT_ROOT/human/$rel"
+    mkdir -p "$(dirname "$human_dest")"
+    cp "$file" "$human_dest"
+    # Add header to archived version (POSIX-compatible: no sed -i portability issues)
+    local header="# [HUMAN VERSION] Agent version: $rel | Last optimized: $(date '+%Y-%m-%d')"
+    { echo "$header"; echo ""; cat "$human_dest"; } > "${human_dest}.tmp" && mv "${human_dest}.tmp" "$human_dest"
+
+    # Write optimized version in place
+    cp "$proposed_file" "$file"
+
+    # Log
+    local before after
+    before=$(count_tokens "$human_dest")
+    after=$(count_tokens "$file")
+    echo "- $rel | $before → $after tokens | applied $timestamp" >> "$AUDIT_LOG"
+    echo "Applied: $rel ($before → $after tokens)"
+  done < <(find_llm_files)
+
+  echo ""
+  echo "APPLY COMPLETE. Originals archived to human/. Review with: cat $AUDIT_LOG"
+}
+
 # ── Main dispatcher ───────────────────────────────────────────────────────────
 MODE=""
 for arg in "$@"; do
@@ -386,6 +438,6 @@ case "$MODE" in
   judge)        mode_judge ;;
   baseline)     mode_baseline ;;
   test)         mode_test ;;
-  apply)        echo "stub: apply (Task 7)" ; exit 0 ;;
+  apply)        mode_apply ;;
   *)            echo "Usage: token-audit.sh --mode=<stuck-check|session-end|full|dry-run|judge|baseline|test|apply>" ; exit 1 ;;
 esac
