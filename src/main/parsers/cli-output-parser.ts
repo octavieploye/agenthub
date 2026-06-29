@@ -23,7 +23,7 @@ function stripAnsi(text: string): string {
 const PATTERNS = {
   awaiting_approval: [
     // Claude CLI tool-approval: "Do you want to create/write/read/edit/delete/run...?"
-    /Do you want to (?:create|write|read|edit|delete|execute|run|update|modify|remove|install|push|overwrite)\b/i,
+    /Do you want to (?:create|make|write|read|edit|delete|execute|run|update|modify|remove|install|push|overwrite)\b/i,
     // Fallback for other approval question forms
     /(?:do you (?:want to|wish to)|would you like to)\s+(?:approve|deny|allow)/i,
     /(?:approve|deny|allow)\s+this\s+(?:tool|action|operation|request)\??/i,

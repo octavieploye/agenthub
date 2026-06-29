@@ -11,14 +11,11 @@ const AGENT_REPO = process.env.AGENTHUB_AGENT_REPO || ''
 
 // ── MCP JSON-RPC helpers ────────────────────────────────────────────────────
 function sendResponse(id, result) {
-  const msg = JSON.stringify({ jsonrpc: '2.0', id, result })
-  // MCP stdio uses Content-Length header framing
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(msg)}\r\n\r\n${msg}`)
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 }
 
 function sendError(id, code, message) {
-  const msg = JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } })
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(msg)}\r\n\r\n${msg}`)
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }) + '\n')
 }
 
 // ── Unix socket communication ───────────────────────────────────────────────
@@ -69,7 +66,7 @@ async function handleMethod(id, method, params) {
   switch (method) {
     case 'initialize':
       sendResponse(id, {
-        protocolVersion: '2024-11-05',
+        protocolVersion: params?.protocolVersion || '2024-11-05',
         capabilities: { tools: {} },
         serverInfo: { name: 'agenthub-telegram', version: '1.0.0' }
       })
@@ -135,54 +132,16 @@ async function handleMethod(id, method, params) {
   }
 }
 
-// ── MCP stdio reader (Content-Length framed) ─────────────────────────────────
-let headerBuf = ''
-let expectedLength = null
-let bodyBuf = ''
-
-process.stdin.on('data', (chunk) => {
-  let data = chunk.toString()
-
-  while (data.length > 0) {
-    if (expectedLength === null) {
-      // Reading headers
-      headerBuf += data
-      const headerEnd = headerBuf.indexOf('\r\n\r\n')
-      if (headerEnd === -1) {
-        data = ''
-        continue
-      }
-      const header = headerBuf.slice(0, headerEnd)
-      const match = header.match(/Content-Length:\s*(\d+)/i)
-      if (!match) {
-        headerBuf = ''
-        data = ''
-        continue
-      }
-      expectedLength = parseInt(match[1], 10)
-      data = headerBuf.slice(headerEnd + 4)
-      headerBuf = ''
-      bodyBuf = ''
-    }
-
-    // Reading body
-    bodyBuf += data
-    if (bodyBuf.length >= expectedLength) {
-      const json = bodyBuf.slice(0, expectedLength)
-      data = bodyBuf.slice(expectedLength)
-      expectedLength = null
-      bodyBuf = ''
-
-      try {
-        const msg = JSON.parse(json)
-        handleMethod(msg.id, msg.method, msg.params)
-      } catch {}
-    } else {
-      data = ''
-    }
-  }
+// ── MCP stdio reader (bare JSONL — newline-delimited JSON) ───────────────────
+const rl = readline.createInterface({ input: process.stdin, terminal: false })
+rl.on('line', (line) => {
+  if (!line.trim()) return
+  try {
+    const msg = JSON.parse(line)
+    handleMethod(msg.id, msg.method, msg.params)
+  } catch {}
 })
+rl.on('close', () => process.exit(0))
 
-process.stdin.on('end', () => process.exit(0))
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))

@@ -206,6 +206,11 @@ describe('ClaudeCliOutputParser', () => {
       expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
+    it('detects "Do you want to make" as awaiting_approval', () => {
+      const result = parser.parse('Do you want to make this edit to test-hello.txt?')
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
+    })
+
     it('does not detect "Do you want to" without a tool verb', () => {
       const result = parser.parse('Do you want to continue with the next step?')
       expect(result?.status).not.toBe('awaiting_approval')

@@ -500,7 +500,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           const debounceTimer = setTimeout(() => {
             statusDebounceTimers.delete(agentState.id)
             const current = agents.get(agentState.id)
-            if (current && current.state.status !== newStatus) {
+            if (current && current.state.status !== newStatus && current.state.status !== 'awaiting_approval') {
               applyStatusChange()
             }
           }, 4000)
