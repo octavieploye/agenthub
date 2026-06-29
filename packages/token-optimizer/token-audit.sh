@@ -202,6 +202,114 @@ mode_session_end() {
   echo "Session-end audit complete. Log: $AUDIT_LOG"
 }
 
+# ── Baseline mode ────────────────────────────────────────────────────────────
+mode_baseline() {
+  mkdir -p "$BASELINES_DIR"
+  local scenarios_file="$PROJECT_ROOT/.claude/skills/token-optimizer/test-scenarios.md"
+  [[ ! -f "$scenarios_file" ]] && scenarios_file="${SCRIPT_DIR}/test-scenarios.md"
+
+  # Build combined system prompt from all LLM-directed files
+  local sys_prompt=""
+  while IFS= read -r file; do
+    sys_prompt+="$(cat "$file")"$'\n\n'
+  done < <(find_llm_files)
+
+  # Extract scenarios and capture baselines
+  local scenario_id="" scenario_prompt="" scenario_check=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##\ (GENERIC|PROJ)-[0-9]+ ]]; then
+      [[ -n "$scenario_id" && -n "$scenario_prompt" ]] && {
+        local resp
+        resp=$(call_claude "$sys_prompt" "$scenario_prompt")
+        echo "$resp" > "$BASELINES_DIR/${scenario_id}.baseline.txt"
+        echo "$scenario_check" > "$BASELINES_DIR/${scenario_id}.check.txt"
+        echo "$scenario_prompt" > "$BASELINES_DIR/${scenario_id}.prompt.txt"
+        echo "Captured baseline: $scenario_id"
+      }
+      scenario_id=$(echo "$line" | grep -oE '(GENERIC|PROJ)-[0-9]+')
+      scenario_prompt="" scenario_check=""
+    elif [[ "$line" =~ ^Prompt:\ (.*) ]]; then
+      scenario_prompt="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ ^Compliance\ check:\ (.*) ]]; then
+      scenario_check="${BASH_REMATCH[1]}"
+    fi
+  done < "$scenarios_file"
+  # Capture last scenario
+  [[ -n "$scenario_id" && -n "$scenario_prompt" ]] && {
+    local resp
+    resp=$(call_claude "$sys_prompt" "$scenario_prompt")
+    echo "$resp" > "$BASELINES_DIR/${scenario_id}.baseline.txt"
+    echo "$scenario_check" > "$BASELINES_DIR/${scenario_id}.check.txt"
+    echo "$scenario_prompt" > "$BASELINES_DIR/${scenario_id}.prompt.txt"
+    echo "Captured baseline: $scenario_id"
+  }
+  echo "Baseline captured. Run --test after --dry-run + --judge PASS."
+}
+
+# ── Test mode ─────────────────────────────────────────────────────────────────
+mode_test() {
+  local timestamp run_dir all_pass=true
+  timestamp=$(date '+%Y-%m-%d-%H-%M')
+  run_dir="$TEST_RESULTS_DIR/$timestamp"
+  mkdir -p "$run_dir"
+
+  # Build system prompt from PROPOSED files (fall back to original if no proposed)
+  local sys_prompt=""
+  while IFS= read -r file; do
+    local rel proposed_file
+    rel="${file#$PROJECT_ROOT/}"
+    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
+    if [[ -f "$proposed_file" ]]; then
+      sys_prompt+="$(cat "$proposed_file")"$'\n\n'
+    else
+      sys_prompt+="$(cat "$file")"$'\n\n'
+    fi
+  done < <(find_llm_files)
+
+  for baseline_file in "$BASELINES_DIR"/*.baseline.txt; do
+    [[ -f "$baseline_file" ]] || continue
+    local scenario_id check_file check baseline_resp proposed_resp verdict
+    scenario_id=$(basename "$baseline_file" .baseline.txt)
+    check_file="$BASELINES_DIR/${scenario_id}.check.txt"
+    check=$(cat "$check_file" 2>/dev/null || echo "response is consistent with original")
+    baseline_resp=$(cat "$baseline_file")
+
+    local prompt_file user_prompt
+    prompt_file="$BASELINES_DIR/${scenario_id}.prompt.txt"
+    [[ ! -f "$prompt_file" ]] && { echo "SKIP: $scenario_id — no prompt file"; continue; }
+    user_prompt=$(cat "$prompt_file")
+
+    proposed_resp=$(call_claude "$sys_prompt" "$user_prompt")
+
+    local COMPARE_PROMPT
+    COMPARE_PROMPT="BASELINE response (original instructions):
+$baseline_resp
+
+PROPOSED response (optimized instructions):
+$proposed_resp
+
+Compliance check required: $check
+
+Does the PROPOSED response comply with the same check as BASELINE?
+Answer: COMPLIANT or REGRESSION (one word only, first line)"
+
+    verdict=$(call_claude "You are a behavioral compliance auditor." "$COMPARE_PROMPT" | head -1 | tr -d '[:space:]')
+    echo "$verdict — $scenario_id" | tee "$run_dir/${scenario_id}.result.txt"
+    [[ "$verdict" != "COMPLIANT" ]] && all_pass=false
+  done
+
+  local gate_status="PASS"
+  [[ "$all_pass" == "false" ]] && gate_status="FAIL"
+  echo "$gate_status" > "$TEST_RESULTS_DIR/.gate-status"
+  echo ""
+  echo "BEHAVIORAL TEST GATE: $gate_status"
+  [[ "$gate_status" == "FAIL" ]] && {
+    echo "One or more scenarios showed REGRESSION. Increase CR conservatively and re-run from --dry-run."
+    exit 1
+  }
+  echo "Next: run --apply to write changes"
+}
+
 # ── Main dispatcher ───────────────────────────────────────────────────────────
 MODE=""
 for arg in "$@"; do
@@ -276,8 +384,8 @@ case "$MODE" in
   full)         mode_session_end ;;
   dry-run)      mode_dry_run ;;
   judge)        mode_judge ;;
-  baseline)     echo "stub: baseline (Task 6)" ; exit 0 ;;
-  test)         echo "stub: test (Task 6)" ; exit 0 ;;
+  baseline)     mode_baseline ;;
+  test)         mode_test ;;
   apply)        echo "stub: apply (Task 7)" ; exit 0 ;;
   *)            echo "Usage: token-audit.sh --mode=<stuck-check|session-end|full|dry-run|judge|baseline|test|apply>" ; exit 1 ;;
 esac
