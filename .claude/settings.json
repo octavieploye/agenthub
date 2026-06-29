@@ -1,0 +1,110 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_TEAM_NAME": "dev-stack",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high"
+  },
+  "project": {
+    "defaultAgentTeam": "dev-stack"
+  },
+  "effortLevel": "low",
+  "permissions": {
+    "fs": {
+      "readMode": "auto",
+      "writeMode": "auto",
+      "writeAllowPatterns": [
+        "**/*"
+      ],
+      "writeDenyPatterns": [
+        "**/.env*",
+        "**/.git/**",
+        "**/.ssh/**"
+      ]
+    },
+    "shell": {
+      "mode": "auto",
+      "autoAllowPatterns": [
+        "cd *",
+        "ls*",
+        "pwd",
+        "cat *",
+        "head *",
+        "tail *",
+        "wc *",
+        "echo *",
+        "mkdir *",
+        "cp *",
+        "mv *",
+        "touch *",
+        "which *",
+        "find *",
+        "grep *",
+        "rg *",
+        "sort *",
+        "uniq *",
+        "diff *",
+        "git *",
+        "npm *",
+        "npx *",
+        "pnpm *",
+        "yarn *",
+        "node *",
+        "tsc *",
+        "tsx *",
+        "vitest *",
+        "npx vitest*",
+        "npx tsc*",
+        "npx electron*",
+        "npx playwright*",
+        "pytest*",
+        "python *",
+        "go test*",
+        "jq *",
+        "sed *",
+        "awk *",
+        "xargs *",
+        "true",
+        "false",
+        "test *"
+      ],
+      "denyPatterns": [
+        "rm -rf /",
+        "rm -rf .*",
+        "sudo *",
+        "dd *",
+        "mkfs.*",
+        "shutdown*",
+        "reboot*"
+      ]
+    },
+    "net": {
+      "mode": "auto"
+    }
+  },
+  "skills": {
+    "universal": {
+      "description": "Refresh and display the Optimaeus universal standards for this entity (hephaestus).",
+      "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md and summarize the standards that apply to the hephaestus entity right now: DB naming, LLM provider setup, port, shared packages, learning and skill table names, and inter-entity communication. Confirm which provider is currently reachable."
+    }
+  },
+  "hooks": [
+    {
+      "event": "PostToolUse",
+      "command": ".claude/skills/token-optimizer/token-audit.sh --mode=stuck-check"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": {
+        "tool_name": [
+          "Write",
+          "Edit"
+        ]
+      },
+      "command": "bash -c 'path=\"${TOOL_INPUT_PATH:-}\"; [[ \"$path\" == */human/* ]] && [[ -z \"${HUMAN_OVERRIDE:-}\" ]] && echo \"BLOCKED: human/ is protected. Export HUMAN_OVERRIDE=1 to proceed.\" && exit 1 || exit 0'"
+    },
+    {
+      "event": "Stop",
+      "command": ".claude/skills/token-optimizer/token-audit.sh --mode=session-end"
+    }
+  ]
+}
