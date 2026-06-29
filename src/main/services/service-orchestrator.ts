@@ -95,10 +95,10 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       killAgent(msg.agentId)
       break
     case 'approve':
-      sendInput(msg.requestId, 'y\n')
+      sendInput(msg.requestId, 'y\r', { isSystemAction: true })
       break
     case 'deny':
-      sendInput(msg.requestId, 'n\n')
+      sendInput(msg.requestId, 'n\r', { isSystemAction: true })
       break
     case 'spawn_agent': {
       try {

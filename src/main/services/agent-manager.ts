@@ -321,6 +321,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     color: options.color,
     voiceMode: options.voiceMode
   })
+  agentState.telegramNotify = options.telegramNotify ?? false
 
   // Track last-used repo for dropdown ordering
   updateRepoLastUsed(db, repoId)
@@ -706,8 +707,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         mTask.cleanTextBuffer = ''
         mTask.hasSentInput = true
       }
+      // Append Telegram instruction when telegramNotify is enabled
+      const telegramSuffix = agentState.telegramNotify
+        ? '. When done, use the send_telegram tool to send me a short summary of what you did (bullet points). If you need approval or have a question, also send_telegram.'
+        : ''
       // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
-      const escapedTask = task.replace(/'/g, "'\\''")
+      const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
       const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag} -- '${escapedTask}'\n`
@@ -726,10 +731,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   return agentState
 }
 
-export function sendInput(agentId: string, data: string): void {
+export function sendInput(agentId: string, data: string, opts?: { isSystemAction?: boolean }): void {
   const managed = agents.get(agentId)
   if (!managed) throw new Error(`Agent ${agentId} not found`)
-  managed.hasSentInput = true
+  if (!opts?.isSystemAction) managed.hasSentInput = true
   log.debug('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
 
   // Start a fresh TTS capture window when the user submits a request.

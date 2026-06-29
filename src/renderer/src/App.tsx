@@ -649,7 +649,7 @@ function AppMain(): React.JSX.Element {
   }, [handleSelectAgent])
 
   const handleSpawn = useCallback(
-    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string, skipPermissions?: boolean): Promise<string | null> => {
+    async (cwd: string, name: string, repoId: string, model?: string, task?: string, color?: string, provider?: string, effortLevel?: string, skipPermissions?: boolean, telegramNotify?: boolean): Promise<string | null> => {
       try {
         const response = await window.agentHub.agents.spawn({
           repoId,
@@ -660,7 +660,8 @@ function AppMain(): React.JSX.Element {
           effortLevel: effortLevel as import('@shared/types/agent.types').EffortLevel | undefined,
           taskDescription: task || 'Interactive session',
           color,
-          skipPermissions
+          skipPermissions,
+          telegramNotify
         })
         if (response.success && response.data) {
           addAgent(response.data)

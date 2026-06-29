@@ -44,7 +44,8 @@ interface SpawnDialogProps {
     color?: string,
     provider?: string,
     effortLevel?: EffortLevel,
-    skipPermissions?: boolean
+    skipPermissions?: boolean,
+    telegramNotify?: boolean
   ) => Promise<string | null>
   prefilledRepoId?: string
 }
@@ -65,6 +66,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [skipPermissions, setSkipPermissions] = useState(false)
   const [isNewProject, setIsNewProject] = useState(false)
+  const [telegramNotify, setTelegramNotify] = useState(false)
   const [_dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
@@ -112,6 +114,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
       setSelectedModel('claude-sonnet-4-6')
       setEffortLevel('medium')
       setSkipPermissions(false)
+      setTelegramNotify(false)
       setIsNewProject(false)
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
     }
@@ -177,14 +180,14 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
       const modelInfo = availableModels.find((m) => m.id === selectedModel)
       const provider = modelInfo?.provider ?? 'anthropic'
       setSpawnError(null)
-      const err = await onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel, skipPermissions)
+      const err = await onSpawn(resolvedCwd, name, repoId, selectedModel, task, selectedColor, provider, effortLevel, skipPermissions, telegramNotify)
       if (err) {
         setSpawnError(err)
       } else {
         onClose()
       }
     },
-    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, skipPermissions, availableModels, onSpawn, onClose]
+    [resolvedCwd, agentName, selectedRepoId, selectedModel, selectedColor, effortLevel, skipPermissions, telegramNotify, availableModels, onSpawn, onClose]
   )
 
   const handleRemoveRepo = useCallback(async (repoId: string) => {
@@ -344,6 +347,26 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
                 checked={skipPermissions}
                 onChange={(e) => setSkipPermissions(e.target.checked)}
                 className="toggle toggle-sm toggle-warning"
+              />
+            </label>
+          </div>
+
+          {/* Telegram notify toggle */}
+          <div className="panel-glass p-3 rounded-lg">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <span className="text-xs font-bold tracking-wide text-base-content/60 block">
+                  TELEGRAM NOTIFY
+                </span>
+                <span className="text-[10px] text-base-content/40">
+                  Agent reports progress and asks approvals via Telegram
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={telegramNotify}
+                onChange={(e) => setTelegramNotify(e.target.checked)}
+                className="toggle toggle-sm toggle-info"
               />
             </label>
           </div>

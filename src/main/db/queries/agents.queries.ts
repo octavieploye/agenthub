@@ -22,7 +22,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     updatedAt: row.updated_at as string,
     color: (row.color as string) ?? '#3B82F6',
     executionMode: (row.execution_mode as ExecutionMode) ?? 'native',
-    voiceMode: (row.voice_mode as VoiceMode) ?? 'always_on'
+    voiceMode: (row.voice_mode as VoiceMode) ?? 'always_on',
+    telegramNotify: false
   }
 }
 

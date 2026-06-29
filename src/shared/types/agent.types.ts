@@ -41,6 +41,7 @@ export interface AgentState {
   color: string
   executionMode: ExecutionMode
   voiceMode: VoiceMode
+  telegramNotify: boolean
 }
 
 export interface AgentSpawnOptions {
@@ -59,4 +60,5 @@ export interface AgentSpawnOptions {
   isLeadAgent?: boolean
   voiceMode?: VoiceMode
   projectId?: string        // triggers workspace_memory.md injection at spawn
+  telegramNotify?: boolean  // when true, appends send_telegram instruction to prompt
 }
