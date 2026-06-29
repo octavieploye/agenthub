@@ -425,8 +425,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     if (parsed) {
       const mgd = agents.get(agentState.id)
       if (mgd && mgd.state.status !== parsed.status) {
-        const previousStatus = mgd.state.status
-        const newStatus = parsed.status as AgentLifecycleStatus
+        let previousStatus = mgd.state.status
+        let newStatus = parsed.status as AgentLifecycleStatus
 
         // Feed every raw parser transition to TtsTrigger immediately — before
         // the 4 s status debounce — so it sees all busy/locked cycles and can
@@ -511,7 +511,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           const debounceTimer = setTimeout(() => {
             statusDebounceTimers.delete(agentState.id)
             const current = agents.get(agentState.id)
-            if (current && current.state.status !== newStatus && current.state.status !== 'awaiting_approval') {
+            if (!current || current.state.status === 'awaiting_approval') return
+
+            // Reconcile with raw parser state — after rapid transitions the
+            // debounced newStatus may be stale (e.g. 'busy' while agent is
+            // already sitting at the ❯ prompt, ttsStatus = 'locked').
+            const latestRaw = current.ttsStatus as AgentLifecycleStatus
+            if (latestRaw !== newStatus) {
+              previousStatus = current.state.status
+              newStatus = latestRaw
+            }
+
+            if (current.state.status !== newStatus) {
               applyStatusChange()
             }
           }, 4000)
