@@ -7,6 +7,7 @@ pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
 
 TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 export TOKEN_OPT_PROJECT="$TMPDIR"
 mkdir -p "$TMPDIR/.claude/skills/token-optimizer" "$TMPDIR/.claude" "$TMPDIR/tmp/token-preview/.claude"
 cp "$PACKAGE_DIR/criteria.md" "$TMPDIR/.claude/skills/token-optimizer/criteria.md"
@@ -42,5 +43,4 @@ CURRENT=$(cat "$TMPDIR/.claude/CLAUDE.md")
 [[ -f "$TMPDIR/.claude/token-audit-log.md" ]] \
   && pass "audit log updated" || fail "audit log not updated"
 
-rm -rf "$TMPDIR"
 echo "ALL APPLY GATE TESTS PASSED"

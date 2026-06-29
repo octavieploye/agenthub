@@ -7,6 +7,7 @@ pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
 
 TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 export TOKEN_OPT_PROJECT="$TMPDIR"
 
 # Test 1: empty state file → not stuck (exit 0)
@@ -29,5 +30,4 @@ printf "1|Glob|0\n1|Grep|0\n1|Read|0\n1|Glob|0\n1|Grep|0\n" > "$STATE"
 TOKEN_OPT_PROJECT="$TMPDIR" bash "$SCRIPT" --mode=stuck-check \
   && fail "5 calls no write should be stuck" || pass "5 calls no write = stuck (exit 1)"
 
-rm -rf "$TMPDIR"
 echo "ALL STUCK DETECTION TESTS PASSED"

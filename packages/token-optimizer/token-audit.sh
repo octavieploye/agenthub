@@ -76,7 +76,7 @@ call_claude() {
       --arg system "$system" \
       --arg user "$user" \
       '{model:$model,max_tokens:4096,system:$system,messages:[{role:"user",content:$user}]}')" \
-  | jq -r '.content[0].text'
+  | jq -r 'if .type == "error" then "ERROR: " + .error.message else .content[0].text end'
 }
 
 # ── Dry-run mode ─────────────────────────────────────────────────────────────
@@ -106,6 +106,11 @@ $(cat "$file")"
 
     call_claude "You are a token-efficiency expert." "$REWRITE_PROMPT" > "$proposed_file"
     tokens_after=$(count_tokens "$proposed_file")
+    if [[ "$tokens_after" -eq 0 ]]; then
+      echo "  ERROR: empty LLM response for $rel — skipping" >&2
+      rm -f "$proposed_file"
+      continue
+    fi
     cr=$(awk "BEGIN {printf \"%.1f\", $tokens_before/$tokens_after}")
     tes=$(awk "BEGIN {printf \"%.2f\", $cr * 0.98}")  # assume QR=0.98 for preview
 
@@ -152,6 +157,14 @@ Then a brief explanation (max 3 sentences)."
 
     result=$(call_claude "You are an AI instruction quality auditor." "$JUDGE_PROMPT")
     verdict=$(echo "$result" | head -1 | tr -d '[:space:]')
+
+    if [[ ! "$verdict" =~ ^(PASS|PARTIAL|FAIL)$ ]]; then
+      echo "ERROR: invalid verdict '$verdict' for $rel — API error or unexpected response. Treating as FAIL." >&2
+      echo "FAIL" > "$judge_file"
+      all_pass=false
+      continue
+    fi
+
     mkdir -p "$(dirname "$judge_file")"
     echo "$verdict" > "$judge_file"
     echo "$result" | tail -n +3 >> "$judge_file"
