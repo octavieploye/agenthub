@@ -8,13 +8,15 @@
  */
 
 export interface TelegramNotificationPayload {
-  type: 'completed' | 'failed' | 'awaiting_approval' | 'needs_input'
+  type: 'completed' | 'failed' | 'awaiting_approval' | 'needs_input' | 'agent_message'
   agentId: string
   agentName: string
   repo: string
   summary: string        // max 200 chars — plain English only
   proposedAction?: string // awaiting_approval only — max 300 chars
   question?: string       // needs_input only — max 300 chars
+  message?: string        // agent_message only — the composed message (max 4000 chars)
+  format?: 'status' | 'question' | 'error'  // agent_message only
   requestId?: string      // for approval correlation (use agentId in Phase 1)
   timestamp: string       // ISO 8601
 }

@@ -391,15 +391,15 @@ async function sendNotification(payload) {
   const time = new Date(payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
   if (payload.type === 'completed') {
-    const summary = payload.summary.length > 120
-      ? payload.summary.slice(0, 117) + '\u2026'
+    const summary = payload.summary.length > 200
+      ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
     text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\nProject: ${payload.repo}\nFinished at: ${time}`
     replyMarkup = { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
 
   } else if (payload.type === 'failed') {
-    const summary = payload.summary.length > 100
-      ? payload.summary.slice(0, 97) + '\u2026'
+    const summary = payload.summary.length > 200
+      ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
     text = `\u274c Failed \u2014 ${payload.agentName}\n\nSomething went wrong and the agent stopped.\n\nLast message: "${summary}"\n\nProject: ${payload.repo}\nTime: ${time}`
     replyMarkup = {
@@ -429,11 +429,25 @@ async function sendNotification(payload) {
     pendingApprovals.set(requestId, { chatId: allowedChatId, timerId })
 
   } else if (payload.type === 'needs_input') {
-    const q = (payload.question || '').length > 300
-      ? (payload.question || '').slice(0, 297) + '\u2026'
+    const q = (payload.question || '').length > 200
+      ? (payload.question || '').slice(0, 197) + '\u2026'
       : (payload.question || '')
     text = `\ud83d\udcac Question from ${payload.agentName}\n\n"${q}"\n\nProject: ${payload.repo}\n\nReply directly to this message to send your answer.`
     replyMarkup = { force_reply: true, selective: true }
+
+  } else if (payload.type === 'agent_message') {
+    const format = payload.format || 'status'
+    const emoji = format === 'error' ? '\u274c'
+      : format === 'question' ? '\ud83d\udcac'
+      : '\u2705'
+    const msg = (payload.message || '').length > 4000
+      ? (payload.message || '').slice(0, 3997) + '\u2026'
+      : (payload.message || '')
+    text = `${emoji} ${payload.agentName}\n\n${msg}\n\nProject: ${payload.repo}`
+    if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
+    if (format === 'question') {
+      replyMarkup = { force_reply: true, selective: true }
+    }
   }
 
   if (!text) return
