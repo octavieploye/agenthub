@@ -67,7 +67,7 @@ call_claude() {
     echo "ERROR: ANTHROPIC_API_KEY not set" >&2
     exit 1
   fi
-  curl -s https://api.anthropic.com/v1/messages \
+  curl --http1.1 -s https://api.anthropic.com/v1/messages \
     -H "x-api-key: $ANTHROPIC_API_KEY" \
     -H "anthropic-version: ${ANTHROPIC_API_VERSION:-2023-06-01}" \
     -H "content-type: application/json" \
@@ -77,6 +77,99 @@ call_claude() {
       --arg user "$user" \
       '{model:$model,max_tokens:4096,system:$system,messages:[{role:"user",content:$user}]}')" \
   | jq -r '.content[0].text'
+}
+
+# ── Dry-run mode ─────────────────────────────────────────────────────────────
+mode_dry_run() {
+  mkdir -p "$PREVIEW_DIR"
+  echo "=== DRY-RUN PREVIEW ==="
+  echo ""
+  while IFS= read -r file; do
+    local class cr_target tokens_before tokens_after rel proposed_dir proposed_file cr tes REWRITE_PROMPT
+    class=$(classify_file "$file")
+    [[ "$class" == "human" ]] && continue
+    cr_target=$(cr_target_for_class "$class")
+    tokens_before=$(count_tokens "$file")
+    rel="${file#$PROJECT_ROOT/}"
+
+    REWRITE_PROMPT="You are a token optimizer for AI instruction files.
+Rewrite the following $class instruction content at a ${cr_target}x compression ratio.
+Rules: preserve ALL behavioral directives exactly. Remove narrative prose, rationale, examples unless they change agent behavior. Use imperative sentences. No markdown headers unless structurally necessary.
+Output ONLY the rewritten content, no preamble.
+
+CONTENT:
+$(cat "$file")"
+
+    proposed_dir="$PREVIEW_DIR/$(dirname "$rel")"
+    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
+    mkdir -p "$proposed_dir"
+
+    call_claude "You are a token-efficiency expert." "$REWRITE_PROMPT" > "$proposed_file"
+    tokens_after=$(count_tokens "$proposed_file")
+    cr=$(awk "BEGIN {printf \"%.1f\", $tokens_before/$tokens_after}")
+    tes=$(awk "BEGIN {printf \"%.2f\", $cr * 0.98}")  # assume QR=0.98 for preview
+
+    echo "[$class] $rel"
+    echo "  Before: $tokens_before tokens | After: $tokens_after tokens | CR: ${cr}x | TES: $tes"
+    echo "  Preview: $proposed_file"
+    echo ""
+  done < <(find_llm_files)
+  echo "Review previews in: $PREVIEW_DIR"
+  echo "Next: run --judge to score intent preservation"
+}
+
+# ── Judge mode ────────────────────────────────────────────────────────────────
+mode_judge() {
+  local all_pass=true
+  while IFS= read -r file; do
+    local class rel proposed_file judge_file result verdict JUDGE_PROMPT
+    class=$(classify_file "$file")
+    [[ "$class" == "human" ]] && continue
+    rel="${file#$PROJECT_ROOT/}"
+    proposed_file="$PREVIEW_DIR/${rel}.proposed.md"
+    judge_file="$PREVIEW_DIR/${rel}.judge.txt"
+
+    [[ ! -f "$proposed_file" ]] && {
+      echo "SKIP: $rel — no preview found. Run --dry-run first."
+      continue
+    }
+
+    JUDGE_PROMPT="Compare these two AI instruction texts.
+ORIGINAL:
+$(cat "$file")
+
+PROPOSED (compressed):
+$(cat "$proposed_file")
+
+Evaluate: does the PROPOSED version preserve all behavioral directives from the ORIGINAL?
+- PASS: all rules, constraints, and behavioral requirements are preserved
+- PARTIAL: minor loss of nuance but core behavior preserved
+- FAIL: one or more behavioral directives are missing or weakened
+
+Respond with exactly one line: PASS, PARTIAL, or FAIL
+Then a blank line.
+Then a brief explanation (max 3 sentences)."
+
+    result=$(call_claude "You are an AI instruction quality auditor." "$JUDGE_PROMPT")
+    verdict=$(echo "$result" | head -1 | tr -d '[:space:]')
+    mkdir -p "$(dirname "$judge_file")"
+    echo "$verdict" > "$judge_file"
+    echo "$result" | tail -n +3 >> "$judge_file"
+
+    echo "[$verdict] $rel"
+    [[ "$verdict" == "FAIL" || "$verdict" == "PARTIAL" ]] && all_pass=false
+  done < <(find_llm_files)
+
+  if [[ "$all_pass" == "true" ]]; then
+    echo ""
+    echo "JUDGE GATE: PASS — all files scored PASS"
+    echo "Next: run --baseline (first time) then --test"
+  else
+    echo ""
+    echo "JUDGE GATE: FAIL — one or more files scored PARTIAL or FAIL"
+    echo "Adjust compression ratio in criteria.md and re-run --dry-run"
+    exit 1
+  fi
 }
 
 # ── Session-end mode ──────────────────────────────────────────────────────────
@@ -181,8 +274,8 @@ case "$MODE" in
     exit 0
     ;;
   full)         mode_session_end ;;
-  dry-run)      echo "stub: dry-run (Task 3 follow-up)" ; exit 0 ;;
-  judge)        echo "stub: judge (Task 5)" ; exit 0 ;;
+  dry-run)      mode_dry_run ;;
+  judge)        mode_judge ;;
   baseline)     echo "stub: baseline (Task 6)" ; exit 0 ;;
   test)         echo "stub: test (Task 6)" ; exit 0 ;;
   apply)        echo "stub: apply (Task 7)" ; exit 0 ;;
