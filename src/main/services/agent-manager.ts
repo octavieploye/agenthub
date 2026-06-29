@@ -11,7 +11,11 @@ import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
-import { getWindowManager, getAnamnesisWriter } from './service-orchestrator'
+import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath } from './service-orchestrator'
+import { writeFileSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { app } from 'electron'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
@@ -62,9 +66,9 @@ interface ManagedAgent {
   ttsTrigger: TtsTrigger
   /** True once the user (or task auto-send) has written input to this agent's PTY. */
   hasSentInput: boolean
-  /** Last filtered LLM prose captured by TTS — survives buffer resets for Telegram. */
+  /** Last filtered LLM prose captured by TTS — used by TTS only. */
   lastFilteredProse: string
-  /** Delayed Telegram send timer — 3s after status change to let TTS capture prose. */
+  /** Delayed Telegram status notification — 3s debounce for rapid status changes. */
   telegramSendTimer: ReturnType<typeof setTimeout> | null
   /** Headless xterm terminal for clean text extraction (Telegram, TTS) */
   headlessTerminal: HeadlessTerminalBuffer
@@ -142,22 +146,6 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
   if (routingResult.layers.includes('telegram') && _telegramNotifier) {
-    // --- [Telegram Debug] log raw → stripped → filtered pipeline ---
-    const _dbgManaged = agents.get(agent.id)
-    if (_dbgManaged) {
-      const _dbgRaw = _dbgManaged.cleanTextBuffer
-      const _dbgStripped = stripAnsi(_dbgRaw).trim()
-      const _dbgFiltered = filterTtsResponse(_dbgStripped)
-      log.info('[Telegram Debug] cleanTextBuffer pipeline', {
-        agentId: agent.id,
-        agentStatus: agent.status,
-        lastFilteredProseLen: _dbgManaged.lastFilteredProse.length,
-        lastFilteredProseFirst300: _dbgManaged.lastFilteredProse.slice(0, 300),
-        bufferLen: _dbgRaw.length,
-        filteredLen: _dbgFiltered.length,
-        filteredFirst300: _dbgFiltered.slice(0, 300),
-      })
-    }
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
       completed: 'completed',
       error: 'failed',
@@ -174,29 +162,13 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
         const managed = agents.get(agent.id)
         const task = (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
-        // Use lastFilteredProse (captured by TTS before buffer reset) instead of
-        // re-filtering cleanTextBuffer which is stale/refilled with terminal chrome
-        // after TTS clears it.
-        let filteredProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
-        if (!filteredProse && managed) {
-          // Fallback: try the current buffer (may work for non-TTS paths)
-          const rawText = stripAnsi(managed.cleanTextBuffer).trim()
-          filteredProse = filterTtsResponse(rawText).slice(-300)
-        }
-
-        // completed/failed/needs_input: agent's prose response is useful
-        // awaiting_approval: buffer is permission UI chrome — use task only
-        const summary = (payloadType !== 'awaiting_approval' && filteredProse)
-          ? filteredProse
-          : task
-
         const payload: TelegramNotificationPayload = {
           type: payloadType,
           agentId: agent.id,
           agentName: agent.name,
           repo: agent.cwd.split('/').pop() ?? agent.cwd,
-          summary,
-          question: payloadType === 'needs_input' ? (filteredProse || task) : undefined,
+          summary: task,
+          question: payloadType === 'needs_input' ? task : undefined,
           proposedAction: payloadType === 'awaiting_approval' ? `Agent needs permission to run a tool.\n\nTask: ${task}` : undefined,
           requestId: agent.id,
           timestamp: new Date().toISOString(),
@@ -209,43 +181,8 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
         if (managed) {
           managed.telegramSendTimer = setTimeout(() => {
             if (managed) managed.telegramSendTimer = null
-
-            // Re-filter cleanTextBuffer — with CUP→\n in stripAnsi, line
-            // structure is preserved so filterTtsResponse classifies correctly.
-            let freshProse = ''
-            if (managed && payloadType !== 'awaiting_approval') {
-              try {
-                const refiltered = filterTtsResponse(managed.cleanTextBuffer.trim()).trim()
-                log.debug('[Telegram] delayed re-filter', {
-                  agentId: agent.id,
-                  bufLen: managed.cleanTextBuffer.length,
-                  refilteredLen: refiltered.length,
-                  refilteredPreview: refiltered.slice(0, 200).replace(/\n/g, '↵'),
-                })
-                if (refiltered) {
-                  managed.lastFilteredProse = refiltered
-                  freshProse = refiltered.slice(-300)
-                }
-              } catch (e) {
-                log.warn('[Telegram] delayed re-filter failed', { agentId: agent.id, error: String(e) })
-              }
-            }
-
-            // Fall back to lastFilteredProse from TTS capture
-            if (!freshProse) {
-              freshProse = managed?.lastFilteredProse?.trim().slice(-300) ?? ''
-            }
-
-            try {
-              if (freshProse && payloadType !== 'awaiting_approval') {
-                payload.summary = freshProse.slice(-120)
-              }
-              if (freshProse && payload.question !== undefined) {
-                payload.question = freshProse
-              }
-            } catch (e) {
-              log.warn('[Telegram] payload update failed, sending with original', { agentId: agent.id, error: String(e) })
-            }
+            // Status-only notification — agent sends content via MCP tool
+            payload.summary = (agent.taskDescription ?? '').slice(0, 200) || agent.name
             if (_telegramNotifier) _telegramNotifier(payload)
           }, 3000)
         }
@@ -311,6 +248,40 @@ function flushOutputBuffer(agentId: string): void {
   }
   managed.outputBuffer = ''
   managed.flushTimer = null
+}
+
+function writeMcpConfig(agentId: string, agentName: string, repo: string): string | null {
+  const sockPath = getTelegramSocketPath()
+  if (!sockPath) return null
+
+  const scriptPath = app.isPackaged
+    ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
+    : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
+
+  const config = {
+    mcpServers: {
+      'agenthub-telegram': {
+        command: 'node',
+        args: [scriptPath],
+        env: {
+          AGENTHUB_TELEGRAM_SOCK: sockPath,
+          AGENTHUB_AGENT_ID: agentId,
+          AGENTHUB_AGENT_NAME: agentName,
+          AGENTHUB_AGENT_REPO: repo,
+        }
+      }
+    }
+  }
+
+  const configPath = join(tmpdir(), `agenthub-mcp-${agentId}.json`)
+  writeFileSync(configPath, JSON.stringify(config), 'utf-8')
+  return configPath
+}
+
+function cleanupMcpConfig(agentId: string): void {
+  try {
+    unlinkSync(join(tmpdir(), `agenthub-mcp-${agentId}.json`))
+  } catch {}
 }
 
 export function spawnAgent(options: AgentSpawnOptions): AgentState {
@@ -578,6 +549,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // to avoid "The database connection is not open" crashes.
     if (isDbShuttingDown()) {
       log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
+      cleanupMcpConfig(agentState.id)
       managed?.headlessTerminal.dispose()
       agents.delete(agentState.id)
       return
@@ -606,6 +578,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       wm.closeBreakout(agentState.id)
     }
 
+    cleanupMcpConfig(agentState.id)
     managed?.headlessTerminal.dispose()
     agents.delete(agentState.id)
   })
@@ -683,6 +656,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
 
+  const repoName = options.cwd.split('/').pop() ?? options.cwd
+  const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName)
+  const mcpFlag = mcpConfigPath ? ` --mcp-config '${mcpConfigPath}'` : ''
+
   // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
   // env vars and model routing internally. Claude CLI rejects unknown model names,
   // so the env-var-only approach does NOT work.
@@ -726,13 +703,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = task.replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag} '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag} '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag}\n`
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
@@ -842,6 +819,7 @@ export function killAgent(agentId: string): void {
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
+      cleanupMcpConfig(agentId)
       mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
@@ -868,6 +846,7 @@ export function killAgent(agentId: string): void {
       if (holdTimer) { clearTimeout(holdTimer); approvalHoldTimers.delete(agentId) }
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
+      cleanupMcpConfig(agentId)
       mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
@@ -1040,6 +1019,7 @@ export function cleanupAllAgents(): void {
       if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
       if (managed.telegramSendTimer) clearTimeout(managed.telegramSendTimer)
       flushOutputBuffer(id)
+      cleanupMcpConfig(id)
       managed.headlessTerminal.dispose()
       managed.ptyProcess.kill()
     } catch {
