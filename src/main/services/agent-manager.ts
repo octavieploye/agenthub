@@ -145,20 +145,28 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   const routingResult = routeNotification(triageEvent, getNotificationConfig())
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
-  if (routingResult.layers.includes('telegram') && _telegramNotifier) {
+  // One-shot task completion: agent with taskDescription goes busy→locked (returned to prompt)
+  // Triage gives locked 'low' priority which doesn't reach telegram layer, so send directly
+  // Only fire on first completion (before user sends follow-up input)
+  const managed = agents.get(agent.id)
+  const isOneShotDone = agent.status === 'locked'
+    && previousStatus === 'busy'
+    && Boolean(agent.taskDescription)
+    && managed !== undefined && !managed.hasSentInput
+
+  if ((routingResult.layers.includes('telegram') || isOneShotDone) && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
       completed: 'completed',
       error: 'failed',
       looping: 'failed',
       awaiting_approval: 'awaiting_approval',
     }
-    const payloadType = STATUS_TO_PAYLOAD[agent.status]
+    const payloadType = isOneShotDone ? 'completed' : STATUS_TO_PAYLOAD[agent.status]
     if (payloadType) {
       const db = getDb()
       const prefs = getTelegramPrefs(db)
       const prefKey = `notify_${payloadType}` as keyof typeof prefs
       if (prefs[prefKey]) {
-        const managed = agents.get(agent.id)
         const task = (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
         const payload: TelegramNotificationPayload = {
