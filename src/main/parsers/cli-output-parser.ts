@@ -72,6 +72,13 @@ export class ClaudeCliOutputParser implements CliOutputParser {
   private statusTransitions: { status: string; timestamp: number }[] = []
   private readonly loopingThreshold = 8          // locked transitions needed to trigger looping
   private readonly loopingWindowMs = 30_000     // 30 second window
+  private readonly createdAt: number
+  private readonly startupGraceMs: number
+
+  constructor(opts?: { startupGraceMs?: number }) {
+    this.createdAt = Date.now()
+    this.startupGraceMs = opts?.startupGraceMs ?? 45_000  // ignore looping during MCP init
+  }
 
   getParserName(): string {
     return 'claude-cli-v1'
@@ -139,6 +146,7 @@ export class ClaudeCliOutputParser implements CliOutputParser {
   }
 
   private isLooping(): boolean {
+    if (Date.now() - this.createdAt < this.startupGraceMs) return false
     const lockedCount = this.statusTransitions.filter((t) => t.status === 'locked').length
     return lockedCount >= this.loopingThreshold
   }

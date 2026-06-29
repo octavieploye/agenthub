@@ -238,30 +238,49 @@ describe('ClaudeCliOutputParser', () => {
   })
 
   describe('looping detection', () => {
+    let noGraceParser: ClaudeCliOutputParser
+
+    beforeEach(() => {
+      noGraceParser = new ClaudeCliOutputParser({ startupGraceMs: 0 })
+    })
+
     it('detects looping when locked transitions exceed threshold (8) in 30s', () => {
       // Simulate rapid busy->locked oscillations
       for (let i = 0; i < 7; i++) {
-        parser.resetBuffer()
-        parser.parse('\u28CB Processing...')
-        parser.resetBuffer()
-        parser.parse('? Do you want to proceed?')
+        noGraceParser.resetBuffer()
+        noGraceParser.parse('\u28CB Processing...')
+        noGraceParser.resetBuffer()
+        noGraceParser.parse('? Do you want to proceed?')
       }
-      parser.resetBuffer()
-      parser.parse('\u28CB Processing...')
-      parser.resetBuffer()
-      const result = parser.parse('? Do you want to proceed?')
+      noGraceParser.resetBuffer()
+      noGraceParser.parse('\u28CB Processing...')
+      noGraceParser.resetBuffer()
+      const result = noGraceParser.parse('? Do you want to proceed?')
       expect(result).toEqual({ status: 'looping', confidence: 'inferred' })
     })
 
     it('does not detect looping for fewer than 8 locked transitions', () => {
       for (let i = 0; i < 3; i++) {
+        noGraceParser.resetBuffer()
+        noGraceParser.parse('\u28CB Processing...')
+        noGraceParser.resetBuffer()
+        noGraceParser.parse('? prompt')
+      }
+      noGraceParser.resetBuffer()
+      noGraceParser.parse('\u28CB Processing...')
+      noGraceParser.resetBuffer()
+      const result = noGraceParser.parse('? prompt')
+      expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
+    })
+
+    it('suppresses looping during startup grace period', () => {
+      // Default parser has 45s grace — looping should not trigger
+      for (let i = 0; i < 9; i++) {
         parser.resetBuffer()
         parser.parse('\u28CB Processing...')
         parser.resetBuffer()
-        parser.parse('? prompt')
+        parser.parse('? Do you want to proceed?')
       }
-      parser.resetBuffer()
-      parser.parse('\u28CB Processing...')
       parser.resetBuffer()
       const result = parser.parse('? prompt')
       expect(result).toEqual({ status: 'locked', confidence: 'inferred' })
