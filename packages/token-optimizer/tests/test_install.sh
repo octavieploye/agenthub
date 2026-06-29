@@ -8,6 +8,7 @@ pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
 
 TARGET=$(mktemp -d)
+trap 'rm -rf "$TARGET"' EXIT
 mkdir -p "$TARGET/.claude"
 echo '{"hooks":[]}' > "$TARGET/.claude/settings.json"
 mkdir -p "$TARGET/.claude/skills"
@@ -33,5 +34,4 @@ jq '.hooks | length > 0' "$TARGET/.claude/settings.json" | grep -q true \
 grep -q "token-optimizer" "$TARGET/.claude/skills/index.md" \
   && pass "skill added to index.md" || fail "skill not in index.md"
 
-rm -rf "$TARGET"
 echo "ALL INSTALL TESTS PASSED"

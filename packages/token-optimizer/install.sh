@@ -28,6 +28,7 @@ echo "  [OK] human/ folder created at $TARGET/human"
 # 3. Merge hooks into settings.json
 SETTINGS="$TARGET/.claude/settings.json"
 if [[ ! -f "$SETTINGS" ]]; then
+  mkdir -p "$(dirname "$SETTINGS")"
   echo '{"hooks":[]}' > "$SETTINGS"
 fi
 NEW_HOOKS=$(jq '.hooks' "$PACKAGE_DIR/hooks-snippet.json")
