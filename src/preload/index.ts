@@ -280,6 +280,10 @@ const agentHubBridge = {
     getPrefs: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_PREFS),
     setPref: (key: string, value: boolean) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SET_PREF, key, value),
     sendTest: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SEND_TEST),
+    getNotificationStats: (agentId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_NOTIFICATION_STATS, agentId),
+    getNotifications: (agentId: string, limit?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_NOTIFICATIONS, agentId, limit),
     onFirstContactLinked: (callback: () => void) => {
       const handler = (): void => callback()
       ipcRenderer.on(IPC_EVENTS.TELEGRAM.FIRST_CONTACT_LINKED, handler)

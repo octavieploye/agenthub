@@ -27,9 +27,10 @@ import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './
 import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
+import { TelegramQueueProcessor } from './telegram-queue-processor'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -57,6 +58,7 @@ let forgejoAdapter: IForgejoAdapter | null = null
 let sprintWatcher: SprintWatcher | null = null
 let telegramSidecarService: TelegramSidecarService | null = null
 let telegramSocketServer: TelegramSocketServer | null = null
+let telegramQueueProcessor: TelegramQueueProcessor | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -383,21 +385,33 @@ export function initializeServices(db: Database.Database): void {
       telegramSidecarService?.sendAgentList(agents)
 
       // Start socket server for MCP tool connections
-      if (!telegramSocketServer) {
-        telegramSocketServer = new TelegramSocketServer({
+      if (!telegramQueueProcessor) {
+        telegramQueueProcessor = new TelegramQueueProcessor({
+          db,
           notify: (payload) => telegramSidecarService?.notify(payload),
           logInfo: (msg, meta) => log.info(msg, meta),
           logError: (msg, meta) => log.error(msg, meta),
         })
+        telegramQueueProcessor.start()
       }
-      const sockPath = `/tmp/agenthub-telegram-${process.pid}.sock`
+
+      if (!telegramSocketServer) {
+        telegramSocketServer = new TelegramSocketServer({
+          notify: (payload) => telegramSidecarService?.notify(payload),
+          queueFallback: (payload) => telegramQueueProcessor?.enqueue(payload),
+          onMcpMessage: (agentId) => setLastMcpTelegramAt(agentId),
+          logInfo: (msg, meta) => log.info(msg, meta),
+          logError: (msg, meta) => log.error(msg, meta),
+        })
+      }
+      const sockPath = join(app.getPath('userData'), 'telegram.sock')
       telegramSocketServer.start(sockPath)
     },
   })
 
   // Inject telegram notifier into agent-manager (avoids circular import)
   setTelegramNotifier((payload) => {
-    telegramSidecarService?.notify(payload)
+    telegramQueueProcessor?.enqueue(payload)
   })
 
   // Keep sidecar agent cache in sync on every agent status change
@@ -444,6 +458,8 @@ export function stopServices(): void {
   piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   sprintWatcher?.stop()
+  telegramQueueProcessor?.stop()
+  telegramQueueProcessor = null
   telegramSocketServer?.stop()
   telegramSocketServer = null
   telegramSidecarService?.stop()
@@ -518,6 +534,10 @@ export function getSprintWatcher(): SprintWatcher | null {
 
 export function getTelegramSidecarService(): TelegramSidecarService | null {
   return telegramSidecarService
+}
+
+export function getTelegramQueueProcessor(): TelegramQueueProcessor | null {
+  return telegramQueueProcessor
 }
 
 export function getTelegramSocketPath(): string | null {

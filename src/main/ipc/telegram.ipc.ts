@@ -3,7 +3,7 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import type { TelegramNotificationPrefs } from '../../shared/types/telegram.types'
 import { getDb } from '../db/connection'
 import { getTelegramPrefs, setTelegramPref } from '../db/queries/telegram.queries'
-import { getTelegramSidecarService } from '../services/service-orchestrator'
+import { getTelegramSidecarService, getTelegramQueueProcessor } from '../services/service-orchestrator'
 
 export function registerTelegramIpc(): void {
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_STATUS, () => {
@@ -57,5 +57,17 @@ export function registerTelegramIpc(): void {
       timestamp: new Date().toISOString(),
     })
     return { success: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_NOTIFICATION_STATS, (_event, agentId: string) => {
+    const qp = getTelegramQueueProcessor()
+    if (!qp) return { sent: 0, queued: 0, failed: 0 }
+    return qp.getStats(agentId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_NOTIFICATIONS, (_event, agentId: string, limit?: number) => {
+    const qp = getTelegramQueueProcessor()
+    if (!qp) return []
+    return qp.getNotifications(agentId, limit ?? 10)
   })
 }

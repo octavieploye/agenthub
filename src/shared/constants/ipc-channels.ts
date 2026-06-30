@@ -205,6 +205,8 @@ export const IPC_CHANNELS = {
     GET_PREFS:    'telegram:get-prefs',
     SET_PREF:     'telegram:set-pref',
     SEND_TEST:    'telegram:send-test',
+    GET_NOTIFICATION_STATS: 'telegram:get-notification-stats',
+    GET_NOTIFICATIONS:      'telegram:get-notifications',
   },
 } as const
 

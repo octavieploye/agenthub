@@ -4,6 +4,8 @@ import type { TelegramNotificationPayload } from '../../shared/types/telegram.ty
 
 export interface TelegramSocketServerDeps {
   notify: (payload: TelegramNotificationPayload) => void
+  queueFallback?: (payload: TelegramNotificationPayload) => void
+  onMcpMessage?: (agentId: string) => void
   logInfo: (msg: string, meta?: Record<string, unknown>) => void
   logError: (msg: string, meta?: Record<string, unknown>) => void
 }
@@ -69,11 +71,16 @@ export class TelegramSocketServer {
     return this.sockPath
   }
 
-  private handleMessage(data: unknown): { ok: boolean; error?: string } {
+  private handleMessage(data: unknown): { ok: boolean; error?: string; queued?: boolean } {
     if (!data || typeof data !== 'object') {
       return { ok: false, error: 'Expected JSON object' }
     }
     const msg = data as Record<string, unknown>
+
+    // Health check ping
+    if (msg.type === 'ping') {
+      return { ok: true }
+    }
 
     if (!msg.message || typeof msg.message !== 'string') {
       return { ok: false, error: 'Missing required field: message' }
@@ -100,7 +107,18 @@ export class TelegramSocketServer {
       timestamp: new Date().toISOString(),
     }
 
-    this.deps.notify(payload)
-    return { ok: true }
+    this.deps.onMcpMessage?.(msg.agentId as string)
+
+    try {
+      this.deps.notify(payload)
+      return { ok: true }
+    } catch (err) {
+      if (this.deps.queueFallback) {
+        this.deps.queueFallback(payload)
+        return { ok: true, queued: true }
+      }
+      this.deps.logError('telegram socket notify failed, no queue fallback', { error: String(err) })
+      return { ok: false, error: 'Delivery failed' }
+    }
   }
 }

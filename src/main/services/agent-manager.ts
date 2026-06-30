@@ -119,6 +119,11 @@ export function setTelegramAgentSync(fn: TelegramAgentSync | null): void {
   _telegramAgentSync = fn
 }
 
+// Stub for Task 4 — silent lock detection will fill this in
+export function setLastMcpTelegramAt(_agentId: string): void {
+  // Will track last MCP telegram timestamp per agent in Task 4
+}
+
 function getNotificationConfig(): NotificationRouterConfig {
   let telegramEnabled = false
   try {
