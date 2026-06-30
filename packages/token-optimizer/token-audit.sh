@@ -413,6 +413,29 @@ print(int((r - r/cr) + (c - c/cc) + (w - w/cw)))
   echo "  To check gate status: token-audit.sh --status"
 }
 
+# ── Report-file mode ─────────────────────────────────────────────────────────
+# Writes a dated report to docs/token-reports/ and prints the path.
+mode_report_file() {
+  local report_dir="${PROJECT_ROOT}/docs/token-reports"
+  mkdir -p "$report_dir"
+  local datestamp
+  datestamp=$(date '+%Y-%m-%d')
+  local report_file="${report_dir}/${datestamp}-token-report.md"
+
+  # Generate the report header
+  {
+    echo "# Token Optimizer Report — $datestamp"
+    echo ""
+    echo "Generated: $(date '+%Y-%m-%d %H:%M')"
+    echo ""
+  } > "$report_file"
+
+  # Pipe the report body into the file
+  mode_report >> "$report_file"
+
+  echo "Report saved: $report_file"
+}
+
 # ── Main dispatcher ───────────────────────────────────────────────────────────
 MODE=""
 GATE_NAME=""
@@ -427,6 +450,7 @@ for arg in "$@"; do
     --apply)      MODE="apply" ;;
     --status)     MODE="status" ;;
     --report)     MODE="report" ;;
+    --report-file) MODE="report-file" ;;
     --gate=*)     GATE_NAME="${arg#--gate=}" ;;
     --verdict=*)  GATE_VERDICT="${arg#--verdict=}" ;;
     --profile=*)  ACTIVE_PROFILE="${arg#--profile=}" ;;
@@ -450,5 +474,6 @@ case "$MODE" in
   apply)        mode_apply ;;
   status)       mode_status ;;
   report)       mode_report ;;
-  *)            echo "Usage: token-audit.sh --mode=<session-end|dry-run|set-gate|apply|status|report> [--profile=<name>]" ; exit 1 ;;
+  report-file)  mode_report_file ;;
+  *)            echo "Usage: token-audit.sh --mode=<session-end|dry-run|set-gate|apply|status|report|report-file> [--profile=<name>]" ; exit 1 ;;
 esac
