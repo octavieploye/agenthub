@@ -168,7 +168,6 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   if (agentHasTelegram && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
       error: 'failed',
-      looping: 'failed',
       awaiting_approval: 'awaiting_approval',
     }
     let payloadType: string | undefined = isOneShotDone ? 'completed' : STATUS_TO_PAYLOAD[agent.status]
@@ -185,7 +184,10 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       const prefs = getTelegramPrefs(db)
       const prefKey = `notify_${payloadType}` as keyof typeof prefs
       if (prefs[prefKey]) {
-        const task = (agent.taskDescription ?? '').slice(0, 200) || agent.name
+        const recentOutput = managed?.cleanTextBuffer
+          ? managed.cleanTextBuffer.slice(-200).trim()
+          : ''
+        const task = recentOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
         const payload: TelegramNotificationPayload = {
           type: payloadType,
@@ -207,7 +209,10 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           managed.telegramSendTimer = setTimeout(() => {
             if (managed) managed.telegramSendTimer = null
             // Status-only notification — agent sends content via MCP tool
-            payload.summary = (agent.taskDescription ?? '').slice(0, 200) || agent.name
+            const latestOutput = managed?.cleanTextBuffer
+              ? managed.cleanTextBuffer.slice(-200).trim()
+              : ''
+            payload.summary = latestOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
             if (_telegramNotifier) _telegramNotifier(payload)
           }, 3000)
         }
