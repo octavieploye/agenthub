@@ -211,6 +211,16 @@ describe('ClaudeCliOutputParser', () => {
       expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
     })
 
+    it('detects MCP "Do you want to proceed?" as awaiting_approval', () => {
+      const result = parser.parse('Do you want to proceed?')
+      expect(result).toEqual({ status: 'awaiting_approval', confidence: 'inferred' })
+    })
+
+    it('does not detect "? Do you want to proceed?" (inquirer prompt) as awaiting_approval', () => {
+      const result = parser.parse('? Do you want to proceed?')
+      expect(result?.status).not.toBe('awaiting_approval')
+    })
+
     it('does not detect "Do you want to" without a tool verb', () => {
       const result = parser.parse('Do you want to continue with the next step?')
       expect(result?.status).not.toBe('awaiting_approval')

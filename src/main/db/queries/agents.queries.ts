@@ -143,7 +143,8 @@ export function insertAgent(
     updatedAt: now,
     color,
     executionMode: agent.executionMode ?? 'native',
-    voiceMode
+    voiceMode,
+    telegramNotify: false
   }
 }
 

@@ -147,23 +147,27 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   const routingResult = routeNotification(triageEvent, getNotificationConfig())
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
-  // One-shot task completion: agent with taskDescription goes busy→locked (returned to prompt)
-  // Triage gives locked 'low' priority which doesn't reach telegram layer, so send directly
-  // Only fire on first completion (before user sends manual follow-up input)
+  // Telegram notifications are per-agent: only agents with telegramNotify send to Telegram.
+  // Agents with telegramNotify report their own completion via the send_telegram MCP tool,
+  // so the system only sends approval requests (for non-send_telegram tools) and error/failure.
   const managed = agents.get(agent.id)
-  const isOneShotDone = agent.status === 'locked'
-    && previousStatus === 'busy'
-    && Boolean(agent.taskDescription)
-    && managed !== undefined && !managed.hasManualFollowUp
+  const agentHasTelegram = managed?.state.telegramNotify === true
 
-  if ((routingResult.layers.includes('telegram') || isOneShotDone) && _telegramNotifier) {
+  if (agentHasTelegram && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
-      completed: 'completed',
       error: 'failed',
       looping: 'failed',
       awaiting_approval: 'awaiting_approval',
     }
-    const payloadType = isOneShotDone ? 'completed' : STATUS_TO_PAYLOAD[agent.status]
+    let payloadType: string | undefined = STATUS_TO_PAYLOAD[agent.status]
+    // Skip circular Telegram notification: don't ask "approve send_telegram?" via Telegram
+    if (payloadType === 'awaiting_approval') {
+      const buf = managed.cleanTextBuffer || ''
+      if (buf.includes('send_telegram')) {
+        log.debug('Skipping Telegram approval notification for send_telegram tool (circular)', { id: agent.id })
+        payloadType = undefined
+      }
+    }
     if (payloadType) {
       const db = getDb()
       const prefs = getTelegramPrefs(db)
@@ -677,6 +681,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const modelFlag = safeModelName ? ` --model '${safeModelName}'` : ''
   const effortFlag = agentState.effortLevel ? ` --effort ${agentState.effortLevel}` : ''
   const permFlag = options.skipPermissions ? ' --dangerously-skip-permissions' : ''
+  // Auto-allow send_telegram MCP tool when telegramNotify is enabled so agent can
+  // report without being blocked by an approval prompt the user can't reach remotely.
+  const telegramToolFlag = agentState.telegramNotify ? " --allowedTools 'mcp__agenthub-telegram__send_telegram'" : ''
 
   const repoName = options.cwd.split('/').pop() ?? options.cwd
   const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName)
@@ -729,13 +736,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${mcpFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}\n`
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
