@@ -23,6 +23,7 @@ export interface TelegramQueueProcessorDeps {
 export class TelegramQueueProcessor {
   private readonly deps: TelegramQueueProcessorDeps
   private retryTimer: ReturnType<typeof setInterval> | null = null
+  private lastAttemptTimes = new Map<string, number>()
 
   constructor(deps: TelegramQueueProcessorDeps) {
     this.deps = deps
@@ -63,6 +64,7 @@ export class TelegramQueueProcessor {
       clearInterval(this.retryTimer)
       this.retryTimer = null
     }
+    this.lastAttemptTimes.clear()
   }
 
   getStats(agentId: string): TelegramNotificationStats {
@@ -79,19 +81,22 @@ export class TelegramQueueProcessor {
       // Exponential backoff: skip if too soon since last attempt
       if (row.attempts > 0) {
         const backoffMs = Math.pow(2, row.attempts) * 1000
-        const lastAttemptAt = new Date(row.created_at).getTime()
-        if (Date.now() - lastAttemptAt < backoffMs) continue
+        const lastAttemptAt = this.lastAttemptTimes.get(row.id) ?? 0
+        if (lastAttemptAt > 0 && Date.now() - lastAttemptAt < backoffMs) continue
       }
 
       try {
         const payload = JSON.parse(row.payload_json) as TelegramNotificationPayload
         this.deps.notify(payload)
         markSent(this.deps.db, row.id)
+        this.lastAttemptTimes.delete(row.id)
         this.deps.logInfo('telegram notification retry succeeded', { id: row.id })
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
+        this.lastAttemptTimes.set(row.id, Date.now())
         if (row.attempts + 1 >= 5) {
           markExpired(this.deps.db, row.id)
+          this.lastAttemptTimes.delete(row.id)
           this.deps.logError('telegram notification expired after 5 attempts', {
             id: row.id,
             agentId: row.agent_id,
