@@ -19,7 +19,13 @@ cp "$PACKAGE_DIR/criteria.md" "$DEST/"
 cp "$PACKAGE_DIR/token-audit.sh" "$DEST/"
 cp "$PACKAGE_DIR/test-scenarios.md" "$DEST/"
 chmod +x "$DEST/token-audit.sh"
-echo "  [OK] Package files copied to $DEST"
+
+# Copy profiles
+mkdir -p "$DEST/profiles"
+if [[ -d "$PACKAGE_DIR/profiles" ]]; then
+  cp "$PACKAGE_DIR/profiles/"*.conf "$DEST/profiles/" 2>/dev/null || true
+fi
+echo "  [OK] Package files + profiles copied to $DEST"
 
 # 2. Create human/ folder
 mkdir -p "$TARGET/human"
