@@ -155,13 +155,15 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   const managed = agents.get(agent.id)
   const agentHasTelegram = managed?.state.telegramNotify === true
 
-  // One-shot completion for agents toggled on mid-session (no prompt suffix)
+  // One-shot completion for agents toggled on mid-session (no prompt suffix).
+  // These agents can't self-notify via MCP tool, so the system must detect
+  // busy→locked transitions and send the notification. hasManualFollowUp is
+  // intentionally NOT checked here — the user sending input is expected
+  // (they're giving the agent work), not a signal to suppress notifications.
   const isOneShotDone = agentHasTelegram
     && managed !== undefined && !managed.telegramNotifyAtSpawn
     && agent.status === 'locked'
     && previousStatus === 'busy'
-    && Boolean(agent.taskDescription)
-    && !managed.hasManualFollowUp
 
   if (agentHasTelegram && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
