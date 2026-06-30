@@ -28,13 +28,11 @@ export function insertNotification(
   payload: TelegramNotificationPayload
 ): string {
   const id = randomUUID()
-  const now = new Date().toISOString()
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
   db.prepare(
     `INSERT INTO telegram_notifications
        (id, agent_id, agent_name, repo, type, payload_json, status, attempts, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'queued', 0, ?, ?)`
-  ).run(id, payload.agentId, payload.agentName, payload.repo, payload.type, JSON.stringify(payload), now, expiresAt)
+     VALUES (?, ?, ?, ?, ?, ?, 'queued', 0, datetime('now'), datetime('now', '+30 minutes'))`
+  ).run(id, payload.agentId, payload.agentName, payload.repo, payload.type, JSON.stringify(payload))
   return id
 }
 
