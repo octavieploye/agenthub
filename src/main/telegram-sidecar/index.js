@@ -345,6 +345,12 @@ async function handleCallback(cb) {
   } else if (data === 'dismiss') {
     // no-op, just clear the buttons by editing
     await editMessageText(chatId, msgId, cb.message.text + '\n\n(dismissed)')
+  } else if (data.startsWith('reply:')) {
+    const parts = data.split(':')
+    const agentId = parts[1]
+    const key = parts.slice(2).join(':')
+    sendToParent({ type: 'command', command: 'send_task', agentId, message: key })
+    await editMessageText(chatId, msgId, cb.message.text + `\n\n\u2705 Sent "${key}"`)
   } else if (data.startsWith('pick_agent:')) {
     const [, agentId, ...msgParts] = data.split(':')
     const message = msgParts.join(':')
@@ -379,6 +385,39 @@ async function handleCallback(cb) {
     sendToParent({ type: 'command', command: 'get_status' })
     await sendMessage(chatId, 'Checking\u2026')
   }
+}
+
+// ── Choice detection ──────────────────────────────────────────────────────────
+function extractChoices(text) {
+  if (!text) return null
+  const patterns = [
+    /^\s*(\d+)[.)]\s+(.+)$/gm,                           // 1. Option or 1) Option
+    /^\s*\(?([A-Za-z])[.)]\s+(.+)$/gm,                   // A. Option or (A) Option
+    /^\s*\*\*(?:Option\s+)?([A-Za-z\d]+)[.:]\*\*\s*(.+)$/gm,  // **Option A:** desc
+  ]
+  for (const pat of patterns) {
+    const matches = [...text.matchAll(pat)]
+    if (matches.length >= 2 && matches.length <= 6) {
+      return matches.map(m => ({ key: m[1], label: m[2].trim() }))
+    }
+  }
+  return null
+}
+
+function buildChoiceMarkup(choices, agentId) {
+  const buttons = choices.map(c => ({
+    text: String(c.key),
+    callback_data: `reply:${agentId}:${c.key}`
+  }))
+  const rows = []
+  for (let i = 0; i < buttons.length; i += 4) {
+    rows.push(buttons.slice(i, i + 4))
+  }
+  return { inline_keyboard: rows }
+}
+
+function formatChoiceBody(choices) {
+  return choices.map(c => `${c.key} · ${c.label}`).join('\n')
 }
 
 // ── Notification sender ────────────────────────────────────────────────────────
@@ -432,8 +471,27 @@ async function sendNotification(payload) {
     const q = (payload.question || '').length > 200
       ? (payload.question || '').slice(0, 197) + '\u2026'
       : (payload.question || '')
-    text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to answer`
-    replyMarkup = { force_reply: true, selective: true }
+    const choices = extractChoices(q)
+    if (choices) {
+      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      replyMarkup = buildChoiceMarkup(choices, payload.agentId)
+    } else {
+      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to answer`
+      replyMarkup = { force_reply: true, selective: true }
+    }
+
+  } else if (payload.type === 'silent_lock') {
+    const body = (payload.message || payload.summary || '').length > 500
+      ? (payload.message || payload.summary || '').slice(0, 497) + '\u2026'
+      : (payload.message || payload.summary || '')
+    const choices = extractChoices(body)
+    if (choices) {
+      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      replyMarkup = buildChoiceMarkup(choices, payload.agentId)
+    } else {
+      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${body}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to respond`
+      replyMarkup = { force_reply: true, selective: true }
+    }
 
   } else if (payload.type === 'agent_message') {
     const format = payload.format || 'status'
@@ -443,10 +501,16 @@ async function sendNotification(payload) {
     const msg = (payload.message || '').length > 4000
       ? (payload.message || '').slice(0, 3997) + '\u2026'
       : (payload.message || '')
-    text = `${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
-    if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
-    if (format === 'question') {
-      replyMarkup = { force_reply: true, selective: true }
+    const choices = format === 'question' ? extractChoices(msg) : null
+    if (choices) {
+      text = `${emoji} ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      replyMarkup = buildChoiceMarkup(choices, payload.agentId)
+    } else {
+      text = `${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
+      if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
+      if (format === 'question') {
+        replyMarkup = { force_reply: true, selective: true }
+      }
     }
   }
 
