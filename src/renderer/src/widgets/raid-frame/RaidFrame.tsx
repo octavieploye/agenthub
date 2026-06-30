@@ -22,6 +22,7 @@ interface RaidFrameProps {
   onSelect: (agentId: string) => void
   onContextMenu: (agentId: string, position: { x: number; y: number }) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
+  onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
 }
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
@@ -36,7 +37,7 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   tray_running: 'bg-success/50'
 }
 
-function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode }: RaidFrameProps): React.JSX.Element {
+function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: RaidFrameProps): React.JSX.Element {
   const repoLabel = agent.cwd.split('/').pop() ?? 'unknown'
   const isTicking = agent.status === 'busy' || agent.status === 'locked'
   const now = useNow(isTicking ? 1000 : 0)
@@ -86,6 +87,19 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode }: RaidFr
             }}
           >
             {VOICE_MODE_ICON[agent.voiceMode ?? 'off']}
+          </button>
+        )}
+        {onToggleTelegramNotify && (
+          <button
+            data-testid="telegram-notify-toggle"
+            title={agent.telegramNotify ? 'Telegram on' : 'Telegram off'}
+            className={`text-[10px] ${agent.telegramNotify ? 'opacity-100 text-info' : 'opacity-50'} hover:opacity-100 transition-opacity leading-none`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleTelegramNotify(agent.id, !agent.telegramNotify)
+            }}
+          >
+            ✈
           </button>
         )}
       </div>

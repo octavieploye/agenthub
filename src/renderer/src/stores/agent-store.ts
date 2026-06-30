@@ -14,6 +14,7 @@ interface AgentStore {
   renameAgent: (id: string, name: string) => void
   updateModel: (id: string, model: string, provider: ModelProvider, effortLevel: EffortLevel) => void
   updateVoiceMode: (id: string, mode: VoiceMode) => void
+  updateTelegramNotify: (id: string, enabled: boolean) => void
   hydrateAgents: (agents: AgentState[]) => void
 }
 
@@ -97,6 +98,15 @@ export const useAgentStore = create<AgentStore>((set) => ({
       if (!agent) return state
       const next = new Map(state.agents)
       next.set(id, { ...agent, voiceMode: mode, updatedAt: new Date().toISOString() })
+      return { agents: next }
+    }),
+
+  updateTelegramNotify: (id, enabled) =>
+    set((state) => {
+      const agent = state.agents.get(id)
+      if (!agent) return state
+      const next = new Map(state.agents)
+      next.set(id, { ...agent, telegramNotify: enabled, updatedAt: new Date().toISOString() })
       return { agents: next }
     }),
 

@@ -16,7 +16,8 @@ export const IPC_CHANNELS = {
     DETACH_TERMINAL: 'agents:detach-terminal',
     GET_PROXY_PATH: 'agents:get-proxy-path',
     RESPAWN: 'agents:respawn',
-    UPDATE_VOICE_MODE: 'agents:update-voice-mode'
+    UPDATE_VOICE_MODE: 'agents:update-voice-mode',
+    UPDATE_TELEGRAM_NOTIFY: 'agents:update-telegram-notify'
   },
   MODELS: {
     LIST_ALL: 'models:list-all',

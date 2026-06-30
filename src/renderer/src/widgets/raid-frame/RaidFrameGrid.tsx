@@ -7,9 +7,10 @@ interface RaidFrameGridProps {
   onSelectAgent?: (agentId: string) => void
   onContextMenu?: (agentId: string, position: { x: number; y: number }) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
+  onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
 }
 
-function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode }: RaidFrameGridProps): React.JSX.Element {
+function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: RaidFrameGridProps): React.JSX.Element {
   const statusFilter = useViewStore((s) => s.statusFilter)
 
   const filtered = statusFilter
@@ -39,6 +40,7 @@ function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode
           onSelect={onSelectAgent ?? (() => {})}
           onContextMenu={onContextMenu ?? (() => {})}
           onToggleVoiceMode={onToggleVoiceMode}
+          onToggleTelegramNotify={onToggleTelegramNotify}
         />
       ))}
     </div>

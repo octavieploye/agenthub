@@ -20,7 +20,8 @@ import {
   stopPtyProxy,
   getPtyProxyPath,
   respawnAgent,
-  updateAgentVoiceMode
+  updateAgentVoiceMode,
+  updateAgentTelegramNotify
 } from '../services/agent-manager'
 import { ModelProviderSchema, EffortLevelSchema } from '../../shared/schemas/agent.schemas'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
@@ -187,6 +188,22 @@ export function registerAgentHandlers(): void {
         return success(undefined)
       } catch (err) {
         return error('UPDATE_VOICE_MODE_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.UPDATE_TELEGRAM_NOTIFY,
+    async (_event, agentId: unknown, enabled: unknown): Promise<IpcResponse<void>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const enabledValidation = validateInput(z.boolean(), enabled)
+        if (!enabledValidation.valid) return enabledValidation.response
+        updateAgentTelegramNotify(idValidation.data, enabledValidation.data)
+        return success(undefined)
+      } catch (err) {
+        return error('UPDATE_TELEGRAM_NOTIFY_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )

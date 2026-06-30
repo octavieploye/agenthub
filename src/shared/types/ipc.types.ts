@@ -32,6 +32,7 @@ export interface AgentHubBridge {
     getProxyPath: (agentId: string) => Promise<IpcResponse<string | null>>
     respawn: (agentId: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
     updateVoiceMode: (agentId: string, mode: string) => Promise<IpcResponse<void>>
+    updateTelegramNotify: (agentId: string, enabled: boolean) => Promise<IpcResponse<void>>
   }
   models: {
     listAll: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>

@@ -20,6 +20,7 @@ interface AgentSidebarProps {
   onSpawnAgent: () => void
   onOpenGuardrails?: (agentId: string) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
+  onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -94,7 +95,8 @@ function AgentCard({
   onPauseAgent,
   onResumeAgent,
   onOpenGuardrails,
-  onToggleVoiceMode
+  onToggleVoiceMode,
+  onToggleTelegramNotify
 }: {
   agent: AgentState
   isActive: boolean
@@ -104,6 +106,7 @@ function AgentCard({
   onResumeAgent: (id: string) => void
   onOpenGuardrails?: (agentId: string) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
+  onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
 }): React.JSX.Element {
   const branchName = useBranchName(agent.cwd)
   const isRunning = agent.status === 'busy' || agent.status === 'locked'
@@ -439,6 +442,19 @@ function AgentCard({
               {VOICE_MODE_ICON[agent.voiceMode ?? 'off']}
             </button>
           )}
+          {onToggleTelegramNotify && (
+            <button
+              data-testid="telegram-notify-toggle"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleTelegramNotify(agent.id, !agent.telegramNotify)
+              }}
+              className={`btn btn-xs rounded-full ${agent.telegramNotify ? 'bg-info/30 text-info' : 'bg-base-content/10 text-base-content/60'} hover:bg-base-content/20`}
+              title={agent.telegramNotify ? 'Telegram notifications on' : 'Telegram notifications off'}
+            >
+              {agent.telegramNotify ? '✈' : '✈'}
+            </button>
+          )}
         </div>
       )}
 
@@ -469,10 +485,11 @@ function AgentSidebar({
   onResumeAgent,
   onSpawnAgent,
   onOpenGuardrails,
-  onToggleVoiceMode
+  onToggleVoiceMode,
+  onToggleTelegramNotify
 }: AgentSidebarProps): React.JSX.Element {
   return (
-    <aside className="w-56 shrink-0 panel-glass border-r border-base-content/10 flex flex-col h-full">
+    <aside className="w-64 shrink-0 panel-glass border-r border-base-content/10 flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10">
         <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
           Agents
@@ -504,6 +521,7 @@ function AgentSidebar({
             onResumeAgent={onResumeAgent}
             onOpenGuardrails={onOpenGuardrails}
             onToggleVoiceMode={onToggleVoiceMode}
+            onToggleTelegramNotify={onToggleTelegramNotify}
           />
         ))}
       </div>

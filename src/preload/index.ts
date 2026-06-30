@@ -33,7 +33,9 @@ const agentHubBridge = {
     getProxyPath: (agentId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_PROXY_PATH, agentId),
     updateVoiceMode: (agentId: string, mode: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_VOICE_MODE, agentId, mode)
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_VOICE_MODE, agentId, mode),
+    updateTelegramNotify: (agentId: string, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS.UPDATE_TELEGRAM_NOTIFY, agentId, enabled)
   },
   models: {
     listAll: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.LIST_ALL),

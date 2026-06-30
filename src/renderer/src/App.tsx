@@ -94,7 +94,7 @@ function KanbanBreakoutApp(): React.JSX.Element {
 }
 
 function AppMain(): React.JSX.Element {
-  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent, updateVoiceMode } =
+  const { agents, activeAgentId, setActiveAgent, addAgent, updateStatus, removeAgent, updateVoiceMode, updateTelegramNotify } =
     useAgentStore()
   const viewMode = useViewStore((s) => s.viewMode)
   const selectedRepoId = useViewStore((s) => s.selectedRepoId)
@@ -188,6 +188,14 @@ function AppMain(): React.JSX.Element {
       await window.agentHub.agents.updateVoiceMode(agentId, mode).catch(console.error)
     },
     [updateVoiceMode]
+  )
+
+  const handleToggleTelegramNotify = useCallback(
+    async (agentId: string, enabled: boolean) => {
+      updateTelegramNotify(agentId, enabled)
+      await window.agentHub.agents.updateTelegramNotify(agentId, enabled).catch(console.error)
+    },
+    [updateTelegramNotify]
   )
 
   // Ref to imperative handle on RepoSwitcher (for Cmd+E)
@@ -1033,6 +1041,7 @@ function AppMain(): React.JSX.Element {
             onSpawnAgent={() => setSpawnDialogOpen(true)}
             onOpenGuardrails={handleOpenGuardrails}
             onToggleVoiceMode={handleToggleVoiceMode}
+            onToggleTelegramNotify={handleToggleTelegramNotify}
           />
         )}
 

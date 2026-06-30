@@ -74,6 +74,8 @@ interface ManagedAgent {
   telegramSendTimer: ReturnType<typeof setTimeout> | null
   /** Headless xterm terminal for clean text extraction (Telegram, TTS) */
   headlessTerminal: HeadlessTerminalBuffer
+  /** True if telegramNotify was enabled at spawn time (agent has prompt suffix). */
+  telegramNotifyAtSpawn: boolean
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -148,10 +150,18 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   emitToAllRenderers(IPC_EVENTS.NOTIFICATIONS.TRIAGED, routingResult)
 
   // Telegram notifications are per-agent: only agents with telegramNotify send to Telegram.
-  // Agents with telegramNotify report their own completion via the send_telegram MCP tool,
-  // so the system only sends approval requests (for non-send_telegram tools) and error/failure.
+  // Agents spawned with telegramNotify report completion via the send_telegram MCP tool.
+  // Agents toggled on mid-session don't have the prompt suffix, so use one-shot detection.
   const managed = agents.get(agent.id)
   const agentHasTelegram = managed?.state.telegramNotify === true
+
+  // One-shot completion for agents toggled on mid-session (no prompt suffix)
+  const isOneShotDone = agentHasTelegram
+    && managed !== undefined && !managed.telegramNotifyAtSpawn
+    && agent.status === 'locked'
+    && previousStatus === 'busy'
+    && Boolean(agent.taskDescription)
+    && !managed.hasManualFollowUp
 
   if (agentHasTelegram && _telegramNotifier) {
     const STATUS_TO_PAYLOAD: Partial<Record<string, TelegramNotificationPayload['type']>> = {
@@ -159,7 +169,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       looping: 'failed',
       awaiting_approval: 'awaiting_approval',
     }
-    let payloadType: string | undefined = STATUS_TO_PAYLOAD[agent.status]
+    let payloadType: string | undefined = isOneShotDone ? 'completed' : STATUS_TO_PAYLOAD[agent.status]
     // Skip circular Telegram notification: don't ask "approve send_telegram?" via Telegram
     if (payloadType === 'awaiting_approval') {
       const buf = managed.cleanTextBuffer || ''
@@ -651,7 +661,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     hasManualFollowUp: false,
     lastFilteredProse: '',
     telegramSendTimer: null,
-    headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30)
+    headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
+    telegramNotifyAtSpawn: agentState.telegramNotify
   })
   emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
@@ -982,6 +993,14 @@ export function updateAgentVoiceMode(agentId: string, mode: import('../../shared
   }
   dbUpdateAgentVoiceMode(getDb(), agentId, mode)
   log.debug('Agent voice mode updated', { id: agentId, mode })
+}
+
+export function updateAgentTelegramNotify(agentId: string, enabled: boolean): void {
+  const managed = agents.get(agentId)
+  if (managed) {
+    managed.state.telegramNotify = enabled
+  }
+  log.info('Agent telegramNotify toggled', { id: agentId, enabled })
 }
 
 export function updateAgentColor(agentId: string, color: string): void {
