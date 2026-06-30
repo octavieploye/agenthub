@@ -70,8 +70,10 @@ interface ManagedAgent {
   hasManualFollowUp: boolean
   /** Last filtered LLM prose captured by TTS — used by TTS only. */
   lastFilteredProse: string
-  /** Delayed Telegram status notification — 3s debounce for rapid status changes. */
-  telegramSendTimer: ReturnType<typeof setTimeout> | null
+  /** Timer for silent lock detection — fires 15s after agent enters locked without calling send_telegram. */
+  silentLockTimer: ReturnType<typeof setTimeout> | null
+  /** Timestamp of last MCP send_telegram call for this agent. */
+  lastMcpTelegramAt: number
   /** Headless xterm terminal for clean text extraction (Telegram, TTS) */
   headlessTerminal: HeadlessTerminalBuffer
   /** True if telegramNotify was enabled at spawn time (agent has prompt suffix). */
@@ -119,9 +121,9 @@ export function setTelegramAgentSync(fn: TelegramAgentSync | null): void {
   _telegramAgentSync = fn
 }
 
-// Stub for Task 4 — silent lock detection will fill this in
-export function setLastMcpTelegramAt(_agentId: string): void {
-  // Will track last MCP telegram timestamp per agent in Task 4
+export function setLastMcpTelegramAt(agentId: string): void {
+  const managed = agents.get(agentId)
+  if (managed) managed.lastMcpTelegramAt = Date.now()
 }
 
 function getNotificationConfig(): NotificationRouterConfig {
@@ -206,27 +208,63 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           timestamp: new Date().toISOString(),
         }
 
-        // Cancel any pending Telegram send for this agent (debounce rapid status changes)
-        const existingTimer = managed?.telegramSendTimer
-        if (existingTimer) clearTimeout(existingTimer)
-
-        if (managed) {
-          managed.telegramSendTimer = setTimeout(() => {
-            if (managed) managed.telegramSendTimer = null
-            // Status-only notification — agent sends content via MCP tool
-            const latestOutput = managed?.cleanTextBuffer
-              ? managed.cleanTextBuffer.slice(-200).trim()
-              : ''
-            payload.summary = latestOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
-            if (_telegramNotifier) _telegramNotifier(payload)
-          }, 3000)
-        }
+        if (_telegramNotifier) _telegramNotifier(payload)
       }
     }
   }
 
   // Keep sidecar agent cache in sync on every status change
   _telegramAgentSync?.()
+}
+
+function startSilentLockTimer(agentId: string): void {
+  const managed = agents.get(agentId)
+  if (!managed) return
+
+  // Clear existing timer
+  if (managed.silentLockTimer) {
+    clearTimeout(managed.silentLockTimer)
+    managed.silentLockTimer = null
+  }
+
+  // Only for agents with telegram enabled
+  if (!managed.state.telegramNotify) return
+
+  managed.silentLockTimer = setTimeout(() => {
+    managed.silentLockTimer = null
+    const m = agents.get(agentId)
+    if (!m) return
+
+    // Check: still locked, no MCP send_telegram in last 15s, telegram enabled
+    if (m.state.status !== 'locked') return
+    if (m.lastMcpTelegramAt > Date.now() - 15_000) return
+    if (!m.state.telegramNotify) return
+
+    const recentOutput = m.cleanTextBuffer
+      ? m.cleanTextBuffer.slice(-500).trim()
+      : ''
+    if (!recentOutput) return
+
+    const payload: TelegramNotificationPayload = {
+      type: 'silent_lock',
+      agentId: m.state.id,
+      agentName: m.state.name,
+      repo: m.state.cwd.split('/').pop() ?? m.state.cwd,
+      summary: recentOutput.slice(0, 200),
+      message: recentOutput,
+      timestamp: new Date().toISOString(),
+    }
+
+    if (_telegramNotifier) _telegramNotifier(payload)
+  }, 15_000)
+}
+
+function cancelSilentLockTimer(agentId: string): void {
+  const managed = agents.get(agentId)
+  if (managed?.silentLockTimer) {
+    clearTimeout(managed.silentLockTimer)
+    managed.silentLockTimer = null
+  }
 }
 
 function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus: string): void {
@@ -502,6 +540,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             details: { from: previousStatus, to: newStatus, confidence: parsed!.confidence }
           })
           emitTriageResult(current.state, previousStatus)
+          // Silent lock detection: start timer when agent enters locked
+          if (newStatus === 'locked') {
+            startSilentLockTimer(agentState.id)
+          } else {
+            cancelSilentLockTimer(agentState.id)
+          }
           syncKanbanCard(db, agentState.id, newStatus)
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }
@@ -568,10 +612,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
     // Flush remaining IPC batch so the last ~16ms of output is not lost
     const managed = agents.get(agentState.id)
-    if (managed?.telegramSendTimer) {
-      clearTimeout(managed.telegramSendTimer)
-      managed.telegramSendTimer = null
-    }
+    cancelSilentLockTimer(agentState.id)
     if (managed) {
       if (managed.ipcBatchTimer) {
         clearTimeout(managed.ipcBatchTimer)
@@ -672,7 +713,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     hasSentInput: false,
     hasManualFollowUp: false,
     lastFilteredProse: '',
-    telegramSendTimer: null,
+    silentLockTimer: null,
+    lastMcpTelegramAt: 0,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify
   })
@@ -862,10 +904,7 @@ export function killAgent(agentId: string): void {
     // If the onExit handler hasn't already cleaned up, do it now
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
-      if (mgd.telegramSendTimer) {
-        clearTimeout(mgd.telegramSendTimer)
-        mgd.telegramSendTimer = null
-      }
+      cancelSilentLockTimer(agentId)
       const previousStatusOnKill = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -889,10 +928,7 @@ export function killAgent(agentId: string): void {
     } catch { /* already dead */ }
     if (agents.has(agentId)) {
       const mgd = agents.get(agentId)!
-      if (mgd.telegramSendTimer) {
-        clearTimeout(mgd.telegramSendTimer)
-        mgd.telegramSendTimer = null
-      }
+      cancelSilentLockTimer(agentId)
       const previousStatusOnKillCatch = mgd.state.status
       const db = getDb()
       updateAgentStatus(db, agentId, 'interrupted', 'confirmed')
@@ -1084,7 +1120,7 @@ export function cleanupAllAgents(): void {
     try {
       if (managed.flushTimer) clearTimeout(managed.flushTimer)
       if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
-      if (managed.telegramSendTimer) clearTimeout(managed.telegramSendTimer)
+      if (managed.silentLockTimer) clearTimeout(managed.silentLockTimer)
       flushOutputBuffer(id)
       cleanupMcpConfig(id)
       managed.headlessTerminal.dispose()

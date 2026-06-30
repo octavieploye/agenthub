@@ -8,7 +8,7 @@
  */
 
 export interface TelegramNotificationPayload {
-  type: 'completed' | 'failed' | 'awaiting_approval' | 'needs_input' | 'agent_message'
+  type: 'completed' | 'failed' | 'awaiting_approval' | 'needs_input' | 'agent_message' | 'silent_lock'
   agentId: string
   agentName: string
   repo: string

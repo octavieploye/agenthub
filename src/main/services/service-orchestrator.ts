@@ -384,17 +384,6 @@ export function initializeServices(db: Database.Database): void {
       }))
       telegramSidecarService?.sendAgentList(agents)
 
-      // Start socket server for MCP tool connections
-      if (!telegramQueueProcessor) {
-        telegramQueueProcessor = new TelegramQueueProcessor({
-          db,
-          notify: (payload) => telegramSidecarService?.notify(payload),
-          logInfo: (msg, meta) => log.info(msg, meta),
-          logError: (msg, meta) => log.error(msg, meta),
-        })
-        telegramQueueProcessor.start()
-      }
-
       if (!telegramSocketServer) {
         telegramSocketServer = new TelegramSocketServer({
           notify: (payload) => telegramSidecarService?.notify(payload),
@@ -408,6 +397,15 @@ export function initializeServices(db: Database.Database): void {
       telegramSocketServer.start(sockPath)
     },
   })
+
+  // Queue processor only needs db — construct before setTelegramNotifier so enqueue works immediately
+  telegramQueueProcessor = new TelegramQueueProcessor({
+    db,
+    notify: (payload) => telegramSidecarService?.notify(payload),
+    logInfo: (msg, meta) => log.info(msg, meta),
+    logError: (msg, meta) => log.error(msg, meta),
+  })
+  telegramQueueProcessor.start()
 
   // Inject telegram notifier into agent-manager (avoids circular import)
   setTelegramNotifier((payload) => {
