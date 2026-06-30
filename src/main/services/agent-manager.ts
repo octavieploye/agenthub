@@ -743,7 +743,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
       // Append Telegram instruction when telegramNotify is enabled
       const telegramSuffix = agentState.telegramNotify
-        ? '. When done, use the send_telegram tool to send me a short summary of what you did (bullet points). If you need approval or have a question, also send_telegram.'
+        ? '. Telegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
         : ''
       // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
