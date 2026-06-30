@@ -394,14 +394,14 @@ async function sendNotification(payload) {
     const summary = payload.summary.length > 200
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
-    text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\nProject: ${payload.repo}\nFinished at: ${time}`
+    text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
     replyMarkup = { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
 
   } else if (payload.type === 'failed') {
     const summary = payload.summary.length > 200
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
-    text = `\u274c Failed \u2014 ${payload.agentName}\n\nSomething went wrong and the agent stopped.\n\nLast message: "${summary}"\n\nProject: ${payload.repo}\nTime: ${time}`
+    text = `\u274c Failed \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
     replyMarkup = {
       inline_keyboard: [[
         { text: 'Retry', callback_data: `retry:${payload.agentId}` },
@@ -411,9 +411,9 @@ async function sendNotification(payload) {
 
   } else if (payload.type === 'awaiting_approval') {
     const action = (payload.proposedAction || '').length > 300
-      ? 'The full details are in AgentHub. Here\'s a summary:\n' + (payload.proposedAction || '').slice(0, 297) + '\u2026'
+      ? (payload.proposedAction || '').slice(0, 297) + '\u2026'
       : (payload.proposedAction || '')
-    text = `\u23f8 Waiting for you \u2014 ${payload.agentName}\n\nThe agent wants to do something and needs your go-ahead:\n\n"${action}"\n\nProject: ${payload.repo}`
+    text = `\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}`
     const requestId = payload.requestId || payload.agentId
     replyMarkup = {
       inline_keyboard: [[
@@ -424,7 +424,7 @@ async function sendNotification(payload) {
     // Set approval timeout (30 min)
     const timerId = setTimeout(async () => {
       pendingApprovals.delete(requestId)
-      await sendMessage(allowedChatId, `\u23f0 This approval window has closed.\n\nThe agent for ${payload.agentName} has been paused. Go to AgentHub to see its status and decide what to do next.`)
+      await sendMessage(allowedChatId, `\u23f0 Approval expired \u2014 ${payload.agentName}\n\nGo to AgentHub to see status and decide what to do next.`)
     }, 30 * 60 * 1000)
     pendingApprovals.set(requestId, { chatId: allowedChatId, timerId })
 
@@ -432,7 +432,7 @@ async function sendNotification(payload) {
     const q = (payload.question || '').length > 200
       ? (payload.question || '').slice(0, 197) + '\u2026'
       : (payload.question || '')
-    text = `\ud83d\udcac Question from ${payload.agentName}\n\n"${q}"\n\nProject: ${payload.repo}\n\nReply directly to this message to send your answer.`
+    text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to answer`
     replyMarkup = { force_reply: true, selective: true }
 
   } else if (payload.type === 'agent_message') {
@@ -443,7 +443,7 @@ async function sendNotification(payload) {
     const msg = (payload.message || '').length > 4000
       ? (payload.message || '').slice(0, 3997) + '\u2026'
       : (payload.message || '')
-    text = `${emoji} ${payload.agentName}\n\n${msg}\n\nProject: ${payload.repo}`
+    text = `${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
     if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
     if (format === 'question') {
       replyMarkup = { force_reply: true, selective: true }
