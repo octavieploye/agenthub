@@ -402,7 +402,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     ...providerEnv,
-    ...(options.envOverrides ?? {})
+    ...(options.envOverrides ?? {}),
+    // Point zsh dotfile lookup to an empty dir so oh-my-zsh and user .zshrc
+    // don't pollute the terminal before Claude CLI appears.
+    // /etc/zprofile still runs, keeping macOS PATH (path_helper) intact.
+    ZDOTDIR: tmpdir()
   }
   // Remove CLAUDECODE env var so spawned claude CLI doesn't think it's nested
   delete env.CLAUDECODE
