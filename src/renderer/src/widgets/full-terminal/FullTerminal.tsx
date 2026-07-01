@@ -11,6 +11,8 @@ import {
   getTerminal,
   getSearchAddon,
   getSerializeAddon,
+  hasReceivedData,
+  onClaudeReady,
 } from './terminal-manager'
 import TerminalContextMenu from './TerminalContextMenu'
 
@@ -25,6 +27,22 @@ interface FullTerminalProps {
 
 function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Boot overlay: covers the terminal with the xterm background until Claude's welcome box
+  // appears, hiding the brief shell prompt / clear sequence on first launch.
+  // Skipped for agents that already have data (re-selecting an existing agent).
+  const [bootOverlay, setBootOverlay] = useState(() => !hasReceivedData(agentId))
+
+  useEffect(() => {
+    if (!bootOverlay) return
+    // Safety net: always remove after 8 s in case detection misses
+    const safetyTimer = setTimeout(() => setBootOverlay(false), 8000)
+    const unregister = onClaudeReady(agentId, () => setBootOverlay(false))
+    return () => {
+      clearTimeout(safetyTimer)
+      unregister()
+    }
+  }, [agentId]) // intentionally omits bootOverlay — runs once per agent
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
@@ -238,6 +256,9 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
         className="flex-1 min-h-0"
         style={{ padding: '4px' }}
       />
+      {bootOverlay && (
+        <div className="absolute inset-0" style={{ background: '#1e1e2e', zIndex: 5 }} />
+      )}
     </div>
   )
 }

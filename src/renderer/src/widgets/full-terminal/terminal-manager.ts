@@ -53,12 +53,27 @@ const terminals = new Map<string, ManagedTerminal>()
 // Pre-open buffer: catches IPC data for agents that don't have a terminal yet
 const preOpenBuffers = new Map<string, string[]>()
 
+// Tracks agents that have received at least one IPC write — used to skip boot overlay for existing agents
+const writtenAgents = new Set<string>()
+
+// Per-agent callbacks fired once Claude's welcome box is detected in the stream
+const claudeReadyCallbacks = new Map<string, () => void>()
+
 // Global IPC subscription — routes data to the correct terminal
 let ipcUnsubscribe: (() => void) | null = null
 
 function ensureIpcSubscription(): void {
   if (ipcUnsubscribe) return
   ipcUnsubscribe = window.agentHub.on.agentOutput((agentId: string, data: string) => {
+    writtenAgents.add(agentId)
+
+    // Detect Claude's welcome box (╭─── Claude Code …) and fire the ready callback once
+    const readyCb = claudeReadyCallbacks.get(agentId)
+    if (readyCb && data.includes('╭')) {
+      claudeReadyCallbacks.delete(agentId)
+      readyCb()
+    }
+
     const managed = terminals.get(agentId)
     if (managed) {
       if (managed.opened) {
@@ -301,6 +316,23 @@ export function updateTheme(): void {
 }
 
 /**
+ * Returns true if this agent has received at least one IPC data write.
+ * Used by FullTerminal to skip the boot overlay for already-running agents.
+ */
+export function hasReceivedData(agentId: string): boolean {
+  return writtenAgents.has(agentId)
+}
+
+/**
+ * Register a one-shot callback fired when Claude's welcome box (╭) is detected
+ * in the agent's output stream. Returns a cleanup function.
+ */
+export function onClaudeReady(agentId: string, cb: () => void): () => void {
+  claudeReadyCallbacks.set(agentId, cb)
+  return () => claudeReadyCallbacks.delete(agentId)
+}
+
+/**
  * Destroy terminal — call when agent is removed from the UI.
  */
 export function destroyTerminal(agentId: string): void {
@@ -312,6 +344,8 @@ export function destroyTerminal(agentId: string): void {
   managed.term.dispose()
   terminals.delete(agentId)
   preOpenBuffers.delete(agentId)
+  writtenAgents.delete(agentId)
+  claudeReadyCallbacks.delete(agentId)
 }
 
 /**

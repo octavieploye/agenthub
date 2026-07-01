@@ -140,7 +140,7 @@ function AgentDetailPanel({
             <GeneralTab agent={agent} onPause={onPause} onResume={onResume} onKill={onKill} />
           </div>
         )}
-        <div className="h-full" style={{ visibility: activeTab === 'terminal' ? 'visible' : 'hidden' }}>
+        <div className="absolute inset-0" style={{ visibility: activeTab === 'terminal' ? 'visible' : 'hidden' }}>
           <TerminalTab
             key={agent.id}
             agent={agent}
