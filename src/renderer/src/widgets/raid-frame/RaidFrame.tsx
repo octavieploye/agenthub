@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import HeartbeatWaveform from '@renderer/widgets/heartbeat-waveform/HeartbeatWaveform'
 import CooldownTimer from '@renderer/widgets/cooldown-timer/CooldownTimer'
@@ -43,6 +44,20 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
   const now = useNow(isTicking ? 1000 : 0)
   const elapsed = now - new Date(agent.createdAt).getTime()
   const remaining = Math.max(0, DEFAULT_MAX_DURATION_MS - elapsed)
+
+  const [notifQueued, setNotifQueued] = useState(0)
+
+  useEffect(() => {
+    if (!agent.telegramNotify) return
+    const check = (): void => {
+      window.agentHub.telegram.getNotificationStats(agent.id).then(stats => {
+        setNotifQueued(stats.queued)
+      }).catch(() => {})
+    }
+    check()
+    const interval = setInterval(check, 10_000)
+    return () => clearInterval(interval)
+  }, [agent.id, agent.telegramNotify])
 
   return (
     <div
@@ -101,6 +116,13 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
           >
             ✈
           </button>
+        )}
+        {notifQueued > 0 && (
+          <span
+            data-testid="telegram-notif-badge"
+            className="inline-block w-2 h-2 rounded-full bg-warning ml-1"
+            title={`${notifQueued} notification${notifQueued > 1 ? 's' : ''} pending`}
+          />
         )}
       </div>
 

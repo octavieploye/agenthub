@@ -227,6 +227,8 @@ export interface AgentHubBridge {
     getPrefs: () => Promise<import('./telegram.types').TelegramNotificationPrefs>
     setPref: (key: string, value: boolean) => Promise<{ success: boolean; error?: string }>
     sendTest: () => Promise<{ success: boolean; error?: string }>
+    getNotificationStats: (agentId: string) => Promise<{ sent: number; queued: number; failed: number }>
+    getNotifications: (agentId: string, limit?: number) => Promise<Array<{ id: string; type: string; status: string; created_at: string }>>
     onFirstContactLinked: (callback: () => void) => () => void
     onBlockedSender: (callback: (payload: unknown) => void) => () => void
     onConnectionStatusChanged: (callback: () => void) => () => void

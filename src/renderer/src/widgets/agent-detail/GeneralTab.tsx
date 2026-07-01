@@ -127,6 +127,15 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
     }
   }, [agent.id, agent.model, agent.provider, updateModel])
 
+  const [notifStats, setNotifStats] = useState<{ sent: number; queued: number; failed: number } | null>(null)
+  const [notifExpanded, setNotifExpanded] = useState(false)
+  const [notifRows, setNotifRows] = useState<Array<{ id: string; type: string; status: string; created_at: string }>>([])
+
+  useEffect(() => {
+    if (!agent.telegramNotify) return
+    window.agentHub.telegram.getNotificationStats(agent.id).then(setNotifStats).catch(() => {})
+  }, [agent.id, agent.telegramNotify, agent.status])
+
   const canPause = agent.status === 'busy' || agent.status === 'idle' || agent.status === 'locked'
   const canResume = agent.status === 'paused'
   const canKill =
@@ -404,6 +413,35 @@ function GeneralTab({ agent, onPause, onResume, onKill }: GeneralTabProps): Reac
               style={{ width: `${Math.round(agent.progress * 100)}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* Telegram notification stats */}
+      {agent.telegramNotify && notifStats && (
+        <div className="panel-glass rounded-lg p-4 space-y-2">
+          <button
+            className="text-xs text-base-content/60 hover:text-base-content transition-colors"
+            onClick={() => {
+              if (!notifExpanded) {
+                window.agentHub.telegram.getNotifications(agent.id, 10).then(setNotifRows).catch(() => {})
+              }
+              setNotifExpanded(!notifExpanded)
+            }}
+          >
+            Telegram: {notifStats.sent} sent · {notifStats.queued} queued · {notifStats.failed} failed
+          </button>
+          {notifExpanded && notifRows.length > 0 && (
+            <ul className="mt-1 text-xs text-base-content/50 space-y-0.5">
+              {notifRows.map(r => (
+                <li key={r.id}>
+                  <span className={r.status === 'sent' ? 'text-success' : r.status === 'queued' ? 'text-warning' : 'text-error'}>
+                    {r.status}
+                  </span>
+                  {' '}{r.type} — {new Date(r.created_at).toLocaleTimeString()}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
