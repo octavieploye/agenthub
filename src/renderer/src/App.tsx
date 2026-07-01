@@ -105,7 +105,7 @@ function AppMain(): React.JSX.Element {
   const fetchUsage = useUsageStore((s) => s.fetchUsage)
   const prefetchAgentData = usePrefetchAgentData()
   const { width: windowWidth } = useWindowSize()
-  const isNarrowWindow = windowWidth < 728
+  const isNarrowWindow = windowWidth < 860
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [pausedAgentAnomalies, setPausedAgentAnomalies] = useState<HealthAnomaly[]>([])
@@ -1053,7 +1053,7 @@ function AppMain(): React.JSX.Element {
             /* Raid view — 3-column layout: RepoSidebar + AgentList + DetailPanel */
             <div className="flex h-full overflow-x-auto">
               <RepoSidebar onAddRepo={() => setSpawnDialogOpen(true)} />
-              <div className="w-56 flex-shrink-0 h-full overflow-y-auto border-r border-base-content/10">
+              <div className="w-40 md:w-44 xl:w-48 2xl:w-56 flex-shrink-0 h-full overflow-y-auto border-r border-base-content/10">
                 {agentList.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-base-content/40 text-sm h-full">
                     Add a repo to get started

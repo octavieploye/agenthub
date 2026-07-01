@@ -2,8 +2,8 @@ export const APP_DEFAULTS = {
   THEME: 'mocha',
   WINDOW_WIDTH: 1400,
   WINDOW_HEIGHT: 900,
-  MIN_WIDTH: 720,
-  MIN_HEIGHT: 500,
+  MIN_WIDTH: 860,   // fits 10" screens at 2× retina scaling (~1024 logical px)
+  MIN_HEIGHT: 600,
   SNAPSHOT_INTERVAL_MS: 60000,
   MAX_TERMINAL_BUFFER_LINES: 5000
 } as const

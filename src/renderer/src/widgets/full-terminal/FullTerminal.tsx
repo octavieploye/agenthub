@@ -159,7 +159,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
       resizeTimer = setTimeout(() => {
         if (!visibleRef.current) return
         fitTerminal(agentId)
-      }, 150)
+      }, 250)
     })
     observer.observe(container)
 
