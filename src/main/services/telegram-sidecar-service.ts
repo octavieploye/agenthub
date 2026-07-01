@@ -168,7 +168,9 @@ export class TelegramSidecarService {
   }
 
   private send(msg: object): void {
-    if (!this.proc?.stdin) return
+    if (!this.proc?.stdin) {
+      throw new Error('Telegram sidecar not running')
+    }
     this.proc.stdin.write(JSON.stringify(msg) + '\n')
   }
 
