@@ -16,7 +16,6 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SerializeAddon } from '@xterm/addon-serialize'
-import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { getXtermTheme } from './theme-bridge'
 import { watchWebGlContext } from '../../crash-logger'
 
@@ -200,10 +199,6 @@ export function attachToContainer(agentId: string, container: HTMLDivElement): v
 
     const webLinksAddon = new WebLinksAddon()
     managed.term.loadAddon(webLinksAddon)
-
-    const unicode11Addon = new Unicode11Addon()
-    managed.term.loadAddon(unicode11Addon)
-    managed.term.unicode.activeVersion = '11'
 
     const serializeAddon = new SerializeAddon()
     managed.term.loadAddon(serializeAddon)
