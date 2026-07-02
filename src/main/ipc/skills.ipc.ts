@@ -31,7 +31,7 @@ export function registerSkillsHandlers(): void {
         const validation = validateInput(listSchema, input)
         if (!validation.valid) return validation.response
 
-        const skills = service.listSkills(validation.data.repoPath)
+        const skills = service.listSkills(validation.data.repoPath ?? process.cwd())
         return success(skills)
       } catch (err) {
         log.error('Skills list error:', err)
@@ -50,7 +50,7 @@ export function registerSkillsHandlers(): void {
         const validation = validateInput(executeSchema, input)
         if (!validation.valid) return validation.response
 
-        const result = await service.executeSkill(validation.data.skillId, validation.data.repoPath)
+        const result = await service.executeSkill(validation.data.skillId, validation.data.repoPath ?? process.cwd())
         return success(result)
       } catch (err) {
         log.error('Skills execute error:', err)
@@ -69,7 +69,7 @@ export function registerSkillsHandlers(): void {
         const validation = validateInput(refreshSchema, input)
         if (!validation.valid) return validation.response
 
-        const skills = service.refresh(validation.data.repoPath)
+        const skills = service.refresh(validation.data.repoPath ?? process.cwd())
         return success(skills)
       } catch (err) {
         log.error('Skills refresh error:', err)
