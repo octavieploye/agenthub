@@ -44,7 +44,12 @@ export type {
 export {
   CompetitorCardSchema,
   CompetitorProfileSchema,
+  CompetitorRingResultSchema,
   CompetitorMapSchema,
+  type CompetitorCardInferred,
+  type CompetitorProfileInferred,
+  type CompetitorRingResultInferred,
+  type CompetitorMapInferred,
 } from './schemas/competitor.schema.js';
 
 // Competitor workflow
