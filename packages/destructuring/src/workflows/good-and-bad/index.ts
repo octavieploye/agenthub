@@ -32,7 +32,7 @@ export async function runGoodAndBad(
     ...badPatterns.map((p) => p.name),
   ]);
   const neutralPatterns = allPatterns.filter(
-    (p) => !classifiedNames.has(p.name) || p.verdict === 'neutral' || p.verdict === 'context-dependent'
+    (p) => !classifiedNames.has(p.name)
   );
 
   // Step 4: Synthesise narrative report with blind spots
