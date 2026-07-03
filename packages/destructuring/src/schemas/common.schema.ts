@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { BusinessProfileSchema } from './business.schema.js';
 
 export const GeoRadiusSchema = z.enum(['local', 'national', 'continental', 'worldwide']);
 
@@ -9,7 +10,7 @@ export const GeoRingSchema = z.object({
 
 export const PriorOutputsSchema = z.object({
   competitorMap: z.unknown().optional(),
-  businessProfiles: z.array(z.unknown()).optional(),
+  businessProfiles: z.array(BusinessProfileSchema).optional(),
   marketStrategyMap: z.unknown().optional(),
   marketDynamicsMap: z.unknown().optional(),
 });

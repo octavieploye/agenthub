@@ -1,4 +1,5 @@
 import type { CompetitorMap } from './competitor.types.js';
+import type { BusinessProfile } from './business.types.js';
 
 export type GeoRadius = 'local' | 'national' | 'continental' | 'worldwide';
 
@@ -18,7 +19,7 @@ export interface DestructuringSubject {
 
 export interface PriorOutputs {
   competitorMap?: CompetitorMap;
-  businessProfiles?: unknown[];
+  businessProfiles?: BusinessProfile[];
   marketStrategyMap?: unknown;
   marketDynamicsMap?: unknown;
 }

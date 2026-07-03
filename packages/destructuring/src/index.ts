@@ -54,3 +54,32 @@ export {
 
 // Competitor workflow
 export { runCompetitorStrategies } from './workflows/competitor-strategies/index.js';
+
+// Business types
+export type {
+  MarketPosition,
+  OfferTier,
+  AcquisitionChannel,
+  UnitEconomics,
+  MonetizationModel,
+  BusinessProfile,
+} from './types/business.types.js';
+
+// Business schemas
+export {
+  MarketPositionSchema,
+  OfferTierSchema,
+  AcquisitionChannelSchema,
+  UnitEconomicsSchema,
+  MonetizationModelSchema,
+  BusinessProfileSchema,
+  type MarketPositionInferred,
+  type OfferTierInferred,
+  type AcquisitionChannelInferred,
+  type UnitEconomicsInferred,
+  type MonetizationModelInferred,
+  type BusinessProfileInferred,
+} from './schemas/business.schema.js';
+
+// Business workflow
+export { runBusinessStrategies } from './workflows/business-strategies/index.js';
