@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { BusinessProfileSchema } from './business.schema.js';
 import { MarketStrategyMapSchema } from './market.schema.js';
+import { MarketDynamicsMapSchema } from './dynamics.schema.js';
 
 export const GeoRadiusSchema = z.enum(['local', 'national', 'continental', 'worldwide']);
 
@@ -13,7 +14,7 @@ export const PriorOutputsSchema = z.object({
   competitorMap: z.unknown().optional(),
   businessProfiles: z.array(BusinessProfileSchema).optional(),
   marketStrategyMap: MarketStrategyMapSchema.optional(),
-  marketDynamicsMap: z.unknown().optional(),
+  marketDynamicsMap: MarketDynamicsMapSchema.optional(),
 });
 
 export const DestructuringSubjectSchema = z.object({

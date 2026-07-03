@@ -109,3 +109,29 @@ export {
 
 // Market workflow
 export { runMarketStrategies } from './workflows/market-strategies/index.js';
+
+// Dynamics types
+export type {
+  MarketForce,
+  EntryBarrier,
+  PowerStructure,
+  TrendVector,
+  MarketDynamicsMap,
+} from './types/dynamics.types.js';
+
+// Dynamics schemas
+export {
+  MarketForceSchema,
+  EntryBarrierSchema,
+  PowerStructureSchema,
+  TrendVectorSchema,
+  MarketDynamicsMapSchema,
+  type MarketForceInferred,
+  type EntryBarrierInferred,
+  type PowerStructureInferred,
+  type TrendVectorInferred,
+  type MarketDynamicsMapInferred,
+} from './schemas/dynamics.schema.js';
+
+// Dynamics workflow
+export { runMarketDynamics } from './workflows/market-dynamics/index.js';

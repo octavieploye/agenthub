@@ -1,6 +1,7 @@
 import type { CompetitorMap } from './competitor.types.js';
 import type { BusinessProfile } from './business.types.js';
 import type { MarketStrategyMap } from './market.types.js';
+import type { MarketDynamicsMap } from './dynamics.types.js';
 
 export type GeoRadius = 'local' | 'national' | 'continental' | 'worldwide';
 
@@ -22,7 +23,7 @@ export interface PriorOutputs {
   competitorMap?: CompetitorMap;
   businessProfiles?: BusinessProfile[];
   marketStrategyMap?: MarketStrategyMap;
-  marketDynamicsMap?: unknown;
+  marketDynamicsMap?: MarketDynamicsMap;
 }
 
 export interface PatternExtractionInput {
