@@ -1,3 +1,5 @@
+import type { CompetitorMap } from './competitor.types.js';
+
 export type GeoRadius = 'local' | 'national' | 'continental' | 'worldwide';
 
 export interface GeoRing {
@@ -15,7 +17,7 @@ export interface DestructuringSubject {
 }
 
 export interface PriorOutputs {
-  competitorMap?: unknown;
+  competitorMap?: CompetitorMap;
   businessProfiles?: unknown[];
   marketStrategyMap?: unknown;
   marketDynamicsMap?: unknown;

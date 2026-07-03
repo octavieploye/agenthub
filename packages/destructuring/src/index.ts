@@ -31,3 +31,21 @@ export {
 
 // Utils
 export { expandRadius, isWithinRadius, ringOrder } from './utils/geo-radius.js';
+
+// Competitor types
+export type {
+  CompetitorCard,
+  CompetitorProfile,
+  CompetitorMap,
+  CompetitorRingResult,
+} from './types/competitor.types.js';
+
+// Competitor schemas
+export {
+  CompetitorCardSchema,
+  CompetitorProfileSchema,
+  CompetitorMapSchema,
+} from './schemas/competitor.schema.js';
+
+// Competitor workflow
+export { runCompetitorStrategies } from './workflows/competitor-strategies/index.js';
