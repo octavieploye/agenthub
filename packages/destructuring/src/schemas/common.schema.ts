@@ -28,3 +28,9 @@ export const PatternExtractionInputSchema = z.object({
   outputs: z.array(PriorOutputsSchema).min(2),
   focusQuestion: z.string().optional(),
 });
+
+export type GeoRadiusInferred = z.infer<typeof GeoRadiusSchema>;
+export type GeoRingInferred = z.infer<typeof GeoRingSchema>;
+export type PriorOutputsInferred = z.infer<typeof PriorOutputsSchema>;
+export type DestructuringSubjectInferred = z.infer<typeof DestructuringSubjectSchema>;
+export type PatternExtractionInputInferred = z.infer<typeof PatternExtractionInputSchema>;

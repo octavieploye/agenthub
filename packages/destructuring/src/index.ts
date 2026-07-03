@@ -22,6 +22,11 @@ export {
   DestructuringSubjectSchema,
   PriorOutputsSchema,
   PatternExtractionInputSchema,
+  type GeoRadiusInferred,
+  type GeoRingInferred,
+  type PriorOutputsInferred,
+  type DestructuringSubjectInferred,
+  type PatternExtractionInputInferred,
 } from './schemas/common.schema.js';
 
 // Utils
