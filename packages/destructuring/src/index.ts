@@ -155,3 +155,9 @@ export {
 
 // Good-and-bad workflow
 export { runGoodAndBad } from './workflows/good-and-bad/index.js';
+
+// Composition
+export type { PipelineResult } from './compose/pipeline.js';
+export type { WorkflowStage } from './compose/handoffs.js';
+export { runFullPipeline, runPartialPipeline, runPatternExtraction } from './compose/pipeline.js';
+export { buildHandoff, stagesFromEntry, STAGE_ORDER } from './compose/handoffs.js';
