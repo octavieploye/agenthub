@@ -1,0 +1,22 @@
+{
+  "name": "@optimaeus/destructuring",
+  "version": "0.1.0",
+  "description": "Destructure and reverse-engineer business strategies, competitor positioning, market entry paths, and market dynamics",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "files": ["dist"],
+  "license": "UNLICENSED"
+}
