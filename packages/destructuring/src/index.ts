@@ -135,3 +135,23 @@ export {
 
 // Dynamics workflow
 export { runMarketDynamics } from './workflows/market-dynamics/index.js';
+
+// Pattern types
+export type {
+  PatternVerdict,
+  ExtractedPattern,
+  PatternReport,
+} from './types/patterns.types.js';
+
+// Pattern schemas
+export {
+  PatternVerdictSchema,
+  ExtractedPatternSchema,
+  PatternReportSchema,
+  type PatternVerdictInferred,
+  type ExtractedPatternInferred,
+  type PatternReportInferred,
+} from './schemas/patterns.schema.js';
+
+// Good-and-bad workflow
+export { runGoodAndBad } from './workflows/good-and-bad/index.js';
