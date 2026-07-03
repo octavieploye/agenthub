@@ -83,3 +83,29 @@ export {
 
 // Business workflow
 export { runBusinessStrategies } from './workflows/business-strategies/index.js';
+
+// Market types
+export type {
+  MarketSegment,
+  ChannelStrategy,
+  PositioningAnalysis,
+  EntryVector,
+  MarketStrategyMap,
+} from './types/market.types.js';
+
+// Market schemas
+export {
+  MarketSegmentSchema,
+  ChannelStrategySchema,
+  PositioningAnalysisSchema,
+  EntryVectorSchema,
+  MarketStrategyMapSchema,
+  type MarketSegmentInferred,
+  type ChannelStrategyInferred,
+  type PositioningAnalysisInferred,
+  type EntryVectorInferred,
+  type MarketStrategyMapInferred,
+} from './schemas/market.schema.js';
+
+// Market workflow
+export { runMarketStrategies } from './workflows/market-strategies/index.js';
