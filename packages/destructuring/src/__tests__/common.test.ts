@@ -35,7 +35,14 @@ describe('DestructuringSubjectSchema', () => {
   it('accepts subject with priorOutputs', () => {
     const result = DestructuringSubjectSchema.parse({
       ...validSubject,
-      priorOutputs: { competitorMap: { competitors: [] } },
+      priorOutputs: {
+        competitorMap: {
+          subject: 'AgentHub',
+          geoBase: 'Lyon, FR',
+          rings: [],
+          totalCompetitors: 0,
+        },
+      },
     });
     expect(result.priorOutputs).toBeDefined();
   });

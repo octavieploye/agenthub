@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { GeoRadiusSchema } from './common.schema.js';
+import { GeoRadiusSchema } from './base.schema.js';
 
 export const CompetitorCardSchema = z.object({
   name: z.string().min(1),

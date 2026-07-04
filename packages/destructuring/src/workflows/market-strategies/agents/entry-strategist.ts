@@ -2,6 +2,7 @@ import type { LLMMessage } from '../../../types/agent.types.js';
 import type { MarketSegment, ChannelStrategy, PositioningAnalysis, EntryVector } from '../../../types/market.types.js';
 import { z } from 'zod/v4';
 import { EntryVectorSchema } from '../../../schemas/market.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(EntryVectorSchema).min(1);
 
@@ -44,7 +45,5 @@ The first vector must be executable immediately with minimal resources. Include 
 }
 
 export function parseOutput(raw: string): EntryVector[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Entry strategist output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Entry strategist');
 }

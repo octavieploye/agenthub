@@ -2,6 +2,7 @@ import type { LLMMessage } from '../../../types/agent.types.js';
 import type { CompetitorCard, CompetitorProfile } from '../../../types/competitor.types.js';
 import { z } from 'zod/v4';
 import { CompetitorProfileSchema } from '../../../schemas/competitor.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(CompetitorProfileSchema);
 
@@ -40,10 +41,5 @@ Return as a JSON array of enriched competitor profiles.`,
 }
 
 export function parseOutput(raw: string): CompetitorProfile[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    throw new Error('Strategy extractor output does not contain a JSON array');
-  }
-  const parsed = JSON.parse(jsonMatch[0]);
-  return outputSchema.parse(parsed);
+  return parseJsonArray(raw, outputSchema, 'Strategy extractor');
 }

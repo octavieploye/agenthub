@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketSegment, ChannelStrategy } from '../../../types/market.types.js';
 import { z } from 'zod/v4';
 import { ChannelStrategySchema } from '../../../schemas/market.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(ChannelStrategySchema).min(1);
 
@@ -40,7 +41,5 @@ Include a mix of owned, earned, and paid channels. Cover pre-launch, launch, and
 }
 
 export function parseOutput(raw: string): ChannelStrategy[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Channel strategist output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Channel strategist');
 }

@@ -2,6 +2,7 @@ import type { LLMMessage } from '../../../types/agent.types.js';
 import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketPosition } from '../../../types/business.types.js';
 import { MarketPositionSchema } from '../../../schemas/business.schema.js';
+import { parseJsonObject } from '../../../utils/json-extract.js';
 
 export const outputSchema = MarketPositionSchema;
 
@@ -38,7 +39,5 @@ Return as JSON:
 }
 
 export function parseOutput(raw: string): MarketPosition {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Market positioner output does not contain JSON object');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonObject(raw, outputSchema, 'Market positioner');
 }

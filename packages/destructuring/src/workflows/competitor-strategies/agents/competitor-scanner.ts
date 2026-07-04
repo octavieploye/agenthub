@@ -4,6 +4,7 @@ import type { CompetitorCard } from '../../../types/competitor.types.js';
 import { z } from 'zod/v4';
 import { CompetitorCardSchema } from '../../../schemas/competitor.schema.js';
 import { expandRadius } from '../../../utils/geo-radius.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(CompetitorCardSchema);
 
@@ -51,10 +52,5 @@ Return as a JSON array of competitor cards. Start with the closest ring and expa
 }
 
 export function parseOutput(raw: string): CompetitorCard[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    throw new Error('Competitor scanner output does not contain a JSON array');
-  }
-  const parsed = JSON.parse(jsonMatch[0]);
-  return outputSchema.parse(parsed);
+  return parseJsonArray(raw, outputSchema, 'Competitor scanner');
 }

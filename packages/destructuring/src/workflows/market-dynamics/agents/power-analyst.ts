@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketForce, EntryBarrier, PowerStructure } from '../../../types/dynamics.types.js';
 import { z } from 'zod/v4';
 import { PowerStructureSchema } from '../../../schemas/dynamics.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(PowerStructureSchema).min(1);
 
@@ -47,7 +48,5 @@ Include at least 2 actors. Name each actor precisely — 'large platforms' is no
 }
 
 export function parseOutput(raw: string): PowerStructure[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Power analyst output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Power analyst');
 }

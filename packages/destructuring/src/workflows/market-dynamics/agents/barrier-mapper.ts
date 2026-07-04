@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketForce, EntryBarrier } from '../../../types/dynamics.types.js';
 import { z } from 'zod/v4';
 import { EntryBarrierSchema } from '../../../schemas/dynamics.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(EntryBarrierSchema).min(1);
 
@@ -39,7 +40,5 @@ Cover at least 3 different barrier types. For each barrier, name who holds the a
 }
 
 export function parseOutput(raw: string): EntryBarrier[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Barrier mapper output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Barrier mapper');
 }

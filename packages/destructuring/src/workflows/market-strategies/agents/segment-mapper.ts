@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketSegment } from '../../../types/market.types.js';
 import { z } from 'zod/v4';
 import { MarketSegmentSchema } from '../../../schemas/market.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(MarketSegmentSchema).min(1);
 
@@ -48,7 +49,5 @@ Include at least 2 non-obvious segments. Do not list 'small businesses' or 'ente
 }
 
 export function parseOutput(raw: string): MarketSegment[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Segment mapper output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Segment mapper');
 }

@@ -1,17 +1,15 @@
 import { z } from 'zod/v4';
+import { GeoRadiusSchema } from './base.schema.js';
 import { BusinessProfileSchema } from './business.schema.js';
 import { MarketStrategyMapSchema } from './market.schema.js';
 import { MarketDynamicsMapSchema } from './dynamics.schema.js';
+import { CompetitorMapSchema } from './competitor.schema.js';
 
-export const GeoRadiusSchema = z.enum(['local', 'national', 'continental', 'worldwide']);
-
-export const GeoRingSchema = z.object({
-  radius: GeoRadiusSchema,
-  label: z.string(),
-});
+export { GeoRadiusSchema, GeoRingSchema } from './base.schema.js';
+export type { GeoRadiusInferred, GeoRingInferred } from './base.schema.js';
 
 export const PriorOutputsSchema = z.object({
-  competitorMap: z.unknown().optional(),
+  competitorMap: CompetitorMapSchema.optional(),
   businessProfiles: z.array(BusinessProfileSchema).optional(),
   marketStrategyMap: MarketStrategyMapSchema.optional(),
   marketDynamicsMap: MarketDynamicsMapSchema.optional(),
@@ -32,8 +30,6 @@ export const PatternExtractionInputSchema = z.object({
   focusQuestion: z.string().optional(),
 });
 
-export type GeoRadiusInferred = z.infer<typeof GeoRadiusSchema>;
-export type GeoRingInferred = z.infer<typeof GeoRingSchema>;
 export type PriorOutputsInferred = z.infer<typeof PriorOutputsSchema>;
 export type DestructuringSubjectInferred = z.infer<typeof DestructuringSubjectSchema>;
 export type PatternExtractionInputInferred = z.infer<typeof PatternExtractionInputSchema>;

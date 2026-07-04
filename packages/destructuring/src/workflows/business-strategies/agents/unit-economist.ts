@@ -1,6 +1,7 @@
 import type { LLMMessage } from '../../../types/agent.types.js';
 import type { UnitEconomics, OfferTier, AcquisitionChannel } from '../../../types/business.types.js';
 import { UnitEconomicsSchema } from '../../../schemas/business.schema.js';
+import { parseJsonObject } from '../../../utils/json-extract.js';
 
 export const outputSchema = UnitEconomicsSchema;
 
@@ -30,7 +31,5 @@ Return JSON:
 }
 
 export function parseOutput(raw: string): UnitEconomics {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Unit economist output does not contain JSON object');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonObject(raw, outputSchema, 'Unit economist');
 }

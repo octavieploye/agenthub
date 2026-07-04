@@ -1,6 +1,7 @@
 import type { LLMMessage } from '../../../types/agent.types.js';
 import type { MonetizationModel, OfferTier, UnitEconomics } from '../../../types/business.types.js';
 import { MonetizationModelSchema } from '../../../schemas/business.schema.js';
+import { parseJsonObject } from '../../../utils/json-extract.js';
 
 export const outputSchema = MonetizationModelSchema;
 
@@ -29,7 +30,5 @@ Return JSON:
 }
 
 export function parseOutput(raw: string): MonetizationModel {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Monetization architect output does not contain JSON object');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonObject(raw, outputSchema, 'Monetization architect');
 }

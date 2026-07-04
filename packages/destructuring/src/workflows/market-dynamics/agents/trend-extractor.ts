@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketForce, EntryBarrier, PowerStructure, TrendVector } from '../../../types/dynamics.types.js';
 import { z } from 'zod/v4';
 import { TrendVectorSchema } from '../../../schemas/dynamics.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(TrendVectorSchema).min(1);
 
@@ -51,7 +52,5 @@ Include at least 3 trends spanning different time horizons. Each trend must be t
 }
 
 export function parseOutput(raw: string): TrendVector[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Trend extractor output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Trend extractor');
 }

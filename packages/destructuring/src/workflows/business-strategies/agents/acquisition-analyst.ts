@@ -3,6 +3,7 @@ import type { AcquisitionChannel, OfferTier } from '../../../types/business.type
 import type { DestructuringSubject } from '../../../types/common.types.js';
 import { z } from 'zod/v4';
 import { AcquisitionChannelSchema } from '../../../schemas/business.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(AcquisitionChannelSchema);
 
@@ -33,7 +34,5 @@ For each channel, return JSON array:
 }
 
 export function parseOutput(raw: string): AcquisitionChannel[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Acquisition analyst output does not contain JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Acquisition analyst');
 }

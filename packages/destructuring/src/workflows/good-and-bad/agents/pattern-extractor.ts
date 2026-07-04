@@ -3,6 +3,7 @@ import type { PatternExtractionInput } from '../../../types/common.types.js';
 import type { ExtractedPattern } from '../../../types/patterns.types.js';
 import { z } from 'zod/v4';
 import { ExtractedPatternSchema } from '../../../schemas/patterns.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(ExtractedPatternSchema).min(1);
 
@@ -55,7 +56,5 @@ Only include patterns present in at least 2 subjects. Evidence must cite the spe
 }
 
 export function parseOutput(raw: string): ExtractedPattern[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Pattern extractor output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Pattern extractor');
 }

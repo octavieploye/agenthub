@@ -3,6 +3,7 @@ import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketForce } from '../../../types/dynamics.types.js';
 import { z } from 'zod/v4';
 import { MarketForceSchema } from '../../../schemas/dynamics.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(MarketForceSchema).min(1);
 
@@ -47,7 +48,5 @@ Include at least one of each force type. Do not list forces without naming the m
 }
 
 export function parseOutput(raw: string): MarketForce[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Force analyst output does not contain a JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Force analyst');
 }

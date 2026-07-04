@@ -3,6 +3,7 @@ import type { MarketPosition, OfferTier } from '../../../types/business.types.js
 import type { DestructuringSubject } from '../../../types/common.types.js';
 import { z } from 'zod/v4';
 import { OfferTierSchema } from '../../../schemas/business.schema.js';
+import { parseJsonArray } from '../../../utils/json-extract.js';
 
 export const outputSchema = z.array(OfferTierSchema).min(2);
 
@@ -36,7 +37,5 @@ For each tier, return JSON array:
 }
 
 export function parseOutput(raw: string): OfferTier[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('Offer architect output does not contain JSON array');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonArray(raw, outputSchema, 'Offer architect');
 }

@@ -2,6 +2,7 @@ import type { LLMMessage } from '../../../types/agent.types.js';
 import type { DestructuringSubject } from '../../../types/common.types.js';
 import type { MarketSegment, ChannelStrategy, PositioningAnalysis } from '../../../types/market.types.js';
 import { PositioningAnalysisSchema } from '../../../schemas/market.schema.js';
+import { parseJsonObject } from '../../../utils/json-extract.js';
 
 export const outputSchema = PositioningAnalysisSchema;
 
@@ -51,7 +52,5 @@ Map at least 3 existing positions. The white space must be specific — not 'AI-
 }
 
 export function parseOutput(raw: string): PositioningAnalysis {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Positioning analyst output does not contain a JSON object');
-  return outputSchema.parse(JSON.parse(jsonMatch[0]));
+  return parseJsonObject(raw, outputSchema, 'Positioning analyst');
 }
