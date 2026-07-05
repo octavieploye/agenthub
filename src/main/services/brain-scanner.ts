@@ -5,6 +5,7 @@ import { join, relative } from 'path'
 import { parse as parseYaml } from 'yaml'
 import log from 'electron-log/main'
 import { getDb } from '../db/connection'
+import type Database from 'better-sqlite3'
 import {
   getBrainEntries,
   upsertBrainEntry,
@@ -13,7 +14,7 @@ import {
   createTaskFromBrainEntry
 } from '../db/queries/brain.queries'
 import { BrainEntry, BrainTimelineEntry } from '../../shared/types/brain.types'
-import { Repo } from '../../shared/types/repo.types'
+import { RepoConfig } from '../../shared/types/config.types'
 import { GitService } from './git-service'
 
 /**
@@ -31,14 +32,14 @@ export class BrainScannerService {
   /**
    * Start watching all known repos for brain entry changes
    */
-  startWatchingAllRepos(repos: Repo[]): void {
+  startWatchingAllRepos(repos: RepoConfig[]): void {
     repos.forEach((repo) => this.startWatchingRepo(repo))
   }
 
   /**
    * Start watching a single repo's docs/brain/ directory
    */
-  startWatchingRepo(repo: Repo): void {
+  startWatchingRepo(repo: RepoConfig): void {
     if (!repo.path) {
       log.warn(`Cannot watch brain entries for repo ${repo.name} - no path set`)
       return
@@ -84,7 +85,7 @@ export class BrainScannerService {
   /**
    * Handle file changes in a repo's brain directory
    */
-  private handleBrainFileChange(repo: Repo, eventType: string, filename: string): void {
+  private handleBrainFileChange(repo: RepoConfig, eventType: string, filename: string): void {
     log.info(`Brain file change detected: ${eventType} ${filename} in ${repo.name}`)
 
     // Debounce rapid changes (e.g., during file saves)
@@ -96,7 +97,7 @@ export class BrainScannerService {
   /**
    * Scan a repo's docs/brain/ directory and sync with database
    */
-  scanRepoBrainEntries(repo: Repo): void {
+  scanRepoBrainEntries(repo: RepoConfig): void {
     if (!repo.path) {
       log.warn(`Cannot scan brain entries for repo ${repo.name} - no path set`)
       return
@@ -128,7 +129,7 @@ export class BrainScannerService {
   /**
    * Process a single brain pointer file
    */
-  private processBrainPointerFile(db: Database, repo: Repo, filePath: string): void {
+  private processBrainPointerFile(db: Database, repo: RepoConfig, filePath: string): void {
     const content = readFileSync(filePath, 'utf-8')
 
     // Extract frontmatter
@@ -359,7 +360,7 @@ export class BrainScannerService {
   /**
    * Helper to get repo by ID (would be implemented with repo service)
    */
-  private getRepoById(repoId: string): Repo | null {
+  private getRepoById(repoId: string): RepoConfig | null {
     // In a real implementation, this would query the repos service
     // For now, return a mock repo
     return {
