@@ -31,6 +31,7 @@ import { registerKanbanHandlers } from './kanban.ipc'
 import { registerProjectsHandlers } from './projects.ipc'
 import { registerTtsHandlers } from './tts.ipc'
 import { registerTelegramIpc } from './telegram.ipc'
+import { registerBrainIpcHandlers } from './brain.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -65,5 +66,6 @@ export function registerAllIpcHandlers(): void {
   registerProjectsHandlers()
   registerTtsHandlers()
   registerTelegramIpc()
+  registerBrainIpcHandlers()
   log.info('All IPC handlers registered')
 }

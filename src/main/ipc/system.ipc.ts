@@ -144,5 +144,18 @@ export function registerSystemHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    IPC_CHANNELS.SYSTEM.OPEN_PATH,
+    async (event, path: string): Promise<IpcResponse<void>> => {
+      try {
+        const { shell } = require('electron')
+        await shell.openPath(path)
+        return success(undefined)
+      } catch (err) {
+        return error('OPEN_PATH_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
   log.info('System IPC handlers registered')
 }

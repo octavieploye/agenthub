@@ -136,6 +136,7 @@ export const IPC_CHANNELS = {
     OPEN_TERMINAL: 'system:open-terminal',
     GET_INTAKE_DIR: 'system:get-intake-dir',
     LIST_HOW_TO: 'system:list-how-to',
+    OPEN_PATH: 'system:open-path',
   },
   VOICE: {
     TRANSCRIBE: 'voice:transcribe',
