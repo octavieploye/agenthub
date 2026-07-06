@@ -9,14 +9,242 @@ interface SkillsIndexPanelProps {
   repoPath?: string
 }
 
-function groupByCategory(skills: SkillItem[]): Map<string, SkillItem[]> {
+const CATEGORY_ORDER = [
+  'Code Quality',
+  'AI Configuration',
+  'Market Intelligence',
+  'Competitor Analysis',
+  'Content & Voice',
+  'Workflows',
+  'Teams',
+  'Utilities'
+]
+
+function sortedGroupByCategory(skills: SkillItem[]): [string, SkillItem[]][] {
   const grouped = new Map<string, SkillItem[]>()
   for (const skill of skills) {
-    const list = grouped.get(skill.category) ?? []
-    list.push(skill)
-    grouped.set(skill.category, list)
+    const existing = grouped.get(skill.category) ?? []
+    existing.push(skill)
+    grouped.set(skill.category, existing)
   }
-  return grouped
+
+  for (const items of grouped.values()) {
+    items.sort((a, b) => {
+      const nameA = a.displayName ?? a.name
+      const nameB = b.displayName ?? b.name
+      return nameA.localeCompare(nameB)
+    })
+  }
+
+  const ordered: [string, SkillItem[]][] = []
+  for (const cat of CATEGORY_ORDER) {
+    const items = grouped.get(cat)
+    if (items) {
+      ordered.push([cat, items])
+      grouped.delete(cat)
+    }
+  }
+  for (const [cat, items] of grouped.entries()) {
+    ordered.push([cat, items])
+  }
+  return ordered
+}
+
+function repoLabel(repoPath?: string): string {
+  if (!repoPath) return 'PROJECT'
+  const parts = repoPath.replace(/\/+$/, '').split('/')
+  return parts[parts.length - 1]?.toUpperCase() || 'PROJECT'
+}
+
+interface OriginSectionProps {
+  label: string
+  skills: SkillItem[]
+  panelKey: string
+  isPanelExpanded: boolean
+  onTogglePanel: () => void
+  expandedCategories: Set<string>
+  onToggleCategory: (key: string) => void
+  activeAgentId: string | null
+  sentSkillId: string | null
+  insertedSkillId: string | null
+  tooltipSkillId: string | null
+  onSend: (skill: SkillItem) => void
+  onInsert: (skill: SkillItem) => void
+  onTooltipEnter: (id: string) => void
+  onTooltipLeave: () => void
+}
+
+function OriginSection({
+  label,
+  skills,
+  panelKey,
+  isPanelExpanded,
+  onTogglePanel,
+  expandedCategories,
+  onToggleCategory,
+  activeAgentId,
+  sentSkillId,
+  insertedSkillId,
+  tooltipSkillId,
+  onSend,
+  onInsert,
+  onTooltipEnter,
+  onTooltipLeave
+}: OriginSectionProps): React.JSX.Element {
+  const grouped = useMemo(() => sortedGroupByCategory(skills), [skills])
+
+  return (
+    <div className="mb-2" data-testid={`origin-panel-${panelKey}`}>
+      {/* Origin header */}
+      <button
+        data-testid={`origin-toggle-${panelKey}`}
+        onClick={onTogglePanel}
+        className="w-full flex items-center gap-2 px-2 py-2 rounded bg-base-content/5 hover:bg-base-content/10 transition-colors"
+      >
+        <span
+          className={`text-[10px] text-base-content/50 transition-transform ${isPanelExpanded ? 'rotate-90' : ''}`}
+        >
+          &#9654;
+        </span>
+        <span className="text-[11px] font-bold uppercase text-base-content/60 tracking-wider flex-1 text-left">
+          {label}
+        </span>
+        <span className="text-[10px] text-base-content/30 bg-base-content/10 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+          {skills.length}
+        </span>
+      </button>
+
+      {isPanelExpanded && (
+        <div className="pl-1 mt-1">
+          {grouped.map(([category, categorySkills]) => {
+            const catKey = `${panelKey}:${category}`
+            const isExpanded = expandedCategories.has(catKey)
+            return (
+              <div key={catKey} className="mb-1">
+                {/* Category header */}
+                <button
+                  data-testid={`section-${catKey}`}
+                  onClick={() => onToggleCategory(catKey)}
+                  className="w-full flex items-center gap-1.5 px-1 py-1.5 rounded hover:bg-base-content/5 transition-colors"
+                >
+                  <span
+                    className={`text-[10px] text-base-content/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  >
+                    &#9654;
+                  </span>
+                  <span className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider flex-1 text-left">
+                    {category}
+                  </span>
+                  <span className="text-[10px] text-base-content/30 bg-base-content/5 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {categorySkills.length}
+                  </span>
+                </button>
+
+                {/* Skill items */}
+                {isExpanded && (
+                  <div className="flex flex-col gap-0.5 pl-2">
+                    {categorySkills.map((skill) => (
+                      <div key={skill.id} className="relative group rounded-md hover:bg-base-content/5 transition-colors">
+                        <div className="px-2 pt-2 pb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-base-content/80 flex-1 truncate">
+                              {skill.displayName ?? skill.name}
+                            </span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                                skill.source === 'team'
+                                  ? 'bg-secondary/10 text-secondary'
+                                  : skill.source === 'workflow'
+                                    ? 'bg-warning/10 text-warning'
+                                    : skill.source === 'command'
+                                      ? 'bg-info/10 text-info'
+                                      : 'bg-success/10 text-success'
+                              }`}
+                            >
+                              {skill.source}
+                            </span>
+                          </div>
+                          {skill.description && (
+                            <p className="text-[10px] text-base-content/40 mt-0.5 truncate">
+                              {skill.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1 px-2 pb-1.5">
+                          <button
+                            data-testid={`skill-send-${skill.id}`}
+                            onClick={() => onSend(skill)}
+                            disabled={!activeAgentId}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Send to agent and execute"
+                          >
+                            {sentSkillId === skill.id ? (
+                              <span className="text-success">sent</span>
+                            ) : (
+                              <>
+                                <SendIcon />
+                                Send
+                              </>
+                            )}
+                          </button>
+                          <button
+                            data-testid={`skill-insert-${skill.id}`}
+                            onClick={() => onInsert(skill)}
+                            disabled={!activeAgentId}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-base-content/8 text-base-content/60 hover:bg-base-content/12 hover:text-base-content/80 active:bg-base-content/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Insert into prompt (edit before sending)"
+                          >
+                            {insertedSkillId === skill.id ? (
+                              <span className="text-success">added</span>
+                            ) : (
+                              <>
+                                <InsertIcon />
+                                + Prompt
+                              </>
+                            )}
+                          </button>
+
+                          {skill.description && (
+                            <div className="relative ml-auto">
+                              <button
+                                data-testid={`skill-info-${skill.id}`}
+                                onMouseEnter={() => onTooltipEnter(skill.id)}
+                                onMouseLeave={onTooltipLeave}
+                                className="p-0.5 rounded text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5 transition-colors"
+                                aria-label={`Info for ${skill.displayName ?? skill.name}`}
+                              >
+                                <InfoIcon />
+                              </button>
+
+                              {tooltipSkillId === skill.id && (
+                                <div className="absolute right-0 bottom-6 w-56 p-3 rounded-lg bg-base-300 border border-base-content/15 shadow-xl z-[400] pointer-events-none">
+                                  <p className="text-xs font-semibold text-base-content mb-1">{skill.displayName ?? skill.name}</p>
+                                  <p className="text-[11px] text-base-content/70 leading-relaxed">
+                                    {skill.description}
+                                  </p>
+                                  {skill.format && (
+                                    <span className="mt-2 inline-block text-[10px] px-1.5 py-0.5 rounded bg-base-content/10 text-base-content/50 font-mono">
+                                      .{skill.format}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function SkillsIndexPanel({
@@ -29,12 +257,16 @@ export default function SkillsIndexPanel({
   const [sentSkillId, setSentSkillId] = useState<string | null>(null)
   const [insertedSkillId, setInsertedSkillId] = useState<string | null>(null)
   const [tooltipSkillId, setTooltipSkillId] = useState<string | null>(null)
+  const [expandedPanels, setExpandedPanels] = useState<Set<string>>(new Set())
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [initialized, setInitialized] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isOpen) return
     fetchSkills(repoPath)
     setSearchFilter('')
+    setInitialized(false)
     setTimeout(() => searchRef.current?.focus(), 50)
   }, [isOpen, repoPath, fetchSkills, setSearchFilter])
 
@@ -51,13 +283,86 @@ export default function SkillsIndexPanel({
     const lower = searchFilter.toLowerCase()
     return skills.filter(
       (s) =>
+        (s.displayName ?? s.name).toLowerCase().includes(lower) ||
         s.name.toLowerCase().includes(lower) ||
         s.description.toLowerCase().includes(lower) ||
         s.category.toLowerCase().includes(lower)
     )
   }, [skills, searchFilter])
 
-  const grouped = useMemo(() => groupByCategory(filteredSkills), [filteredSkills])
+  // Split by origin
+  const projectSkills = useMemo(
+    () => filteredSkills.filter((s) => s.origin === 'project'),
+    [filteredSkills]
+  )
+  const agenthubSkills = useMemo(
+    () => filteredSkills.filter((s) => s.origin === 'agenthub'),
+    [filteredSkills]
+  )
+
+  const hasProject = projectSkills.length > 0
+  const hasAgenthub = agenthubSkills.length > 0
+
+  // Initialize: expand panels and first category when skills load
+  useEffect(() => {
+    if (!initialized && !loading && filteredSkills.length > 0) {
+      const panels = new Set<string>()
+      const cats = new Set<string>()
+
+      if (hasProject) {
+        panels.add('project')
+        const firstGroup = sortedGroupByCategory(projectSkills)
+        if (firstGroup.length > 0) cats.add(`project:${firstGroup[0][0]}`)
+      }
+      if (hasAgenthub) {
+        panels.add('agenthub')
+        if (!hasProject) {
+          const firstGroup = sortedGroupByCategory(agenthubSkills)
+          if (firstGroup.length > 0) cats.add(`agenthub:${firstGroup[0][0]}`)
+        }
+      }
+
+      setExpandedPanels(panels)
+      setExpandedCategories(cats)
+      setInitialized(true)
+    }
+  }, [filteredSkills, loading, initialized, hasProject, hasAgenthub, projectSkills, agenthubSkills])
+
+  // Search: auto-expand everything
+  useEffect(() => {
+    if (searchFilter.trim()) {
+      const panels = new Set<string>()
+      const cats = new Set<string>()
+      if (hasProject) {
+        panels.add('project')
+        for (const [cat] of sortedGroupByCategory(projectSkills)) cats.add(`project:${cat}`)
+      }
+      if (hasAgenthub) {
+        panels.add('agenthub')
+        for (const [cat] of sortedGroupByCategory(agenthubSkills)) cats.add(`agenthub:${cat}`)
+      }
+      setExpandedPanels(panels)
+      setExpandedCategories(cats)
+    }
+  }, [searchFilter, hasProject, hasAgenthub, projectSkills, agenthubSkills])
+
+  const togglePanel = useCallback((key: string) => {
+    setExpandedPanels((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const toggleCategory = useCallback((key: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   const handleSendSkill = useCallback(
     (skill: SkillItem) => {
@@ -145,116 +450,49 @@ export default function SkillsIndexPanel({
               <p className="text-xs text-base-content/40">
                 {skills.length === 0 ? 'No skills found' : 'No matching skills'}
               </p>
-              <p className="text-[10px] text-base-content/30 mt-1">~/.claude/skills/ or .claude/skills/</p>
+              <p className="text-[10px] text-base-content/30 mt-1">Add .md files to .claude/skills/</p>
             </div>
           )}
 
-          {!loading &&
-            Array.from(grouped.entries()).map(([category, categorySkills]) => (
-              <div key={category} className="mb-3">
-                <h3 className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider px-1 py-1.5">
-                  {category}
-                </h3>
+          {!loading && hasProject && (
+            <OriginSection
+              label={repoLabel(repoPath)}
+              skills={projectSkills}
+              panelKey="project"
+              isPanelExpanded={expandedPanels.has('project')}
+              onTogglePanel={() => togglePanel('project')}
+              expandedCategories={expandedCategories}
+              onToggleCategory={toggleCategory}
+              activeAgentId={activeAgentId}
+              sentSkillId={sentSkillId}
+              insertedSkillId={insertedSkillId}
+              tooltipSkillId={tooltipSkillId}
+              onSend={handleSendSkill}
+              onInsert={handleInsertSkill}
+              onTooltipEnter={setTooltipSkillId}
+              onTooltipLeave={() => setTooltipSkillId(null)}
+            />
+          )}
 
-                <div className="flex flex-col gap-0.5">
-                  {categorySkills.map((skill) => (
-                    <div key={skill.id} className="relative group rounded-md hover:bg-base-content/5 transition-colors">
-                      {/* Skill info row — click anywhere except action buttons */}
-                      <div className="px-2 pt-2 pb-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-base-content/80 flex-1 truncate">
-                            {skill.name}
-                          </span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                              skill.source === 'team'
-                                ? 'bg-secondary/10 text-secondary'
-                                : skill.source === 'workflow'
-                                  ? 'bg-warning/10 text-warning'
-                                  : skill.source === 'command'
-                                    ? 'bg-info/10 text-info'
-                                    : 'bg-success/10 text-success'
-                            }`}
-                          >
-                            {skill.source}
-                          </span>
-                        </div>
-                        {skill.description && (
-                          <p className="text-[10px] text-base-content/40 mt-0.5 truncate">
-                            {skill.description}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Action buttons row */}
-                      <div className="flex items-center gap-1 px-2 pb-1.5">
-                        <button
-                          data-testid={`skill-send-${skill.id}`}
-                          onClick={() => handleSendSkill(skill)}
-                          disabled={!activeAgentId}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Send to agent and execute"
-                        >
-                          {sentSkillId === skill.id ? (
-                            <span className="text-success">sent</span>
-                          ) : (
-                            <>
-                              <SendIcon />
-                              Send
-                            </>
-                          )}
-                        </button>
-                        <button
-                          data-testid={`skill-insert-${skill.id}`}
-                          onClick={() => handleInsertSkill(skill)}
-                          disabled={!activeAgentId}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-base-content/8 text-base-content/60 hover:bg-base-content/12 hover:text-base-content/80 active:bg-base-content/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Insert into prompt (edit before sending)"
-                        >
-                          {insertedSkillId === skill.id ? (
-                            <span className="text-success">added</span>
-                          ) : (
-                            <>
-                              <InsertIcon />
-                              + Prompt
-                            </>
-                          )}
-                        </button>
-
-                        {/* Info tooltip */}
-                        {skill.description && (
-                          <div className="relative ml-auto">
-                            <button
-                              data-testid={`skill-info-${skill.id}`}
-                              onMouseEnter={() => setTooltipSkillId(skill.id)}
-                              onMouseLeave={() => setTooltipSkillId(null)}
-                              className="p-0.5 rounded text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5 transition-colors"
-                              aria-label={`Info for ${skill.name}`}
-                            >
-                              <InfoIcon />
-                            </button>
-
-                            {tooltipSkillId === skill.id && (
-                              <div className="absolute right-0 bottom-6 w-56 p-3 rounded-lg bg-base-300 border border-base-content/15 shadow-xl z-[400] pointer-events-none">
-                                <p className="text-xs font-semibold text-base-content mb-1">{skill.name}</p>
-                                <p className="text-[11px] text-base-content/70 leading-relaxed">
-                                  {skill.description}
-                                </p>
-                                {skill.format && (
-                                  <span className="mt-2 inline-block text-[10px] px-1.5 py-0.5 rounded bg-base-content/10 text-base-content/50 font-mono">
-                                    .{skill.format}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          {!loading && hasAgenthub && (
+            <OriginSection
+              label="AGENTHUB"
+              skills={agenthubSkills}
+              panelKey="agenthub"
+              isPanelExpanded={expandedPanels.has('agenthub')}
+              onTogglePanel={() => togglePanel('agenthub')}
+              expandedCategories={expandedCategories}
+              onToggleCategory={toggleCategory}
+              activeAgentId={activeAgentId}
+              sentSkillId={sentSkillId}
+              insertedSkillId={insertedSkillId}
+              tooltipSkillId={tooltipSkillId}
+              onSend={handleSendSkill}
+              onInsert={handleInsertSkill}
+              onTooltipEnter={setTooltipSkillId}
+              onTooltipLeave={() => setTooltipSkillId(null)}
+            />
+          )}
         </div>
 
         {/* Footer */}
