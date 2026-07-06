@@ -536,14 +536,23 @@ h1, h2, h3, .agent-name {
   100% { transform: translateX(100%); }
 }
 
-.card-shimmer::after {
+.card-shimmer::after,
+.card-shimmer-double::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(105deg, transparent 40%, oklch(from var(--color-success, 0.72 0.14 145) l c h / 0.15) 50%, transparent 60%);
-  animation: card-shimmer 600ms ease-out forwards;
   pointer-events: none;
   overflow: hidden;
+}
+
+.card-shimmer::after {
+  animation: card-shimmer 600ms ease-out forwards;
+}
+
+/* Two-pass shimmer: response-ready (locked) and completed */
+.card-shimmer-double::after {
+  animation: card-shimmer 600ms ease-out 2 forwards;
 }
 
 /* Approval nudge — lateral shake on awaiting_approval entry */

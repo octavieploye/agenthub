@@ -147,9 +147,9 @@ function AgentCard({
     }
   }, [agent.status])
 
-  // Shimmer: add class on completed, remove after animation
+  // shimmerClass: which shimmer variant is active ('', 'card-shimmer', 'card-shimmer-double')
   // Nudge: lateral shake when entering awaiting_approval
-  const [showShimmer, setShowShimmer] = useState(false)
+  const [shimmerClass, setShimmerClass] = useState('')
   const [showNudge, setShowNudge] = useState(false)
   const prevStatusRef = useRef(agent.status)
 
@@ -158,20 +158,22 @@ function AgentCard({
     prevStatusRef.current = agent.status
 
     if (agent.status === 'completed' && prev !== 'completed') {
-      setShowShimmer(true)
-      const timer = setTimeout(() => setShowShimmer(false), 650)
+      // 2 passes for completed — 2 × 600ms = 1200ms
+      setShimmerClass('card-shimmer-double')
+      const timer = setTimeout(() => setShimmerClass(''), 1250)
       return () => clearTimeout(timer)
     }
     if (agent.status === 'locked' && prev !== 'locked') {
-      // Shimmer on every turn completion (BEL signal → ❯ prompt) — "response ready"
-      setShowShimmer(true)
-      const timer = setTimeout(() => setShowShimmer(false), 650)
+      // 2 passes for response-ready (BEL → ❯ prompt) — 2 × 600ms = 1200ms
+      setShimmerClass('card-shimmer-double')
+      const timer = setTimeout(() => setShimmerClass(''), 1250)
       return () => clearTimeout(timer)
     }
     if (agent.status === 'awaiting_approval' && prev !== 'awaiting_approval') {
-      setShowShimmer(true)
+      // 1 pass + nudge for approval prompt
+      setShimmerClass('card-shimmer')
       setShowNudge(true)
-      const shimmerTimer = setTimeout(() => setShowShimmer(false), 650)
+      const shimmerTimer = setTimeout(() => setShimmerClass(''), 650)
       const nudgeTimer = setTimeout(() => setShowNudge(false), 400)
       return () => {
         clearTimeout(shimmerTimer)
@@ -179,13 +181,13 @@ function AgentCard({
       }
     }
     if (agent.status !== 'completed' && agent.status !== 'locked') {
-      setShowShimmer(false)
+      setShimmerClass('')
     }
     return undefined
   }, [agent.status])
 
   const handleAnimationEnd = useCallback(() => {
-    setShowShimmer(false)
+    setShimmerClass('')
   }, [])
 
   useEffect(() => {
@@ -229,7 +231,7 @@ function AgentCard({
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
       onClick={() => onSelectAgent(agent.id)}
-      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${showShimmer ? 'card-shimmer' : ''} ${showNudge ? 'card-nudge' : ''}`}
+      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${shimmerClass} ${showNudge ? 'card-nudge' : ''}`}
       onAnimationEnd={handleAnimationEnd}
       style={{
         ...colorWashStyle,
