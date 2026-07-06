@@ -247,9 +247,7 @@ export function initializeServices(db: Database.Database): void {
   // 7a. BrainScannerService — depends on GitService for timeline merging
   const brainScanner = initBrainScanner(gitService)
 
-  // Start watching all repos for brain entries
-  const allRepos = getAllRepos(db)
-  brainScanner.startWatchingAllRepos(allRepos)
+  // Brain scanner auto-discovers on query — no watcher needed
 
   // 7b. FsService — filesystem browsing scoped to repo paths
   fsService = new FsService({
