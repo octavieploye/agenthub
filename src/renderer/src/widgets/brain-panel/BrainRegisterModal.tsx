@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useReposStore } from '../../../stores/repos-store'
+import { useReposStore } from '@renderer/stores/repos-store'
 
 /**
  * Modal for registering new brain entries
