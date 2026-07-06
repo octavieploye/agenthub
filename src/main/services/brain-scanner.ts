@@ -59,7 +59,7 @@ export function deriveComputedStatus(
   fileContent: string
 ): 'remaining' | 'in_progress' | 'done' {
   if (total > 0 && done === total) return 'done'
-  if (/implemented|status:\s*done/i.test(fileContent)) return 'done'
+  if (/^#+\s*status:\s*(implemented|done)|\*\*status:\*\*\s*(implemented|done)/im.test(fileContent)) return 'done'
   if (done > 0) return 'in_progress'
   if (gitSignal) return 'in_progress'
   return 'remaining'

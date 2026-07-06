@@ -131,6 +131,10 @@ describe('deriveComputedStatus', () => {
     expect(deriveComputedStatus(0, 0, false, '')).toBe('remaining')
   })
 
+  test('does NOT return done for file mentioning "not yet implemented"', () => {
+    expect(deriveComputedStatus(0, 0, false, 'This feature is not yet implemented in the codebase.')).toBe('remaining')
+  })
+
   test('gitSignal does not override all-done checklist', () => {
     expect(deriveComputedStatus(2, 2, true, '')).toBe('done')
   })

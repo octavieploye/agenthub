@@ -74,6 +74,13 @@ describe('BrainEntryRow', () => {
     expect(dot).not.toBeNull()
   })
 
+  it('renders computed status dot with correct class for in_progress', () => {
+    const entry = createMockEntry({ computedStatus: 'in_progress' })
+    const { container } = render(<BrainEntryRow entry={entry} />)
+    const dot = container.querySelector('.bg-warning')
+    expect(dot).not.toBeNull()
+  })
+
   it('renders checklist progress bar when checklistTotal > 0', () => {
     const entry = createMockEntry({ checklistTotal: 5, checklistDone: 2 })
     render(<BrainEntryRow entry={entry} />)
