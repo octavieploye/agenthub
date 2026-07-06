@@ -3,6 +3,12 @@ import { BrainEntry } from '../../../../shared/types/brain.types'
 import { useBrainStore } from './brain-store'
 import BrainTaskModal from './BrainTaskModal'
 
+const COMPUTED_DOT: Record<string, string> = {
+  remaining:   'bg-base-content/20',
+  in_progress: 'bg-warning',
+  done:        'bg-success',
+}
+
 interface BrainEntryRowProps {
   entry: BrainEntry
 }
@@ -42,12 +48,6 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
       case 'learning': return 'badge-accent badge-outline'
       default: return 'badge-ghost'
     }
-  }
-
-  const COMPUTED_DOT: Record<string, string> = {
-    remaining:   'bg-base-content/20',
-    in_progress: 'bg-warning',
-    done:        'bg-success',
   }
 
   const computedDotCls = COMPUTED_DOT[entry.computedStatus] ?? 'bg-base-content/20'
