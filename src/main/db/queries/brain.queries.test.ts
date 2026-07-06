@@ -1,6 +1,5 @@
-import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest'
+import { describe, expect, test, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { getDb } from '../connection'
 import {
   getBrainEntries,
   getBrainEntryById,
@@ -10,13 +9,13 @@ import {
   getBrainTimeline,
   createTaskFromBrainEntry
 } from './brain.queries'
-import { BrainEntry } from '../../../shared/types/brain.types'
 
-// Mock database setup
-def createTestDb(): Database.Database {
-  const db = getDb(':memory:')
+// Creates an isolated in-memory DB with the brain_entries schema (including computed status columns).
+// Does NOT use getDb() / migration runner — schema is defined inline for full isolation.
+function createTestDb(): Database.Database {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
 
-  // Create required tables
   db.exec(`
     CREATE TABLE repos (
       id TEXT PRIMARY KEY,
@@ -46,14 +45,22 @@ def createTestDb(): Database.Database {
       project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       pointer_path TEXT NOT NULL UNIQUE,
       artifact_path TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('brainstorm','spec','plan','sprint')),
+      type TEXT NOT NULL CHECK(type IN (
+        'brainstorm','spec','plan','sprint',
+        'strategy','marketing','how-to','reference','learning'
+      )),
       subject TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'draft'
-                CHECK(status IN ('draft','active','parked','implemented')),
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('draft','active','parked','implemented')),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       synced_to_anamnesis INTEGER NOT NULL DEFAULT 0,
-      note TEXT
+      note TEXT,
+      computed_status TEXT NOT NULL DEFAULT 'remaining'
+        CHECK(computed_status IN ('remaining','in_progress','done')),
+      checklist_total INTEGER NOT NULL DEFAULT 0,
+      checklist_done  INTEGER NOT NULL DEFAULT 0,
+      git_signal      INTEGER NOT NULL DEFAULT 0
     )
   `)
 
@@ -68,11 +75,11 @@ def createTestDb(): Database.Database {
     )
   `)
 
-  // Create indexes
   db.exec('CREATE INDEX idx_brain_entries_repo ON brain_entries(repo_id)')
   db.exec('CREATE INDEX idx_brain_entries_project ON brain_entries(project_id)')
   db.exec('CREATE INDEX idx_brain_entries_status ON brain_entries(status)')
   db.exec('CREATE INDEX idx_brain_entries_type ON brain_entries(type)')
+  db.exec('CREATE INDEX idx_brain_entries_computed_status ON brain_entries(computed_status)')
   db.exec('CREATE INDEX idx_tasks_brain_entry ON tasks(brain_entry_id)')
 
   return db
@@ -84,7 +91,6 @@ describe('Brain Queries', () => {
   beforeEach(() => {
     db = createTestDb()
 
-    // Insert test data
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(
       'repo1', 'Test Repo 1', '/test/repo1', '2023-01-01T00:00:00Z'
     )
@@ -105,7 +111,6 @@ describe('Brain Queries', () => {
     })
 
     test('should return brain entries with task counts', () => {
-      // Insert brain entry
       db.prepare(`
         INSERT INTO brain_entries (
           id, repo_id, project_id, pointer_path, artifact_path,
@@ -117,7 +122,6 @@ describe('Brain Queries', () => {
         '2023-01-01T00:00:00Z', '2023-01-02T00:00:00Z', 'Test note'
       )
 
-      // Insert tasks
       db.prepare('INSERT INTO tasks (id, subject, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?)').run(
         'task1', 'Task 1', 'completed', '2023-01-01T00:00:00Z', 'entry1'
       )
@@ -147,7 +151,6 @@ describe('Brain Queries', () => {
     })
 
     test('should filter by repoId when provided', () => {
-      // Insert entries for different repos
       db.prepare(`
         INSERT INTO brain_entries (
           id, repo_id, pointer_path, artifact_path,
@@ -228,7 +231,6 @@ describe('Brain Queries', () => {
     })
 
     test('should update existing brain entry', () => {
-      // Insert initial entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -242,7 +244,6 @@ describe('Brain Queries', () => {
         note: 'Original note'
       })
 
-      // Update entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -258,14 +259,12 @@ describe('Brain Queries', () => {
 
       const result = getBrainEntryById(db, 'entry1')
       expect(result?.subject).toBe('Updated Subject')
-      expect(result?.status).toBe('active')
       expect(result?.note).toBe('Updated note')
     })
   })
 
   describe('updateBrainEntryStatus', () => {
     test('should update entry status', () => {
-      // Insert entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -278,7 +277,6 @@ describe('Brain Queries', () => {
         createdAt: '2023-01-01T00:00:00Z'
       })
 
-      // Update status
       updateBrainEntryStatus(db, 'entry1', 'active')
 
       const result = getBrainEntryById(db, 'entry1')
@@ -288,7 +286,6 @@ describe('Brain Queries', () => {
 
   describe('deleteBrainEntry', () => {
     test('should delete brain entry', () => {
-      // Insert entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -301,7 +298,6 @@ describe('Brain Queries', () => {
         createdAt: '2023-01-01T00:00:00Z'
       })
 
-      // Delete entry
       deleteBrainEntry(db, 'entry1')
 
       const result = getBrainEntryById(db, 'entry1')
@@ -311,7 +307,6 @@ describe('Brain Queries', () => {
 
   describe('getBrainTimeline', () => {
     test('should return brain events from entries', () => {
-      // Insert entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -339,7 +334,6 @@ describe('Brain Queries', () => {
 
   describe('createTaskFromBrainEntry', () => {
     test('should create task linked to brain entry', () => {
-      // Insert entry
       upsertBrainEntry(db, {
         id: 'entry1',
         repoId: 'repo1',
@@ -355,12 +349,86 @@ describe('Brain Queries', () => {
       const taskId = createTaskFromBrainEntry(db, 'entry1', 'Test Task', 'Task description')
       expect(taskId).toBeDefined()
 
-      // Verify task was created with correct brain_entry_id
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as any
       expect(task).toBeDefined()
       expect(task.brain_entry_id).toBe('entry1')
       expect(task.subject).toBe('Test Task')
       expect(task.description).toBe('Task description')
+    })
+  })
+
+  describe('computed status fields', () => {
+    test('upsertBrainEntry stores and retrieves computed_status', () => {
+      upsertBrainEntry(db, {
+        id: 'cs1',
+        repoId: 'repo1',
+        pointerPath: '/test/cs1.md',
+        artifactPath: '/test/cs1.md',
+        type: 'spec',
+        subject: 'Computed Status Test',
+        status: 'active',
+        createdAt: '2026-01-01',
+        computedStatus: 'done',
+        checklistTotal: 4,
+        checklistDone: 4,
+        gitSignal: 1,
+      })
+
+      const entries = getBrainEntries(db)
+      expect(entries).toHaveLength(1)
+      expect(entries[0].computedStatus).toBe('done')
+      expect(entries[0].checklistTotal).toBe(4)
+      expect(entries[0].checklistDone).toBe(4)
+      expect(entries[0].gitSignal).toBe(true)
+    })
+
+    test('upsertBrainEntry defaults computedStatus to remaining when not provided', () => {
+      upsertBrainEntry(db, {
+        id: 'cs2',
+        repoId: 'repo1',
+        pointerPath: '/test/cs2.md',
+        artifactPath: '/test/cs2.md',
+        type: 'spec',
+        subject: 'Default Status',
+        status: 'active',
+        createdAt: '2026-01-01',
+      })
+
+      const entries = getBrainEntries(db)
+      expect(entries[0].computedStatus).toBe('remaining')
+      expect(entries[0].checklistTotal).toBe(0)
+      expect(entries[0].checklistDone).toBe(0)
+      expect(entries[0].gitSignal).toBe(false)
+    })
+
+    test('manual status is preserved on upsert (not overwritten)', () => {
+      upsertBrainEntry(db, {
+        id: 'cs3',
+        repoId: 'repo1',
+        pointerPath: '/test/cs3.md',
+        artifactPath: '/test/cs3.md',
+        type: 'spec',
+        subject: 'Preserve Status',
+        status: 'parked',
+        createdAt: '2026-01-01',
+      })
+
+      // Second upsert passes status: 'active' — should NOT overwrite 'parked'
+      upsertBrainEntry(db, {
+        id: 'cs3',
+        repoId: 'repo1',
+        pointerPath: '/test/cs3.md',
+        artifactPath: '/test/cs3.md',
+        type: 'spec',
+        subject: 'Preserve Status',
+        status: 'active',
+        createdAt: '2026-01-01',
+        computedStatus: 'in_progress',
+      })
+
+      const entries = getBrainEntries(db)
+      expect(entries[0].status).toBe('parked')           // manual untouched
+      expect(entries[0].computedStatus).toBe('in_progress') // computed updated
     })
   })
 })

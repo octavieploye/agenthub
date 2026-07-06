@@ -18,6 +18,10 @@ export function getBrainEntries(db: Database, repoId?: string): BrainEntry[] {
       be.created_at as createdAt,
       be.updated_at as updatedAt,
       be.note,
+      be.computed_status as computedStatus,
+      be.checklist_total as checklistTotal,
+      be.checklist_done as checklistDone,
+      CASE WHEN be.git_signal = 1 THEN 1 ELSE 0 END as gitSignal,
       COUNT(t.id) as tasksTotal,
       SUM(CASE WHEN t.status IN ('completed', 'tested') THEN 1 ELSE 0 END) as tasksDone,
       SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as tasksInProgress
@@ -36,7 +40,8 @@ export function getBrainEntries(db: Database, repoId?: string): BrainEntry[] {
 
   query += ' GROUP BY be.id ORDER BY be.updated_at DESC'
 
-  return db.prepare(query).all(...params) as BrainEntry[]
+  const rows = db.prepare(query).all(...params) as any[]
+  return rows.map(row => ({ ...row, gitSignal: row.gitSignal === 1 })) as BrainEntry[]
 }
 
 // Get a single brain entry by ID
@@ -62,10 +67,12 @@ export function getBrainEntryById(db: Database, id: string): BrainEntry | null {
     WHERE be.id = ?
   `
 
-  return db.prepare(query).get(id) as BrainEntry | null
+  return (db.prepare(query).get(id) ?? null) as BrainEntry | null
 }
 
-// Create or update a brain entry
+// Create or update a brain entry.
+// NOTE: status is intentionally excluded from ON CONFLICT DO UPDATE
+// to preserve user manual overrides when the scanner re-discovers an entry.
 export function upsertBrainEntry(db: Database, entry: {
   id: string
   repoId: string
@@ -77,34 +84,47 @@ export function upsertBrainEntry(db: Database, entry: {
   status: string
   createdAt: string
   note?: string | null
+  computedStatus?: string
+  checklistTotal?: number
+  checklistDone?: number
+  gitSignal?: number
 }): void {
   db.prepare(`
     INSERT INTO brain_entries (
       id, repo_id, project_id, pointer_path, artifact_path,
-      type, subject, status, created_at, updated_at, note
+      type, subject, status, created_at, updated_at, note,
+      computed_status, checklist_total, checklist_done, git_signal
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?
     ) ON CONFLICT(id) DO UPDATE SET
-      project_id = excluded.project_id,
-      pointer_path = excluded.pointer_path,
-      artifact_path = excluded.artifact_path,
-      type = excluded.type,
-      subject = excluded.subject,
-      status = excluded.status,
-      created_at = excluded.created_at,
-      updated_at = datetime('now'),
-      note = excluded.note
+      project_id      = excluded.project_id,
+      pointer_path    = excluded.pointer_path,
+      artifact_path   = excluded.artifact_path,
+      type            = excluded.type,
+      subject         = excluded.subject,
+      updated_at      = datetime('now'),
+      note            = excluded.note,
+      computed_status = excluded.computed_status,
+      checklist_total = excluded.checklist_total,
+      checklist_done  = excluded.checklist_done,
+      git_signal      = excluded.git_signal
   `).run(
     entry.id,
     entry.repoId,
-    entry.projectId,
+    entry.projectId ?? null,
     entry.pointerPath,
     entry.artifactPath,
     entry.type,
     entry.subject,
     entry.status,
     entry.createdAt,
-    entry.note
+    entry.createdAt,  // updated_at equals created_at on first insert; ON CONFLICT sets it to datetime('now')
+    entry.note ?? null,
+    entry.computedStatus ?? 'remaining',
+    entry.checklistTotal ?? 0,
+    entry.checklistDone ?? 0,
+    entry.gitSignal ?? 0
   )
 }
 

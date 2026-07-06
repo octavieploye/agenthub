@@ -24,6 +24,11 @@ export interface BrainEntry {
   tasksTotal: number
   tasksDone: number
   tasksInProgress: number
+  // Auto-computed by scanner
+  computedStatus: 'remaining' | 'in_progress' | 'done'
+  checklistTotal: number
+  checklistDone: number
+  gitSignal: boolean
 }
 
 export interface BrainQueryResult {
