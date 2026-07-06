@@ -372,8 +372,8 @@ function AgentCard({
             {agent.taskDescription || '(no task)'}
           </span>
         )}
-        <span className="text-[11px] bg-base-content/15 rounded px-1 inline-block capitalize text-base-content/60">
-          {agent.status}
+        <span className="text-[11px] bg-base-content/15 rounded px-1 inline-block text-base-content/60">
+          {agent.status === 'tray_running' ? 'Remote' : agent.status === 'awaiting_approval' ? 'Awaiting' : agent.status}
           {agent.confidence === 'inferred' ? ' ~' : ''}
         </span>
       </div>
@@ -489,7 +489,7 @@ function AgentSidebar({
   onToggleTelegramNotify
 }: AgentSidebarProps): React.JSX.Element {
   return (
-    <aside className="w-44 md:w-48 xl:w-56 2xl:w-64 shrink-0 panel-glass border-r border-base-content/10 flex flex-col h-full">
+    <aside className="w-60 md:w-64 xl:w-72 2xl:w-80 shrink-0 panel-glass border-r border-base-content/10 flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-base-content/10">
         <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
           Agents

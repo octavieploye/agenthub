@@ -167,9 +167,13 @@ export default function SkillsIndexPanel({
                           </span>
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                              skill.source === 'global'
-                                ? 'bg-info/10 text-info'
-                                : 'bg-success/10 text-success'
+                              skill.source === 'team'
+                                ? 'bg-secondary/10 text-secondary'
+                                : skill.source === 'workflow'
+                                  ? 'bg-warning/10 text-warning'
+                                  : skill.source === 'command'
+                                    ? 'bg-info/10 text-info'
+                                    : 'bg-success/10 text-success'
                             }`}
                           >
                             {skill.source}

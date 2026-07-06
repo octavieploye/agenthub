@@ -419,7 +419,7 @@ h1, h2, h3, .agent-name {
   border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
   border-radius: 0.75rem;
   padding: 0.625rem 0.75rem;
-  margin: 2px;
+  margin: 15px;
   position: relative;
   overflow: hidden;
   transition:

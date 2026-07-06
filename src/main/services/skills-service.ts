@@ -1,10 +1,23 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs'
 import { execFile } from 'child_process'
 import { join, basename, dirname, relative, extname } from 'path'
-import { homedir } from 'os'
 import type { SkillItem, SkillExecutionResult } from '../../shared/types/skills.types'
 
 export const SUPPORTED_SKILL_EXTENSIONS = ['.md', '.sh', '.py', '.js']
+
+// Meta-files at the skills root that are not skills themselves
+const SKIP_ROOT_FILENAMES = new Set(['index.md', 'README.md', 'MEMORY.md'])
+
+// Category assigned to each workflow folder name (fallback: 'workflows')
+const WORKFLOW_CATEGORIES: Record<string, string> = {
+  business: 'business-research',
+  marketing: 'business-venture',
+  data: 'business-analysis',
+  brain: 'business-analysis',
+  brainstorm: 'business-venture',
+  'tech-brainstorm': 'dev-skills',
+  stats: 'business-modeling',
+}
 
 export interface SkillsServiceDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
@@ -95,18 +108,107 @@ export class SkillsService {
   private scanSkills(repoPath?: string): SkillItem[] {
     const skills: SkillItem[] = []
 
-    // Global skills: ~/.claude/skills/
-    const globalDir = join(homedir(), '.claude', 'skills')
-    skills.push(...this.scanDirectory(globalDir, 'global'))
-
-    // Project skills: {repoPath}/.claude/skills/
+    // Project-scoped only — AgentHub shows skills from the agent's repo, not from
+    // the user's global ~/.claude/skills/ or Claude Code plugins (those are consumed
+    // internally by Claude and can't be sent via the PTY).
     if (repoPath) {
       const projectDir = join(repoPath, '.claude', 'skills')
       skills.push(...this.scanDirectory(projectDir, 'project'))
+      skills.push(...this.scanTeams(repoPath))
+      skills.push(...this.scanWorkflows(repoPath))
+      skills.push(...this.scanCommands(repoPath))
     }
 
     this.deps.logInfo('Skills scanned', { count: skills.length, repoPath })
     return skills
+  }
+
+  private scanTeams(repoPath: string): SkillItem[] {
+    const teamsDir = join(repoPath, '.claude', 'teams')
+    if (!existsSync(teamsDir)) return []
+
+    let entries: string[]
+    try {
+      entries = readdirSync(teamsDir)
+    } catch {
+      return []
+    }
+
+    const items: SkillItem[] = []
+    for (const entry of entries) {
+      const configPath = join(teamsDir, entry, 'config.json')
+      if (!existsSync(configPath)) continue
+
+      let name = entry
+      let description = ''
+      let category = 'teams'
+      try {
+        const raw = readFileSync(configPath, 'utf-8')
+        const config = JSON.parse(raw) as { name?: string; description?: string; category?: string }
+        if (config.name) name = config.name
+        if (config.description) description = config.description.slice(0, 200)
+        if (config.category) category = config.category
+      } catch {
+        // use defaults
+      }
+
+      items.push({ id: entry, name, description, category, path: configPath, source: 'team', format: 'json' })
+    }
+    return items
+  }
+
+  private scanWorkflows(repoPath: string): SkillItem[] {
+    const workflowDir = join(repoPath, '.claude', 'workflow-team-library')
+    if (!existsSync(workflowDir)) return []
+
+    let entries: string[]
+    try {
+      entries = readdirSync(workflowDir)
+    } catch {
+      return []
+    }
+
+    const items: SkillItem[] = []
+    for (const entry of entries) {
+      const manifestPath = join(workflowDir, entry, 'manifest.md')
+      if (!existsSync(manifestPath)) continue
+
+      const parsed = this.parseSkillFile(manifestPath, workflowDir, 'project')
+      const category = WORKFLOW_CATEGORIES[entry] ?? 'workflows'
+      items.push({ ...parsed, id: entry, category, source: 'workflow' })
+    }
+    return items
+  }
+
+  private scanCommands(repoPath: string): SkillItem[] {
+    const commandsDir = join(repoPath, '.claude', 'commands')
+    if (!existsSync(commandsDir)) return []
+
+    let entries: string[]
+    try {
+      entries = readdirSync(commandsDir)
+    } catch {
+      return []
+    }
+
+    const items: SkillItem[] = []
+    for (const entry of entries) {
+      const ext = extname(entry)
+      if (!SUPPORTED_SKILL_EXTENSIONS.includes(ext)) continue
+
+      const fullPath = join(commandsDir, entry)
+      let stat
+      try {
+        stat = statSync(fullPath)
+      } catch {
+        continue
+      }
+      if (!stat.isFile()) continue
+
+      const parsed = this.parseSkillFile(fullPath, commandsDir, 'project')
+      items.push({ ...parsed, source: 'command', category: parsed.category === 'general' ? 'commands' : parsed.category })
+    }
+    return items
   }
 
   private scanDirectory(dir: string, source: 'global' | 'project'): SkillItem[] {
@@ -123,6 +225,8 @@ export class SkillsService {
     source: 'global' | 'project',
     results: SkillItem[]
   ): void {
+    const isRoot = currentDir === rootDir
+
     let entries: string[]
     try {
       entries = readdirSync(currentDir)
@@ -142,9 +246,40 @@ export class SkillsService {
       if (stat.isDirectory()) {
         this.walkDir(fullPath, rootDir, source, results)
       } else if (SUPPORTED_SKILL_EXTENSIONS.includes(extname(entry))) {
-        results.push(this.parseSkillFile(fullPath, rootDir, source))
+        const baseName = basename(entry, extname(entry))
+        const isSkillEntryPoint = baseName.toUpperCase() === 'SKILL'
+
+        if (isRoot) {
+          // Root level: accept all supported files except known meta-files
+          if (!SKIP_ROOT_FILENAMES.has(entry)) {
+            results.push(this.parseSkillFile(fullPath, rootDir, source))
+          }
+        } else {
+          // Inside a named skill folder: only accept SKILL.* entry points
+          if (isSkillEntryPoint) {
+            results.push(this.parseSkillFile(fullPath, rootDir, source))
+          }
+        }
       }
     }
+  }
+
+  private parseFrontmatter(content: string): Record<string, string> {
+    const result: Record<string, string> = {}
+    if (!content.startsWith('---')) return result
+
+    const end = content.indexOf('\n---', 3)
+    if (end === -1) return result
+
+    const block = content.slice(3, end)
+    for (const line of block.split('\n')) {
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+      const key = line.slice(0, colonIdx).trim()
+      const value = line.slice(colonIdx + 1).trim()
+      if (key) result[key] = value
+    }
+    return result
   }
 
   private parseSkillFile(filePath: string, rootDir: string, source: 'global' | 'project'): SkillItem {
@@ -152,7 +287,7 @@ export class SkillsService {
     const baseName = basename(filePath).replace(/\.[^.]+$/, '')
     const id = baseName.toUpperCase() === 'SKILL' ? basename(dirname(filePath)) : baseName
     const relDir = relative(rootDir, dirname(filePath))
-    const category = relDir || 'general'
+    let category = relDir || 'general'
     const format = ext.slice(1) // strip leading dot
 
     let name = id
@@ -163,30 +298,50 @@ export class SkillsService {
       const lines = content.split('\n')
 
       if (ext === '.md') {
-        // Extract name from first heading
-        for (const line of lines) {
-          const headingMatch = line.match(/^#\s+(.+)/)
-          if (headingMatch) {
-            name = headingMatch[1].trim()
-            break
+        // Extract values from YAML frontmatter if present
+        const fm = this.parseFrontmatter(content)
+        if (fm.name) name = fm.name
+        if (fm.description) description = fm.description.slice(0, 200)
+        if (fm.category) category = fm.category
+
+        // Fall through to heading extraction if name not in frontmatter
+        if (!fm.name) {
+          for (const line of lines) {
+            const headingMatch = line.match(/^#\s+(.+)/)
+            if (headingMatch) {
+              name = headingMatch[1].trim()
+              break
+            }
           }
         }
 
-        // Extract description from first non-heading, non-empty paragraph
-        let foundHeading = false
-        for (const line of lines) {
-          if (line.match(/^#/)) {
-            foundHeading = true
-            continue
+        // Fall through to paragraph extraction if description not in frontmatter.
+        // Use only the body content (after closing ---) to avoid extracting '---'.
+        if (!fm.description) {
+          let bodyContent = content
+          if (content.startsWith('---')) {
+            const fmEnd = content.indexOf('\n---', 3)
+            if (fmEnd !== -1) {
+              const nextNewline = content.indexOf('\n', fmEnd + 4)
+              bodyContent = nextNewline !== -1 ? content.slice(nextNewline + 1) : ''
+            }
           }
-          const trimmed = line.trim()
-          if (foundHeading && trimmed && !trimmed.startsWith('#')) {
-            description = trimmed.slice(0, 200)
-            break
-          }
-          if (!foundHeading && trimmed && !trimmed.startsWith('#')) {
-            description = trimmed.slice(0, 200)
-            break
+
+          let foundHeading = false
+          for (const line of bodyContent.split('\n')) {
+            if (line.match(/^#/)) {
+              foundHeading = true
+              continue
+            }
+            const trimmed = line.trim()
+            if (foundHeading && trimmed && !trimmed.startsWith('#')) {
+              description = trimmed.slice(0, 200)
+              break
+            }
+            if (!foundHeading && trimmed && !trimmed.startsWith('#')) {
+              description = trimmed.slice(0, 200)
+              break
+            }
           }
         }
       } else if (ext === '.sh' || ext === '.py') {

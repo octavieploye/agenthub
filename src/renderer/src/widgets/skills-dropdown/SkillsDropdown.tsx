@@ -157,9 +157,13 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
                     )}
                     <span
                       className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
-                        skill.source === 'global'
-                          ? 'bg-info/10 text-info'
-                          : 'bg-success/10 text-success'
+                        skill.source === 'team'
+                          ? 'bg-secondary/10 text-secondary'
+                          : skill.source === 'workflow'
+                            ? 'bg-warning/10 text-warning'
+                            : skill.source === 'command'
+                              ? 'bg-info/10 text-info'
+                              : 'bg-success/10 text-success'
                       }`}
                     >
                       {skill.source}

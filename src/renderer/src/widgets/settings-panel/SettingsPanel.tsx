@@ -17,7 +17,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div data-testid="settings-panel" className="card-elevated w-full max-w-md mx-4 flex flex-col">
+      <div data-testid="settings-panel" className="card-elevated w-full max-w-lg mx-4 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <h2 className="font-semibold text-base">Settings</h2>
@@ -30,12 +30,12 @@ function SettingsPanel({ onClose }: SettingsPanelProps): React.JSX.Element {
           </button>
         </div>
         {/* Tab bar */}
-        <div className="flex border-b border-base-content/10 px-4">
+        <div className="flex border-b border-base-content/10 px-4 overflow-x-auto">
           {(['general', 'notifications', 'telegram', 'voice', 'advanced', 'docker'] as SettingsTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3 py-2 text-xs font-medium capitalize border-b-2 -mb-px transition-colors ${
+              className={`px-3 py-2 text-xs font-medium capitalize border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${
                 activeTab === tab
                   ? 'border-primary text-primary'
                   : 'border-transparent text-base-content/50 hover:text-base-content'

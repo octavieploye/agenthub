@@ -4,7 +4,7 @@ export interface SkillItem {
   description: string
   category: string
   path: string
-  source: 'global' | 'project'
+  source: 'project' | 'team' | 'workflow' | 'command'
   format?: string
 }
 
