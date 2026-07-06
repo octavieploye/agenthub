@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { BrainEntry } from '../../../../shared/types/brain.types'
 import { useBrainStore } from './brain-store'
+import { useReposStore } from '@renderer/stores/repos-store'
+import { useThemeStore } from '@renderer/stores/theme-store'
 import BrainTaskModal from './BrainTaskModal'
 
 const COMPUTED_DOT: Record<string, string> = {
@@ -15,6 +17,8 @@ interface BrainEntryRowProps {
 
 export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
   const { updateBrainEntryStatus } = useBrainStore()
+  const repos = useReposStore((s) => s.repos)
+  const theme = useThemeStore((s) => s.theme)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
 
@@ -53,7 +57,15 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
   const computedDotCls = COMPUTED_DOT[entry.computedStatus] ?? 'bg-base-content/20'
 
   const handleOpenArtifact = () => {
-    window.agentHub.system.openPath(entry.artifactPath)
+    const repo = repos.find((r) => r.id === entry.repoId)
+    if (repo) {
+      const relativePath = entry.artifactPath.startsWith(repo.path + '/')
+        ? entry.artifactPath.slice(repo.path.length + 1)
+        : entry.artifactPath
+      window.agentHub.windows.createFilePreview({ filePath: relativePath, repoPath: repo.path, theme })
+    } else {
+      window.agentHub.system.openPath(entry.artifactPath)
+    }
   }
 
   const handleStatusChange = (newStatus: string) => {

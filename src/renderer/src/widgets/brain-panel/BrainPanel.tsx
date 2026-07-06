@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useBrainStore } from './brain-store'
+import { useReposStore } from '@renderer/stores/repos-store'
 import BrainRepoGroup from './BrainRepoGroup'
 import BrainTimelineView from './BrainTimelineView'
 import type { BrainEntryType } from '../../../../shared/types/brain.types'
@@ -28,9 +29,11 @@ export default function BrainPanel() {
     error,
     refreshBrainData,
   } = useBrainStore()
+  const { repos, fetchRepos } = useReposStore()
 
   useEffect(() => {
     refreshBrainData()
+    if (repos.length === 0) fetchRepos()
   }, [])
 
   // Collect unique repos for the filter dropdown
