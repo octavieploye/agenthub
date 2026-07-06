@@ -21,6 +21,7 @@ export default function BrainPanel() {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview')
   const [typeFilter, setTypeFilter] = useState<BrainEntryType | 'all'>('all')
   const [repoFilter, setRepoFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'remaining' | 'in_progress' | 'done'>('all')
   const {
     brainData,
     loading,
@@ -39,17 +40,26 @@ export default function BrainPanel() {
   const filteredData = brainData
     .filter((group) => repoFilter === 'all' || group.repoId === repoFilter)
     .map((group) => {
-      if (typeFilter === 'all') return group
-      const filtered = group.entries.filter((e) => e.type === typeFilter)
-      if (filtered.length === 0) return null
+      let entries = group.entries
+
+      if (typeFilter !== 'all') {
+        entries = entries.filter((e) => e.type === typeFilter)
+      }
+
+      if (statusFilter !== 'all') {
+        entries = entries.filter((e) => e.computedStatus === statusFilter)
+      }
+
+      if (entries.length === 0) return null
+
       return {
         ...group,
-        entries: filtered,
+        entries,
         summary: {
-          active: filtered.filter(e => e.status === 'active').length,
-          notActioned: filtered.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
-          parked: filtered.filter(e => e.status === 'parked').length,
-          implemented: filtered.filter(e => e.status === 'implemented').length
+          active: entries.filter(e => e.status === 'active').length,
+          notActioned: entries.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
+          parked: entries.filter(e => e.status === 'parked').length,
+          implemented: entries.filter(e => e.status === 'implemented').length
         }
       }
     })
@@ -104,6 +114,18 @@ export default function BrainPanel() {
             {TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
+          </select>
+
+          {/* Status filter */}
+          <select
+            className="select select-bordered select-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'remaining' | 'in_progress' | 'done')}
+          >
+            <option value="all">All Status</option>
+            <option value="remaining">Remaining</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
           </select>
 
           {/* Count badge */}

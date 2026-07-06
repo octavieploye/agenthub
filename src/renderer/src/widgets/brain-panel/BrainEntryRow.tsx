@@ -44,6 +44,14 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
     }
   }
 
+  const COMPUTED_DOT: Record<string, string> = {
+    remaining:   'bg-base-content/20',
+    in_progress: 'bg-warning',
+    done:        'bg-success',
+  }
+
+  const computedDotCls = COMPUTED_DOT[entry.computedStatus] ?? 'bg-base-content/20'
+
   const handleOpenArtifact = () => {
     window.agentHub.system.openPath(entry.artifactPath)
   }
@@ -70,6 +78,11 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
           {/* Left side - subject and metadata */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
+              {/* Computed status dot */}
+              <span
+                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${computedDotCls}`}
+                title={`Auto-detected: ${entry.computedStatus.replace('_', ' ')}`}
+              />
               <h3 className="font-semibold text-lg truncate max-w-xs">
                 {entry.subject}
               </h3>
@@ -98,6 +111,22 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
                   ></progress>
                   <span className="text-sm text-gray-500">
                     {entry.tasksDone}/{entry.tasksTotal} tasks
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Checklist progress — shown when the doc has markdown task items */}
+            {entry.checklistTotal > 0 && (
+              <div className="mb-2">
+                <div className="flex items-center gap-2">
+                  <progress
+                    className="progress progress-success w-32 h-1.5"
+                    value={entry.checklistDone}
+                    max={entry.checklistTotal}
+                  />
+                  <span className="text-xs text-base-content/50">
+                    {entry.checklistDone}/{entry.checklistTotal} checklist
                   </span>
                 </div>
               </div>
