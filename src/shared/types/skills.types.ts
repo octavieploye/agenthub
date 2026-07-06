@@ -1,6 +1,7 @@
 export interface SkillItem {
   id: string
   name: string
+  displayName?: string
   description: string
   category: string
   path: string

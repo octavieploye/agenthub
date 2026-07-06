@@ -24,6 +24,11 @@ export interface SkillsServiceDeps {
   logWarning: (message: string, meta?: Record<string, unknown>) => void
 }
 
+interface DisplayRegistry {
+  categories: Record<string, string>
+  items: Record<string, { displayName: string; category: string }>
+}
+
 export class SkillsService {
   private deps: SkillsServiceDeps
   private cache: Map<string, SkillItem[]> = new Map()
@@ -117,6 +122,33 @@ export class SkillsService {
       skills.push(...this.scanTeams(repoPath))
       skills.push(...this.scanWorkflows(repoPath))
       skills.push(...this.scanCommands(repoPath))
+
+      // Deduplicate: if a skill and command share the same id, keep the skill
+      const seen = new Map<string, number>()
+      for (let i = 0; i < skills.length; i++) {
+        const existing = seen.get(skills[i].id)
+        if (existing !== undefined) {
+          // Keep whichever is NOT a command (skills have richer metadata)
+          if (skills[i].source === 'command') {
+            skills.splice(i, 1)
+            i--
+          } else {
+            skills.splice(existing, 1)
+            i--
+            // Re-index after splice
+            seen.clear()
+            for (let j = 0; j <= i; j++) seen.set(skills[j].id, j)
+          }
+          continue
+        }
+        seen.set(skills[i].id, i)
+      }
+
+      // Apply display registry overrides
+      const registry = this.loadDisplayRegistry(repoPath)
+      if (registry) {
+        this.applyDisplayRegistry(skills, registry)
+      }
     }
 
     this.deps.logInfo('Skills scanned', { count: skills.length, repoPath })
@@ -203,12 +235,49 @@ export class SkillsService {
       } catch {
         continue
       }
-      if (!stat.isFile()) continue
+      if (stat.isDirectory()) continue
+
+      // Skip team-*.md — teams are discovered by scanTeams()
+      const baseName = basename(entry, ext)
+      if (baseName.startsWith('team-') || baseName === 'team') continue
+
+      // Skip agent role definitions that have allowed-tools in frontmatter
+      let content: string
+      try {
+        content = readFileSync(fullPath, 'utf-8')
+      } catch {
+        continue
+      }
+      const fm = this.parseFrontmatter(content)
+      if (fm['allowed-tools']) continue
 
       const parsed = this.parseSkillFile(fullPath, commandsDir, 'project')
       items.push({ ...parsed, source: 'command', category: parsed.category === 'general' ? 'commands' : parsed.category })
     }
     return items
+  }
+
+  private loadDisplayRegistry(repoPath: string): DisplayRegistry | null {
+    const registryPath = join(repoPath, '.claude', 'skills', 'display-registry.json')
+    if (!existsSync(registryPath)) return null
+
+    try {
+      const raw = readFileSync(registryPath, 'utf-8')
+      return JSON.parse(raw) as DisplayRegistry
+    } catch {
+      this.deps.logWarning('Failed to load display registry', { registryPath })
+      return null
+    }
+  }
+
+  private applyDisplayRegistry(skills: SkillItem[], registry: DisplayRegistry): void {
+    for (const skill of skills) {
+      const entry = registry.items[skill.id]
+      if (!entry) continue
+      skill.displayName = entry.displayName
+      const categoryLabel = registry.categories[entry.category]
+      if (categoryLabel) skill.category = categoryLabel
+    }
   }
 
   private scanDirectory(dir: string, source: 'global' | 'project'): SkillItem[] {
