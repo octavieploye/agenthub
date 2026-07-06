@@ -1,18 +1,14 @@
 import { ipcMain } from 'electron'
+import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getBrainScanner } from '../services/brain-scanner'
 import log from 'electron-log/main'
 
 export function registerBrainIpcHandlers(): void {
-  const brainScanner = getBrainScanner()
-
-  /**
-   * Get brain entries, optionally filtered by repo
-   */
-  ipcMain.handle('brain:query', async (event, { repoId }: { repoId?: string }) => {
+  ipcMain.handle(IPC_CHANNELS.BRAIN.QUERY, async (_event, { repoId }: { repoId?: string }) => {
     try {
+      const brainScanner = getBrainScanner()
       const entries = brainScanner.getBrainEntries(repoId)
 
-      // Group by repo for the response
       const result = {
         entries,
         summary: {
@@ -30,11 +26,9 @@ export function registerBrainIpcHandlers(): void {
     }
   })
 
-  /**
-   * Update brain entry status
-   */
-  ipcMain.handle('brain:update-status', async (event, { id, status }: { id: string; status: string }) => {
+  ipcMain.handle(IPC_CHANNELS.BRAIN.UPDATE_STATUS, async (_event, { id, status }: { id: string; status: string }) => {
     try {
+      const brainScanner = getBrainScanner()
       brainScanner.updateBrainEntryStatus(id, status)
       return { success: true }
     } catch (error) {
@@ -43,10 +37,7 @@ export function registerBrainIpcHandlers(): void {
     }
   })
 
-  /**
-   * Register a new brain entry
-   */
-  ipcMain.handle('brain:register', async (event, input: {
+  ipcMain.handle(IPC_CHANNELS.BRAIN.REGISTER, async (_event, input: {
     repoId: string
     subject: string
     type: string
@@ -55,6 +46,7 @@ export function registerBrainIpcHandlers(): void {
     note?: string
   }) => {
     try {
+      const brainScanner = getBrainScanner()
       const entryId = brainScanner.registerBrainEntry(
         input.repoId,
         input.subject,
@@ -70,11 +62,9 @@ export function registerBrainIpcHandlers(): void {
     }
   })
 
-  /**
-   * Get timeline entries (brain events + git commits)
-   */
-  ipcMain.handle('brain:timeline', async (event, { repoId }: { repoId: string }) => {
+  ipcMain.handle(IPC_CHANNELS.BRAIN.TIMELINE, async (_event, { repoId }: { repoId: string }) => {
     try {
+      const brainScanner = getBrainScanner()
       const timeline = await brainScanner.getTimeline(repoId)
       return timeline
     } catch (error) {
@@ -83,15 +73,13 @@ export function registerBrainIpcHandlers(): void {
     }
   })
 
-  /**
-   * Create a task from a brain entry
-   */
-  ipcMain.handle('brain:create-task', async (event, input: {
+  ipcMain.handle(IPC_CHANNELS.BRAIN.CREATE_TASK, async (_event, input: {
     brainEntryId: string
     subject?: string
     description?: string
   }) => {
     try {
+      const brainScanner = getBrainScanner()
       const taskId = brainScanner.createTaskFromBrainEntry(
         input.brainEntryId,
         input.subject,

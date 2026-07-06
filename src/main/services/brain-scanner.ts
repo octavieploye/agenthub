@@ -1,6 +1,4 @@
-import { app } from 'electron'
-import { watch } from 'fs'
-import { readFileSync, existsSync } from 'fs'
+import { watch, readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'fs'
 import { join, relative } from 'path'
 import { parse as parseYaml } from 'yaml'
 import log from 'electron-log/main'
@@ -8,6 +6,7 @@ import { getDb } from '../db/connection'
 import type Database from 'better-sqlite3'
 import {
   getBrainEntries,
+  getBrainEntryById,
   upsertBrainEntry,
   updateBrainEntryStatus,
   getBrainTimeline,
@@ -15,6 +14,7 @@ import {
 } from '../db/queries/brain.queries'
 import { BrainEntry, BrainTimelineEntry } from '../../shared/types/brain.types'
 import { RepoConfig } from '../../shared/types/config.types'
+import { getRepoById } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
 
 /**
@@ -47,10 +47,7 @@ export class BrainScannerService {
 
     const brainDir = join(repo.path, 'docs', 'brain')
     if (!existsSync(brainDir)) {
-      log.info(`Creating docs/brain directory for repo ${repo.name}`)
-      // Note: In a real implementation, we'd create the directory here
-      // For now, we'll just skip watching if it doesn't exist
-      return
+      return // No brain dir yet — will be created on first registerBrainEntry
     }
 
     if (this.repoWatchers.has(repo.id)) {
@@ -109,7 +106,7 @@ export class BrainScannerService {
     }
 
     try {
-      const files = app.getFileNamesInDirectory(brainDir, ['.md'])
+      const files = readdirSync(brainDir).filter((f) => f.endsWith('.md'))
       const db = getDb()
 
       files.forEach((file) => {
@@ -224,21 +221,18 @@ export class BrainScannerService {
     const db = getDb()
     const entry = getBrainEntryById(db, entryId)
 
-    if (!entry || !entry.pointerPath) {
+    if (!entry || !entry.pointerPath || !existsSync(entry.pointerPath)) {
       return
     }
 
     try {
       const content = readFileSync(entry.pointerPath, 'utf-8')
       const updatedContent = content.replace(
-        /status:\s*['"]?[^'"
-]+['"]?/,
+        /status:\s*['"]?[^'"\n]+['"]?/,
         `status: ${status}`
       )
-
-      // In a real implementation, we'd write the file back here
-      // For now, we'll just log it
-      log.info(`Would update status to ${status} in ${entry.pointerPath}`)
+      writeFileSync(entry.pointerPath, updatedContent, 'utf-8')
+      log.info(`Updated status to ${status} in ${entry.pointerPath}`)
     } catch (error) {
       log.error(`Error updating pointer file status:`, error)
     }
@@ -256,7 +250,7 @@ export class BrainScannerService {
     note?: string
   ): string {
     const db = getDb()
-    const repo = this.getRepoById(repoId) // This would be implemented
+    const repo = getRepoById(db, repoId)
 
     if (!repo || !repo.path) {
       throw new Error(`Repo not found or has no path: ${repoId}`)
@@ -264,9 +258,10 @@ export class BrainScannerService {
 
     // Generate pointer filename
     const date = new Date().toISOString().split('T')[0]
-    const slug = subject.toLowerCase().replace(/\s+/g, '-')
+    const slug = subject.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const filename = `${date}-${slug}-${type}.md`
-    const pointerPath = join(repo.path, 'docs', 'brain', filename)
+    const brainDir = join(repo.path, 'docs', 'brain')
+    const pointerPath = join(brainDir, filename)
 
     // Generate entry ID
     const entryId = `brain_${repoId}_${date}_${slug}`
@@ -286,17 +281,21 @@ export class BrainScannerService {
       .map(([key, value]) => `${key}: ${typeof value === 'string' ? `"${value}"` : value}`)
       .join('\n')
 
-    const pointerContent = `---\n${frontmatterYaml}\n---\n\n`
+    const pointerContent = `---\n${frontmatterYaml}\n---\n`
 
-    // In a real implementation, we'd write the pointer file here
-    log.info(`Would create pointer file at ${pointerPath}`)
-    log.info(`Content:\n${pointerContent}`)
+    // Ensure docs/brain/ directory exists
+    if (!existsSync(brainDir)) {
+      mkdirSync(brainDir, { recursive: true })
+    }
+
+    writeFileSync(pointerPath, pointerContent, 'utf-8')
+    log.info(`Created brain pointer file at ${pointerPath}`)
 
     // Create DB record
     upsertBrainEntry(db, {
       id: entryId,
       repoId,
-      projectId: null, // Would be set if project exists
+      projectId: null,
       pointerPath,
       artifactPath,
       type,
@@ -357,18 +356,6 @@ export class BrainScannerService {
     return createTaskFromBrainEntry(db, brainEntryId, taskSubject, taskDescription)
   }
 
-  /**
-   * Helper to get repo by ID (would be implemented with repo service)
-   */
-  private getRepoById(repoId: string): RepoConfig | null {
-    // In a real implementation, this would query the repos service
-    // For now, return a mock repo
-    return {
-      id: repoId,
-      name: `repo_${repoId}`,
-      path: `/mock/path/repo_${repoId}`
-    } as any
-  }
 }
 
 // Singleton instance

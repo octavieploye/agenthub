@@ -29,6 +29,7 @@ import StandaloneGitPanel from './widgets/git-panel/StandaloneGitPanel'
 import { OutputReplayModal } from './widgets/output-replay/OutputReplayModal'
 import { ContinuationDialog } from './widgets/continuation-dialog/ContinuationDialog'
 import ActivityLogView from './widgets/activity-log/ActivityLogView'
+import BrainPanel from './widgets/brain-panel/BrainPanel'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import { useWindowSize } from './hooks/useWindowSize'
 import { useAgentTts } from './hooks/useAgentTts'
@@ -1049,6 +1050,8 @@ function AppMain(): React.JSX.Element {
         <div className="flex-1 flex flex-col min-h-0">
           {viewMode === 'activity' ? (
             <ActivityLogView />
+          ) : viewMode === 'brain' ? (
+            <BrainPanel />
           ) : viewMode === 'raid' ? (
             /* Raid view — 3-column layout: RepoSidebar + AgentList + DetailPanel */
             <div className="flex h-full overflow-x-auto">

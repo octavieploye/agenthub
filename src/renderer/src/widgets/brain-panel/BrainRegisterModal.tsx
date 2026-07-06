@@ -30,7 +30,7 @@ export default function BrainRegisterModal({ onClose, onSuccess }: {
     setError(null)
 
     try {
-      const result = await window.electron.ipcRenderer.invoke('brain:register', {
+      const result = await window.agentHub.brain.register({
         repoId: formData.repoId,
         subject: formData.subject,
         type: formData.type,

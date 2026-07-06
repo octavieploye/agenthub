@@ -1,5 +1,5 @@
 import { Database } from 'better-sqlite3'
-import { BrainEntry } from '../../../shared/types/brain.types'
+import { BrainEntry, BrainTimelineEntry } from '../../../shared/types/brain.types'
 
 // Get all brain entries, optionally filtered by repo
 export function getBrainEntries(db: Database, repoId?: string): BrainEntry[] {
@@ -123,7 +123,7 @@ export function deleteBrainEntry(db: Database, id: string): void {
 }
 
 // Get timeline entries (brain events + git commits) for a repo
-export function getBrainTimeline(db: Database, repoId: string): any[] {
+export function getBrainTimeline(db: Database, repoId: string): BrainTimelineEntry[] {
   // This will be implemented with git service integration
   // For now, return brain events only
   const query = `
@@ -154,7 +154,7 @@ export function getBrainTimeline(db: Database, repoId: string): any[] {
     ORDER BY date DESC
   `
 
-  return db.prepare(query).all(repoId, repoId)
+  return db.prepare(query).all(repoId, repoId) as BrainTimelineEntry[]
 }
 
 // Create a task linked to a brain entry

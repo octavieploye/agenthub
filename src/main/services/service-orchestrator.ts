@@ -13,7 +13,7 @@ import { AutoPauseService } from './auto-pause'
 import { TrayManager } from './tray-manager'
 import { GitService } from './git-service'
 import { FsService } from './fs-service'
-import './brain-scanner' // Import for side effects (registers IPC handlers)
+import { initBrainScanner } from './brain-scanner'
 import { getAllRepos } from '../db/queries/repos.queries'
 import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
@@ -245,7 +245,6 @@ export function initializeServices(db: Database.Database): void {
   })
 
   // 7a. BrainScannerService — depends on GitService for timeline merging
-  import { initBrainScanner } from './brain-scanner'
   const brainScanner = initBrainScanner(gitService)
 
   // Start watching all repos for brain entries

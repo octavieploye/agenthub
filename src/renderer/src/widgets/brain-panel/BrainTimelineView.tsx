@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { useBrainStore } from './brain-store'
+import { useViewStore } from '@renderer/stores/view-store'
 import BrainTimelineEntry from './BrainTimelineEntry'
 
 /**
@@ -7,12 +8,13 @@ import BrainTimelineEntry from './BrainTimelineEntry'
  */
 export default function BrainTimelineView() {
   const { timelineData, loading, error, getTimeline } = useBrainStore()
+  const selectedRepoId = useViewStore((s) => s.selectedRepoId)
 
   useEffect(() => {
-    // For now, we'll just show a placeholder
-    // In a real implementation, this would fetch timeline data for the selected repo
-    // getTimeline('selected-repo-id')
-  }, [])
+    if (selectedRepoId) {
+      getTimeline(selectedRepoId)
+    }
+  }, [selectedRepoId])
 
   // Group entries by date
   const groupedByDate = timelineData.reduce((groups, entry) => {

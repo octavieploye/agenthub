@@ -6,14 +6,14 @@ interface BrainTimelineEntryProps {
 }
 
 export default function BrainTimelineEntry({ entry }: BrainTimelineEntryProps) {
-  // Icon mapping
-  const icons = {
+  // Icon mapping — keys match BrainTimelineEntry.icon values
+  const icons: Record<string, React.JSX.Element> = {
     brain: (
       <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
         <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
       </svg>
     ),
-    git: (
+    'git-commit': (
       <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
         <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
       </svg>
@@ -24,7 +24,7 @@ export default function BrainTimelineEntry({ entry }: BrainTimelineEntryProps) {
     <div className="timeline-entry flex items-start gap-3 p-3 hover:bg-base-200 rounded-lg transition-colors">
       {/* Icon */}
       <div className="icon mt-1">
-        {icons[entry.icon] || icons[entry.type]}
+        {icons[entry.icon] || icons[entry.type] || icons['brain']}
       </div>
 
       {/* Content */}

@@ -273,6 +273,18 @@ const agentHubBridge = {
       return () => ipcRenderer.removeListener(IPC_EVENTS.TTS.APPROVAL_NEEDED, handler)
     },
   },
+  brain: {
+    query: (params: { repoId?: string }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BRAIN.QUERY, params),
+    updateStatus: (id: string, status: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BRAIN.UPDATE_STATUS, { id, status }),
+    register: (input: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BRAIN.REGISTER, input),
+    timeline: (repoId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BRAIN.TIMELINE, { repoId }),
+    createTask: (input: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.BRAIN.CREATE_TASK, input)
+  },
   telegram: {
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.GET_STATUS),
     saveToken: (token: string) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM.SAVE_TOKEN, token),

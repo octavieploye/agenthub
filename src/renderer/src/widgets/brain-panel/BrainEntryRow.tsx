@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BrainEntry } from '../../../../shared/types/brain.types'
+import { useBrainStore } from './brain-store'
 import BrainTaskModal from './BrainTaskModal'
 
 interface BrainEntryRowProps {
@@ -7,6 +8,7 @@ interface BrainEntryRowProps {
 }
 
 export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
+  const { updateBrainEntryStatus } = useBrainStore()
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
 
@@ -42,10 +44,7 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
   }
 
   const handleStatusChange = (newStatus: string) => {
-    window.electron.ipcRenderer.invoke('brain:update-status', {
-      id: entry.id,
-      status: newStatus
-    })
+    updateBrainEntryStatus(entry.id, newStatus)
     setIsStatusDropdownOpen(false)
   }
 

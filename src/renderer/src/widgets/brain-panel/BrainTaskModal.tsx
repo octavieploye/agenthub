@@ -18,11 +18,12 @@ export default function BrainTaskModal({ brainEntry, onClose, onSuccess }: Brain
     setError(null)
 
     try {
-      const taskId = await window.electron.ipcRenderer.invoke('brain:create-task', {
+      const result = await window.agentHub.brain.createTask({
         brainEntryId: brainEntry.id,
         subject: `Implement: ${brainEntry.subject}`,
         description: description || `Task created from brain entry: ${brainEntry.subject}`
       })
+      const taskId = result.taskId
 
       setIsCreating(false)
       onSuccess()

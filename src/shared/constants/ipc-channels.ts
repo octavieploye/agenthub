@@ -199,6 +199,13 @@ export const IPC_CHANNELS = {
     UNPIN:           'workspace-memory:unpin',
     SET_CONTEXT_DOC: 'workspace-memory:set-context-doc'
   },
+  BRAIN: {
+    QUERY: 'brain:query',
+    UPDATE_STATUS: 'brain:update-status',
+    REGISTER: 'brain:register',
+    TIMELINE: 'brain:timeline',
+    CREATE_TASK: 'brain:create-task'
+  },
   TELEGRAM: {
     GET_STATUS:   'telegram:get-status',
     SAVE_TOKEN:   'telegram:save-token',

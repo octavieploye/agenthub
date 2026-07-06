@@ -29,9 +29,9 @@ export const useBrainStore = create<BrainStoreState>((set) => ({
   refreshBrainData: async () => {
     set({ loading: true, error: null })
     try {
-      const result = await window.electron.ipcRenderer.invoke('brain:query', {})
+      const result = await window.agentHub.brain.query({})
       set({ brainData: result, loading: false })
-    } catch (error) {
+    } catch (error: any) {
       set({ error: error.message || 'Failed to load brain data', loading: false })
     }
   },
@@ -39,39 +39,37 @@ export const useBrainStore = create<BrainStoreState>((set) => ({
   registerBrainEntry: async (input) => {
     set({ loading: true, error: null })
     try {
-      const result = await window.electron.ipcRenderer.invoke('brain:register', input)
+      const result = await window.agentHub.brain.register(input)
       set({ loading: false })
       return result.entryId
-    } catch (error) {
+    } catch (error: any) {
       set({ error: error.message || 'Failed to register brain entry', loading: false })
       throw error
     }
   },
 
   updateBrainEntryStatus: async (entryId, status) => {
-    set({ loading: true, error: null })
+    set({ error: null })
     try {
-      await window.electron.ipcRenderer.invoke('brain:update-status', { id: entryId, status })
+      await window.agentHub.brain.updateStatus(entryId, status)
       await useBrainStore.getState().refreshBrainData()
-      set({ loading: false })
-    } catch (error) {
-      set({ error: error.message || 'Failed to update status', loading: false })
+    } catch (error: any) {
+      set({ error: error.message || 'Failed to update status' })
       throw error
     }
   },
 
   createTaskFromBrainEntry: async (brainEntryId, subject, description) => {
-    set({ loading: true, error: null })
+    set({ error: null })
     try {
-      const result = await window.electron.ipcRenderer.invoke('brain:create-task', {
+      const result = await window.agentHub.brain.createTask({
         brainEntryId,
         subject,
         description
       })
-      set({ loading: false })
       return result.taskId
-    } catch (error) {
-      set({ error: error.message || 'Failed to create task', loading: false })
+    } catch (error: any) {
+      set({ error: error.message || 'Failed to create task' })
       throw error
     }
   },
@@ -79,9 +77,9 @@ export const useBrainStore = create<BrainStoreState>((set) => ({
   getTimeline: async (repoId) => {
     set({ loading: true, error: null })
     try {
-      const result = await window.electron.ipcRenderer.invoke('brain:timeline', { repoId })
+      const result = await window.agentHub.brain.timeline(repoId)
       set({ timelineData: result, loading: false })
-    } catch (error) {
+    } catch (error: any) {
       set({ error: error.message || 'Failed to load timeline', loading: false })
     }
   }
