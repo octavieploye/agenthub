@@ -3,7 +3,7 @@
  * Cross-repo intelligence panel for tracking brainstorms, specs, plans, and sprints
  */
 
-export type BrainEntryType = 'brainstorm' | 'spec' | 'plan' | 'sprint'
+export type BrainEntryType = 'brainstorm' | 'spec' | 'plan' | 'sprint' | 'strategy' | 'marketing' | 'how-to' | 'reference' | 'learning'
 export type BrainEntryStatus = 'draft' | 'active' | 'parked' | 'implemented'
 
 export interface BrainEntry {

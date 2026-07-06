@@ -184,6 +184,7 @@ export interface AgentHubBridge {
     openTerminal: (command: string) => Promise<IpcResponse<void>>
     getIntakeDir: () => Promise<IpcResponse<string>>
     listHowTo: () => Promise<IpcResponse<import('./how-to.types').HowToDoc[]>>
+    openPath: (filePath: string) => Promise<IpcResponse<void>>
   }
   log: {
     rendererError: (payload: import('./log.types').RendererErrorPayload) => void

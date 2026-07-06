@@ -2,35 +2,65 @@ import React, { useState, useEffect } from 'react'
 import { useBrainStore } from './brain-store'
 import BrainRepoGroup from './BrainRepoGroup'
 import BrainTimelineView from './BrainTimelineView'
-import BrainRegisterModal from './BrainRegisterModal'
+import type { BrainEntryType } from '../../../../shared/types/brain.types'
 
-/**
- * Main Brain Panel component - shows cross-repo intelligence index
- */
+const TYPE_OPTIONS: { value: BrainEntryType | 'all'; label: string }[] = [
+  { value: 'all',        label: 'All Types' },
+  { value: 'brainstorm', label: 'Brainstorm' },
+  { value: 'spec',       label: 'Spec' },
+  { value: 'plan',       label: 'Plan' },
+  { value: 'sprint',     label: 'Sprint' },
+  { value: 'strategy',   label: 'Strategy' },
+  { value: 'marketing',  label: 'Marketing' },
+  { value: 'how-to',     label: 'How-To' },
+  { value: 'reference',  label: 'Reference' },
+  { value: 'learning',   label: 'Learning' },
+]
+
 export default function BrainPanel() {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview')
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const [typeFilter, setTypeFilter] = useState<BrainEntryType | 'all'>('all')
+  const [repoFilter, setRepoFilter] = useState<string>('all')
   const {
     brainData,
     loading,
     error,
     refreshBrainData,
-    registerBrainEntry
   } = useBrainStore()
 
   useEffect(() => {
     refreshBrainData()
   }, [])
 
-  const handleRegisterSuccess = () => {
-    setIsRegisterModalOpen(false)
-    refreshBrainData()
-  }
+  // Collect unique repos for the filter dropdown
+  const repoOptions = brainData.map((g) => ({ id: g.repoId, name: g.repoName }))
+
+  // Apply filters
+  const filteredData = brainData
+    .filter((group) => repoFilter === 'all' || group.repoId === repoFilter)
+    .map((group) => {
+      if (typeFilter === 'all') return group
+      const filtered = group.entries.filter((e) => e.type === typeFilter)
+      if (filtered.length === 0) return null
+      return {
+        ...group,
+        entries: filtered,
+        summary: {
+          active: filtered.filter(e => e.status === 'active').length,
+          notActioned: filtered.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
+          parked: filtered.filter(e => e.status === 'parked').length,
+          implemented: filtered.filter(e => e.status === 'implemented').length
+        }
+      }
+    })
+    .filter(Boolean)
+
+  const totalEntries = filteredData.reduce((sum, g) => sum + (g?.entries.length ?? 0), 0)
 
   return (
     <div className="brain-panel w-full h-full flex flex-col bg-base-100">
-      {/* Header with tabs and controls */}
-      <div className="brain-header flex items-center justify-between p-4 border-b border-base-300">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-base-300">
         <div className="flex items-center gap-4">
           <h2 className="text-xl font-bold">Brain</h2>
 
@@ -51,28 +81,51 @@ export default function BrainPanel() {
           </div>
         </div>
 
-        {/* Action buttons */}
+        {/* Filters + actions */}
         <div className="flex items-center gap-2">
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={() => setIsRegisterModalOpen(true)}
+          {/* Repo filter */}
+          <select
+            className="select select-bordered select-sm"
+            value={repoFilter}
+            onChange={(e) => setRepoFilter(e.target.value)}
           >
-            + Register artifact
-          </button>
+            <option value="all">All Repos</option>
+            {repoOptions.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+
+          {/* Type filter */}
+          <select
+            className="select select-bordered select-sm"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as BrainEntryType | 'all')}
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+
+          {/* Count badge */}
+          <span className="badge badge-ghost text-xs">{totalEntries} artifacts</span>
+
           <button
             className="btn btn-sm btn-ghost"
             onClick={refreshBrainData}
             disabled={loading}
           >
-            ↻ {loading ? 'Refreshing...' : 'Refresh'}
+            {loading ? '↻ Scanning...' : '↻ Refresh'}
           </button>
         </div>
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {loading && brainData.length === 0 && (
         <div className="flex-1 flex items-center justify-center">
-          <span className="loading loading-spinner loading-lg"></span>
+          <div className="text-center">
+            <span className="loading loading-spinner loading-lg"></span>
+            <p className="mt-2 text-sm text-base-content/50">Scanning repos for artifacts...</p>
+          </div>
         </div>
       )}
 
@@ -80,28 +133,27 @@ export default function BrainPanel() {
       {error && (
         <div className="flex-1 flex items-center justify-center">
           <div className="alert alert-error max-w-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span>{error}</span>
           </div>
         </div>
       )}
 
       {/* Empty state */}
-      {!loading && !error && brainData.length === 0 && (
+      {!loading && !error && totalEntries === 0 && (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-gray-500">
-            <p className="mb-2">No brain entries found</p>
-            <p className="text-sm">Register artifacts to track brainstorms, specs, and plans</p>
+          <div className="text-center text-base-content/50">
+            <p className="mb-2">No artifacts found</p>
+            <p className="text-sm">Add repos with docs/ directories to see brainstorms, specs, and plans</p>
           </div>
         </div>
       )}
 
-      {/* Content - Overview or Timeline */}
-      {!loading && !error && brainData.length > 0 && (
+      {/* Content */}
+      {totalEntries > 0 && (
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'overview' ? (
             <div className="space-y-6">
-              {brainData.map((repoGroup) => (
+              {filteredData.map((repoGroup) => repoGroup && (
                 <BrainRepoGroup
                   key={repoGroup.repoId}
                   repoName={repoGroup.repoName}
@@ -114,14 +166,6 @@ export default function BrainPanel() {
             <BrainTimelineView />
           )}
         </div>
-      )}
-
-      {/* Register modal */}
-      {isRegisterModalOpen && (
-        <BrainRegisterModal
-          onClose={() => setIsRegisterModalOpen(false)}
-          onSuccess={handleRegisterSuccess}
-        />
       )}
     </div>
   )

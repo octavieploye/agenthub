@@ -4,9 +4,16 @@ import { getBrainScanner } from '../services/brain-scanner'
 import log from 'electron-log/main'
 
 export function registerBrainIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.BRAIN.QUERY, async (_event, { repoId }: { repoId?: string }) => {
+  // Query: auto-discover first, then return grouped results
+  ipcMain.handle(IPC_CHANNELS.BRAIN.QUERY, async (_event, { repoId, skipDiscovery }: { repoId?: string; skipDiscovery?: boolean }) => {
     try {
       const brainScanner = getBrainScanner()
+
+      // Auto-discover artifacts on each query (fast — upsert skips existing)
+      if (!skipDiscovery) {
+        brainScanner.discoverAllArtifacts()
+      }
+
       const entries = brainScanner.getBrainEntries(repoId)
 
       // Group entries by repo to match BrainQueryResult[] shape
@@ -18,7 +25,7 @@ export function registerBrainIpcHandlers(): void {
         grouped.get(entry.repoId)!.entries.push(entry)
       }
 
-      const results = Array.from(grouped.values()).map((group) => ({
+      return Array.from(grouped.values()).map((group) => ({
         repoId: group.repoId,
         repoName: group.repoName,
         entries: group.entries,
@@ -29,8 +36,6 @@ export function registerBrainIpcHandlers(): void {
           implemented: group.entries.filter(e => e.status === 'implemented').length
         }
       }))
-
-      return results
     } catch (error) {
       log.error('Error in brain:query:', error)
       throw error
@@ -48,36 +53,10 @@ export function registerBrainIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.BRAIN.REGISTER, async (_event, input: {
-    repoId: string
-    subject: string
-    type: string
-    artifactPath: string
-    project?: string
-    note?: string
-  }) => {
-    try {
-      const brainScanner = getBrainScanner()
-      const entryId = brainScanner.registerBrainEntry(
-        input.repoId,
-        input.subject,
-        input.type,
-        input.artifactPath,
-        input.project,
-        input.note
-      )
-      return { entryId, success: true }
-    } catch (error) {
-      log.error('Error in brain:register:', error)
-      throw error
-    }
-  })
-
   ipcMain.handle(IPC_CHANNELS.BRAIN.TIMELINE, async (_event, { repoId }: { repoId: string }) => {
     try {
       const brainScanner = getBrainScanner()
-      const timeline = await brainScanner.getTimeline(repoId)
-      return timeline
+      return await brainScanner.getTimeline(repoId)
     } catch (error) {
       log.error('Error in brain:timeline:', error)
       throw error

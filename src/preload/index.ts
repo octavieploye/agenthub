@@ -177,6 +177,7 @@ const agentHubBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_TERMINAL, command),
     getIntakeDir: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.GET_INTAKE_DIR),
     listHowTo: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.LIST_HOW_TO),
+    openPath: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM.OPEN_PATH, filePath),
   },
   log: {
     rendererError: (payload: RendererErrorPayload): void => {

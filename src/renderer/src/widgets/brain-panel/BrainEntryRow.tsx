@@ -35,12 +35,17 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
       case 'spec': return 'badge-accent'
       case 'plan': return 'badge-warning'
       case 'sprint': return 'badge-success'
+      case 'strategy': return 'badge-secondary'
+      case 'marketing': return 'badge-primary'
+      case 'how-to': return 'badge-info badge-outline'
+      case 'reference': return 'badge-ghost'
+      case 'learning': return 'badge-accent badge-outline'
       default: return 'badge-ghost'
     }
   }
 
   const handleOpenArtifact = () => {
-    window.electron.ipcRenderer.invoke('system:open-path', entry.artifactPath)
+    window.agentHub.system.openPath(entry.artifactPath)
   }
 
   const handleStatusChange = (newStatus: string) => {
@@ -98,17 +103,10 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
               </div>
             )}
 
-            {/* Path display */}
-            <div className="text-sm text-gray-500 mb-1 truncate max-w-md">
-              {entry.artifactPath}
+            {/* Path display — show short relative path */}
+            <div className="text-xs text-base-content/40 mb-1 truncate max-w-md font-mono">
+              {entry.artifactPath.replace(/^.*?\/(docs|brainstorm|development-stack|monetize|marketing|TODOS|ai-team-expert)/, '$1')}
             </div>
-
-            {/* Note display */}
-            {entry.note && (
-              <div className="text-sm italic text-gray-400 mt-1">
-                "{entry.note}"
-              </div>
-            )}
           </div>
 
           {/* Right side - status and actions */}

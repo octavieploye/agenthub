@@ -1,6 +1,5 @@
-import { watch, readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'fs'
-import { join, relative } from 'path'
-import { parse as parseYaml } from 'yaml'
+import { readFileSync, readdirSync, existsSync, statSync } from 'fs'
+import { join, relative, basename, extname } from 'path'
 import log from 'electron-log/main'
 import { getDb } from '../db/connection'
 import type Database from 'better-sqlite3'
@@ -12,17 +11,79 @@ import {
   getBrainTimeline,
   createTaskFromBrainEntry
 } from '../db/queries/brain.queries'
-import { BrainEntry, BrainTimelineEntry } from '../../shared/types/brain.types'
+import { BrainEntry, BrainEntryType, BrainTimelineEntry } from '../../shared/types/brain.types'
 import { RepoConfig } from '../../shared/types/config.types'
-import { getRepoById } from '../db/queries/repos.queries'
+import { getRepoById, getAllRepos } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
 
 /**
- * Scans repos for brain entry pointer files and maintains the brain_entries table.
+ * Directory patterns to scan for artifacts.
+ * Each maps a relative directory path to a brain entry type.
+ * Directories are scanned recursively for .md files.
+ */
+const ARTIFACT_SCAN_RULES: { dir: string; type: BrainEntryType; recursive: boolean }[] = [
+  { dir: 'docs/superpowers/specs',    type: 'spec',       recursive: false },
+  { dir: 'docs/superpowers/plans',    type: 'plan',       recursive: false },
+  { dir: 'docs/superpowers/strategy', type: 'strategy',   recursive: false },
+  { dir: 'docs/brainstorm',           type: 'brainstorm',  recursive: true  },
+  { dir: 'docs/how-to',              type: 'how-to',      recursive: false },
+  { dir: 'docs/marketing',           type: 'marketing',    recursive: true  },
+  { dir: 'docs/business-strategy',   type: 'strategy',    recursive: false },
+  { dir: 'docs/ai-engineering',      type: 'reference',   recursive: false },
+  { dir: 'docs/learnings',           type: 'learning',    recursive: false },
+  // Architecture repo patterns
+  { dir: 'brainstorm',                type: 'brainstorm',  recursive: true  },
+  { dir: 'development-stack',         type: 'reference',   recursive: true  },
+  { dir: 'monetize',                  type: 'strategy',    recursive: true  },
+  { dir: 'marketing-launch-strategy', type: 'marketing',   recursive: false },
+  { dir: 'ai-team-expert/learnings',  type: 'learning',    recursive: false },
+  { dir: 'ai-team-expert/audits',     type: 'reference',   recursive: false },
+  { dir: 'TODOS',                     type: 'plan',        recursive: true  },
+]
+
+/**
+ * Extract a human-readable subject from a markdown filename.
+ * "2026-07-03-deep-reasoning-package-design.md" → "Deep Reasoning Package Design"
+ */
+function subjectFromFilename(filename: string): string {
+  const name = basename(filename, extname(filename))
+  // Strip leading date prefix (YYYY-MM-DD-)
+  const stripped = name.replace(/^\d{4}-\d{2}-\d{2}-/, '')
+  // Strip leading numbered prefix (01-, 02-, etc.)
+  const cleaned = stripped.replace(/^\d{1,3}-/, '')
+  return cleaned
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/**
+ * Recursively collect .md files from a directory.
+ */
+function collectMdFiles(dir: string, recursive: boolean): string[] {
+  if (!existsSync(dir)) return []
+  const results: string[] = []
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name)
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        results.push(fullPath)
+      } else if (entry.isDirectory() && recursive) {
+        results.push(...collectMdFiles(fullPath, true))
+      }
+    }
+  } catch {
+    // Permission errors etc — skip silently
+  }
+  return results
+}
+
+/**
+ * Scans repos for artifact .md files in known directories and maintains the brain_entries table.
  * Also provides timeline merging with git events.
  */
 export class BrainScannerService {
-  private repoWatchers: Map<string, NodeJS.FSWatcher> = new Map()
   private gitService: GitService
 
   constructor(gitService: GitService) {
@@ -30,173 +91,77 @@ export class BrainScannerService {
   }
 
   /**
-   * Start watching all known repos for brain entry changes
+   * Auto-discover and register all artifacts across all known repos.
+   * Called on brain panel refresh.
    */
-  startWatchingAllRepos(repos: RepoConfig[]): void {
-    repos.forEach((repo) => this.startWatchingRepo(repo))
+  discoverAllArtifacts(): { discovered: number; repos: number } {
+    const db = getDb()
+    const repos = getAllRepos(db)
+    let totalDiscovered = 0
+
+    for (const repo of repos) {
+      if (!repo.path) continue
+      totalDiscovered += this.discoverRepoArtifacts(repo)
+    }
+
+    log.info(`Brain auto-discovery: found ${totalDiscovered} artifacts across ${repos.length} repos`)
+    return { discovered: totalDiscovered, repos: repos.length }
   }
 
   /**
-   * Start watching a single repo's docs/brain/ directory
+   * Auto-discover artifacts in a single repo by scanning known directories.
    */
-  startWatchingRepo(repo: RepoConfig): void {
-    if (!repo.path) {
-      log.warn(`Cannot watch brain entries for repo ${repo.name} - no path set`)
-      return
-    }
+  discoverRepoArtifacts(repo: RepoConfig): number {
+    if (!repo.path || !existsSync(repo.path)) return 0
 
-    const brainDir = join(repo.path, 'docs', 'brain')
-    if (!existsSync(brainDir)) {
-      return // No brain dir yet — will be created on first registerBrainEntry
-    }
+    const db = getDb()
+    let count = 0
 
-    if (this.repoWatchers.has(repo.id)) {
-      return // Already watching
-    }
+    for (const rule of ARTIFACT_SCAN_RULES) {
+      const scanDir = join(repo.path, rule.dir)
+      if (!existsSync(scanDir)) continue
 
-    log.info(`Starting brain scanner watcher for repo ${repo.name} at ${brainDir}`)
-
-    const watcher = watch(brainDir, { recursive: false }, (eventType, filename) => {
-      if (filename && (filename.endsWith('.md') || filename.endsWith('.md~'))) {
-        this.handleBrainFileChange(repo, eventType, filename)
-      }
-    })
-
-    this.repoWatchers.set(repo.id, watcher)
-
-    // Initial scan
-    this.scanRepoBrainEntries(repo)
-  }
-
-  /**
-   * Stop watching a repo
-   */
-  stopWatchingRepo(repoId: string): void {
-    const watcher = this.repoWatchers.get(repoId)
-    if (watcher) {
-      watcher.close()
-      this.repoWatchers.delete(repoId)
-    }
-  }
-
-  /**
-   * Handle file changes in a repo's brain directory
-   */
-  private handleBrainFileChange(repo: RepoConfig, eventType: string, filename: string): void {
-    log.info(`Brain file change detected: ${eventType} ${filename} in ${repo.name}`)
-
-    // Debounce rapid changes (e.g., during file saves)
-    setTimeout(() => {
-      this.scanRepoBrainEntries(repo)
-    }, 500)
-  }
-
-  /**
-   * Scan a repo's docs/brain/ directory and sync with database
-   */
-  scanRepoBrainEntries(repo: RepoConfig): void {
-    if (!repo.path) {
-      log.warn(`Cannot scan brain entries for repo ${repo.name} - no path set`)
-      return
-    }
-
-    const brainDir = join(repo.path, 'docs', 'brain')
-    if (!existsSync(brainDir)) {
-      return
-    }
-
-    try {
-      const files = readdirSync(brainDir).filter((f) => f.endsWith('.md'))
-      const db = getDb()
-
-      files.forEach((file) => {
+      const mdFiles = collectMdFiles(scanDir, rule.recursive)
+      for (const filePath of mdFiles) {
         try {
-          this.processBrainPointerFile(db, repo, join(brainDir, file))
+          // Skip very small files (likely empty or just frontmatter)
+          const stat = statSync(filePath)
+          if (stat.size < 20) continue
+
+          const relPath = relative(repo.path, filePath)
+          const entryId = `auto_${repo.id}_${relPath.replace(/[^a-zA-Z0-9]/g, '_')}`
+
+          // Extract date from filename if present
+          const dateMatch = basename(filePath).match(/^(\d{4}-\d{2}-\d{2})/)
+          const createdAt = dateMatch ? dateMatch[1] : stat.birthtime.toISOString().split('T')[0]
+
+          upsertBrainEntry(db, {
+            id: entryId,
+            repoId: repo.id,
+            projectId: null,
+            pointerPath: filePath,    // For auto-discovered, pointer = artifact
+            artifactPath: filePath,
+            type: rule.type,
+            subject: subjectFromFilename(filePath),
+            status: 'active',
+            createdAt,
+            note: `Auto-discovered from ${rule.dir}/`
+          })
+          count++
         } catch (error) {
-          log.error(`Error processing brain file ${file}:`, error)
+          log.warn(`Brain discovery: skipping ${filePath}: ${error}`)
         }
-      })
-
-      log.info(`Scanned ${files.length} brain entries for repo ${repo.name}`)
-    } catch (error) {
-      log.error(`Error scanning brain entries for repo ${repo.name}:`, error)
+      }
     }
+
+    if (count > 0) {
+      log.info(`Brain discovery: registered ${count} artifacts in ${repo.name}`)
+    }
+    return count
   }
 
   /**
-   * Process a single brain pointer file
-   */
-  private processBrainPointerFile(db: Database, repo: RepoConfig, filePath: string): void {
-    const content = readFileSync(filePath, 'utf-8')
-
-    // Extract frontmatter
-    const frontmatterMatch = content.match(/^---\s*([\s\S]*?)\s*---/)
-    if (!frontmatterMatch) {
-      log.warn(`No frontmatter found in ${filePath}`)
-      return
-    }
-
-    try {
-      const frontmatter = parseYaml(frontmatterMatch[1]) as {
-        type: string
-        subject: string
-        project?: string
-        path: string
-        status: string
-        created_at: string
-        note?: string
-      }
-
-      // Validate required fields
-      if (!frontmatter.type || !frontmatter.subject || !frontmatter.path || !frontmatter.status || !frontmatter.created_at) {
-        log.warn(`Invalid frontmatter in ${filePath} - missing required fields`)
-        return
-      }
-
-      // Resolve artifact path (relative to repo root)
-      const artifactPath = join(repo.path, frontmatter.path)
-      if (!existsSync(artifactPath)) {
-        log.warn(`Artifact not found at ${artifactPath} for brain entry ${filePath}`)
-      }
-
-      // Generate entry ID from filename (without extension)
-      const filename = filePath.split('/').pop()?.replace('.md', '')
-      const entryId = `brain_${repo.id}_${filename}`
-
-      // Find project ID if specified
-      let projectId: string | null = null
-      if (frontmatter.project) {
-        // In a real implementation, we'd look up the project by name
-        // For now, we'll just store the name in the note field
-        const projectNote = frontmatter.project
-        if (frontmatter.note) {
-          frontmatter.note += ` | Project: ${projectNote}`
-        } else {
-          frontmatter.note = `Project: ${projectNote}`
-        }
-      }
-
-      // Upsert into database
-      upsertBrainEntry(db, {
-        id: entryId,
-        repoId: repo.id,
-        projectId: projectId,
-        pointerPath: filePath,
-        artifactPath: artifactPath,
-        type: frontmatter.type,
-        subject: frontmatter.subject,
-        status: frontmatter.status,
-        createdAt: frontmatter.created_at,
-        note: frontmatter.note || null
-      })
-
-    } catch (error) {
-      log.error(`Error parsing frontmatter in ${filePath}:`, error)
-    }
-  }
-
-  /**
-   * Get all brain entries, optionally filtered by repo
+   * Get all brain entries, optionally filtered by repo and/or type.
    */
   getBrainEntries(repoId?: string): BrainEntry[] {
     const db = getDb()
@@ -209,103 +174,6 @@ export class BrainScannerService {
   updateBrainEntryStatus(entryId: string, status: string): void {
     const db = getDb()
     updateBrainEntryStatus(db, entryId, status)
-
-    // Also update the pointer file's frontmatter
-    this.updatePointerFileStatus(entryId, status)
-  }
-
-  /**
-   * Update the pointer file's status field to match the database
-   */
-  private updatePointerFileStatus(entryId: string, status: string): void {
-    const db = getDb()
-    const entry = getBrainEntryById(db, entryId)
-
-    if (!entry || !entry.pointerPath || !existsSync(entry.pointerPath)) {
-      return
-    }
-
-    try {
-      const content = readFileSync(entry.pointerPath, 'utf-8')
-      const updatedContent = content.replace(
-        /status:\s*['"]?[^'"\n]+['"]?/,
-        `status: ${status}`
-      )
-      writeFileSync(entry.pointerPath, updatedContent, 'utf-8')
-      log.info(`Updated status to ${status} in ${entry.pointerPath}`)
-    } catch (error) {
-      log.error(`Error updating pointer file status:`, error)
-    }
-  }
-
-  /**
-   * Register a new brain entry (create pointer file and DB record)
-   */
-  registerBrainEntry(
-    repoId: string,
-    subject: string,
-    type: string,
-    artifactPath: string,
-    project?: string,
-    note?: string
-  ): string {
-    const db = getDb()
-    const repo = getRepoById(db, repoId)
-
-    if (!repo || !repo.path) {
-      throw new Error(`Repo not found or has no path: ${repoId}`)
-    }
-
-    // Generate pointer filename
-    const date = new Date().toISOString().split('T')[0]
-    const slug = subject.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    const filename = `${date}-${slug}-${type}.md`
-    const brainDir = join(repo.path, 'docs', 'brain')
-    const pointerPath = join(brainDir, filename)
-
-    // Generate entry ID
-    const entryId = `brain_${repoId}_${date}_${slug}`
-
-    // Create pointer file content
-    const frontmatter = {
-      type,
-      subject,
-      ...(project && { project }),
-      path: relative(repo.path, artifactPath),
-      status: 'draft',
-      created_at: date,
-      ...(note && { note })
-    }
-
-    const frontmatterYaml = Object.entries(frontmatter)
-      .map(([key, value]) => `${key}: ${typeof value === 'string' ? `"${value}"` : value}`)
-      .join('\n')
-
-    const pointerContent = `---\n${frontmatterYaml}\n---\n`
-
-    // Ensure docs/brain/ directory exists
-    if (!existsSync(brainDir)) {
-      mkdirSync(brainDir, { recursive: true })
-    }
-
-    writeFileSync(pointerPath, pointerContent, 'utf-8')
-    log.info(`Created brain pointer file at ${pointerPath}`)
-
-    // Create DB record
-    upsertBrainEntry(db, {
-      id: entryId,
-      repoId,
-      projectId: null,
-      pointerPath,
-      artifactPath,
-      type,
-      subject,
-      status: 'draft',
-      createdAt: date,
-      note: note || null
-    })
-
-    return entryId
   }
 
   /**
@@ -316,7 +184,7 @@ export class BrainScannerService {
     const dbEvents = getBrainTimeline(db, repoId)
 
     // Get git events
-    let gitEvents: any[] = []
+    let gitEvents: BrainTimelineEntry[] = []
     try {
       const repo = getRepoById(db, repoId)
       if (repo?.path) {
@@ -335,10 +203,8 @@ export class BrainScannerService {
       log.warn(`Error getting git events for repo ${repoId}:`, error)
     }
 
-    // Merge and sort events
     const allEvents = [...dbEvents, ...gitEvents]
     allEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
     return allEvents
   }
 
@@ -348,17 +214,12 @@ export class BrainScannerService {
   createTaskFromBrainEntry(brainEntryId: string, subject?: string, description?: string): string {
     const db = getDb()
     const entry = getBrainEntryById(db, brainEntryId)
-
-    if (!entry) {
-      throw new Error(`Brain entry not found: ${brainEntryId}`)
-    }
+    if (!entry) throw new Error(`Brain entry not found: ${brainEntryId}`)
 
     const taskSubject = subject || `Implement: ${entry.subject}`
     const taskDescription = description || `Task created from brain entry: ${entry.subject}`
-
     return createTaskFromBrainEntry(db, brainEntryId, taskSubject, taskDescription)
   }
-
 }
 
 // Singleton instance
