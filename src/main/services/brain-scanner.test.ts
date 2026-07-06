@@ -115,6 +115,10 @@ describe('deriveComputedStatus', () => {
     expect(deriveComputedStatus(0, 0, false, '## Status: implemented')).toBe('done')
   })
 
+  test('returns done when fileContent contains "Status: done" marker', () => {
+    expect(deriveComputedStatus(0, 0, false, '## Status: done')).toBe('done')
+  })
+
   test('returns in_progress when some checklist items done', () => {
     expect(deriveComputedStatus(4, 2, false, '')).toBe('in_progress')
   })
