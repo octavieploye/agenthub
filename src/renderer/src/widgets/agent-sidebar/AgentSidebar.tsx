@@ -29,6 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
   idle: 'bg-base-content/60',
   locked: 'bg-warning animate-breathe',
   completed: 'bg-info',
+  awaiting_approval: 'bg-warning',
   looping: 'bg-error animate-urgency-pulse',
   paused: 'bg-amber-400',
   interrupted: 'bg-error',
@@ -36,7 +37,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 interface GlowResult {
-  boxShadow: string
   cssVar: string
   glowClass: string
 }
@@ -46,23 +46,26 @@ function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | nu
 
   switch (agent.status) {
     case 'completed': {
+      // Persistent slow pulse so the completed state stays visible until user acts
       return {
-        boxShadow: '',
         cssVar: color,
-        glowClass: 'glow-blip-soft',
+        glowClass: 'glow-blip',
+      }
+    }
+
+    case 'locked': {
+      // "Response needed" — Claude finished a turn (BEL fired) and is at the ❯ prompt.
+      // Slow pulse matches completed cadence: both are "waiting for user".
+      return {
+        cssVar: color,
+        glowClass: 'glow-blip',
       }
     }
 
     case 'awaiting_approval': {
-      if (isEscalated) {
-        return {
-          boxShadow: `0 0 20px ${color}, 0 0 50px ${color}80`,
-          cssVar: color,
-          glowClass: 'glow-blip-fast',
-        }
-      }
+      // Fast pulse — escalated uses same class; escalation is tracked via isEscalated
+      // for future differentiation if needed. box-shadow fully owned by keyframe.
       return {
-        boxShadow: `0 0 12px ${color}, 0 0 30px ${color}60`,
         cssVar: color,
         glowClass: 'glow-blip-fast',
       }
@@ -72,7 +75,6 @@ function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | nu
     case 'looping': {
       const errorColor = 'oklch(0.62 0.16 15)'
       return {
-        boxShadow: `0 0 0 1px ${errorColor}60`,
         cssVar: errorColor,
         glowClass: 'glow-blip-fast',
       }
@@ -160,6 +162,12 @@ function AgentCard({
       const timer = setTimeout(() => setShowShimmer(false), 650)
       return () => clearTimeout(timer)
     }
+    if (agent.status === 'locked' && prev !== 'locked') {
+      // Shimmer on every turn completion (BEL signal → ❯ prompt) — "response ready"
+      setShowShimmer(true)
+      const timer = setTimeout(() => setShowShimmer(false), 650)
+      return () => clearTimeout(timer)
+    }
     if (agent.status === 'awaiting_approval' && prev !== 'awaiting_approval') {
       setShowShimmer(true)
       setShowNudge(true)
@@ -170,7 +178,7 @@ function AgentCard({
         clearTimeout(nudgeTimer)
       }
     }
-    if (agent.status !== 'completed') {
+    if (agent.status !== 'completed' && agent.status !== 'locked') {
       setShowShimmer(false)
     }
     return undefined
@@ -196,11 +204,10 @@ function AgentCard({
 
   const glowClass = glow?.glowClass ?? ''
 
+  // Only pass --glow-color — box-shadow is owned exclusively by the keyframe animation.
+  // An inline boxShadow competes with the animation and can prevent it from running.
   const glowStyle: React.CSSProperties = glow
-    ? ({
-        '--glow-color': glow.cssVar,
-        boxShadow: glow.boxShadow,
-      } as React.CSSProperties)
+    ? ({ '--glow-color': glow.cssVar } as React.CSSProperties)
     : {}
 
   const colorWashStyle: React.CSSProperties = {

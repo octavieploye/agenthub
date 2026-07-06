@@ -32,10 +32,30 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   idle: 'bg-base-content/60',
   locked: 'bg-warning animate-breathe',
   completed: 'bg-info',
+  awaiting_approval: 'bg-warning',
   looping: 'bg-error animate-urgency-pulse',
   paused: 'bg-amber-400',
   interrupted: 'bg-error',
   tray_running: 'bg-success/50'
+}
+
+function getRaidGlowClass(status: string): string {
+  switch (status) {
+    case 'locked':
+    case 'completed':
+      return 'glow-blip'
+    case 'awaiting_approval':
+    case 'error':
+    case 'looping':
+      return 'glow-blip-fast'
+    default:
+      return ''
+  }
+}
+
+function getRaidGlowColor(status: string, agentColor: string): string {
+  if (status === 'error' || status === 'looping') return 'oklch(0.62 0.16 15)'
+  return agentColor
 }
 
 function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: RaidFrameProps): React.JSX.Element {
@@ -59,11 +79,18 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
     return () => clearInterval(interval)
   }, [agent.id, agent.telegramNotify])
 
+  const glowClass = getRaidGlowClass(agent.status)
+  const glowColor = getRaidGlowColor(agent.status, agent.color)
+
   return (
     <div
       data-testid="raid-frame"
-      className="panel-glass p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px]"
-      style={{ borderLeftColor: agent.color, boxShadow: `0 0 12px ${agent.color}20` }}
+      className={`panel-glass p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px] ${glowClass}`}
+      style={{
+        borderLeftColor: agent.color,
+        // Static ambient shadow when idle/busy; keyframe animation owns box-shadow when glowing
+        ...(glowClass ? { '--glow-color': glowColor } as React.CSSProperties : { boxShadow: `0 0 12px ${agent.color}20` }),
+      }}
       onClick={() => onSelect(agent.id)}
       onContextMenu={(e) => {
         e.preventDefault()
