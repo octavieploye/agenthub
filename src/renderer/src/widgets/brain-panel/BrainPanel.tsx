@@ -3,6 +3,7 @@ import { useBrainStore } from './brain-store'
 import { useReposStore } from '@renderer/stores/repos-store'
 import BrainRepoGroup from './BrainRepoGroup'
 import BrainTimelineView from './BrainTimelineView'
+import BrainChronologyView from './BrainChronologyView'
 import type { BrainEntryType } from '../../../../shared/types/brain.types'
 
 const TYPE_OPTIONS: { value: BrainEntryType | 'all'; label: string }[] = [
@@ -19,7 +20,7 @@ const TYPE_OPTIONS: { value: BrainEntryType | 'all'; label: string }[] = [
 ]
 
 export default function BrainPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'chronology'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<BrainEntryType | 'all'>('all')
   const [repoFilter, setRepoFilter] = useState<string>('all')
@@ -100,6 +101,12 @@ export default function BrainPanel() {
               onClick={() => setActiveTab('timeline')}
             >
               Timeline
+            </button>
+            <button
+              className={`tab ${activeTab === 'chronology' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('chronology')}
+            >
+              Chronology
             </button>
           </div>
         </div>
@@ -206,6 +213,8 @@ export default function BrainPanel() {
                 />
               ))}
             </div>
+          ) : activeTab === 'chronology' ? (
+            <BrainChronologyView groups={filteredData} />
           ) : (
             <BrainTimelineView />
           )}
