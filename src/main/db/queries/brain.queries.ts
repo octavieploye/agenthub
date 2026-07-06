@@ -60,14 +60,19 @@ export function getBrainEntryById(db: Database, id: string): BrainEntry | null {
       be.status,
       be.created_at as createdAt,
       be.updated_at as updatedAt,
-      be.note
+      be.note,
+      be.computed_status as computedStatus,
+      be.checklist_total as checklistTotal,
+      be.checklist_done as checklistDone,
+      CASE WHEN be.git_signal = 1 THEN 1 ELSE 0 END as gitSignal
     FROM brain_entries be
     LEFT JOIN repos r ON be.repo_id = r.id
     LEFT JOIN projects p ON be.project_id = p.id
     WHERE be.id = ?
   `
 
-  return (db.prepare(query).get(id) ?? null) as BrainEntry | null
+  const row = db.prepare(query).get(id) as any
+  return row ? { ...row, gitSignal: row.gitSignal === 1 } as BrainEntry : null
 }
 
 // Create or update a brain entry.

@@ -208,6 +208,22 @@ describe('Brain Queries', () => {
         note: 'Test note'
       })
     })
+
+    test('should return computed status fields', () => {
+      db.prepare(`
+        INSERT INTO brain_entries (
+          id, repo_id, pointer_path, artifact_path,
+          type, subject, status, created_at, updated_at,
+          computed_status, checklist_total, checklist_done, git_signal
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('csentry', 'repo1', '/test/cs.md', '/test/cs.md', 'spec', 'CS Entry', 'active', '2026-01-01', '2026-01-01', 'done', 5, 5, 1)
+
+      const result = getBrainEntryById(db, 'csentry')
+      expect(result?.computedStatus).toBe('done')
+      expect(result?.checklistTotal).toBe(5)
+      expect(result?.checklistDone).toBe(5)
+      expect(result?.gitSignal).toBe(true)
+    })
   })
 
   describe('upsertBrainEntry', () => {
