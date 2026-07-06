@@ -273,7 +273,10 @@ export function initializeServices(db: Database.Database): void {
     },
     logWarning: (message: string, meta?: Record<string, unknown>) => {
       log.warn(message, meta)
-    }
+    },
+    agenthubPath: app.isPackaged
+      ? join(app.getAppPath(), '..')
+      : process.cwd()
   })
 
   // 9. WindowManager — creates/tracks breakout terminal windows

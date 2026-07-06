@@ -22,6 +22,7 @@ const WORKFLOW_CATEGORIES: Record<string, string> = {
 export interface SkillsServiceDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
   logWarning: (message: string, meta?: Record<string, unknown>) => void
+  agenthubPath?: string
 }
 
 interface DisplayRegistry {
@@ -112,47 +113,71 @@ export class SkillsService {
 
   private scanSkills(repoPath?: string): SkillItem[] {
     const skills: SkillItem[] = []
+    const agenthubPath = this.deps.agenthubPath
 
-    // Project-scoped only — AgentHub shows skills from the agent's repo, not from
-    // the user's global ~/.claude/skills/ or Claude Code plugins (those are consumed
-    // internally by Claude and can't be sent via the PTY).
+    // Scan project repo (if provided and different from agenthub)
     if (repoPath) {
-      const projectDir = join(repoPath, '.claude', 'skills')
-      skills.push(...this.scanDirectory(projectDir, 'project'))
-      skills.push(...this.scanTeams(repoPath))
-      skills.push(...this.scanWorkflows(repoPath))
-      skills.push(...this.scanCommands(repoPath))
+      const projectSkills = this.scanRepo(repoPath)
+      const isAgentHub = agenthubPath && this.normalizePath(repoPath) === this.normalizePath(agenthubPath)
+      const origin = isAgentHub ? 'agenthub' as const : 'project' as const
+      for (const s of projectSkills) s.origin = origin
+      skills.push(...projectSkills)
+    }
 
-      // Deduplicate: if a skill and command share the same id, keep the skill
-      const seen = new Map<string, number>()
-      for (let i = 0; i < skills.length; i++) {
-        const existing = seen.get(skills[i].id)
-        if (existing !== undefined) {
-          // Keep whichever is NOT a command (skills have richer metadata)
-          if (skills[i].source === 'command') {
-            skills.splice(i, 1)
-            i--
-          } else {
-            skills.splice(existing, 1)
-            i--
-            // Re-index after splice
-            seen.clear()
-            for (let j = 0; j <= i; j++) seen.set(skills[j].id, j)
-          }
-          continue
-        }
-        seen.set(skills[i].id, i)
-      }
-
-      // Apply display registry overrides
-      const registry = this.loadDisplayRegistry(repoPath)
-      if (registry) {
-        this.applyDisplayRegistry(skills, registry)
+    // Always scan agenthub repo as well (if configured and different from project)
+    if (agenthubPath) {
+      const isAlreadyScanned = repoPath && this.normalizePath(repoPath) === this.normalizePath(agenthubPath)
+      if (!isAlreadyScanned) {
+        const agenthubSkills = this.scanRepo(agenthubPath)
+        for (const s of agenthubSkills) s.origin = 'agenthub'
+        skills.push(...agenthubSkills)
       }
     }
 
     this.deps.logInfo('Skills scanned', { count: skills.length, repoPath })
     return skills
+  }
+
+  private normalizePath(p: string): string {
+    // Resolve trailing slashes and normalize for comparison
+    return p.replace(/\/+$/, '')
+  }
+
+  private scanRepo(repoPath: string): SkillItem[] {
+    const items: SkillItem[] = []
+
+    const projectDir = join(repoPath, '.claude', 'skills')
+    items.push(...this.scanDirectory(projectDir, 'project'))
+    items.push(...this.scanTeams(repoPath))
+    items.push(...this.scanWorkflows(repoPath))
+    items.push(...this.scanCommands(repoPath))
+
+    // Deduplicate within this repo: if a skill and command share the same id, keep the skill
+    const seen = new Map<string, number>()
+    for (let i = 0; i < items.length; i++) {
+      const existing = seen.get(items[i].id)
+      if (existing !== undefined) {
+        if (items[i].source === 'command') {
+          items.splice(i, 1)
+          i--
+        } else {
+          items.splice(existing, 1)
+          i--
+          seen.clear()
+          for (let j = 0; j <= i; j++) seen.set(items[j].id, j)
+        }
+        continue
+      }
+      seen.set(items[i].id, i)
+    }
+
+    // Apply display registry overrides
+    const registry = this.loadDisplayRegistry(repoPath)
+    if (registry) {
+      this.applyDisplayRegistry(items, registry)
+    }
+
+    return items
   }
 
   private scanTeams(repoPath: string): SkillItem[] {

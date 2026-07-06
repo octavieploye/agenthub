@@ -52,6 +52,129 @@ function sortedGroupByCategory(skills: SkillItem[]): [string, SkillItem[]][] {
   return ordered
 }
 
+function repoLabel(repoPath?: string): string {
+  if (!repoPath) return 'PROJECT'
+  const parts = repoPath.replace(/\/+$/, '').split('/')
+  return parts[parts.length - 1]?.toUpperCase() || 'PROJECT'
+}
+
+interface OriginPanelProps {
+  label: string
+  skills: SkillItem[]
+  expandedSections: Set<string>
+  toggleSection: (key: string) => void
+  executing: string | null
+  onExecute: (skillId: string) => void
+  panelKey: string
+  isPanelExpanded: boolean
+  onTogglePanel: () => void
+}
+
+function OriginPanel({
+  label,
+  skills,
+  expandedSections,
+  toggleSection,
+  executing,
+  onExecute,
+  panelKey,
+  isPanelExpanded,
+  onTogglePanel
+}: OriginPanelProps): React.JSX.Element {
+  const grouped = useMemo(() => sortedGroupByCategory(skills), [skills])
+
+  return (
+    <div className="mb-1" data-testid={`origin-panel-${panelKey}`}>
+      {/* Origin panel header */}
+      <button
+        data-testid={`origin-toggle-${panelKey}`}
+        onClick={onTogglePanel}
+        className="w-full flex items-center gap-2 px-2 py-2 rounded bg-base-content/5 hover:bg-base-content/10 transition-colors"
+      >
+        <span
+          className={`text-[10px] text-base-content/50 transition-transform ${isPanelExpanded ? 'rotate-90' : ''}`}
+        >
+          &#9654;
+        </span>
+        <span className="text-[11px] font-bold uppercase text-base-content/60 tracking-wider flex-1 text-left">
+          {label}
+        </span>
+        <span className="text-[10px] text-base-content/30 bg-base-content/10 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+          {skills.length}
+        </span>
+      </button>
+
+      {/* Category sections inside panel */}
+      {isPanelExpanded && (
+        <div className="pl-2 mt-0.5">
+          {grouped.map(([category, categorySkills]) => {
+            const sectionKey = `${panelKey}:${category}`
+            const isExpanded = expandedSections.has(sectionKey)
+            return (
+              <div key={sectionKey} className="mb-0.5">
+                {/* Category header */}
+                <button
+                  data-testid={`section-${sectionKey}`}
+                  onClick={() => toggleSection(sectionKey)}
+                  className="w-full flex items-center gap-1.5 px-1 py-1.5 rounded hover:bg-base-content/5 transition-colors"
+                >
+                  <span
+                    className={`text-[10px] text-base-content/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  >
+                    &#9654;
+                  </span>
+                  <span className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider flex-1 text-left">
+                    {category}
+                  </span>
+                  <span className="text-[10px] text-base-content/30 bg-base-content/5 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {categorySkills.length}
+                  </span>
+                </button>
+
+                {/* Skill items */}
+                {isExpanded &&
+                  categorySkills.map((skill) => (
+                    <button
+                      key={skill.id}
+                      data-testid={`skill-${skill.id}`}
+                      onClick={() => onExecute(skill.id)}
+                      disabled={executing !== null}
+                      title={skill.description}
+                      className="dropdown-item w-full text-left disabled:opacity-50 ml-2"
+                      style={{ width: 'calc(100% - 0.5rem)' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-base-content/80 font-medium flex-1 truncate">
+                          {skill.displayName ?? skill.name}
+                        </span>
+                        {executing === skill.id && (
+                          <span className="loading loading-spinner loading-xs text-primary" />
+                        )}
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                            skill.source === 'team'
+                              ? 'bg-secondary/10 text-secondary'
+                              : skill.source === 'workflow'
+                                ? 'bg-warning/10 text-warning'
+                                : skill.source === 'command'
+                                  ? 'bg-info/10 text-info'
+                                  : 'bg-success/10 text-success'
+                          }`}
+                        >
+                          {skill.source}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): React.JSX.Element | null {
   const {
     skills,
@@ -69,6 +192,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
 
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [expandedPanels, setExpandedPanels] = useState<Set<string>>(new Set())
   const [initialized, setInitialized] = useState(false)
 
   // Fetch skills when opened
@@ -129,30 +253,90 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
     )
   }, [skills, searchFilter])
 
-  const grouped = useMemo(() => sortedGroupByCategory(filteredSkills), [filteredSkills])
+  // Split by origin
+  const projectSkills = useMemo(
+    () => filteredSkills.filter((s) => s.origin === 'project'),
+    [filteredSkills]
+  )
+  const agenthubSkills = useMemo(
+    () => filteredSkills.filter((s) => s.origin === 'agenthub'),
+    [filteredSkills]
+  )
 
-  // Initialize: expand first section when skills load
+  const hasProject = projectSkills.length > 0
+  const hasAgenthub = agenthubSkills.length > 0
+  const hasBothOrigins = hasProject && hasAgenthub
+
+  // Initialize: expand panels and first category section when skills load
   useEffect(() => {
-    if (!initialized && grouped.length > 0 && !loading) {
-      setExpandedSections(new Set([grouped[0][0]]))
+    if (!initialized && !loading && filteredSkills.length > 0) {
+      const panels = new Set<string>()
+      const sections = new Set<string>()
+
+      if (hasProject) {
+        panels.add('project')
+        const firstProjectGroup = sortedGroupByCategory(projectSkills)
+        if (firstProjectGroup.length > 0) {
+          sections.add(`project:${firstProjectGroup[0][0]}`)
+        }
+      }
+      if (hasAgenthub) {
+        panels.add('agenthub')
+        if (!hasProject) {
+          const firstAhGroup = sortedGroupByCategory(agenthubSkills)
+          if (firstAhGroup.length > 0) {
+            sections.add(`agenthub:${firstAhGroup[0][0]}`)
+          }
+        }
+      }
+
+      setExpandedPanels(panels)
+      setExpandedSections(sections)
       setInitialized(true)
     }
-  }, [grouped, loading, initialized])
+  }, [filteredSkills, loading, initialized, hasProject, hasAgenthub, projectSkills, agenthubSkills])
 
-  // When searching: auto-expand sections with matches
+  // When searching: auto-expand all panels and sections
   useEffect(() => {
     if (searchFilter.trim()) {
-      setExpandedSections(new Set(grouped.map(([cat]) => cat)))
+      const panels = new Set<string>()
+      const sections = new Set<string>()
+      if (hasProject) {
+        panels.add('project')
+        for (const [cat] of sortedGroupByCategory(projectSkills)) {
+          sections.add(`project:${cat}`)
+        }
+      }
+      if (hasAgenthub) {
+        panels.add('agenthub')
+        for (const [cat] of sortedGroupByCategory(agenthubSkills)) {
+          sections.add(`agenthub:${cat}`)
+        }
+      }
+      setExpandedPanels(panels)
+      setExpandedSections(sections)
     }
-  }, [searchFilter, grouped])
+  }, [searchFilter, hasProject, hasAgenthub, projectSkills, agenthubSkills])
 
-  const toggleSection = useCallback((category: string) => {
+  const toggleSection = useCallback((sectionKey: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev)
-      if (next.has(category)) {
-        next.delete(category)
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey)
       } else {
-        next.add(category)
+        next.add(sectionKey)
+      }
+      return next
+    })
+  }, [])
+
+  const togglePanel = useCallback((panelKey: string) => {
+    setExpandedPanels((prev) => {
+      const next = new Set(prev)
+      if (next.has(panelKey)) {
+        next.delete(panelKey)
+      } else {
+        next.add(panelKey)
       }
       return next
     })
@@ -198,68 +382,33 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
           </div>
         )}
 
-        {!loading &&
-          grouped.map(([category, categorySkills]) => {
-            const isExpanded = expandedSections.has(category)
-            return (
-              <div key={category} className="mb-1">
-                {/* Section header */}
-                <button
-                  data-testid={`section-${category}`}
-                  onClick={() => toggleSection(category)}
-                  className="w-full flex items-center gap-1.5 px-1 py-1.5 rounded hover:bg-base-content/5 transition-colors"
-                >
-                  <span
-                    className={`text-[10px] text-base-content/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                  >
-                    &#9654;
-                  </span>
-                  <span className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider flex-1 text-left">
-                    {category}
-                  </span>
-                  <span className="text-[10px] text-base-content/30 bg-base-content/5 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
-                    {categorySkills.length}
-                  </span>
-                </button>
+        {!loading && hasProject && (
+          <OriginPanel
+            label={hasBothOrigins ? repoLabel(repoPath) : repoLabel(repoPath)}
+            skills={projectSkills}
+            expandedSections={expandedSections}
+            toggleSection={toggleSection}
+            executing={executing}
+            onExecute={handleExecute}
+            panelKey="project"
+            isPanelExpanded={expandedPanels.has('project')}
+            onTogglePanel={() => togglePanel('project')}
+          />
+        )}
 
-                {/* Section items */}
-                {isExpanded &&
-                  categorySkills.map((skill) => (
-                    <button
-                      key={skill.id}
-                      data-testid={`skill-${skill.id}`}
-                      onClick={() => handleExecute(skill.id)}
-                      disabled={executing !== null}
-                      title={skill.description}
-                      className="dropdown-item w-full text-left disabled:opacity-50 ml-2"
-                      style={{ width: 'calc(100% - 0.5rem)' }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-base-content/80 font-medium flex-1 truncate">
-                          {skill.displayName ?? skill.name}
-                        </span>
-                        {executing === skill.id && (
-                          <span className="loading loading-spinner loading-xs text-primary" />
-                        )}
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                            skill.source === 'team'
-                              ? 'bg-secondary/10 text-secondary'
-                              : skill.source === 'workflow'
-                                ? 'bg-warning/10 text-warning'
-                                : skill.source === 'command'
-                                  ? 'bg-info/10 text-info'
-                                  : 'bg-success/10 text-success'
-                          }`}
-                        >
-                          {skill.source}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-              </div>
-            )
-          })}
+        {!loading && hasAgenthub && (
+          <OriginPanel
+            label="AGENTHUB"
+            skills={agenthubSkills}
+            expandedSections={expandedSections}
+            toggleSection={toggleSection}
+            executing={executing}
+            onExecute={handleExecute}
+            panelKey="agenthub"
+            isPanelExpanded={expandedPanels.has('agenthub')}
+            onTogglePanel={() => togglePanel('agenthub')}
+          />
+        )}
       </div>
 
       {/* Result area */}

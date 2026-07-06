@@ -733,6 +733,82 @@ describe('SkillsService', () => {
     })
   })
 
+  describe('dual-source scanning', () => {
+    it('sets origin to project when repoPath differs from agenthubPath', () => {
+      const dualDeps: SkillsServiceDeps = {
+        logInfo: vi.fn(),
+        logWarning: vi.fn(),
+        agenthubPath: '/agenthub'
+      }
+      const dualService = new SkillsService(dualDeps)
+
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/.claude/skills' || path === '/agenthub/.claude/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/.claude/skills') return ['proj-skill.md']
+        if (dir === '/agenthub/.claude/skills') return ['ah-skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Skill\nDesc')
+
+      const skills = dualService.listSkills('/project')
+      const proj = skills.find((s) => s.id === 'proj-skill')
+      const ah = skills.find((s) => s.id === 'ah-skill')
+      expect(proj).toBeTruthy()
+      expect(proj!.origin).toBe('project')
+      expect(ah).toBeTruthy()
+      expect(ah!.origin).toBe('agenthub')
+    })
+
+    it('scans only once when repoPath equals agenthubPath', () => {
+      const dualDeps: SkillsServiceDeps = {
+        logInfo: vi.fn(),
+        logWarning: vi.fn(),
+        agenthubPath: '/agenthub'
+      }
+      const dualService = new SkillsService(dualDeps)
+
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/agenthub/.claude/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/agenthub/.claude/skills') return ['skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Skill\nDesc')
+
+      const skills = dualService.listSkills('/agenthub')
+      expect(skills).toHaveLength(1)
+      expect(skills[0].origin).toBe('agenthub')
+    })
+
+    it('scans agenthub even when no repoPath provided', () => {
+      const dualDeps: SkillsServiceDeps = {
+        logInfo: vi.fn(),
+        logWarning: vi.fn(),
+        agenthubPath: '/agenthub'
+      }
+      const dualService = new SkillsService(dualDeps)
+
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/agenthub/.claude/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/agenthub/.claude/skills') return ['ah-skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# AH Skill\nDesc')
+
+      const skills = dualService.listSkills()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].origin).toBe('agenthub')
+    })
+  })
+
   describe('parseSkillFile — YAML frontmatter', () => {
     it('extracts name, description, and category from frontmatter', () => {
       mockExistsSync.mockImplementation((path: string) =>

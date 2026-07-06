@@ -6,6 +6,7 @@ export interface SkillItem {
   category: string
   path: string
   source: 'project' | 'team' | 'workflow' | 'command'
+  origin: 'project' | 'agenthub'
   format?: string
 }
 

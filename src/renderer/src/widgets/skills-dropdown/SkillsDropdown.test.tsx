@@ -30,6 +30,7 @@ function createMockSkill(overrides: Partial<SkillItem> = {}): SkillItem {
     category: 'general',
     path: '/path/to/skill.md',
     source: 'project',
+    origin: 'project',
     ...overrides
   }
 }
@@ -81,8 +82,8 @@ describe('SkillsDropdown', () => {
     render(<SkillsDropdown {...defaultProps} />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('section-testing')).toBeInTheDocument()
-      expect(screen.getByTestId('section-deploy')).toBeInTheDocument()
+      expect(screen.getByTestId('section-project:testing')).toBeInTheDocument()
+      expect(screen.getByTestId('section-project:deploy')).toBeInTheDocument()
     })
   })
 
@@ -203,10 +204,8 @@ describe('SkillsDropdown', () => {
     render(<SkillsDropdown {...defaultProps} />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('section-Code Quality')).toBeInTheDocument()
-      expect(screen.getByTestId('section-Teams')).toBeInTheDocument()
-      expect(screen.getByText('2')).toBeInTheDocument() // count badge
-      expect(screen.getByText('1')).toBeInTheDocument()
+      expect(screen.getByTestId('section-project:Code Quality')).toBeInTheDocument()
+      expect(screen.getByTestId('section-project:Teams')).toBeInTheDocument()
     })
   })
 
@@ -225,14 +224,14 @@ describe('SkillsDropdown', () => {
 
     // Click to collapse the first section
     await act(async () => {
-      fireEvent.click(screen.getByTestId('section-Code Quality'))
+      fireEvent.click(screen.getByTestId('section-project:Code Quality'))
     })
 
     expect(screen.queryByText('Skill A')).not.toBeInTheDocument()
 
     // Click to re-expand
     await act(async () => {
-      fireEvent.click(screen.getByTestId('section-Code Quality'))
+      fireEvent.click(screen.getByTestId('section-project:Code Quality'))
     })
 
     expect(screen.getByText('Skill A')).toBeInTheDocument()
@@ -288,6 +287,80 @@ describe('SkillsDropdown', () => {
     await waitFor(() => {
       expect(screen.getByText('Market Scan')).toBeInTheDocument()
       expect(screen.queryByText('Deploy App')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('two-panel layout', () => {
+    it('renders project and agenthub panels when both origins present', async () => {
+      const skills = [
+        createMockSkill({ id: 'proj-skill', name: 'Proj Skill', origin: 'project', category: 'Code Quality' }),
+        createMockSkill({ id: 'ah-skill', name: 'AH Skill', origin: 'agenthub', category: 'Teams' })
+      ]
+      mockList.mockResolvedValue({ success: true, data: skills })
+
+      render(<SkillsDropdown {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('origin-panel-project')).toBeInTheDocument()
+        expect(screen.getByTestId('origin-panel-agenthub')).toBeInTheDocument()
+      })
+    })
+
+    it('renders only agenthub panel when all skills are agenthub', async () => {
+      const skills = [
+        createMockSkill({ id: 'ah1', name: 'AH One', origin: 'agenthub' }),
+        createMockSkill({ id: 'ah2', name: 'AH Two', origin: 'agenthub' })
+      ]
+      mockList.mockResolvedValue({ success: true, data: skills })
+
+      render(<SkillsDropdown {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('origin-panel-agenthub')).toBeInTheDocument()
+        expect(screen.queryByTestId('origin-panel-project')).not.toBeInTheDocument()
+      })
+    })
+
+    it('toggles origin panel on click', async () => {
+      const skills = [
+        createMockSkill({ id: 'p', name: 'Proj', origin: 'project', category: 'Code Quality' })
+      ]
+      mockList.mockResolvedValue({ success: true, data: skills })
+
+      render(<SkillsDropdown {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Proj')).toBeInTheDocument()
+      })
+
+      // Collapse the project panel
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('origin-toggle-project'))
+      })
+
+      expect(screen.queryByText('Proj')).not.toBeInTheDocument()
+
+      // Re-expand
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('origin-toggle-project'))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Proj')).toBeInTheDocument()
+      })
+    })
+
+    it('derives project panel label from repoPath', async () => {
+      const skills = [
+        createMockSkill({ id: 'p', name: 'Proj', origin: 'project' })
+      ]
+      mockList.mockResolvedValue({ success: true, data: skills })
+
+      render(<SkillsDropdown {...defaultProps} repoPath="/home/user/my-project" />)
+
+      await waitFor(() => {
+        expect(screen.getByText('MY-PROJECT')).toBeInTheDocument()
+      })
     })
   })
 })
