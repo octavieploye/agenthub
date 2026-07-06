@@ -16,9 +16,13 @@ export const useReposStore = create<ReposStore>((set) => ({
   fetchRepos: async () => {
     set({ loading: true, error: null })
     try {
-      const repos = await window.electron.ipcRenderer.invoke('db:get-repos', {})
-      set({ repos, loading: false })
-    } catch (error) {
+      const res = await window.agentHub.db.getRepos()
+      if (res.success) {
+        set({ repos: res.data, loading: false })
+      } else {
+        set({ error: res.error?.message || 'Failed to fetch repos', loading: false })
+      }
+    } catch (error: any) {
       set({ error: error.message || 'Failed to fetch repos', loading: false })
     }
   }

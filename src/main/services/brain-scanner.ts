@@ -318,16 +318,19 @@ export class BrainScannerService {
     // Get git events
     let gitEvents: any[] = []
     try {
-      const gitLog = await this.gitService.getRecentCommits(repoId, 50)
-      gitEvents = gitLog.map((commit) => ({
-        id: `git_${commit.hash}`,
-        repoId,
-        date: commit.date,
-        type: 'git' as const,
-        subject: commit.message.split('\n')[0],
-        details: commit.message,
-        icon: 'git-commit' as const
-      }))
+      const repo = getRepoById(db, repoId)
+      if (repo?.path) {
+        const gitLog = this.gitService.getLog(repo.path, 50)
+        gitEvents = gitLog.map((commit) => ({
+          id: `git_${commit.hash}`,
+          repoId,
+          date: commit.date,
+          type: 'git' as const,
+          subject: commit.message.split('\n')[0],
+          details: commit.message,
+          icon: 'git-commit' as const
+        }))
+      }
     } catch (error) {
       log.warn(`Error getting git events for repo ${repoId}:`, error)
     }

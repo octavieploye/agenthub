@@ -9,17 +9,28 @@ export function registerBrainIpcHandlers(): void {
       const brainScanner = getBrainScanner()
       const entries = brainScanner.getBrainEntries(repoId)
 
-      const result = {
-        entries,
-        summary: {
-          active: entries.filter(e => e.status === 'active').length,
-          notActioned: entries.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
-          parked: entries.filter(e => e.status === 'parked').length,
-          implemented: entries.filter(e => e.status === 'implemented').length
+      // Group entries by repo to match BrainQueryResult[] shape
+      const grouped = new Map<string, { repoId: string; repoName: string; entries: typeof entries }>()
+      for (const entry of entries) {
+        if (!grouped.has(entry.repoId)) {
+          grouped.set(entry.repoId, { repoId: entry.repoId, repoName: entry.repoName, entries: [] })
         }
+        grouped.get(entry.repoId)!.entries.push(entry)
       }
 
-      return result
+      const results = Array.from(grouped.values()).map((group) => ({
+        repoId: group.repoId,
+        repoName: group.repoName,
+        entries: group.entries,
+        summary: {
+          active: group.entries.filter(e => e.status === 'active').length,
+          notActioned: group.entries.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
+          parked: group.entries.filter(e => e.status === 'parked').length,
+          implemented: group.entries.filter(e => e.status === 'implemented').length
+        }
+      }))
+
+      return results
     } catch (error) {
       log.error('Error in brain:query:', error)
       throw error
