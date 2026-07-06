@@ -16,6 +16,55 @@ import { RepoConfig } from '../../shared/types/config.types'
 import { getRepoById, getAllRepos } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
 
+/** Parse markdown checklist items from file content. */
+export function parseChecklist(content: string): { total: number; done: number } {
+  const done = (content.match(/- \[[xX]\]/g) || []).length
+  const remaining = (content.match(/- \[ \]/g) || []).length
+  return { total: done + remaining, done }
+}
+
+const NOISE_WORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'this', 'that',
+  'design', 'spec', 'plan', 'impl', 'implementation'
+])
+
+/**
+ * Returns true if any commit after docDate mentions a keyword from subject.
+ * gitLog must be pre-fetched (not fetched here — keeps this function pure).
+ */
+export function detectGitSignal(
+  gitLog: { message: string; date: string }[],
+  docDate: string,
+  subject: string
+): boolean {
+  const keywords = subject
+    .toLowerCase()
+    .split(/[\s\-_]+/)
+    .filter(w => w.length > 3 && !NOISE_WORDS.has(w))
+
+  if (keywords.length === 0) return false
+
+  const laterCommits = gitLog.filter(c => c.date > docDate)
+
+  return laterCommits.some(commit =>
+    keywords.some(kw => commit.message.toLowerCase().includes(kw))
+  )
+}
+
+/** Derive computed status from checklist counts, git signal, and file content. */
+export function deriveComputedStatus(
+  total: number,
+  done: number,
+  gitSignal: boolean,
+  fileContent: string
+): 'remaining' | 'in_progress' | 'done' {
+  if (total > 0 && done === total) return 'done'
+  if (/implemented|status:\s*done/i.test(fileContent)) return 'done'
+  if (done > 0) return 'in_progress'
+  if (gitSignal) return 'in_progress'
+  return 'remaining'
+}
+
 /**
  * Directory patterns to scan for artifacts.
  * Each maps a relative directory path to a brain entry type.
@@ -115,6 +164,18 @@ export class BrainScannerService {
     if (!repo.path || !existsSync(repo.path)) return 0
 
     const db = getDb()
+
+    // Fetch git log once per repo — passed to detectGitSignal for each file
+    let repoGitLog: { message: string; date: string }[] = []
+    try {
+      repoGitLog = this.gitService.getLog(repo.path, 200).map(c => ({
+        message: c.message,
+        date: c.date
+      }))
+    } catch {
+      // git unavailable — git_signal stays 0
+    }
+
     let count = 0
 
     for (const rule of ARTIFACT_SCAN_RULES) {
@@ -134,18 +195,31 @@ export class BrainScannerService {
           // Extract date from filename if present
           const dateMatch = basename(filePath).match(/^(\d{4}-\d{2}-\d{2})/)
           const createdAt = dateMatch ? dateMatch[1] : stat.birthtime.toISOString().split('T')[0]
+          const subject = subjectFromFilename(filePath)
+
+          // Read content once — used for both checklist parsing and computed status
+          let fileContent = ''
+          try { fileContent = readFileSync(filePath, 'utf-8') } catch { /* skip */ }
+
+          const checklist = parseChecklist(fileContent)
+          const gitSignalBool = detectGitSignal(repoGitLog, createdAt, subject)
+          const computedStatus = deriveComputedStatus(checklist.total, checklist.done, gitSignalBool, fileContent)
 
           upsertBrainEntry(db, {
             id: entryId,
             repoId: repo.id,
             projectId: null,
-            pointerPath: filePath,    // For auto-discovered, pointer = artifact
+            pointerPath: filePath,
             artifactPath: filePath,
             type: rule.type,
-            subject: subjectFromFilename(filePath),
+            subject,
             status: 'active',
             createdAt,
-            note: `Auto-discovered from ${rule.dir}/`
+            note: `Auto-discovered from ${rule.dir}/`,
+            computedStatus,
+            checklistTotal: checklist.total,
+            checklistDone: checklist.done,
+            gitSignal: gitSignalBool ? 1 : 0,
           })
           count++
         } catch (error) {

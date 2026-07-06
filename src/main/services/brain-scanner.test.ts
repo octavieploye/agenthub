@@ -1,17 +1,27 @@
-import { describe, expect, test, beforeEach, afterEach, vi, beforeAll } from 'vitest'
-import { BrainScannerService } from './brain-scanner'
+import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import {
+  parseChecklist,
+  detectGitSignal,
+  deriveComputedStatus,
+  BrainScannerService
+} from './brain-scanner'
 import { GitService } from './git-service'
-import Database from 'better-sqlite3'
-import { getDb } from '../db/connection'
+import { getDb, resetDb, closeDb } from '../db/connection'
 
-// Mock GitService
-def createMockGitService(): GitService {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function createMockGitService(): GitService {
   return {
-    getLog: vi.fn().mockResolvedValue([]),
-    // Mock other GitService methods as needed
+    getLog: vi.fn().mockReturnValue([]),
     getStatus: vi.fn(),
     getDiff: vi.fn(),
     stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
     commit: vi.fn(),
     push: vi.fn(),
     pull: vi.fn(),
@@ -22,278 +32,282 @@ def createMockGitService(): GitService {
     getUnstagedFiles: vi.fn(),
     getUntrackedFiles: vi.fn(),
     parseDiffStats: vi.fn(),
-    getRecentCommits: vi.fn().mockResolvedValue([])
-  } as any
+    suggestCommitMessage: vi.fn(),
+  } as unknown as GitService
 }
 
-// Mock database setup
-def createTestDb(): Database.Database {
-  const db = getDb(':memory:')
+// ---------------------------------------------------------------------------
+// parseChecklist
+// ---------------------------------------------------------------------------
 
-  // Create required tables
-  db.exec(`
-    CREATE TABLE repos (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      path TEXT NOT NULL,
-      glow_color TEXT,
-      created_at TEXT NOT NULL,
-      last_used_at TEXT,
-      hidden INTEGER NOT NULL DEFAULT 0
-    )
-  `)
+describe('parseChecklist', () => {
+  test('returns zero counts for content with no checklist items', () => {
+    const result = parseChecklist('# My Spec\n\nSome text with no tasks.')
+    expect(result).toEqual({ total: 0, done: 0 })
+  })
 
-  db.exec(`
-    CREATE TABLE projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      path TEXT,
-      created_at TEXT NOT NULL
-    )
-  `)
+  test('counts done and remaining items correctly', () => {
+    const content = `
+# Plan
+- [x] Step one done
+- [x] Step two done
+- [ ] Step three pending
+- [ ] Step four pending
+    `
+    const result = parseChecklist(content)
+    expect(result).toEqual({ total: 4, done: 2 })
+  })
 
-  db.exec(`
-    CREATE TABLE brain_entries (
-      id TEXT PRIMARY KEY,
-      repo_id TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      pointer_path TEXT NOT NULL UNIQUE,
-      artifact_path TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('brainstorm','spec','plan','sprint')),
-      subject TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'draft'
-                CHECK(status IN ('draft','active','parked','implemented')),
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      synced_to_anamnesis INTEGER NOT NULL DEFAULT 0,
-      note TEXT
-    )
-  `)
+  test('is case-insensitive for X marker', () => {
+    const content = '- [X] Done uppercase\n- [x] Done lowercase\n- [ ] Pending'
+    const result = parseChecklist(content)
+    expect(result).toEqual({ total: 3, done: 2 })
+  })
 
-  db.exec(`
-    CREATE TABLE tasks (
-      id TEXT PRIMARY KEY,
-      subject TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      brain_entry_id TEXT REFERENCES brain_entries(id) ON DELETE SET NULL
-    )
-  `)
+  test('returns zero for empty string', () => {
+    expect(parseChecklist('')).toEqual({ total: 0, done: 0 })
+  })
+})
 
-  return db
-}
+// ---------------------------------------------------------------------------
+// detectGitSignal
+// ---------------------------------------------------------------------------
 
-describe('BrainScannerService', () => {
-  let brainScanner: BrainScannerService
+describe('detectGitSignal', () => {
+  const gitLog = [
+    { message: 'feat(telegram): add sidecar service', date: '2026-07-01' },
+    { message: 'fix(brain): resolve scanner bug', date: '2026-07-03' },
+    { message: 'chore: update dependencies', date: '2026-06-20' },
+  ]
+
+  test('returns true when a commit after docDate matches a subject keyword', () => {
+    const result = detectGitSignal(gitLog, '2026-06-28', 'Telegram Sidecar Service')
+    expect(result).toBe(true)
+  })
+
+  test('returns false when matching commit is before docDate', () => {
+    // 'chore: update dependencies' is 2026-06-20, before 2026-06-28
+    const result = detectGitSignal(gitLog, '2026-06-28', 'Update Dependencies')
+    expect(result).toBe(false)
+  })
+
+  test('returns false when no commit matches any keyword', () => {
+    const result = detectGitSignal(gitLog, '2026-06-01', 'Forgejo Integration Adapters')
+    expect(result).toBe(false)
+  })
+
+  test('returns false for empty git log', () => {
+    const result = detectGitSignal([], '2026-06-01', 'Telegram Sidecar')
+    expect(result).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// deriveComputedStatus
+// ---------------------------------------------------------------------------
+
+describe('deriveComputedStatus', () => {
+  test('returns done when all checklist items are checked', () => {
+    expect(deriveComputedStatus(3, 3, false, '')).toBe('done')
+  })
+
+  test('returns done when fileContent contains implemented marker', () => {
+    expect(deriveComputedStatus(0, 0, false, '## Status: implemented')).toBe('done')
+  })
+
+  test('returns in_progress when some checklist items done', () => {
+    expect(deriveComputedStatus(4, 2, false, '')).toBe('in_progress')
+  })
+
+  test('returns in_progress when gitSignal is true and no checklist', () => {
+    expect(deriveComputedStatus(0, 0, true, '')).toBe('in_progress')
+  })
+
+  test('returns remaining when no checklist and no git signal', () => {
+    expect(deriveComputedStatus(0, 0, false, '')).toBe('remaining')
+  })
+
+  test('gitSignal does not override all-done checklist', () => {
+    expect(deriveComputedStatus(2, 2, true, '')).toBe('done')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// discoverRepoArtifacts integration
+// ---------------------------------------------------------------------------
+
+describe('discoverRepoArtifacts', () => {
+  let tmpDir: string
   let mockGitService: GitService
-  let db: Database.Database
+  let scanner: BrainScannerService
 
   beforeEach(() => {
+    // Reset the DB singleton so each test gets a fresh in-memory DB with migrations
+    resetDb()
+    tmpDir = mkdtempSync(join(tmpdir(), 'brain-scanner-test-'))
     mockGitService = createMockGitService()
-    brainScanner = new BrainScannerService(mockGitService)
-    db = createTestDb()
+    scanner = new BrainScannerService(mockGitService)
 
-    // Insert test repo
-    db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(
-      'repo1', 'Test Repo', '/tmp/test-repo', '2023-01-01T00:00:00Z'
-    )
+    // Seed the test repo using the same singleton getDb() will return
+    const db = getDb()
+    db.prepare(
+      'INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)'
+    ).run('repo-test', 'Test Repo', tmpDir, '2026-01-01T00:00:00Z')
   })
 
   afterEach(() => {
-    db.close()
+    closeDb()
+    rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  describe('registerBrainEntry', () => {
-    test('should create brain entry and return entry ID', () => {
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Brainstorm',
-        'brainstorm',
-        '/tmp/test-repo/docs/test.md',
-        'Test Project',
-        'Initial brainstorm session'
-      )
-
-      expect(entryId).toBeDefined()
-      expect(entryId).toContain('brain_repo1_')
-
-      // Verify entry was created in database
-      const entry = db.prepare('SELECT * FROM brain_entries WHERE id = ?').get(entryId) as any
-      expect(entry).toBeDefined()
-      expect(entry.subject).toBe('Test Brainstorm')
-      expect(entry.type).toBe('brainstorm')
-      expect(entry.note).toContain('Project: Test Project')
-    })
-
-    test('should handle entry without project or note', () => {
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Simple Entry',
-        'spec',
-        '/tmp/test-repo/docs/simple.md'
-      )
-
-      expect(entryId).toBeDefined()
-
-      const entry = db.prepare('SELECT * FROM brain_entries WHERE id = ?').get(entryId) as any
-      expect(entry.subject).toBe('Simple Entry')
-      expect(entry.type).toBe('spec')
-      expect(entry.note).toBeNull()
-    })
+  test('returns 0 when repo path does not exist', () => {
+    const result = scanner.discoverRepoArtifacts({
+      id: 'nonexistent',
+      name: 'Ghost',
+      path: '/tmp/definitely-does-not-exist-xyz-abc',
+    } as any)
+    expect(result).toBe(0)
   })
 
-  describe('updateBrainEntryStatus', () => {
-    test('should update entry status in database', () => {
-      // Create entry first
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
-
-      // Update status
-      brainScanner.updateBrainEntryStatus(entryId, 'active')
-
-      // Verify status was updated
-      const entry = db.prepare('SELECT * FROM brain_entries WHERE id = ?').get(entryId) as any
-      expect(entry.status).toBe('active')
-    })
+  test('returns 0 when no known scan directories exist in repo', () => {
+    const result = scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
+    expect(result).toBe(0)
   })
 
-  describe('createTaskFromBrainEntry', () => {
-    test('should create task linked to brain entry', async () => {
-      // Create entry first
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
+  test('discovers .md files in a known scan directory', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, '2026-07-01-my-feature-design.md'),
+      '# My Feature\n\nSome content that is long enough to be discovered.\n\n- [ ] Task one\n- [x] Task two\n'
+    )
 
-      // Create task
-      const taskId = brainScanner.createTaskFromBrainEntry(entryId, 'Implement feature', 'Task description')
+    const result = scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
 
-      expect(taskId).toBeDefined()
-
-      // Verify task was created with correct linking
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as any
-      expect(task).toBeDefined()
-      expect(task.subject).toBe('Implement feature')
-      expect(task.description).toBe('Task description')
-      expect(task.brain_entry_id).toBe(entryId)
-    })
-
-    test('should use default subject and description when not provided', async () => {
-      // Create entry first
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
-
-      // Create task without custom subject/description
-      const taskId = brainScanner.createTaskFromBrainEntry(entryId)
-
-      expect(taskId).toBeDefined()
-
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as any
-      expect(task.subject).toBe('Implement: Test Entry')
-      expect(task.description).toBe('Task created from brain entry: Test Entry')
-    })
+    expect(result).toBe(1)
   })
 
-  describe('getTimeline', () => {
-    test('should return timeline with brain events', async () => {
-      // Create entry
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
+  test('populates checklist columns from file content', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, '2026-07-01-checklist-spec.md'),
+      '# Spec\n\n- [x] Done item\n- [x] Done item two\n- [ ] Pending item\n'
+    )
 
-      const timeline = await brainScanner.getTimeline('repo1')
+    scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
 
-      expect(timeline).toHaveLength(1)
-      expect(timeline[0].type).toBe('brain')
-      expect(timeline[0].subject).toBe('Test Entry')
-    })
+    const db = getDb()
+    const row = db
+      .prepare('SELECT checklist_total, checklist_done, computed_status FROM brain_entries LIMIT 1')
+      .get() as any
 
-    test('should merge git events when available', async () => {
-      // Mock git service to return commits
-      const mockCommits = [
-        {
-          hash: 'abc123',
-          shortHash: 'abc123',
-          author: 'Test Author',
-          date: '2023-01-01T10:00:00Z',
-          message: 'Initial commit'
-        }
-      ]
-      mockGitService.getRecentCommits = vi.fn().mockResolvedValue(mockCommits)
-
-      // Create entry
-      brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
-
-      const timeline = await brainScanner.getTimeline('repo1')
-
-      // Should have both brain event and git commit
-      expect(timeline).toHaveLength(2)
-      expect(timeline.some(e => e.type === 'brain')).toBe(true)
-      expect(timeline.some(e => e.type === 'git')).toBe(true)
-    })
+    expect(row.checklist_total).toBe(3)
+    expect(row.checklist_done).toBe(2)
+    expect(row.computed_status).toBe('in_progress')
   })
 
-  describe('getBrainEntries', () => {
-    test('should return empty array when no entries exist', () => {
-      const entries = brainScanner.getBrainEntries()
-      expect(entries).toEqual([])
-    })
+  test('sets computed_status to done when all checklist items checked', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, '2026-07-01-all-done.md'),
+      '# Complete Spec\n\n- [x] Step one\n- [x] Step two\n- [x] Step three\n'
+    )
 
-    test('should return brain entries with task counts', () => {
-      // Create entry
-      const entryId = brainScanner.registerBrainEntry(
-        'repo1',
-        'Test Entry',
-        'spec',
-        '/tmp/test-repo/docs/test.md'
-      )
+    scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
 
-      // Create tasks
-      brainScanner.createTaskFromBrainEntry(entryId, 'Task 1', 'Description 1')
-      brainScanner.createTaskFromBrainEntry(entryId, 'Task 2', 'Description 2')
+    const db = getDb()
+    const row = db
+      .prepare('SELECT computed_status FROM brain_entries LIMIT 1')
+      .get() as any
 
-      const entries = brainScanner.getBrainEntries()
-      expect(entries).toHaveLength(1)
-      expect(entries[0].tasksTotal).toBe(2)
-    })
+    expect(row.computed_status).toBe('done')
   })
 
-  describe('error handling', () => {
-    test('should handle missing repo gracefully', () => {
-      expect(() => {
-        brainScanner.registerBrainEntry(
-          'nonexistent',
-          'Test Entry',
-          'spec',
-          '/tmp/test-repo/docs/test.md'
-        )
-      }).toThrow()
+  test('uses git log from gitService to set git_signal', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    // File named 2026-06-15 — commit dated 2026-07-01 mentioning "telegram" comes after
+    writeFileSync(
+      join(specsDir, '2026-06-15-telegram-sidecar.md'),
+      '# Telegram Sidecar\n\nDetailed spec content for telegram sidecar service architecture.\n'
+    )
+
+    ;(mockGitService.getLog as ReturnType<typeof vi.fn>).mockReturnValue([
+      { hash: 'abc1', shortHash: 'abc1', author: 'Dev', date: '2026-07-01', message: 'feat(telegram): add sidecar service' }
+    ])
+
+    scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
+
+    const db = getDb()
+    const row = db
+      .prepare('SELECT git_signal, computed_status FROM brain_entries LIMIT 1')
+      .get() as any
+
+    expect(row.git_signal).toBe(1)
+    expect(row.computed_status).toBe('in_progress')
+  })
+
+  test('handles git service throwing gracefully — git_signal stays 0', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, '2026-07-01-error-spec.md'),
+      '# Error Test\n\nFile content for a spec with no git available.\n'
+    )
+
+    ;(mockGitService.getLog as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('git not available')
     })
 
-    test('should handle invalid entry ID in status update', () => {
-      expect(() => {
-        brainScanner.updateBrainEntryStatus('nonexistent', 'active')
-      }).not.toThrow() // Should handle gracefully
-    })
+    const result = scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
+
+    expect(result).toBe(1)
+
+    const db = getDb()
+    const row = db
+      .prepare('SELECT git_signal FROM brain_entries LIMIT 1')
+      .get() as any
+
+    expect(row.git_signal).toBe(0)
+  })
+
+  test('skips files smaller than 20 bytes', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(join(specsDir, '2026-07-01-tiny.md'), '# Hi')
+
+    const result = scanner.discoverRepoArtifacts({
+      id: 'repo-test',
+      name: 'Test Repo',
+      path: tmpDir,
+    } as any)
+
+    expect(result).toBe(0)
   })
 })
