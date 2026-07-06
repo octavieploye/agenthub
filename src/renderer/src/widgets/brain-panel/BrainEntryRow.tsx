@@ -152,10 +152,9 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
 
           {/* Right side - status and actions */}
           <div className="flex flex-col items-end gap-2">
-            {/* Status badge with dropdown */}
-            <div className="dropdown dropdown-end">
+            {/* Status badge with dropdown — pure React, no DaisyUI dropdown CSS */}
+            <div className="relative">
               <div
-                tabIndex={0}
                 role="button"
                 className={`badge ${getStatusBadgeClass()} badge-lg cursor-pointer`}
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
@@ -163,20 +162,18 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
                 {entry.status === 'not_actioned' ? '⚠ NOT ACTIONED' : entry.status.toUpperCase()}
               </div>
               {isStatusDropdownOpen && (
-                <ul
-                  tabIndex={0}
-                  className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-40 mt-1 z-50"
-                >
-                  <li onClick={() => handleStatusChange('active')}>
-                    <a>Active</a>
-                  </li>
-                  <li onClick={() => handleStatusChange('parked')}>
-                    <a>Parked</a>
-                  </li>
-                  <li onClick={() => handleStatusChange('implemented')}>
-                    <a>Implemented</a>
-                  </li>
-                </ul>
+                <>
+                  {/* Backdrop catches outside clicks */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsStatusDropdownOpen(false)}
+                  />
+                  <ul className="absolute right-0 top-full mt-1 z-50 menu p-2 shadow-lg bg-base-100 rounded-box w-40 border border-base-300">
+                    <li><a onClick={() => handleStatusChange('active')}>Active</a></li>
+                    <li><a onClick={() => handleStatusChange('parked')}>Parked</a></li>
+                    <li><a onClick={() => handleStatusChange('implemented')}>Implemented</a></li>
+                  </ul>
+                </>
               )}
             </div>
 

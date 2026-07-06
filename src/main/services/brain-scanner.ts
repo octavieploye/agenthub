@@ -88,6 +88,7 @@ const ARTIFACT_SCAN_RULES: { dir: string; type: BrainEntryType; recursive: boole
   { dir: 'ai-team-expert/learnings',  type: 'learning',    recursive: false },
   { dir: 'ai-team-expert/audits',     type: 'reference',   recursive: false },
   { dir: 'TODOS',                     type: 'plan',        recursive: true  },
+  { dir: 'TODO',                      type: 'plan',        recursive: true  },
 ]
 
 /**
@@ -153,6 +154,18 @@ export class BrainScannerService {
       totalDiscovered += this.discoverRepoArtifacts(repo)
     }
 
+    // Promote any existing entries that are computed-done but still showing as active.
+    // Only promotes 'active' → 'implemented'; leaves 'parked' and other manual statuses alone.
+    const promoted = db.prepare(`
+      UPDATE brain_entries
+      SET status = 'implemented', updated_at = datetime('now')
+      WHERE computed_status = 'done' AND status = 'active'
+    `).run()
+
+    if (promoted.changes > 0) {
+      log.info(`Brain auto-discovery: promoted ${promoted.changes} entries to implemented`)
+    }
+
     log.info(`Brain auto-discovery: found ${totalDiscovered} artifacts across ${repos.length} repos`)
     return { discovered: totalDiscovered, repos: repos.length }
   }
@@ -213,7 +226,9 @@ export class BrainScannerService {
             artifactPath: filePath,
             type: rule.type,
             subject,
-            status: 'active',
+            // Auto-promote to implemented on first insert if already done.
+            // ON CONFLICT(id) excludes status, so existing manual overrides are never touched.
+            status: computedStatus === 'done' ? 'implemented' : 'active',
             createdAt,
             note: `Auto-discovered from ${rule.dir}/`,
             computedStatus,

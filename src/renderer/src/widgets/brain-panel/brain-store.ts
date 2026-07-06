@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { BrainEntry, BrainQueryResult, BrainTimelineEntry } from '../../../../shared/types/brain.types'
+import { BrainEntry, BrainEntryStatus, BrainQueryResult, BrainTimelineEntry } from '../../../../shared/types/brain.types'
 
 interface BrainStoreState {
   brainData: BrainQueryResult[]
@@ -52,7 +52,25 @@ export const useBrainStore = create<BrainStoreState>((set) => ({
     set({ error: null })
     try {
       await window.agentHub.brain.updateStatus(entryId, status)
-      await useBrainStore.getState().refreshBrainData()
+      // Update the entry in-store directly — avoids re-running full discovery
+      // (which can silently fail on pointer_path UNIQUE conflicts and leave stale data)
+      set((state) => ({
+        brainData: state.brainData.map((group) => {
+          const entries = group.entries.map((e) =>
+            e.id === entryId ? { ...e, status: status as BrainEntryStatus } : e
+          )
+          return {
+            ...group,
+            entries,
+            summary: {
+              active: entries.filter(e => e.status === 'active').length,
+              notActioned: entries.filter(e => e.tasksTotal === 0 && e.status !== 'parked' && e.status !== 'implemented').length,
+              parked: entries.filter(e => e.status === 'parked').length,
+              implemented: entries.filter(e => e.status === 'implemented').length
+            }
+          }
+        })
+      }))
     } catch (error: any) {
       set({ error: error.message || 'Failed to update status' })
       throw error
