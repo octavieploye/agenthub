@@ -20,6 +20,7 @@ const TYPE_OPTIONS: { value: BrainEntryType | 'all'; label: string }[] = [
 
 export default function BrainPanel() {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview')
+  const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<BrainEntryType | 'all'>('all')
   const [repoFilter, setRepoFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'remaining' | 'in_progress' | 'done'>('all')
@@ -40,6 +41,8 @@ export default function BrainPanel() {
   const repoOptions = brainData.map((g) => ({ id: g.repoId, name: g.repoName }))
 
   // Apply filters
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+
   const filteredData = brainData
     .filter((group) => repoFilter === 'all' || group.repoId === repoFilter)
     .map((group) => {
@@ -51,6 +54,13 @@ export default function BrainPanel() {
 
       if (statusFilter !== 'all') {
         entries = entries.filter((e) => e.computedStatus === statusFilter)
+      }
+
+      if (normalizedQuery) {
+        entries = entries.filter((e) =>
+          e.subject.toLowerCase().includes(normalizedQuery) ||
+          e.artifactPath.toLowerCase().includes(normalizedQuery)
+        )
       }
 
       if (entries.length === 0) return null
@@ -96,6 +106,15 @@ export default function BrainPanel() {
 
         {/* Filters + actions */}
         <div className="flex items-center gap-2">
+          {/* Search */}
+          <input
+            type="search"
+            className="input input-bordered input-sm w-48"
+            placeholder="Search artifacts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+
           {/* Repo filter */}
           <select
             className="select select-bordered select-sm"
