@@ -29,7 +29,7 @@ function createMockSkill(overrides: Partial<SkillItem> = {}): SkillItem {
     description: 'A test skill description',
     category: 'general',
     path: '/path/to/skill.md',
-    source: 'global',
+    source: 'project',
     ...overrides
   }
 }
@@ -71,7 +71,7 @@ describe('SkillsDropdown', () => {
     expect(screen.getByTestId('skills-search')).toBeInTheDocument()
   })
 
-  it('displays skills grouped by category', async () => {
+  it('displays skills grouped by category in accordion sections', async () => {
     const skills = [
       createMockSkill({ id: 'a', name: 'Skill A', category: 'testing' }),
       createMockSkill({ id: 'b', name: 'Skill B', category: 'deploy' })
@@ -81,10 +81,8 @@ describe('SkillsDropdown', () => {
     render(<SkillsDropdown {...defaultProps} />)
 
     await waitFor(() => {
-      expect(screen.getByText('testing')).toBeInTheDocument()
-      expect(screen.getByText('deploy')).toBeInTheDocument()
-      expect(screen.getByText('Skill A')).toBeInTheDocument()
-      expect(screen.getByText('Skill B')).toBeInTheDocument()
+      expect(screen.getByTestId('section-testing')).toBeInTheDocument()
+      expect(screen.getByTestId('section-deploy')).toBeInTheDocument()
     })
   })
 
@@ -169,18 +167,18 @@ describe('SkillsDropdown', () => {
     expect(defaultProps.onClose).toHaveBeenCalled()
   })
 
-  it('shows source badges (global/project)', async () => {
+  it('shows source badges (project/team)', async () => {
     const skills = [
-      createMockSkill({ id: 'g', name: 'Global', source: 'global' }),
-      createMockSkill({ id: 'p', name: 'Project', source: 'project' })
+      createMockSkill({ id: 'p', name: 'Project', source: 'project' }),
+      createMockSkill({ id: 't', name: 'Team', source: 'team' })
     ]
     mockList.mockResolvedValue({ success: true, data: skills })
 
     render(<SkillsDropdown {...defaultProps} />)
 
     await waitFor(() => {
-      expect(screen.getByText('global')).toBeInTheDocument()
       expect(screen.getByText('project')).toBeInTheDocument()
+      expect(screen.getByText('team')).toBeInTheDocument()
     })
   })
 
@@ -191,6 +189,105 @@ describe('SkillsDropdown', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No skills found')).toBeInTheDocument()
+    })
+  })
+
+  it('renders accordion section headers with item counts', async () => {
+    const skills = [
+      createMockSkill({ id: 'a', name: 'Skill A', category: 'Code Quality' }),
+      createMockSkill({ id: 'b', name: 'Skill B', category: 'Code Quality' }),
+      createMockSkill({ id: 'c', name: 'Skill C', category: 'Teams' })
+    ]
+    mockList.mockResolvedValue({ success: true, data: skills })
+
+    render(<SkillsDropdown {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('section-Code Quality')).toBeInTheDocument()
+      expect(screen.getByTestId('section-Teams')).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument() // count badge
+      expect(screen.getByText('1')).toBeInTheDocument()
+    })
+  })
+
+  it('toggles accordion section on click', async () => {
+    const skills = [
+      createMockSkill({ id: 'a', name: 'Skill A', category: 'Code Quality' }),
+      createMockSkill({ id: 'b', name: 'Skill B', category: 'Teams' })
+    ]
+    mockList.mockResolvedValue({ success: true, data: skills })
+
+    render(<SkillsDropdown {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Skill A')).toBeInTheDocument()
+    })
+
+    // Click to collapse the first section
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('section-Code Quality'))
+    })
+
+    expect(screen.queryByText('Skill A')).not.toBeInTheDocument()
+
+    // Click to re-expand
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('section-Code Quality'))
+    })
+
+    expect(screen.getByText('Skill A')).toBeInTheDocument()
+  })
+
+  it('uses displayName when available', async () => {
+    const skills = [
+      createMockSkill({ id: 'token-optimizer', name: 'token-optimizer', displayName: 'Optimize AI Instructions', category: 'Code Quality' })
+    ]
+    mockList.mockResolvedValue({ success: true, data: skills })
+
+    render(<SkillsDropdown {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Optimize AI Instructions')).toBeInTheDocument()
+      expect(screen.queryByText('token-optimizer')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows description tooltip on hover', async () => {
+    const skills = [
+      createMockSkill({ id: 'a', name: 'Skill A', description: 'This is the full description' })
+    ]
+    mockList.mockResolvedValue({ success: true, data: skills })
+
+    render(<SkillsDropdown {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-a')).toBeInTheDocument()
+    })
+
+    const skillBtn = screen.getByTestId('skill-a')
+    expect(skillBtn.getAttribute('title')).toBe('This is the full description')
+  })
+
+  it('auto-expands matching sections and collapses non-matching on search', async () => {
+    const skills = [
+      createMockSkill({ id: 'a', name: 'Deploy App', category: 'Code Quality' }),
+      createMockSkill({ id: 'b', name: 'Market Scan', category: 'Market Intelligence' })
+    ]
+    mockList.mockResolvedValue({ success: true, data: skills })
+
+    render(<SkillsDropdown {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Deploy App')).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('skills-search'), { target: { value: 'Market' } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Market Scan')).toBeInTheDocument()
+      expect(screen.queryByText('Deploy App')).not.toBeInTheDocument()
     })
   })
 })

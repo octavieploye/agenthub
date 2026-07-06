@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import { useSkillsStore } from '@renderer/stores/skills-store'
 import type { SkillItem } from '@shared/types/skills.types'
 
@@ -8,14 +8,48 @@ interface SkillsDropdownProps {
   repoPath?: string
 }
 
-function groupByCategory(skills: SkillItem[]): Map<string, SkillItem[]> {
+const CATEGORY_ORDER = [
+  'Code Quality',
+  'AI Configuration',
+  'Market Intelligence',
+  'Competitor Analysis',
+  'Content & Voice',
+  'Workflows',
+  'Teams',
+  'Utilities'
+]
+
+function sortedGroupByCategory(skills: SkillItem[]): [string, SkillItem[]][] {
   const grouped = new Map<string, SkillItem[]>()
   for (const skill of skills) {
     const existing = grouped.get(skill.category) ?? []
     existing.push(skill)
     grouped.set(skill.category, existing)
   }
-  return grouped
+
+  // Sort each group by displayName/name
+  for (const items of grouped.values()) {
+    items.sort((a, b) => {
+      const nameA = a.displayName ?? a.name
+      const nameB = b.displayName ?? b.name
+      return nameA.localeCompare(nameB)
+    })
+  }
+
+  // Return in fixed order, then any unknown categories at the end
+  const ordered: [string, SkillItem[]][] = []
+  for (const cat of CATEGORY_ORDER) {
+    const items = grouped.get(cat)
+    if (items) {
+      ordered.push([cat, items])
+      grouped.delete(cat)
+    }
+  }
+  // Append any remaining categories not in CATEGORY_ORDER
+  for (const [cat, items] of grouped.entries()) {
+    ordered.push([cat, items])
+  }
+  return ordered
 }
 
 function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): React.JSX.Element | null {
@@ -34,11 +68,14 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
   } = useSkillsStore()
 
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [initialized, setInitialized] = useState(false)
 
   // Fetch skills when opened
   useEffect(() => {
     if (isOpen) {
       fetchSkills(repoPath)
+      setInitialized(false)
     }
   }, [isOpen, repoPath, fetchSkills])
 
@@ -60,7 +97,6 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
         onClose()
       }
     }
-    // Delay to avoid closing immediately on the click that opened it
     const timer = setTimeout(() => {
       window.addEventListener('mousedown', handleClick)
     }, 0)
@@ -86,13 +122,41 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
     const lower = searchFilter.toLowerCase()
     return skills.filter(
       (s) =>
+        (s.displayName ?? s.name).toLowerCase().includes(lower) ||
         s.name.toLowerCase().includes(lower) ||
         s.description.toLowerCase().includes(lower) ||
         s.category.toLowerCase().includes(lower)
     )
   }, [skills, searchFilter])
 
-  const grouped = useMemo(() => groupByCategory(filteredSkills), [filteredSkills])
+  const grouped = useMemo(() => sortedGroupByCategory(filteredSkills), [filteredSkills])
+
+  // Initialize: expand first section when skills load
+  useEffect(() => {
+    if (!initialized && grouped.length > 0 && !loading) {
+      setExpandedSections(new Set([grouped[0][0]]))
+      setInitialized(true)
+    }
+  }, [grouped, loading, initialized])
+
+  // When searching: auto-expand sections with matches
+  useEffect(() => {
+    if (searchFilter.trim()) {
+      setExpandedSections(new Set(grouped.map(([cat]) => cat)))
+    }
+  }, [searchFilter, grouped])
+
+  const toggleSection = useCallback((category: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }, [])
 
   if (!isOpen) return null
 
@@ -129,55 +193,73 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
               {skills.length === 0 ? 'No skills found' : 'No matching skills'}
             </p>
             <p className="text-[10px] text-base-content/30 mt-1">
-              Add .md files to ~/.claude/skills/
+              Add .md files to .claude/skills/
             </p>
           </div>
         )}
 
         {!loading &&
-          Array.from(grouped.entries()).map(([category, categorySkills]) => (
-            <div key={category} className="mb-2">
-              <h3 className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider px-1 py-1">
-                {category}
-              </h3>
-              {categorySkills.map((skill) => (
+          grouped.map(([category, categorySkills]) => {
+            const isExpanded = expandedSections.has(category)
+            return (
+              <div key={category} className="mb-1">
+                {/* Section header */}
                 <button
-                  key={skill.id}
-                  data-testid={`skill-${skill.id}`}
-                  onClick={() => handleExecute(skill.id)}
-                  disabled={executing !== null}
-                  className="dropdown-item w-full text-left disabled:opacity-50"
+                  data-testid={`section-${category}`}
+                  onClick={() => toggleSection(category)}
+                  className="w-full flex items-center gap-1.5 px-1 py-1.5 rounded hover:bg-base-content/5 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-base-content/80 font-medium flex-1 truncate">
-                      {skill.name}
-                    </span>
-                    {executing === skill.id && (
-                      <span className="loading loading-spinner loading-xs text-primary" />
-                    )}
-                    <span
-                      className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
-                        skill.source === 'team'
-                          ? 'bg-secondary/10 text-secondary'
-                          : skill.source === 'workflow'
-                            ? 'bg-warning/10 text-warning'
-                            : skill.source === 'command'
-                              ? 'bg-info/10 text-info'
-                              : 'bg-success/10 text-success'
-                      }`}
-                    >
-                      {skill.source}
-                    </span>
-                  </div>
-                  {skill.description && (
-                    <p className="text-[10px] text-base-content/40 mt-0.5 truncate">
-                      {skill.description}
-                    </p>
-                  )}
+                  <span
+                    className={`text-[10px] text-base-content/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  >
+                    &#9654;
+                  </span>
+                  <span className="text-[10px] font-bold uppercase text-base-content/40 tracking-wider flex-1 text-left">
+                    {category}
+                  </span>
+                  <span className="text-[10px] text-base-content/30 bg-base-content/5 px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {categorySkills.length}
+                  </span>
                 </button>
-              ))}
-            </div>
-          ))}
+
+                {/* Section items */}
+                {isExpanded &&
+                  categorySkills.map((skill) => (
+                    <button
+                      key={skill.id}
+                      data-testid={`skill-${skill.id}`}
+                      onClick={() => handleExecute(skill.id)}
+                      disabled={executing !== null}
+                      title={skill.description}
+                      className="dropdown-item w-full text-left disabled:opacity-50 ml-2"
+                      style={{ width: 'calc(100% - 0.5rem)' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-base-content/80 font-medium flex-1 truncate">
+                          {skill.displayName ?? skill.name}
+                        </span>
+                        {executing === skill.id && (
+                          <span className="loading loading-spinner loading-xs text-primary" />
+                        )}
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                            skill.source === 'team'
+                              ? 'bg-secondary/10 text-secondary'
+                              : skill.source === 'workflow'
+                                ? 'bg-warning/10 text-warning'
+                                : skill.source === 'command'
+                                  ? 'bg-info/10 text-info'
+                                  : 'bg-success/10 text-success'
+                          }`}
+                        >
+                          {skill.source}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            )
+          })}
       </div>
 
       {/* Result area */}
@@ -228,7 +310,7 @@ function SkillsDropdown({ isOpen, onClose, repoPath }: SkillsDropdownProps): Rea
           Refresh
         </button>
         <span className="text-base-content/20">|</span>
-        <span className="text-[10px] text-base-content/30">~/.claude/skills/</span>
+        <span className="text-[10px] text-base-content/30">{filteredSkills.length} items</span>
       </div>
     </div>
   )
