@@ -20,7 +20,7 @@ const TYPE_OPTIONS: { value: BrainEntryType | 'all'; label: string }[] = [
 ]
 
 export default function BrainPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'chronology'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'chronology'>('chronology')
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<BrainEntryType | 'all'>('all')
   const [repoFilter, setRepoFilter] = useState<string>('all')
@@ -91,6 +91,12 @@ export default function BrainPanel() {
           {/* Tab switcher */}
           <div className="tabs tabs-boxed tabs-sm">
             <button
+              className={`tab ${activeTab === 'chronology' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('chronology')}
+            >
+              Chronology
+            </button>
+            <button
               className={`tab ${activeTab === 'overview' ? 'tab-active' : ''}`}
               onClick={() => setActiveTab('overview')}
             >
@@ -101,12 +107,6 @@ export default function BrainPanel() {
               onClick={() => setActiveTab('timeline')}
             >
               Timeline
-            </button>
-            <button
-              className={`tab ${activeTab === 'chronology' ? 'tab-active' : ''}`}
-              onClick={() => setActiveTab('chronology')}
-            >
-              Chronology
             </button>
           </div>
         </div>
