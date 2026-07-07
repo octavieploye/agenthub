@@ -73,31 +73,50 @@ describe('parseChecklist', () => {
 // detectGitSignal
 // ---------------------------------------------------------------------------
 
+// detectGitSignal uses explicit [Refs] footer matching (not fuzzy keywords).
+// Old keyword-based tests replaced here because keyword matching produced false positives:
+// common words like "telegram", "brain", "agent" appeared in unrelated commits, marking
+// nearly every spec as in_progress regardless of actual implementation activity.
 describe('detectGitSignal', () => {
   const gitLog = [
-    { message: 'feat(telegram): add sidecar service', date: '2026-07-01' },
-    { message: 'fix(brain): resolve scanner bug', date: '2026-07-03' },
-    { message: 'chore: update dependencies', date: '2026-06-20' },
+    {
+      message: 'feat(telegram): add sidecar service\n\n[Task]        N/A — Telegram Sidecar\n[Category]    Implementation\n[Refs]        2026-06-27-telegram-sidecar',
+      date: '2026-07-01'
+    },
+    {
+      message: 'fix(brain): resolve scanner bug',
+      date: '2026-07-03'
+    },
+    {
+      message: 'chore: update deps\n\n[Refs]        2026-06-24-kanban-daisy-ui-redesign',
+      date: '2026-06-20'
+    },
   ]
 
-  test('returns true when a commit after docDate matches a subject keyword', () => {
-    const result = detectGitSignal(gitLog, '2026-06-28', 'Telegram Sidecar Service')
+  test('returns true when a later commit [Refs] line includes the artifact slug', () => {
+    const result = detectGitSignal(gitLog, '2026-06-28', '2026-06-27-telegram-sidecar')
     expect(result).toBe(true)
   })
 
-  test('returns false when matching commit is before docDate', () => {
-    // 'chore: update dependencies' is 2026-06-20, before 2026-06-28
-    const result = detectGitSignal(gitLog, '2026-06-28', 'Update Dependencies')
+  test('returns false when matching [Refs] commit is before docDate', () => {
+    // kanban commit is 2026-06-20, before 2026-06-25
+    const result = detectGitSignal(gitLog, '2026-06-25', '2026-06-24-kanban-daisy-ui-redesign')
     expect(result).toBe(false)
   })
 
-  test('returns false when no commit matches any keyword', () => {
-    const result = detectGitSignal(gitLog, '2026-06-01', 'Forgejo Integration Adapters')
+  test('returns false when no commit has a matching [Refs] line', () => {
+    const result = detectGitSignal(gitLog, '2026-06-01', '2026-07-06-brain-status-filter')
     expect(result).toBe(false)
   })
 
   test('returns false for empty git log', () => {
-    const result = detectGitSignal([], '2026-06-01', 'Telegram Sidecar')
+    const result = detectGitSignal([], '2026-06-01', '2026-06-27-telegram-sidecar')
+    expect(result).toBe(false)
+  })
+
+  test('returns false when commit subject mentions keyword but has no [Refs] line', () => {
+    // Proves old fuzzy matching is gone — subject words no longer trigger git signal
+    const result = detectGitSignal(gitLog, '2026-06-01', 'Telegram Sidecar')
     expect(result).toBe(false)
   })
 })
@@ -249,17 +268,20 @@ describe('discoverRepoArtifacts', () => {
     expect(row.computed_status).toBe('done')
   })
 
-  test('uses git log from gitService to set git_signal', () => {
+  test('uses git log from gitService to set git_signal when [Refs] footer matches slug', () => {
     const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
     mkdirSync(specsDir, { recursive: true })
-    // File named 2026-06-15 — commit dated 2026-07-01 mentioning "telegram" comes after
+    // File slug is "2026-06-15-telegram-sidecar" — commit must reference it via [Refs]
     writeFileSync(
       join(specsDir, '2026-06-15-telegram-sidecar.md'),
       '# Telegram Sidecar\n\nDetailed spec content for telegram sidecar service architecture.\n'
     )
 
     ;(mockGitService.getLog as ReturnType<typeof vi.fn>).mockReturnValue([
-      { hash: 'abc1', shortHash: 'abc1', author: 'Dev', date: '2026-07-01', message: 'feat(telegram): add sidecar service' }
+      {
+        hash: 'abc1', shortHash: 'abc1', author: 'Dev', date: '2026-07-01',
+        message: 'feat(telegram): add sidecar service\n\n[Task]        N/A\n[Refs]        2026-06-15-telegram-sidecar'
+      }
     ])
 
     scanner.discoverRepoArtifacts({
