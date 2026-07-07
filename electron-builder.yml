@@ -12,6 +12,11 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: plugin/
+    to: plugin/
+    filter:
+      - "**/*"
 win:
   executableName: agenthub
   icon: build/icon.ico
