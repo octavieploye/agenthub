@@ -23,32 +23,29 @@ export function parseChecklist(content: string): { total: number; done: number }
   return { total: done + remaining, done }
 }
 
-const NOISE_WORDS = new Set([
-  'the', 'and', 'for', 'with', 'from', 'this', 'that',
-  'design', 'spec', 'plan', 'impl', 'implementation'
-])
-
 /**
- * Returns true if any commit after docDate mentions a keyword from subject.
+ * Returns true if any commit after docDate has a [Refs] footer line
+ * that explicitly references this artifact's slug (filename without extension).
+ *
+ * Format git-ops must use: [Refs]        <slug>[#section], <slug2>[#task-N]
+ * Example: [Refs]        2026-07-06-brain-status-filter, 2026-07-03-llm-mirror#section-2
+ *
  * gitLog must be pre-fetched (not fetched here — keeps this function pure).
  */
 export function detectGitSignal(
   gitLog: { message: string; date: string }[],
   docDate: string,
-  subject: string
+  slug: string
 ): boolean {
-  const keywords = subject
-    .toLowerCase()
-    .split(/[\s\-_]+/)
-    .filter(w => w.length > 3 && !NOISE_WORDS.has(w))
-
-  if (keywords.length === 0) return false
-
   const laterCommits = gitLog.filter(c => c.date > docDate)
+  const slugLower = slug.toLowerCase()
 
-  return laterCommits.some(commit =>
-    keywords.some(kw => commit.message.toLowerCase().includes(kw))
-  )
+  return laterCommits.some(commit => {
+    const refsMatch = commit.message.match(/^\[Refs\]\s+(.+)$/mi)
+    if (!refsMatch) return false
+    const refs = refsMatch[1].split(',').map(r => r.trim().split('#')[0].trim().toLowerCase())
+    return refs.includes(slugLower)
+  })
 }
 
 /** Derive computed status from checklist counts, git signal, and file content. */
@@ -61,7 +58,7 @@ export function deriveComputedStatus(
   if (total > 0 && done === total) return 'done'
   if (/^#+\s*status:\s*(implemented|done)|\*\*status:\*\*\s*(implemented|done)/im.test(fileContent)) return 'done'
   if (done > 0) return 'in_progress'
-  if (gitSignal) return 'in_progress'
+  if (gitSignal) return 'in_progress'  // structured [Refs] commit link (see git-commit.md)
   return 'remaining'
 }
 
@@ -209,13 +206,14 @@ export class BrainScannerService {
           const dateMatch = basename(filePath).match(/^(\d{4}-\d{2}-\d{2})/)
           const createdAt = dateMatch ? dateMatch[1] : stat.birthtime.toISOString().split('T')[0]
           const subject = subjectFromFilename(filePath)
+          const slug = basename(filePath, extname(filePath))
 
           // Read content once — used for both checklist parsing and computed status
           let fileContent = ''
           try { fileContent = readFileSync(filePath, 'utf-8') } catch { /* skip */ }
 
           const checklist = parseChecklist(fileContent)
-          const gitSignalBool = detectGitSignal(repoGitLog, createdAt, subject)
+          const gitSignalBool = detectGitSignal(repoGitLog, createdAt, slug)
           const computedStatus = deriveComputedStatus(checklist.total, checklist.done, gitSignalBool, fileContent)
 
           upsertBrainEntry(db, {
@@ -305,9 +303,9 @@ export class BrainScannerService {
     const entry = getBrainEntryById(db, brainEntryId)
     if (!entry) throw new Error(`Brain entry not found: ${brainEntryId}`)
 
-    const taskSubject = subject || `Implement: ${entry.subject}`
+    const taskTitle = subject || `Implement: ${entry.subject}`
     const taskDescription = description || `Task created from brain entry: ${entry.subject}`
-    return createTaskFromBrainEntry(db, brainEntryId, taskSubject, taskDescription)
+    return createTaskFromBrainEntry(db, brainEntryId, entry.repoId, taskTitle, taskDescription)
   }
 }
 

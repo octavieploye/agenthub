@@ -183,16 +183,16 @@ export function getBrainTimeline(db: Database, repoId: string): BrainTimelineEnt
 }
 
 // Create a task linked to a brain entry
-export function createTaskFromBrainEntry(db: Database, brainEntryId: string, subject: string, description: string): string {
+export function createTaskFromBrainEntry(db: Database, brainEntryId: string, repoId: string, title: string, description: string): string {
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
 
   db.prepare(`
     INSERT INTO tasks (
-      id, subject, description, status, created_at, brain_entry_id
+      id, repo_id, title, description, status, created_at, brain_entry_id
     ) VALUES (
-      ?, ?, ?, 'pending', datetime('now'), ?
+      ?, ?, ?, ?, 'backlog', datetime('now'), ?
     )
-  `).run(taskId, subject, description, brainEntryId)
+  `).run(taskId, repoId, title, description, brainEntryId)
 
   return taskId
 }
