@@ -454,6 +454,14 @@ h1, h2, h3, .agent-name {
     0 4px 12px color-mix(in oklch, black 20%, transparent);
 }
 
+/* Completed/idle/interrupted agents: keep the selection ring but remove the ambient glow.
+   These are terminal states — the persistent glow reads as "still working". */
+.agent-card.card-active.status-completed,
+.agent-card.card-active.status-idle,
+.agent-card.card-active.status-interrupted {
+  box-shadow: 0 0 4px color-mix(in srgb, var(--agent-color, var(--color-primary)) 10%, transparent), 0 2px 8px rgba(0,0,0,0.3);
+}
+
 /* dropdown-panel — solid themed dropdown container */
 .dropdown-panel {
   background: var(--color-neutral);

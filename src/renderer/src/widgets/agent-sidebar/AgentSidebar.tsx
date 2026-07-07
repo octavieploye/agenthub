@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import { useBranchName } from '@renderer/hooks/useBranchName'
+import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useViewStore } from '@renderer/stores/view-store'
@@ -24,7 +25,7 @@ interface AgentSidebarProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  spawning: 'bg-info animate-pulse',
+  spawning: 'bg-amber-400 opacity-75',
   busy: 'bg-success',
   idle: 'bg-base-content/60',
   locked: 'bg-warning',
@@ -34,6 +35,14 @@ const STATUS_COLORS: Record<string, string> = {
   paused: 'bg-amber-400',
   interrupted: 'bg-error',
   tray_running: 'bg-success/50'
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.startsWith('#') ? hex.slice(1) : hex
+  const r = parseInt(clean.slice(0, 2), 16)
+  const g = parseInt(clean.slice(2, 4), 16)
+  const b = parseInt(clean.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 interface GlowResult {
@@ -142,6 +151,8 @@ function AgentCard({
   // Nudge: lateral shake when entering awaiting_approval
   const [shimmerClass, setShimmerClass] = useState('')
   const [showNudge, setShowNudge] = useState(false)
+  // glowColorOverride: set to agent.color during a completed shimmer so --glow-color resolves correctly
+  const [glowColorOverride, setGlowColorOverride] = useState('')
   const prevStatusRef = useRef(agent.status)
 
   useEffect(() => {
@@ -150,8 +161,13 @@ function AgentCard({
 
     if (agent.status === 'completed' && prev !== 'completed') {
       // 2 passes for completed — 2 × 600ms = 1200ms
+      // Set --glow-color to agent.color so shimmer doesn't fall back to white
+      setGlowColorOverride(agent.color)
       setShimmerClass('card-shimmer-double')
-      const timer = setTimeout(() => setShimmerClass(''), 1250)
+      const timer = setTimeout(() => {
+        setShimmerClass('')
+        setGlowColorOverride('')
+      }, 1250)
       return () => clearTimeout(timer)
     }
     if (agent.status === 'locked' && prev !== 'locked') {
@@ -195,21 +211,38 @@ function AgentCard({
   }, [paletteOpen])
   const isPaused = agent.status === 'paused'
 
-  const glow = getGlowConfig(agent, isEscalated)
+  // Settled status: debounced 1s — prevents glow flicker from rapid CLI TUI redraws.
+  // Used for glow config only; shimmer transitions use raw agent.status for immediacy.
+  const settledStatus = useSettledStatus(agent.status)
+  const settledAgent: AgentState = { ...agent, status: settledStatus }
+  const glow = getGlowConfig(settledAgent, isEscalated)
 
   const glowClass = glow?.glowClass ?? ''
 
   // Only pass --glow-color — box-shadow is owned exclusively by the keyframe animation.
   // An inline boxShadow competes with the animation and can prevent it from running.
+  // glowColorOverride: non-empty during a completed shimmer to prevent white fallback.
   const glowStyle: React.CSSProperties = glow
-    ? ({ '--glow-color': glow.cssVar } as React.CSSProperties)
-    : {}
+    ? ({ '--glow-color': glowColorOverride || glow.cssVar } as React.CSSProperties)
+    : glowColorOverride
+      ? ({ '--glow-color': glowColorOverride } as React.CSSProperties)
+      : {}
+
+  const isTerminalState = (['completed', 'idle', 'interrupted', 'tray_running'] as const).includes(
+    agent.status as 'completed' | 'idle' | 'interrupted' | 'tray_running'
+  )
+  const isErrorState = (['error', 'looping'] as const).includes(
+    agent.status as 'error' | 'looping'
+  )
+  const borderBaseColor = isErrorState ? '#ef4444' : agent.color
+  const borderOpacity = isTerminalState ? 0.4 : 1.0
+  const borderWidth = isTerminalState ? '2px' : '3px'
 
   const colorWashStyle: React.CSSProperties = {
     backgroundImage: `linear-gradient(to right, ${agent.color}0d 0%, transparent 60%)`,
     '--agent-color': agent.color,
-    borderLeftColor: agent.color,
-    borderLeftWidth: '3px',
+    borderLeftColor: hexToRgba(borderBaseColor, borderOpacity),
+    borderLeftWidth: borderWidth,
   } as React.CSSProperties
 
   const opacityStyle: React.CSSProperties = isPaused ? { opacity: 0.6 } : {}
@@ -226,7 +259,7 @@ function AgentCard({
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
       onClick={() => onSelectAgent(agent.id)}
-      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${shimmerClass} ${showNudge ? 'card-nudge' : ''}`}
+      className={`agent-card cursor-pointer status-${agent.status} ${glowClass} ${isActive ? 'card-active' : ''} ${shimmerClass} ${showNudge ? 'card-nudge' : ''}`}
       onAnimationEnd={handleAnimationEnd}
       style={{
         ...colorWashStyle,

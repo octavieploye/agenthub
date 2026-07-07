@@ -44,7 +44,7 @@ function HeartbeatWaveform({ status, height }: HeartbeatWaveformProps): React.JS
         const y = midY - spike
         x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
       }
-    } else if (status === 'idle') {
+    } else if (status === 'idle' || status === 'spawning') {
       for (let x = 0; x < w; x++) {
         const micro = Math.sin((x / w) * Math.PI * 2 + now) * h * 0.05
         const y = midY + micro

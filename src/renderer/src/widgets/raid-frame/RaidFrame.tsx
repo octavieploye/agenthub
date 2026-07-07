@@ -3,6 +3,7 @@ import type { AgentState, VoiceMode } from '@shared/types/agent.types'
 import HeartbeatWaveform from '@renderer/widgets/heartbeat-waveform/HeartbeatWaveform'
 import CooldownTimer from '@renderer/widgets/cooldown-timer/CooldownTimer'
 import { useNow } from '@renderer/hooks/useNow'
+import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 
 const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000
 
@@ -27,11 +28,11 @@ interface RaidFrameProps {
 }
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
-  spawning: 'bg-info animate-pulse',
+  spawning: 'bg-amber-400',
   busy: 'bg-success',
   idle: 'bg-base-content/60',
   locked: 'bg-warning',
-  completed: 'bg-info',
+  completed: 'bg-success/50',
   awaiting_approval: 'bg-warning',
   looping: 'bg-error animate-urgency-pulse',
   paused: 'bg-amber-400',
@@ -78,8 +79,9 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
     return () => clearInterval(interval)
   }, [agent.id, agent.telegramNotify])
 
-  const glowClass = getRaidGlowClass(agent.status)
-  const glowColor = getRaidGlowColor(agent.status, agent.color)
+  const settledStatus = useSettledStatus(agent.status)
+  const glowClass = getRaidGlowClass(settledStatus)
+  const glowColor = getRaidGlowColor(settledStatus, agent.color)
 
   return (
     <div
