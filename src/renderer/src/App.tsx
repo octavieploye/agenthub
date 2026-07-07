@@ -334,9 +334,9 @@ function AppMain(): React.JSX.Element {
         }
       }
 
-      // code_blue: play for error status regardless of sound layer
-      // (error has requiresUserAction=false so sound layer is not added by router)
-      if (triageEvent.currentStatus === 'error') {
+      // code_blue: play for error and looping regardless of sound layer
+      // (neither adds requiresSoundAlert — handle explicitly like error)
+      if (triageEvent.currentStatus === 'error' || triageEvent.currentStatus === 'looping') {
         playAgentSound('code_blue', soundDeps.current)
       }
 
