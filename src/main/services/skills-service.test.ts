@@ -859,4 +859,90 @@ describe('SkillsService', () => {
       expect(skills[0].description).not.toBe('---')
     })
   })
+
+  describe('plugin/ path priority', () => {
+    it('prefers plugin/skills over .claude/skills when both exist', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/plugin/skills' || path === '/project/.claude/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/plugin/skills') return ['plugin-skill.md']
+        if (dir === '/project/.claude/skills') return ['legacy-skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Skill\nDesc')
+
+      const skills = service.listSkills('/project')
+      const ids = skills.map((s) => s.id)
+      expect(ids).toContain('plugin-skill')
+      expect(ids).not.toContain('legacy-skill')
+    })
+
+    it('prefers plugin/commands over .claude/commands when both exist', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/plugin/commands' || path === '/project/.claude/commands'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/plugin/commands') return ['plugin-cmd.md']
+        if (dir === '/project/.claude/commands') return ['legacy-cmd.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Cmd\nDoes stuff')
+
+      const skills = service.listSkills('/project')
+      const ids = skills.map((s) => s.id)
+      expect(ids).toContain('plugin-cmd')
+      expect(ids).not.toContain('legacy-cmd')
+    })
+
+    it('prefers plugin/workflows over .claude/workflow-team-library when both exist', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/plugin/workflows' ||
+        path === '/project/plugin/workflows/plugin-wf/manifest.md' ||
+        path === '/project/.claude/workflow-team-library' ||
+        path === '/project/.claude/workflow-team-library/legacy-wf/manifest.md'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/plugin/workflows') return ['plugin-wf']
+        if (dir === '/project/.claude/workflow-team-library') return ['legacy-wf']
+        return []
+      })
+      mockReadFileSync.mockReturnValue('# Workflow\nDesc')
+
+      const skills = service.listSkills('/project')
+      const workflows = skills.filter((s) => s.source === 'workflow')
+      const ids = workflows.map((s) => s.id)
+      expect(ids).toContain('plugin-wf')
+      expect(ids).not.toContain('legacy-wf')
+    })
+
+    it('prefers plugin/skills/display-registry.json over .claude/skills/display-registry.json', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/plugin/skills' ||
+        path === '/project/plugin/skills/display-registry.json'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/plugin/skills') return ['token-optimizer']
+        if (dir === '/project/plugin/skills/token-optimizer') return ['SKILL.md']
+        return []
+      })
+      mockStatSync.mockImplementation((path: string) => ({
+        isDirectory: () => path === '/project/plugin/skills/token-optimizer'
+      }))
+      mockReadFileSync.mockImplementation((path: string) => {
+        if ((path as string).endsWith('display-registry.json'))
+          return JSON.stringify({
+            categories: { 'ai-config': 'AI Config' },
+            items: { 'token-optimizer': { displayName: 'Token Optimizer (plugin)', category: 'ai-config' } }
+          })
+        return '# Token Optimizer\nOptimize tokens'
+      })
+
+      const skills = service.listSkills('/project')
+      expect(skills).toHaveLength(1)
+      expect(skills[0].displayName).toBe('Token Optimizer (plugin)')
+    })
+  })
 })
