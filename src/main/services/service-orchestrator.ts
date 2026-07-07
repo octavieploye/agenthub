@@ -32,6 +32,7 @@ import { TelegramQueueProcessor } from './telegram-queue-processor'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
+import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -134,6 +135,10 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
 }
 
 export function initializeServices(db: Database.Database): void {
+  // Install Claude Code plugin — non-blocking, best-effort.
+  // Runs before any agent can be spawned (agents require user interaction post-startup).
+  installClaudePlugin().catch((err) => log.warn('Claude plugin install failed', { err }))
+
   // Purge dead agents older than 24h to prevent DB bloat
   purgeDeadAgents(db, 24)
   // Reset any non-terminal agents left over from a crashed or force-quit session
