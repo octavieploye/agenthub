@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# plugin/hooks/session-start
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+escape_for_json() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# Only inject when spawned by AgentHub as a builder agent.
+# AGENTHUB_BUILDER=1 is set by AgentHub in the spawn environment.
+if [ "${AGENTHUB_BUILDER:-}" != "1" ]; then
+  exit 0
+fi
+
+builder_mode_content=$(cat "${PLUGIN_ROOT}/context/builder-mode.md" 2>/dev/null || echo "")
+context_escaped=$(escape_for_json "$builder_mode_content")
+
+session_context="<AGENTHUB_BUILDER_CONTEXT>\\n${context_escaped}\\n</AGENTHUB_BUILDER_CONTEXT>"
+
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+
+exit 0

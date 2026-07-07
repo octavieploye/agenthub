@@ -1,0 +1,10 @@
+{
+  "name": "agenthub",
+  "description": "AgentHub builder context: skills, conduct rules, and builder-mode for agents spawned by AgentHub",
+  "version": "1.0.0",
+  "author": {
+    "name": "Optimaeus",
+    "email": "contact@optimaeus.com"
+  },
+  "license": "MIT"
+}
