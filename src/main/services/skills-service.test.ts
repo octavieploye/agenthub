@@ -191,9 +191,10 @@ describe('SkillsService', () => {
     })
 
     it('does not scan global ~/.claude/skills/ directory', () => {
-      mockExistsSync.mockReturnValue(true)
+      // Mock targets plugin/skills (new primary path) — validates no global ~/.claude/skills scanned
+      mockExistsSync.mockImplementation((path: string) => path === '/project/plugin/skills')
       mockReaddirSync.mockImplementation((dir: string) => {
-        if (dir === '/project/.claude/skills') return ['project-skill.md']
+        if (dir === '/project/plugin/skills') return ['project-skill.md']
         return []
       })
       mockStatSync.mockReturnValue({ isDirectory: () => false })
