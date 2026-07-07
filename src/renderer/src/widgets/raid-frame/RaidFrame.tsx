@@ -30,7 +30,7 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   spawning: 'bg-info animate-pulse',
   busy: 'bg-success',
   idle: 'bg-base-content/60',
-  locked: 'bg-warning animate-breathe',
+  locked: 'bg-warning',
   completed: 'bg-info',
   awaiting_approval: 'bg-warning',
   looping: 'bg-error animate-urgency-pulse',
@@ -42,8 +42,7 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
 function getRaidGlowClass(status: string): string {
   switch (status) {
     case 'locked':
-    case 'completed':
-      return 'glow-blip'
+      return 'glow-ring'
     case 'awaiting_approval':
     case 'error':
     case 'looping':

@@ -27,7 +27,7 @@ const STATUS_COLORS: Record<string, string> = {
   spawning: 'bg-info animate-pulse',
   busy: 'bg-success',
   idle: 'bg-base-content/60',
-  locked: 'bg-warning animate-breathe',
+  locked: 'bg-warning',
   completed: 'bg-info',
   awaiting_approval: 'bg-warning',
   looping: 'bg-error animate-urgency-pulse',
@@ -45,20 +45,11 @@ function getGlowConfig(agent: AgentState, isEscalated: boolean): GlowResult | nu
   const color = agent.color
 
   switch (agent.status) {
-    case 'completed': {
-      // Persistent slow pulse so the completed state stays visible until user acts
-      return {
-        cssVar: color,
-        glowClass: 'glow-blip',
-      }
-    }
-
     case 'locked': {
-      // "Response needed" — Claude finished a turn (BEL fired) and is at the ❯ prompt.
-      // Slow pulse matches completed cadence: both are "waiting for user".
+      // "Your turn" — agent responded, waiting at ❯ prompt. Static ring (not urgent pulse).
       return {
         cssVar: color,
-        glowClass: 'glow-blip',
+        glowClass: 'glow-ring',
       }
     }
 
@@ -186,8 +177,10 @@ function AgentCard({
     return undefined
   }, [agent.status])
 
-  const handleAnimationEnd = useCallback(() => {
-    setShimmerClass('')
+  const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
+    if (e.animationName === 'card-shimmer') {
+      setShimmerClass('')
+    }
   }, [])
 
   useEffect(() => {
@@ -215,6 +208,8 @@ function AgentCard({
   const colorWashStyle: React.CSSProperties = {
     backgroundImage: `linear-gradient(to right, ${agent.color}0d 0%, transparent 60%)`,
     '--agent-color': agent.color,
+    borderLeftColor: agent.color,
+    borderLeftWidth: '3px',
   } as React.CSSProperties
 
   const opacityStyle: React.CSSProperties = isPaused ? { opacity: 0.6 } : {}

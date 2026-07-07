@@ -443,6 +443,17 @@ h1, h2, h3, .agent-name {
   z-index: 2;
 }
 
+/* Preserve inset glow ring when a working card is also selected */
+.agent-card.card-active.glow-ring,
+.agent-card.card-active.glow-blip,
+.agent-card.card-active.glow-blip-fast {
+  box-shadow:
+    inset 0 0 0 2px var(--glow-color),
+    inset 0 0 24px color-mix(in srgb, var(--glow-color) 20%, transparent),
+    0 0 14px color-mix(in srgb, var(--agent-color, var(--color-primary)) 25%, transparent),
+    0 4px 12px color-mix(in oklch, black 20%, transparent);
+}
+
 /* dropdown-panel — solid themed dropdown container */
 .dropdown-panel {
   background: var(--color-neutral);
@@ -482,16 +493,22 @@ h1, h2, h3, .agent-name {
 }
 
 /* Liquid glass glow — agent status
-   Inner glow: ::before radial gradient + inset box-shadow ring.
-   Color is set in CLASS RULES (not @keyframes) so var() resolves correctly.
+   Three classes:
+     glow-ring      — static inset ring, no pulse (locked: your turn, not urgent)
+     glow-blip      — slow pulsing ::before  (awaiting_approval-style slow alerts)
+     glow-blip-fast — fast pulsing ::before  (awaiting_approval, error, looping)
+   Color is set in CLASS RULES so var() resolves correctly.
    @keyframes only animates opacity — no color vars, works in all Chromium builds. */
+
+.glow-ring,
 .glow-blip,
 .glow-blip-fast {
-  /* Inset shadow ring: visible colored border INSIDE the card, never clipped by overflow */
   box-shadow:
     inset 0 0 0 2px var(--glow-color),
     inset 0 0 24px color-mix(in srgb, var(--glow-color) 20%, transparent);
   z-index: 1;
+  /* Smooth entry when class is first applied */
+  transition: box-shadow 0.35s ease;
 }
 
 /* ::before — radial ambient glow emanating from card center */
