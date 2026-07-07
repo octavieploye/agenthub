@@ -1,0 +1,381 @@
+{
+  "_generated": "2026-07-03",
+  "_description": "Central registry of all skills, teams, workflows, and commands. Agents read this for quick discovery instead of scanning the filesystem.",
+
+  "skills": [
+    {
+      "id": "skill-creator",
+      "name": "skill-creator",
+      "description": "Create new skills, teams, workflows, commands — reverse-engineer tasks into reusable artifacts",
+      "category": "dev-skills",
+      "path": ".claude/skills/skill-creator/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "test-integrity-review",
+      "name": "test-integrity-review",
+      "description": "Check code changes for 'test changed to pass' patterns during review or before commits",
+      "category": "dev-skills",
+      "path": ".claude/skills/test-integrity-review/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "full-code-review",
+      "name": "full-code-review",
+      "description": "Full multi-agent codebase audit + fix + verify cycle",
+      "category": "dev-skills",
+      "path": ".claude/skills/full-code-review/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "token-optimizer",
+      "name": "token-optimizer",
+      "description": "Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline",
+      "category": "dev-skills",
+      "path": ".claude/skills/token-optimizer/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "external-source-to-strategy",
+      "name": "external-source-to-strategy",
+      "description": "Turn transcript, article, or framework into competitive brief, priority todos, and memory reference",
+      "category": "business-analysis",
+      "path": ".claude/skills/external-source-to-strategy/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "trustworthy-sources",
+      "name": "trustworthy-sources",
+      "description": "Evaluate whether a source is credible enough to cite as evidence (5-source convergence rule)",
+      "category": "business-analysis",
+      "path": ".claude/skills/trustworthy-sources/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "vibe-marketing-validation",
+      "name": "vibe-marketing-validation",
+      "description": "L7V 9-prompt AI validation playbook: niche discovery, product spec, mockups, landing page, Meta ads",
+      "category": "business-venture",
+      "path": ".claude/skills/vibe-marketing-validation/SKILL.md",
+      "source": "project"
+    }
+  ],
+
+  "team-orchestrators": [
+    {
+      "id": "team-business",
+      "name": "team-business",
+      "description": "Business Team Orchestrator — market research, strategy, competitive intelligence",
+      "category": "business-intelligence",
+      "path": ".claude/skills/team-business/SKILL.md",
+      "team": ".claude/teams/business/config.json",
+      "workflow": ".claude/workflow-team-library/business/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-marketing",
+      "name": "team-marketing",
+      "description": "Marketing Team Orchestrator — persona, channel strategy, messaging, campaign planning",
+      "category": "marketing",
+      "path": ".claude/skills/team-marketing/SKILL.md",
+      "team": ".claude/teams/marketing/config.json",
+      "workflow": ".claude/workflow-team-library/marketing/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-brain",
+      "name": "team-brain",
+      "description": "Brain Team Orchestrator — cross-project meta-intelligence and strategic orientation",
+      "category": "business-intelligence",
+      "path": ".claude/skills/team-brain/SKILL.md",
+      "team": ".claude/teams/brain/config.json",
+      "workflow": ".claude/workflow-team-library/brain/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-brainstorm",
+      "name": "team-brainstorm",
+      "description": "Brainstorm Team Orchestrator — general ideation, concept → challenge → synthesis → Idea Brief",
+      "category": "creative-ideation",
+      "path": ".claude/skills/team-brainstorm/SKILL.md",
+      "team": ".claude/teams/brainstorm/config.json",
+      "workflow": ".claude/workflow-team-library/brainstorm/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-data",
+      "name": "team-data",
+      "description": "Data Team Orchestrator — archives session outputs, cross-session opportunity and risk analysis",
+      "category": "business-intelligence",
+      "path": ".claude/skills/team-data/SKILL.md",
+      "team": ".claude/teams/data/config.json",
+      "workflow": ".claude/workflow-team-library/data/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-ai-expert",
+      "name": "team-ai-expert",
+      "description": "AI Expert Team Orchestrator — audits, optimizes, scaffolds .claude/ configs",
+      "category": "ai-engineering",
+      "path": ".claude/skills/team-ai-expert/SKILL.md",
+      "team": ".claude/teams/ai-expert/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-stats",
+      "name": "team-stats",
+      "description": "Stats Team Orchestrator — statistical analysis, risk modeling, decision framing",
+      "category": "business-modeling",
+      "path": ".claude/skills/team-stats/SKILL.md",
+      "team": ".claude/teams/stats/config.json",
+      "workflow": ".claude/workflow-team-library/stats/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-tech-brainstorm",
+      "name": "team-tech-brainstorm",
+      "description": "Tech-Brainstorm Team Orchestrator — from approved Idea Brief to approved Feature Brief",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-tech-brainstorm/SKILL.md",
+      "team": ".claude/teams/tech-brainstorm/config.json",
+      "workflow": ".claude/workflow-team-library/tech-brainstorm/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-ceo-coaching",
+      "name": "team-ceo-coaching",
+      "description": "CEO Coaching Team Orchestrator — intake profiling, inner/outer game coaching, session synthesis",
+      "category": "business-venture",
+      "path": ".claude/skills/team-ceo-coaching/SKILL.md",
+      "team": ".claude/teams/ceo-coaching/config.json",
+      "workflow": null,
+      "source": "project"
+    }
+  ],
+
+  "teams": [
+    {
+      "id": "dev-stack",
+      "name": "dev-stack",
+      "description": "Project-local dev team for backend, frontend, integration, testing, troubleshooting, and git ops",
+      "category": "dev-teams",
+      "path": ".claude/teams/dev-stack/config.json",
+      "members": ["lead", "scout-backend", "scout-frontend", "scout-integration", "dev-backend", "dev-frontend", "dev-integration", "architect", "troubleshooter", "tester-backend", "tester-frontend", "uiux-senior", "persona-nontechuser", "sec-devops", "git-ops"]
+    },
+    {
+      "id": "business",
+      "name": "business",
+      "description": "Business intelligence and strategy team",
+      "category": "business-intelligence",
+      "path": ".claude/teams/business/config.json",
+      "members": ["lead-business", "market-researcher", "business-analyst", "strategist", "positioning-expert", "investment-curator", "ceo-advisor"]
+    },
+    {
+      "id": "brain",
+      "name": "brain",
+      "description": "Meta-intelligence team — ecosystem orientation, project status, strategy context",
+      "category": "business-intelligence",
+      "path": ".claude/teams/brain/config.json",
+      "members": ["lead-brain", "ecosystem-architect", "project-navigator", "strategy-advisor", "memory-curator"]
+    },
+    {
+      "id": "data",
+      "name": "data",
+      "description": "Data intelligence team — session archival, cross-session analysis",
+      "category": "business-intelligence",
+      "path": ".claude/teams/data/config.json",
+      "members": ["lead-data", "data-architect", "opportunity-analyst", "risk-analyst"]
+    },
+    {
+      "id": "brainstorm",
+      "name": "brainstorm",
+      "description": "General ideation team — concept exploration, challenge, synthesis",
+      "category": "creative-ideation",
+      "path": ".claude/teams/brainstorm/config.json",
+      "members": ["lead-brainstorm", "concept-explorer", "idea-challenger", "synthesis-builder"]
+    },
+    {
+      "id": "marketing",
+      "name": "marketing",
+      "description": "Marketing and communication team",
+      "category": "marketing",
+      "path": ".claude/teams/marketing/config.json",
+      "members": ["lead-marketing", "persona-profiler", "readiness-analyst", "competitive-intel-marketing", "channel-strategist", "message-architect", "content-creator", "campaign-analyst"]
+    },
+    {
+      "id": "stats",
+      "name": "stats",
+      "description": "Statistics and probability team",
+      "category": "business-modeling",
+      "path": ".claude/teams/stats/config.json",
+      "members": ["lead-stats", "quant-analyst", "risk-modeler", "market-stats-researcher", "behavioral-analyst", "decision-modeler"]
+    },
+    {
+      "id": "ai-expert",
+      "name": "ai-expert",
+      "description": "AI configuration quality team",
+      "category": "ai-engineering",
+      "path": ".claude/teams/ai-expert/config.json",
+      "members": ["lead-ai-engineer", "config-auditor", "prompt-optimizer", "workflow-analyst", "framework-builder"]
+    },
+    {
+      "id": "tech-brainstorm",
+      "name": "tech-brainstorm",
+      "description": "Technical ideation team — Idea Brief to Feature Brief",
+      "category": "dev-skills",
+      "path": ".claude/teams/tech-brainstorm/config.json",
+      "members": ["lead-tech-brainstorm", "feature-architect", "sr-backend", "sr-frontend", "ux-explorer"]
+    },
+    {
+      "id": "ceo-coaching",
+      "name": "ceo-coaching",
+      "description": "CEO coaching team — intake, inner game, outer game, synthesis",
+      "category": "business-venture",
+      "path": ".claude/teams/ceo-coaching/config.json",
+      "members": ["lead-ceo-coaching", "ceo-profiler", "ceo-inner", "ceo-outer", "ceo-synthesizer"]
+    }
+  ],
+
+  "workflows": [
+    {
+      "id": "business",
+      "name": "Business Research Methodology",
+      "description": "FORWARD/REVERSE/LOOP research modes — Eagle-to-Focus or Focus-to-Eagle",
+      "category": "business-research",
+      "path": ".claude/workflow-team-library/business/manifest.md",
+      "team": "business"
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing Methodology",
+      "description": "Persona → readiness → competitive intel → channels → messaging → campaigns",
+      "category": "business-venture",
+      "path": ".claude/workflow-team-library/marketing/manifest.md",
+      "team": "marketing"
+    },
+    {
+      "id": "brain",
+      "name": "Brain Methodology",
+      "description": "Cross-project meta-intelligence orientation and knowledge surface",
+      "category": "business-analysis",
+      "path": ".claude/workflow-team-library/brain/manifest.md",
+      "team": "brain"
+    },
+    {
+      "id": "brainstorm",
+      "name": "Brainstorm Methodology",
+      "description": "Orient → Explore → Challenge → Synthesize → Present → Decide → Close",
+      "category": "business-venture",
+      "path": ".claude/workflow-team-library/brainstorm/manifest.md",
+      "team": "brainstorm"
+    },
+    {
+      "id": "data",
+      "name": "Data Methodology",
+      "description": "Session deposit → cross-session analysis → opportunity/risk identification",
+      "category": "business-analysis",
+      "path": ".claude/workflow-team-library/data/manifest.md",
+      "team": "data"
+    },
+    {
+      "id": "stats",
+      "name": "Stats Methodology",
+      "description": "Research → quantitative analysis → risk modeling → decision framing",
+      "category": "business-modeling",
+      "path": ".claude/workflow-team-library/stats/manifest.md",
+      "team": "stats"
+    },
+    {
+      "id": "tech-brainstorm",
+      "name": "Tech-Brainstorm Methodology",
+      "description": "Idea Brief → feasibility → architecture options → Feature Brief",
+      "category": "dev-skills",
+      "path": ".claude/workflow-team-library/tech-brainstorm/manifest.md",
+      "team": "tech-brainstorm"
+    },
+    {
+      "id": "market-sim-prep",
+      "name": "Market Simulation Prep",
+      "description": "6-phase market intelligence pre-simulation workflow",
+      "category": "business-modeling",
+      "path": ".claude/workflow-team-library/market-sim-prep/manifest.md",
+      "team": null
+    },
+    {
+      "id": "market-modeling",
+      "name": "Market Modeling",
+      "description": "Five-tradition harvest → five-lens analysis → shadow review → synthesis",
+      "category": "business-modeling",
+      "path": ".claude/workflow-team-library/market-modeling/manifest.md",
+      "team": null
+    }
+  ],
+
+  "commands": {
+    "dev-stack": [
+      "team", "scout-backend", "scout-frontend", "scout-integration",
+      "dev-backend", "dev-frontend", "dev-integration", "architect",
+      "troubleshooter", "tester-backend", "tester-frontend",
+      "uiux-senior", "persona-nontechuser", "sec-devops", "git-commit"
+    ],
+    "business": [
+      "team-business", "market-researcher", "business-analyst",
+      "strategist", "positioning-expert", "investment-curator", "ceo-advisor"
+    ],
+    "brain": [
+      "team-brain", "ecosystem-architect", "project-navigator",
+      "strategy-advisor", "memory-curator"
+    ],
+    "data": [
+      "team-data", "data-architect", "opportunity-analyst", "risk-analyst"
+    ],
+    "brainstorm": [
+      "team-brainstorm", "concept-explorer", "idea-challenger", "synthesis-builder"
+    ],
+    "marketing": [
+      "team-marketing", "persona-profiler", "readiness-analyst",
+      "competitive-intel-marketing", "channel-strategist",
+      "message-architect", "content-creator", "campaign-analyst"
+    ],
+    "stats": [
+      "team-stats", "quant-analyst", "risk-modeler",
+      "market-stats-researcher", "behavioral-analyst", "decision-modeler"
+    ],
+    "ai-expert": [
+      "team-ai-expert", "config-auditor", "prompt-optimizer",
+      "workflow-analyst", "framework-builder",
+      "ai-audit", "ai-fix", "ai-pre-build", "ai-post-sprint"
+    ],
+    "tech-brainstorm": [
+      "team-tech-brainstorm", "feature-architect", "sr-backend",
+      "sr-frontend", "ux-explorer"
+    ],
+    "ceo-coaching": [
+      "ceo-coaching-team", "ceo-coaching-profiler", "ceo-coaching-inner",
+      "ceo-coaching-outer", "ceo-coaching-synthesizer"
+    ],
+    "market-sim": [
+      "market-sim-start", "market-sim-p1", "market-sim-p2", "market-sim-p3",
+      "market-sim-p4", "market-sim-p5", "market-sim-p6"
+    ],
+    "destructuring": [
+      "destructuring-full", "destructuring-business", "destructuring-competitor",
+      "destructuring-market", "destructuring-dynamics", "destructuring-patterns"
+    ],
+    "standalone": [
+      "full-code-review", "modelise", "modelise-quick", "modelise-shadow",
+      "telegram-notify"
+    ]
+  },
+
+  "notes": {
+    "empty-directories": [
+      {
+        "id": "modeling",
+        "path": ".claude/teams/modeling/",
+        "status": "empty — no config.json. Has workflow at .claude/workflow-team-library/modeling/ but no team config. Uses standalone commands (modelise, modelise-quick, modelise-shadow)."
+      }
+    ]
+  }
+}

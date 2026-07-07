@@ -1,0 +1,8 @@
+{
+  "hooks": [
+    {
+      "event": "Stop",
+      "command": ".claude/skills/token-optimizer/token-audit.sh --mode=session-end"
+    }
+  ]
+}
