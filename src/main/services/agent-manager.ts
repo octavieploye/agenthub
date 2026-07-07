@@ -403,6 +403,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ...process.env as Record<string, string>,
     ...providerEnv,
     ...(options.envOverrides ?? {}),
+    AGENTHUB_BUILDER: '1',   // signals plugin hook: this is a builder session
     // Point zsh dotfile lookup to an empty dir so oh-my-zsh and user .zshrc
     // don't pollute the terminal before Claude CLI appears.
     // /etc/zprofile still runs, keeping macOS PATH (path_helper) intact.
