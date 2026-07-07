@@ -146,7 +146,9 @@ export class SkillsService {
   private scanRepo(repoPath: string): SkillItem[] {
     const items: SkillItem[] = []
 
-    const projectDir = join(repoPath, '.claude', 'skills')
+    const pluginSkillsDir = join(repoPath, 'plugin', 'skills')
+    const legacySkillsDir = join(repoPath, '.claude', 'skills')
+    const projectDir = existsSync(pluginSkillsDir) ? pluginSkillsDir : legacySkillsDir
     items.push(...this.scanDirectory(projectDir, 'project'))
     items.push(...this.scanTeams(repoPath))
     items.push(...this.scanWorkflows(repoPath))
@@ -215,7 +217,9 @@ export class SkillsService {
   }
 
   private scanWorkflows(repoPath: string): SkillItem[] {
-    const workflowDir = join(repoPath, '.claude', 'workflow-team-library')
+    const pluginWorkflowDir = join(repoPath, 'plugin', 'workflows')
+    const legacyWorkflowDir = join(repoPath, '.claude', 'workflow-team-library')
+    const workflowDir = existsSync(pluginWorkflowDir) ? pluginWorkflowDir : legacyWorkflowDir
     if (!existsSync(workflowDir)) return []
 
     let entries: string[]
@@ -238,7 +242,9 @@ export class SkillsService {
   }
 
   private scanCommands(repoPath: string): SkillItem[] {
-    const commandsDir = join(repoPath, '.claude', 'commands')
+    const pluginCommandsDir = join(repoPath, 'plugin', 'commands')
+    const legacyCommandsDir = join(repoPath, '.claude', 'commands')
+    const commandsDir = existsSync(pluginCommandsDir) ? pluginCommandsDir : legacyCommandsDir
     if (!existsSync(commandsDir)) return []
 
     let entries: string[]
@@ -283,7 +289,9 @@ export class SkillsService {
   }
 
   private loadDisplayRegistry(repoPath: string): DisplayRegistry | null {
-    const registryPath = join(repoPath, '.claude', 'skills', 'display-registry.json')
+    const pluginRegistryPath = join(repoPath, 'plugin', 'skills', 'display-registry.json')
+    const legacyRegistryPath = join(repoPath, '.claude', 'skills', 'display-registry.json')
+    const registryPath = existsSync(pluginRegistryPath) ? pluginRegistryPath : legacyRegistryPath
     if (!existsSync(registryPath)) return null
 
     try {
