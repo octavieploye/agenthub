@@ -85,7 +85,7 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
   return (
     <div
       data-testid="raid-frame"
-      className={`panel-glass p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px] ${glowClass}`}
+      className={`panel-glass relative p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px] ${glowClass}`}
       style={{
         borderLeftColor: agent.color,
         // Static ambient shadow when idle/busy; keyframe animation owns box-shadow when glowing
