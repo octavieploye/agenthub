@@ -48,6 +48,8 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [team-stats](team-stats/SKILL.md) — Statistical analysis, risk modeling, behavioral research, decision framing — external reference only
 - [team-tech-brainstorm](team-tech-brainstorm/SKILL.md) — From approved Idea Brief to approved Feature Brief — requires Idea Brief to start
 - [team-ceo-coaching](team-ceo-coaching/SKILL.md) — CEO coaching: intake profiling, inner/outer game coaching, session synthesis
+- [team-design-research](team-design-research/SKILL.md) — Landing page trends, emotional UX patterns, Tailwind animations — outputs Design Research Brief
+- [team-ui-builder](team-ui-builder/SKILL.md) — End-to-end UI build: UX architecture + emotional design + Tailwind/CSS + micro-interactions + non-tech validation — outputs UI Build Summary + code
 
 ## Display Registry
 

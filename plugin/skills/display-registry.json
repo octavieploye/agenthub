@@ -41,6 +41,8 @@
     "vibe-marketing-validation":   { "displayName": "Validate Product Idea",       "category": "content-voice" },
     "market-modeling":             { "displayName": "Market Intelligence Workflow", "category": "workflows" },
     "market-sim-prep":             { "displayName": "Market Sim Preparation",      "category": "workflows" },
+    "design-research":             { "displayName": "Design Research Team",        "category": "teams" },
+    "ui-builder":                  { "displayName": "UI Builder Team",             "category": "teams" },
     "dev-stack":                   { "displayName": "Dev Team",                    "category": "teams" },
     "business":                    { "displayName": "Business Research Team",      "category": "teams" },
     "marketing":                   { "displayName": "Marketing Team",              "category": "teams" },

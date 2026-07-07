@@ -454,12 +454,16 @@ h1, h2, h3, .agent-name {
     0 4px 12px color-mix(in oklch, black 20%, transparent);
 }
 
-/* Completed/idle/interrupted agents: keep the selection ring but remove the ambient glow.
-   These are terminal states — the persistent glow reads as "still working". */
-.agent-card.card-active.status-completed,
-.agent-card.card-active.status-idle,
-.agent-card.card-active.status-interrupted {
-  box-shadow: 0 0 4px color-mix(in srgb, var(--agent-color, var(--color-primary)) 10%, transparent), 0 2px 8px rgba(0,0,0,0.3);
+/* Acknowledged card: user has clicked it — kill all glow, keep subtle depth only.
+   Border is removed in JS (borderLeftWidth: 0). Outline and box-shadow cleared here. */
+.agent-card.agent-card-read.card-active {
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.agent-card.agent-card-read.glow-blip,
+.agent-card.agent-card-read.glow-ring,
+.agent-card.agent-card-read.glow-blip-fast {
+  box-shadow: none;
 }
 
 /* dropdown-panel — solid themed dropdown container */
@@ -652,6 +656,64 @@ h1, h2, h3, .agent-name {
   }
 }
 
+/* ─── Sidebar UI Builder — micro-interaction animations ─────────────────────
+   Added for: suggestion chips, intent input, section header, agent mini cards.
+   Timing contract: 100–400ms only. No transform:scale on chips.
+   Reduced-motion overrides are in the @media block below.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Chip entrance — stagger via inline animation-delay on each chip */
+@keyframes chip-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.chip-enter {
+  animation: chip-fade-in 150ms ease-out both;
+}
+
+/* 2. Chip pressed — instant state class, no keyframe needed.
+      Applied via JS for 100ms then removed. */
+.chip-pressed {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
+  color: var(--color-primary) !important;
+  transition: none;
+}
+
+/* 3. Intent input wrapper — focus-within glow signals "system is listening" */
+.intent-input-wrapper:focus-within {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    0 0 8px  color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-radius: 0.75rem;
+  transition: box-shadow 0.2s ease;
+}
+
+/* 4. Section collapse chevron — communicates collapsible state */
+.section-chevron {
+  display: inline-block;
+  transition: transform 200ms ease;
+}
+
+.section-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.section-chevron.is-collapsed {
+  transform: rotate(0deg);
+}
+
+/* 5. Agent mini card entrance — new cards noticed without disruption */
+@keyframes agent-card-enter {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 80px; }
+}
+
+.agent-card-enter {
+  animation: agent-card-enter 200ms ease-out forwards;
+  overflow: hidden;
+}
+
 @keyframes fade-out-collapse {
   from {
     opacity: 1;
@@ -679,8 +741,19 @@ h1, h2, h3, .agent-name {
   .agent-card[data-exiting="true"],
   .panel-glass-alert,
   .glow-blip,
-  .glow-blip-fast {
+  .glow-blip-fast,
+  /* Sidebar UI Builder additions */
+  .chip-enter,
+  .chip-pressed,
+  .agent-card-enter,
+  .section-chevron {
     animation: none !important;
+    transition: none !important;
+  }
+  .intent-input-wrapper:focus-within {
+    /* Keep the 1px outline so focus is still visible — drop the glow blur */
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    transition: none !important;
   }
   * {
     transition-duration: 0.01ms !important;

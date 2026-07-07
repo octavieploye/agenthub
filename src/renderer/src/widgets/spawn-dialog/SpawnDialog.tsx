@@ -48,11 +48,12 @@ interface SpawnDialogProps {
     telegramNotify?: boolean
   ) => Promise<string | null>
   prefilledRepoId?: string
+  prefilledTask?: string
 }
 
 type Step = 'configure' | 'pre-launch' | 'model-select'
 
-function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogProps): React.JSX.Element | null {
+function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }: SpawnDialogProps): React.JSX.Element | null {
   const [repos, setRepos] = useState<RepoConfig[]>([])
   const [selectedRepoId, setSelectedRepoId] = useState<string>('')
   const [customCwd, setCustomCwd] = useState('')
@@ -67,6 +68,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
   const [skipPermissions, setSkipPermissions] = useState(false)
   const [isNewProject, setIsNewProject] = useState(false)
   const [telegramNotify, setTelegramNotify] = useState(false)
+  const [taskHint, setTaskHint] = useState('')
   const [_dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
@@ -110,15 +112,16 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
       setCustomCwd('')
       setSelectedRepoId(prefilledRepoId ?? '')
       setShowAddRepo(false)
-      setStep('configure')
+      setStep(prefilledTask && prefilledRepoId ? 'pre-launch' : 'configure')
       setSelectedModel('claude-sonnet-4-6')
       setEffortLevel('medium')
       setSkipPermissions(false)
       setTelegramNotify(false)
       setIsNewProject(false)
       setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
+      setTaskHint(prefilledTask ?? '')
     }
-  }, [open, loadRepos, loadModels, prefilledRepoId])
+  }, [open, loadRepos, loadModels, prefilledRepoId, prefilledTask])
 
   useEffect(() => {
     if (!skipPermissions) { setDockerStatus(null); return }
@@ -273,7 +276,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId }: SpawnDialogPro
           <PreLaunchCard
             repoId={selectedRepoId || 'default'}
             repoName={repoName}
-            initialTask=""
+            initialTask={taskHint}
             recommendedModel={currentModelInfo?.name ?? selectedModel}
             modelRationale={
               currentModelInfo?.description

@@ -271,7 +271,7 @@ core/{module-name}    {one-line description}
 
 ---
 
-## Step 4 — Register
+## Step 4 — Register in `.claude/`
 
 After creating any artifact:
 
@@ -283,6 +283,45 @@ After creating any artifact:
    - Workflows: `.claude/workflow-team-library/{name}/manifest.md` (`WORKFLOW_CATEGORIES` map)
    - Commands: `.claude/commands/{name}.md` (not in skills panel — invoked via `/command`)
 
+---
+
+## Step 4B — Mirror to AgentHub Plugin
+
+The `plugin/` directory is the Claude Code plugin that AgentHub installs into every agent session it spawns. **Any skill, team, or command created in `.claude/` must also be mirrored into `plugin/`** so agents have access to it.
+
+### What to mirror
+
+| Artifact | Mirror path | Notes |
+|---|---|---|
+| Skill SKILL.md | `plugin/skills/{name}/SKILL.md` | Exact copy |
+| Team orchestrator SKILL.md | `plugin/skills/team-{name}/SKILL.md` | Exact copy |
+| Command files | `plugin/commands/{name}.md` | Exact copy — one file per agent |
+| Supporting files (criteria.md, voice-signature.md, etc.) | `plugin/skills/{name}/` | Copy only files referenced in SKILL.md |
+| `index.json` | `plugin/skills/index.json` | Add same entries as `.claude/skills/index.json` |
+| `display-registry.json` | `plugin/skills/display-registry.json` | Add same entry |
+
+### What NOT to mirror
+
+- `.claude/teams/{name}/config.json` — no `plugin/teams/` directory exists; team configs stay in `.claude/`
+- `.claude/workflow-team-library/` — workflow manifests and phases stay in `.claude/`; the plugin references them via path strings in `index.json`
+
+### Plugin `index.json` additions
+
+Add the same entries you added to `.claude/skills/index.json`:
+- `team-orchestrators` array — the team's orchestrator SKILL entry
+- `teams` array — the team's member list
+- `workflows` array — the workflow entry (path reference only, file stays in `.claude/`)
+- `commands` object — add a key for the new team's commands list
+
+### Plugin `display-registry.json`
+
+Add the team's display name entry under `"items"`:
+```json
+"design-research": { "displayName": "Design Research Team", "category": "teams" }
+```
+
+---
+
 ## Step 5 — Verify
 
 Before declaring done:
@@ -291,9 +330,13 @@ Before declaring done:
 - [ ] Frontmatter has `name`, `description`, and `category` (skills) or `"category"` (teams)
 - [ ] If team: every member has a matching `.claude/commands/{name}.md`
 - [ ] If team: orchestrator SKILL.md exists in `.claude/skills/team-{name}/`
-- [ ] `index.json` updated
-- [ ] `index.md` updated
+- [ ] `index.json` updated (`.claude/skills/index.json`)
+- [ ] `index.md` updated (`.claude/skills/index.md`)
 - [ ] No duplicate IDs across skills, teams, and workflows
+- [ ] **Plugin mirrored** — `plugin/skills/{name}/SKILL.md` exists
+- [ ] **Plugin commands mirrored** — all command files exist in `plugin/commands/`
+- [ ] **Plugin `index.json` updated** — `plugin/skills/index.json` has all new entries
+- [ ] **Plugin `display-registry.json` updated** — team/skill visible in UI dropdown
 - [ ] User has reviewed all files before commit
 
 ## Constraints

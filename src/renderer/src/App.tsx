@@ -108,6 +108,7 @@ function AppMain(): React.JSX.Element {
   const { width: windowWidth } = useWindowSize()
   const isNarrowWindow = windowWidth < 860
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
+  const [spawnPrefilledTask, setSpawnPrefilledTask] = useState('')
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [pausedAgentAnomalies, setPausedAgentAnomalies] = useState<HealthAnomaly[]>([])
   const [pausedAt, setPausedAt] = useState<number>(0)
@@ -1043,6 +1044,16 @@ function AppMain(): React.JSX.Element {
             onOpenGuardrails={handleOpenGuardrails}
             onToggleVoiceMode={handleToggleVoiceMode}
             onToggleTelegramNotify={handleToggleTelegramNotify}
+            onLaunchWithIntent={(text, _skillId) => {
+              const agent = activeAgentId ? agents.get(activeAgentId) : null
+              const receptive = ['idle', 'locked', 'completed']
+              if (agent && receptive.includes(agent.status)) {
+                handleSendInput(activeAgentId!, text + '\r')
+              } else {
+                setSpawnPrefilledTask(text)
+                setSpawnDialogOpen(true)
+              }
+            }}
           />
         )}
 
@@ -1076,6 +1087,16 @@ function AppMain(): React.JSX.Element {
                     onSpawnAgent={() => setSpawnDialogOpen(true)}
                     onOpenGuardrails={handleOpenGuardrails}
                     onToggleVoiceMode={handleToggleVoiceMode}
+                    onLaunchWithIntent={(text, _skillId) => {
+                      const agent = activeAgentId ? agents.get(activeAgentId) : null
+                      const receptive = ['idle', 'locked', 'completed']
+                      if (agent && receptive.includes(agent.status)) {
+                        handleSendInput(activeAgentId!, text + '\r')
+                      } else {
+                        setSpawnPrefilledTask(text)
+                        setSpawnDialogOpen(true)
+                      }
+                    }}
                   />
                 )}
               </div>
@@ -1221,9 +1242,10 @@ function AppMain(): React.JSX.Element {
 
       <SpawnDialog
         open={spawnDialogOpen}
-        onClose={() => setSpawnDialogOpen(false)}
+        onClose={() => { setSpawnDialogOpen(false); setSpawnPrefilledTask('') }}
         onSpawn={handleSpawn}
         prefilledRepoId={selectedRepoId ?? undefined}
+        prefilledTask={spawnPrefilledTask || undefined}
       />
 
       <CommandPalette

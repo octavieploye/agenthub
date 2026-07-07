@@ -151,6 +151,26 @@
       "team": ".claude/teams/ceo-coaching/config.json",
       "workflow": null,
       "source": "project"
+    },
+    {
+      "id": "team-design-research",
+      "name": "team-design-research",
+      "description": "Design Research Team Orchestrator — landing page trends, emotional UX patterns, Tailwind animations, event-triggered interactions",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-design-research/SKILL.md",
+      "team": ".claude/teams/design-research/config.json",
+      "workflow": ".claude/workflow-team-library/design-research/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-ui-builder",
+      "name": "team-ui-builder",
+      "description": "UI Builder Team Orchestrator — coherent, non-tech-user-friendly UI: UX architecture, emotional design, Tailwind/CSS implementation, micro-interactions, non-tech validation",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-ui-builder/SKILL.md",
+      "team": ".claude/teams/ui-builder/config.json",
+      "workflow": ".claude/workflow-team-library/ui-builder/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -234,6 +254,22 @@
       "category": "business-venture",
       "path": ".claude/teams/ceo-coaching/config.json",
       "members": ["lead-ceo-coaching", "ceo-profiler", "ceo-inner", "ceo-outer", "ceo-synthesizer"]
+    },
+    {
+      "id": "design-research",
+      "name": "design-research",
+      "description": "Frontend design research team — landing trends, emotional UX, Tailwind animations",
+      "category": "dev-skills",
+      "path": ".claude/teams/design-research/config.json",
+      "members": ["lead-design-research", "trend-scout", "emotion-ux", "animation-engineer"]
+    },
+    {
+      "id": "ui-builder",
+      "name": "ui-builder",
+      "description": "UI Builder team — coherent, non-tech-user-friendly UI from feature request to validated implementation",
+      "category": "dev-skills",
+      "path": ".claude/teams/ui-builder/config.json",
+      "members": ["lead-ui-builder", "uiux-senior", "emotion-ux", "dev-frontend", "animation-engineer", "persona-nontechuser"]
     }
   ],
 
@@ -362,6 +398,14 @@
     "destructuring": [
       "destructuring-full", "destructuring-business", "destructuring-competitor",
       "destructuring-market", "destructuring-dynamics", "destructuring-patterns"
+    ],
+    "design-research": [
+      "team-design-research", "lead-design-research", "trend-scout",
+      "emotion-ux", "animation-engineer"
+    ],
+    "ui-builder": [
+      "team-ui-builder", "lead-ui-builder", "uiux-senior",
+      "emotion-ux", "dev-frontend", "animation-engineer", "persona-nontechuser"
     ],
     "standalone": [
       "full-code-review", "modelise", "modelise-quick", "modelise-shadow",

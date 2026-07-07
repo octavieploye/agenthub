@@ -4,7 +4,11 @@ import type { AgentState, AgentLifecycleStatus, StatusConfidence, ModelProvider,
 interface AgentStore {
   agents: Map<string, AgentState>
   activeAgentId: string | null
+  /** IDs of agents the user has clicked/acknowledged. Pulsing stops when read. */
+  readAgentIds: Set<string>
   setActiveAgent: (id: string | null) => void
+  /** Mark an agent as acknowledged (stops pulse/border). */
+  markAgentRead: (id: string) => void
   addAgent: (agent: AgentState) => void
   upsertAgent: (agent: AgentState) => void
   removeAgent: (id: string) => void
@@ -21,8 +25,22 @@ interface AgentStore {
 export const useAgentStore = create<AgentStore>((set) => ({
   agents: new Map(),
   activeAgentId: null,
+  readAgentIds: new Set<string>(),
 
-  setActiveAgent: (id) => set({ activeAgentId: id }),
+  setActiveAgent: (id) =>
+    set((state) => {
+      if (id === null) return { activeAgentId: null }
+      const readNext = new Set(state.readAgentIds)
+      readNext.add(id)
+      return { activeAgentId: id, readAgentIds: readNext }
+    }),
+
+  markAgentRead: (id) =>
+    set((state) => {
+      const next = new Set(state.readAgentIds)
+      next.add(id)
+      return { readAgentIds: next }
+    }),
 
   addAgent: (agent) =>
     set((state) => {
@@ -53,6 +71,13 @@ export const useAgentStore = create<AgentStore>((set) => ({
       if (!agent) return state
       const next = new Map(state.agents)
       next.set(id, { ...agent, status, confidence, updatedAt: new Date().toISOString() })
+      // Attention states mark agent unread (pulse restarts) unless it's the active agent
+      const attentionStates: AgentLifecycleStatus[] = ['completed', 'locked', 'awaiting_approval']
+      if (attentionStates.includes(status) && state.activeAgentId !== id) {
+        const readNext = new Set(state.readAgentIds)
+        readNext.delete(id)
+        return { agents: next, readAgentIds: readNext }
+      }
       return { agents: next }
     }),
 
