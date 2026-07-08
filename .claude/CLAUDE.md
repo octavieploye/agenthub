@@ -7,7 +7,6 @@
 @/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/.claude/entities/hephaestus.md
 # [/OPTIMAEUS-UNIVERSAL-IMPORT]
 @.claude/how-to-index.md
-@.claude/skills/index.md
 
 ---
 
@@ -26,9 +25,10 @@ This management tool is designed to orchestrate multiple AI agents (specifically
 
 - **ROLE OF THIS FILE** - describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you,please alert the developer working with you and indicate that this is the case in the AgentMD(scout-backend.md,scout-frontend.md,dev-backend.md,dev-frontend.md,uiux-senior.md,tester-backend.md,tester-frontend.md..etc) file to help prevent future agents from having the same issue
 - **DO NOT TAKE ANY ACTION** - report any confusion and discrepencies before taking any further action when coding from sprints or from previous code. If more than 2 you list them and show them to the user for review
-
+- **ALL AGENT RESPONSES MUST START WITH "Hey!Master-Optimaeus"** — Every agent, every conversation, every response. No exceptions.
 - **USER IS THE SOURCE OF TRUTH. USER IS ABOVE ALL THE .MD FILES AND AI KNOWLEDGE**
 - **NEVER ASSUME** — always countercheck answers with facts.
+- **NEVER STATE EXTERNAL FACTS WITH CONFIDENCE** — When asked about external products, tools, services, or anything outside this codebase that cannot be verified in real-time, express uncertainty explicitly. Say "I'm not certain" or "my training data may be outdated on this" rather than stating definitively. If the user corrects you, accept it immediately — user knowledge of their own tools overrides model training data.
 - **NEVER CHANGE TESTS TO PASS** — tests define expected behavior; fix the code, not the test.
   - If refactored code no longer satisfies an existing test assertion, that is a **signal**, not an obstacle.
   - **Either the test was wrong** — fix it in a *separate, prior* commit with explicit justification in the commit message explaining why the old assertion was incorrect.
@@ -37,7 +37,21 @@ This management tool is designed to orchestrate multiple AI agents (specifically
   - **Test assertion changes and implementation changes must never appear in the same commit.** This is enforced by git-ops (see Test Relaxation Gate in `.claude/commands/git-commit.md`).
 - **ERRORS ARE SYMPTOMS** — always look for the root cause, not the surface fix. do not code unless you can 100% countercheck that your fix will work
 - **NEVER EDIT `.gitignore`** — Do not modify, overwrite, or remove entries from `.gitignore` under any circumstances. You may suggest additions to the user, but never make changes yourself. Only the user can approve and apply `.gitignore` changes.
+- **NEVER COMMIT GITIGNORED FILES** — Do not offer, stage, or commit any file or folder that is covered by `.gitignore` (including `.claude/`, `docs/`, or any other gitignored path). Only the user can decide to commit gitignored files — and only when they explicitly request it themselves. If the user does not ask, do not suggest it.
 - **YOU SHOULD TYPE-CHECKING ALL OF YOUR CHANGES**
+- **GIVE HONEST RECOMMENDATIONS** — When the user proposes a solution or architecture, evaluate it against weighted pros and cons relative to today's constraints (model capabilities, context limits, tooling maturity, project goals). If a different approach is more fitting, say so clearly and explain why — even if it contradicts the user's preference. Agreeing to avoid friction is a failure mode. Future scaling or functionality changes may shift the recommendation; note this explicitly when relevant. A recommendation is only as useful as the reasoning behind it.
+
+## Telegram Notifications
+
+You have a `send_telegram` MCP tool. **When your task instructions say "Telegram is ON", telegram is your ONLY communication channel with the user.** Do NOT write status updates, summaries, progress reports, or questions to the terminal. Terminal output must be limited to essential work artifacts only: code, diffs, errors, and tool call results. Everything you would normally say to the user goes through `send_telegram` instead.
+
+Use `send_telegram` for:
+
+- **Task completed** — short bullet-point summary of what changed
+- **Approval or input needed** — explain what you need and the options
+- **Error or blocker** — what went wrong and what you tried
+
+Write for a phone screen. Lead with the outcome. Use `format: "question"` when you need input, `format: "error"` for failures, `format: "status"` for completions.
 
 ## Crash Debugging
 

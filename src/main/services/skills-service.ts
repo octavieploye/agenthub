@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs'
 import { execFile } from 'child_process'
 import { join, basename, dirname, relative, extname } from 'path'
+import { homedir } from 'os'
 import type { SkillItem, SkillExecutionResult } from '../../shared/types/skills.types'
 
 export const SUPPORTED_SKILL_EXTENSIONS = ['.md', '.sh', '.py', '.js']
@@ -23,6 +24,8 @@ export interface SkillsServiceDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
   logWarning: (message: string, meta?: Record<string, unknown>) => void
   agenthubPath?: string
+  /** Override for the globally installed plugin path (mainly for testing). Defaults to ~/.claude/plugins/agenthub */
+  globalPluginPath?: string
 }
 
 interface DisplayRegistry {
@@ -132,6 +135,14 @@ export class SkillsService {
         for (const s of agenthubSkills) s.origin = 'agenthub'
         skills.push(...agenthubSkills)
       }
+    } else {
+      // Fallback: scan globally installed plugin when agenthubPath is not configured
+      const globalPluginPath = this.deps.globalPluginPath ?? join(homedir(), '.claude', 'plugins', 'agenthub')
+      if (existsSync(globalPluginPath)) {
+        const globalSkills = this.scanGlobalPlugin(globalPluginPath)
+        for (const s of globalSkills) s.origin = 'agenthub'
+        skills.push(...globalSkills)
+      }
     }
 
     this.deps.logInfo('Skills scanned', { count: skills.length, repoPath })
@@ -211,7 +222,7 @@ export class SkillsService {
         // use defaults
       }
 
-      items.push({ id: entry, name, description, category, path: configPath, source: 'team', format: 'json' })
+      items.push({ id: entry, name, description, category, path: configPath, source: 'team', format: 'json', origin: 'project' })
     }
     return items
   }
@@ -220,6 +231,10 @@ export class SkillsService {
     const pluginWorkflowDir = join(repoPath, 'plugin', 'workflows')
     const legacyWorkflowDir = join(repoPath, '.claude', 'workflow-team-library')
     const workflowDir = existsSync(pluginWorkflowDir) ? pluginWorkflowDir : legacyWorkflowDir
+    return this.scanWorkflowsFromDir(workflowDir)
+  }
+
+  private scanWorkflowsFromDir(workflowDir: string): SkillItem[] {
     if (!existsSync(workflowDir)) return []
 
     let entries: string[]
@@ -245,6 +260,10 @@ export class SkillsService {
     const pluginCommandsDir = join(repoPath, 'plugin', 'commands')
     const legacyCommandsDir = join(repoPath, '.claude', 'commands')
     const commandsDir = existsSync(pluginCommandsDir) ? pluginCommandsDir : legacyCommandsDir
+    return this.scanCommandsFromDir(commandsDir)
+  }
+
+  private scanCommandsFromDir(commandsDir: string): SkillItem[] {
     if (!existsSync(commandsDir)) return []
 
     let entries: string[]
@@ -288,6 +307,25 @@ export class SkillsService {
     return items
   }
 
+  private scanGlobalPlugin(pluginPath: string): SkillItem[] {
+    const items: SkillItem[] = []
+    items.push(...this.scanDirectory(join(pluginPath, 'skills'), 'project'))
+    items.push(...this.scanWorkflowsFromDir(join(pluginPath, 'workflows')))
+    items.push(...this.scanCommandsFromDir(join(pluginPath, 'commands')))
+
+    const registryPath = join(pluginPath, 'skills', 'display-registry.json')
+    if (existsSync(registryPath)) {
+      try {
+        const registry = JSON.parse(readFileSync(registryPath, 'utf-8')) as DisplayRegistry
+        this.applyDisplayRegistry(items, registry)
+      } catch {
+        this.deps.logWarning('Failed to load global plugin display registry', { registryPath })
+      }
+    }
+
+    return items
+  }
+
   private loadDisplayRegistry(repoPath: string): DisplayRegistry | null {
     const pluginRegistryPath = join(repoPath, 'plugin', 'skills', 'display-registry.json')
     const legacyRegistryPath = join(repoPath, '.claude', 'skills', 'display-registry.json')
@@ -313,7 +351,7 @@ export class SkillsService {
     }
   }
 
-  private scanDirectory(dir: string, source: 'global' | 'project'): SkillItem[] {
+  private scanDirectory(dir: string, source: 'project'): SkillItem[] {
     if (!existsSync(dir)) return []
 
     const skills: SkillItem[] = []
@@ -324,7 +362,7 @@ export class SkillsService {
   private walkDir(
     currentDir: string,
     rootDir: string,
-    source: 'global' | 'project',
+    source: 'project',
     results: SkillItem[]
   ): void {
     const isRoot = currentDir === rootDir
@@ -384,7 +422,7 @@ export class SkillsService {
     return result
   }
 
-  private parseSkillFile(filePath: string, rootDir: string, source: 'global' | 'project'): SkillItem {
+  private parseSkillFile(filePath: string, rootDir: string, source: 'project'): SkillItem {
     const ext = extname(filePath)
     const baseName = basename(filePath).replace(/\.[^.]+$/, '')
     const id = baseName.toUpperCase() === 'SKILL' ? basename(dirname(filePath)) : baseName
@@ -463,6 +501,6 @@ export class SkillsService {
       // File read error — use defaults
     }
 
-    return { id, name, description, category, path: filePath, source, format }
+    return { id, name, description, category, path: filePath, source, format, origin: 'project' }
   }
 }
