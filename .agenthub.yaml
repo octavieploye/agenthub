@@ -1,4 +1,4 @@
-maxDurationMinutes: 15
+maxDurationMinutes: 45
 maxFilesChanged: 1
 maxConsecutiveErrors: 3
 maxTokensPerSession: 100000

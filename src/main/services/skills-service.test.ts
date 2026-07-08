@@ -861,6 +861,76 @@ describe('SkillsService', () => {
     })
   })
 
+  describe('global plugin fallback', () => {
+    it('scans globalPluginPath/skills when agenthubPath is not configured', () => {
+      const svc = new SkillsService({ logInfo: vi.fn(), logWarning: vi.fn(), globalPluginPath: '/global/plugin' })
+
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/global/plugin' || path === '/global/plugin/skills'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/global/plugin/skills') return ['global-skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# Global Skill\nFrom global plugin')
+
+      const skills = svc.listSkills()
+      expect(skills.some((s) => s.id === 'global-skill')).toBe(true)
+      expect(skills.find((s) => s.id === 'global-skill')?.origin).toBe('agenthub')
+    })
+
+    it('skips global plugin scan when agenthubPath is configured', () => {
+      const svc = new SkillsService({
+        logInfo: vi.fn(),
+        logWarning: vi.fn(),
+        agenthubPath: '/agenthub',
+        globalPluginPath: '/global/plugin'
+      })
+
+      mockExistsSync.mockImplementation((path: string) => path === '/agenthub/.claude/skills')
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/agenthub/.claude/skills') return ['ah-skill.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockReturnValue('# AH Skill\nDesc')
+
+      const skills = svc.listSkills()
+      expect(skills.some((s) => s.id === 'ah-skill')).toBe(true)
+      expect(skills.some((s) => s.id === 'global-skill')).toBe(false)
+    })
+
+    it('includes global plugin workflows when agenthubPath is not configured', () => {
+      const svc = new SkillsService({ logInfo: vi.fn(), logWarning: vi.fn(), globalPluginPath: '/global/plugin' })
+
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/global/plugin' ||
+        path === '/global/plugin/workflows' ||
+        path === '/global/plugin/workflows/market-modeling/manifest.md'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/global/plugin/workflows') return ['market-modeling']
+        return []
+      })
+      mockReadFileSync.mockReturnValue('# Market Modeling\nFour phases')
+
+      const skills = svc.listSkills()
+      const wf = skills.find((s) => s.source === 'workflow')
+      expect(wf).toBeTruthy()
+      expect(wf!.id).toBe('market-modeling')
+      expect(wf!.origin).toBe('agenthub')
+    })
+
+    it('returns empty when globalPluginPath does not exist and agenthubPath not set', () => {
+      const svc = new SkillsService({ logInfo: vi.fn(), logWarning: vi.fn(), globalPluginPath: '/nonexistent' })
+      mockExistsSync.mockReturnValue(false)
+
+      const skills = svc.listSkills()
+      expect(skills).toEqual([])
+    })
+  })
+
   describe('plugin/ path priority', () => {
     it('prefers plugin/skills over .claude/skills when both exist', () => {
       mockExistsSync.mockImplementation((path: string) =>

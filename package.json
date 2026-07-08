@@ -27,7 +27,16 @@
     "docker:rebuild": "docker build --no-cache -t agenthub-cli:latest ./docker/agent",
     "init-project": "node scripts/init-project.mjs",
     "sync-global-claude": "node scripts/sync-global-claude.mjs",
-    "tdd": "node scripts/tdd-cycle.mjs"
+    "tdd": "node scripts/tdd-cycle.mjs",
+    "translate:all": "node -e \"const {translateAll}=require('./.llm/translator/translator');translateAll('.claude/commands','.llm')\"",
+    "translate": "node -e \"const {translate}=require('./.llm/translator/translator');translate(process.argv[1],'.llm')\" --",
+    "probe:role": "node -e \"console.log('Probe role:',process.argv[1],'- implement probe runner in Task 10')\" --",
+    "probe:all": "echo 'Run investigator to probe all roles'",
+    "investigator:run": "node -e \"const {runInvestigator}=require('./.llm/investigator/runner');runInvestigator()\"",
+    "llm-tester:review": "node -e \"console.log('llm-tester review for:',process.argv[1])\" --",
+    "llm-tester:review:all": "echo 'Review all roles'",
+    "llm-tester:status": "echo 'Check docs/llm/meta/llm-tester/ for escalations'",
+    "sync:open": "node -e \"const {syncOpen}=require('./.llm/sync/strip-for-open');syncOpen()\""
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -53,6 +62,7 @@
     "marked": "^18.0.5",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",
+    "optimaeus-llm": "file:../../optimaeus/optimaeus-architecture/shared/optimaeus-llm-ts",
     "yaml": "^2.8.2",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"

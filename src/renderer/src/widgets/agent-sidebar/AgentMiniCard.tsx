@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import type { AgentState, AgentLifecycleStatus, VoiceMode } from '@shared/types/agent.types'
 import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 
@@ -111,13 +111,57 @@ function AgentMiniCard({
     }
   }, [agent.status])
 
+  const [shimmerClass, setShimmerClass] = useState('')
+  const [showNudge, setShowNudge] = useState(false)
+  const [requestSentGlow, setRequestSentGlow] = useState(false)
+  const prevStatusRef = useRef(agent.status)
+
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = agent.status
+
+    if (agent.status === 'busy' && prev === 'locked') {
+      setRequestSentGlow(true)
+      const timer = setTimeout(() => setRequestSentGlow(false), 900)
+      return () => clearTimeout(timer)
+    }
+
+    if (agent.status === 'locked' && prev !== 'locked') {
+      setShimmerClass('card-shimmer-double')
+      const timer = setTimeout(() => setShimmerClass(''), 1250)
+      return () => clearTimeout(timer)
+    }
+
+    if (agent.status === 'awaiting_approval' && prev !== 'awaiting_approval') {
+      setShimmerClass('card-shimmer')
+      setShowNudge(true)
+      const shimmerTimer = setTimeout(() => setShimmerClass(''), 650)
+      const nudgeTimer = setTimeout(() => setShowNudge(false), 400)
+      return () => {
+        clearTimeout(shimmerTimer)
+        clearTimeout(nudgeTimer)
+      }
+    }
+
+    if (agent.status !== 'locked') {
+      setShimmerClass('')
+    }
+    return undefined
+  }, [agent.status])
+
+  const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
+    if (e.animationName === 'card-shimmer') {
+      setShimmerClass('')
+    }
+  }, [])
+
   const settledStatus = useSettledStatus(agent.status)
   const settledAgent: AgentState = { ...agent, status: settledStatus }
   const glow = getGlowConfig(settledAgent, isEscalated, isRead)
 
   const glowClass = glow?.glowClass ?? ''
-  const glowStyle: React.CSSProperties = glow
-    ? ({ '--glow-color': glow.cssVar } as React.CSSProperties)
+  const glowStyle: React.CSSProperties = (glow || requestSentGlow)
+    ? ({ '--glow-color': glow?.cssVar ?? agent.color } as React.CSSProperties)
     : {}
 
   const colorWashStyle: React.CSSProperties = {
@@ -132,7 +176,8 @@ function AgentMiniCard({
     <div
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
-      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${isRead ? 'agent-card-read' : ''}`}
+      className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${isRead ? 'agent-card-read' : ''} ${requestSentGlow ? 'glow-blip-soft' : ''} ${shimmerClass} ${showNudge ? 'card-nudge' : ''}`}
+      onAnimationEnd={handleAnimationEnd}
       style={{ ...colorWashStyle, ...glowStyle }}
       onClick={() => onSelectAgent(agent.id)}
     >
