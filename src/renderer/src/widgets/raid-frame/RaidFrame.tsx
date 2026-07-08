@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { AgentState, VoiceMode } from '@shared/types/agent.types'
+import { Folder } from 'lucide-react'
+import { getShortModelName } from '@renderer/utils/model-utils'
 import HeartbeatWaveform from '@renderer/widgets/heartbeat-waveform/HeartbeatWaveform'
 import CooldownTimer from '@renderer/widgets/cooldown-timer/CooldownTimer'
 import { useNow } from '@renderer/hooks/useNow'
@@ -86,11 +88,16 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
   return (
     <div
       data-testid="raid-frame"
-      className={`panel-glass relative p-2 w-[160px] h-[96px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px] ${glowClass}`}
+      className={`panel-glass relative p-2 w-[240px] h-[108px] flex flex-col gap-1 cursor-pointer hover:bg-base-content/5 transition-colors overflow-hidden border-l-[3px] group ${glowClass}`}
       style={{
         borderLeftColor: agent.color,
         // Static ambient shadow when idle/busy; keyframe animation owns box-shadow when glowing
         ...(glowClass ? { '--glow-color': glowColor } as React.CSSProperties : { boxShadow: `0 0 12px ${agent.color}20` }),
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onSelect(agent.id)
       }}
       onClick={() => onSelect(agent.id)}
       onContextMenu={(e) => {
@@ -154,16 +161,17 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 min-w-0">
         <span
           data-testid="model-badge"
-          className="text-[11px] px-1 py-0.5 rounded bg-base-content/15 text-base-content/60 truncate"
+          className="text-[11px] px-1 py-0.5 rounded bg-base-content/15 text-base-content/60 truncate max-w-[80px]"
         >
-          {agent.model}
+          {getShortModelName(agent.model)}
         </span>
+        <Folder size={12} className="shrink-0 text-base-content/50 opacity-50 group-hover:opacity-100 transition-opacity duration-150" aria-hidden="true" title="Project folder" />
         <span
           data-testid="repo-label"
-          className="text-[11px] text-base-content/60 truncate"
+          className="text-[11px] text-base-content/60 truncate max-w-[100px] min-w-0"
         >
           {repoLabel}
         </span>

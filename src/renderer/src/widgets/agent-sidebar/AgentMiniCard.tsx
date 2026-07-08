@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
+import ReactDOM from 'react-dom'
 import type { AgentState, AgentLifecycleStatus, VoiceMode } from '@shared/types/agent.types'
 import { useSettledStatus } from '@renderer/hooks/use-settled-status'
+import { getShortModelName } from '@renderer/utils/model-utils'
 
 const VOICE_MODE_CYCLE: VoiceMode[] = ['off', 'speak_up', 'always_on']
 const VOICE_MODE_ICON: Record<VoiceMode, string> = { off: '🔇', speak_up: '🔈', always_on: '🔊' }
@@ -155,6 +157,44 @@ function AgentMiniCard({
     }
   }, [])
 
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [tooltipState, setTooltipState] = useState<{ isVisible: boolean; coords: { x: number; y: number } }>({
+    isVisible: false,
+    coords: { x: 0, y: 0 },
+  })
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
+    }
+  }, [])
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+    hoverTimerRef.current = setTimeout(() => {
+      setTooltipState({
+        isVisible: true,
+        coords: { x: rect.right + 8, y: rect.top + rect.height / 2 },
+      })
+    }, 400)
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current !== null) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    setTooltipState((prev) => ({ ...prev, isVisible: false }))
+  }, [])
+
+  const handleMouseDown = useCallback(() => {
+    if (hoverTimerRef.current !== null) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    setTooltipState((prev) => ({ ...prev, isVisible: false }))
+  }, [])
+
   const settledStatus = useSettledStatus(agent.status)
   const settledAgent: AgentState = { ...agent, status: settledStatus }
   const glow = getGlowConfig(settledAgent, isEscalated, isRead)
@@ -173,11 +213,16 @@ function AgentMiniCard({
   } as React.CSSProperties
 
   return (
+    <>
     <div
       role="listitem"
       aria-label={`${agent.name}, status ${agent.status}`}
+      aria-describedby={tooltipState.isVisible ? `agent-tooltip-${agent.id}` : undefined}
       className={`agent-card cursor-pointer ${glowClass} ${isActive ? 'card-active' : ''} ${isRead ? 'agent-card-read' : ''} ${requestSentGlow ? 'glow-blip-soft' : ''} ${shimmerClass} ${showNudge ? 'card-nudge' : ''}`}
       onAnimationEnd={handleAnimationEnd}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseDown={handleMouseDown}
       style={{ ...colorWashStyle, ...glowStyle }}
       onClick={() => onSelectAgent(agent.id)}
     >
@@ -265,6 +310,54 @@ function AgentMiniCard({
         </div>
       )}
     </div>
+    {tooltipState.isVisible && ReactDOM.createPortal(
+      <div
+        id={`agent-tooltip-${agent.id}`}
+        role="tooltip"
+        style={{
+          position: 'fixed',
+          left: tooltipState.coords.x,
+          top: tooltipState.coords.y,
+          transform: 'translateY(-50%)',
+          zIndex: 9999,
+          minWidth: 200,
+          maxWidth: 280,
+          padding: '10px 12px',
+          borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.15)',
+          pointerEvents: 'none',
+        }}
+        className="bg-base-200 border border-base-content/10 tooltip-enter"
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: -6,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 0,
+            height: 0,
+            borderTop: '6px solid transparent',
+            borderBottom: '6px solid transparent',
+            borderRight: '6px solid',
+          }}
+          className="border-r-base-200"
+        />
+        <div style={{ fontSize: 12, fontWeight: 600 }} className="text-base-content">
+          {agent.name}
+        </div>
+        <div style={{ fontSize: 11, marginTop: 4 }} className="text-base-content/60">
+          <span className="text-base-content/40">AI Engine </span>
+          {getShortModelName(agent.model)}
+        </div>
+        <div style={{ fontSize: 11, marginTop: 2 }} className="text-base-content/60">
+          <span className="text-base-content/40">Project </span>
+          {agent.cwd.split('/').pop() ?? agent.cwd}
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   )
 }
 

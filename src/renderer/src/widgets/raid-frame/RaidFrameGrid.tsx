@@ -31,7 +31,7 @@ function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode
     <div
       data-testid="raid-frame-grid"
       className="grid gap-2 p-3"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}
+      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}
     >
       {filtered.map((agent) => (
         <RaidFrame
