@@ -759,6 +759,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName)
   const mcpFlag = mcpConfigPath ? ` --mcp-config '${mcpConfigPath}'` : ''
 
+  // Inject agenthub skills index as appended system prompt — no project file writes,
+  // context lives only in this PTY session and is gone when the agent exits.
+  const agentHubSkillsIndex = '/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/skills/index.md'
+  const appendSkillsFlag = ` --append-system-prompt-file '${agentHubSkillsIndex}'`
+
   // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
   // env vars and model routing internally. Claude CLI rejects unknown model names,
   // so the env-var-only approach does NOT work.
@@ -806,13 +811,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${appendSkillsFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${appendSkillsFlag}\n`
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
