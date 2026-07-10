@@ -144,18 +144,21 @@ async function handleMessage(msg) {
     return
   }
 
+  // Commands always escape any pending flow
+  if (text.startsWith('/')) {
+    pendingSendAgent = null
+    pendingSpawn = null
+    await handleCommand(chatId, text)
+    return
+  }
+
   // Awaiting agent pick for /send
   if (pendingSendAgent && pendingSendAgent.chatId === chatId) {
     await handleSendAgentPick(chatId, text)
     return
   }
 
-  // Commands
-  if (text.startsWith('/')) {
-    await handleCommand(chatId, text)
-  } else {
-    await sendMessage(chatId, `I didn't quite understand that.\n\nTry /help to see what I can do, or just describe what you want and I'll do my best.`)
-  }
+  await sendMessage(chatId, `I didn't quite understand that.\n\nTry /help to see what I can do, or just describe what you want and I'll do my best.`)
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────────
@@ -170,16 +173,15 @@ async function handleCommand(chatId, text) {
 
     case '/status': {
       sendToParent({ type: 'command', command: 'get_status' })
-      // Response arrives via agent_list message — we'll reply when it comes
-      // Store a flag that we owe a status reply
-      pendingSendAgent = null // clear any pending state
+      pendingSendAgent = null
       setTimeout(async () => {
         const agents = [...agentCache.values()]
         if (!agents.length) {
           await sendMessage(chatId, 'No agents running right now.\n\nType /start_agent to launch one.')
         } else {
           const lines = agents.map(a => `• ${a.name} (${a.status}) — ${a.repo}`).join('\n')
-          await sendMessage(chatId, `Your active agents:\n\n${lines}`)
+          const buttons = agents.map(a => [{ text: `Send to ${a.name}`, callback_data: `send_to:${a.id}` }])
+          await sendMessage(chatId, `Your active agents:\n\n${lines}`, { inline_keyboard: buttons })
         }
       }, 300)
       break
@@ -299,17 +301,24 @@ async function handleSpawnStep(chatId, text) {
 }
 
 async function handleSendAgentPick(chatId, text) {
+  // Agent already picked — this message is the content to send
+  if (pendingSendAgent?.awaitingMessage && pendingSendAgent.agentId) {
+    const agentId = pendingSendAgent.agentId
+    pendingSendAgent = null
+    sendToParent({ type: 'command', command: 'send_task', agentId, message: text })
+    const agent = [...agentCache.values()].find(a => a.id === agentId)
+    await sendMessage(chatId, `Sent to ${agent?.name ?? agentId}.`)
+    return
+  }
+
   // User typed an agent name instead of using button
   const agent = agentCache.get(text.toLowerCase())
   if (!agent) {
-    await sendMessage(chatId, `I don't recognise "${text}". Type /status to see agent names.`)
+    await sendMessage(chatId, `I don't recognise "${text}". Type /status to see available agents.`)
     return
   }
-  pendingSendAgent = null
-  await sendMessage(chatId, `What do you want to send to ${agent.name}?`)
-  // Next message will route to send_task — needs state tracking
-  // For Phase 1: store pending send
   pendingSendAgent = { chatId, agentId: agent.id, awaitingMessage: true }
+  await sendMessage(chatId, `What do you want to send to ${agent.name}?`)
 }
 
 // ── Callback handler (button presses) ─────────────────────────────────────────
@@ -384,6 +393,11 @@ async function handleCallback(cb) {
   } else if (data === 'try_again') {
     sendToParent({ type: 'command', command: 'get_status' })
     await sendMessage(chatId, 'Checking\u2026')
+  } else if (data.startsWith('send_to:')) {
+    const agentId = data.slice('send_to:'.length)
+    const agent = [...agentCache.values()].find(a => a.id === agentId)
+    pendingSendAgent = { chatId, agentId, awaitingMessage: true }
+    await sendMessage(chatId, `What do you want to send to ${agent?.name ?? agentId}?`)
   }
 }
 
@@ -586,6 +600,19 @@ rl.on('line', async (line) => {
     case 'config':
       botToken = msg.botToken
       sendToParent({ type: 'ready' })
+      telegramPost('setMyCommands', {
+        commands: [
+          { command: 'status',      description: 'See all active agents' },
+          { command: 'send',        description: 'Send a message to an agent' },
+          { command: 'start_agent', description: 'Launch a new agent' },
+          { command: 'pause',       description: 'Pause an agent' },
+          { command: 'resume',      description: 'Resume a paused agent' },
+          { command: 'stop',        description: 'Stop an agent' },
+          { command: 'mute',        description: 'Mute notifications for 1 hour' },
+          { command: 'unmute',      description: 'Turn notifications back on' },
+          { command: 'help',        description: 'Show all commands' },
+        ]
+      }).catch(() => {}) // non-blocking
       schedulePoll()
       break
 
