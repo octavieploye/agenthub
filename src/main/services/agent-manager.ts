@@ -105,6 +105,8 @@ const repoPathCache = new Map<string, string>()
 
 // S2: skills index existence — checked once per process lifetime
 let skillsIndexExists: boolean | null = null
+/ S27: guard policy existence — checked once per process lifetime
+let guardExists: boolean | null = null
 
 const ptyProxy = new PtyProxy({
   logInfo: (message, meta) => log.info(message, meta),
@@ -209,9 +211,13 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
       const prefs = getTelegramPrefs(db)
       const prefKey = `notify_${payloadType}` as keyof typeof prefs
       if (prefs[prefKey]) {
-        const recentOutput = managed?.cleanTextBuffer
+        // S25: redact credentials and system-prompt keywords before Telegram dispatch
+        const rawOutput = managed?.cleanTextBuffer
           ? managed.cleanTextBuffer.slice(-200).trim()
           : ''
+        const recentOutput = rawOutput
+          .replace(/\b(KEY|TOKEN|SECRET|PASSWORD|ANTHROPIC|FORGEJO|AUTH)[=:]\S+/gi, '[REDACTED]')
+          .replace(/(CLAUDE\.md|SYSTEM PROMPT|You are the|Session Policy)/gi, '[REDACTED]')
         const task = recentOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
         const payload: TelegramNotificationPayload = {
@@ -450,6 +456,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   }
   // Remove CLAUDECODE env var so spawned claude CLI doesn't think it's nested
   delete env.CLAUDECODE
+  // S28: strip credentials that should never be visible to agent PTY
+  delete env.AUTH_SECRET
+  delete env.FORGEJO_TOKEN
+  delete env.FORGEJO_URL
 
   const shell = process.platform === 'win32' ? 'powershell.exe' : 'zsh'
   const args = process.platform === 'win32' ? [] : ['-l']
@@ -854,6 +864,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ? join(process.resourcesPath, 'plugin')
     : join(app.getAppPath(), 'plugin')
   const pluginFlag = ` --plugin-dir '${pluginDir}'`
+  // S31: block plugin hooks directory — if it exists, an attacker may have injected exfiltration hooks
+  const hooksDir = join(pluginDir, 'hooks')
+  if (existsSync(hooksDir)) {
+    log.error('S31: plugin/hooks/ directory detected — potential hook injection. Refusing spawn.', { agentId: agentState.id, hooksDir })
+    throw new Error('Security violation: plugin/hooks/ directory exists. Remove it before spawning agents.')
+  }
   const skillsIndexPath = join(pluginDir, 'skills', 'index.md')
   // S2: cache result — skills index path is static for the process lifetime
   if (skillsIndexExists === null) {
@@ -861,6 +877,22 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   }
   const appendSkillsFlag = skillsIndexExists
     ? ` --append-system-prompt-file '${skillsIndexPath}'`
+    : ''
+  // S27: inject guard policy — loaded after skills index so it takes precedence
+  const guardPath = join(pluginDir, 'guard.md')
+  if (guardExists === null) {
+    guardExists = existsSync(guardPath)
+  }
+  // S32: verify guard.md has not been emptied or tampered — must contain the refusal phrase
+  if (guardExists) {
+    const guardContent = readFileSync(guardPath, 'utf-8')
+    if (!guardContent.includes('I cannot assist with that request')) {
+      log.error('S32: guard.md integrity check failed — file may have been tampered with', { guardPath })
+      throw new Error('Security violation: plugin/guard.md has been modified or emptied. Restore it before spawning agents.')
+    }
+  }
+  const appendGuardFlag = guardExists
+    ? ` --append-system-prompt-file '${guardPath}'`
     : ''
   // S2: emit SKILL_INJECT_SKIPPED when index is absent but a skill was requested
   if (appendSkillsFlag === '' && options.taskDescription && options.taskDescription.trim().length > 0) {
@@ -914,15 +946,17 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
-      log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
+      // S24: log metadata only — never log full cmd string (reveals plugin paths + task content)
+      log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}\n`
       ptyProcess.write(cmd)
-      log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
+      // S24: log metadata only
+      log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag })
     }, 500)
   }
 

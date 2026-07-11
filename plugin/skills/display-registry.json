@@ -11,6 +11,7 @@
     "utilities": "Utilities"
   },
   "items": {
+    "app-scenario-modeler":        { "displayName": "App Scenario Modeler",        "category": "code-quality" },
     "skill-creator":               { "displayName": "Create New Skill",            "category": "code-quality" },
     "test-integrity-review":       { "displayName": "Check Test Integrity",        "category": "code-quality" },
     "full-code-review":            { "displayName": "Full Code Review",            "category": "code-quality" },
@@ -41,7 +42,7 @@
     "vibe-marketing-validation":   { "displayName": "Validate Product Idea",       "category": "content-voice" },
     "market-modeling":             { "displayName": "Market Intelligence Workflow", "category": "workflows" },
     "market-sim-prep":             { "displayName": "Market Sim Preparation",      "category": "workflows" },
-    "design-research":             { "displayName": "Design Research Team",        "category": "teams" },
+    "team-design-research":        { "displayName": "Design Research Team",        "category": "teams" },
     "ui-builder":                  { "displayName": "UI Builder Team",             "category": "teams" },
     "dev-stack":                   { "displayName": "Dev Team",                    "category": "teams" },
     "business":                    { "displayName": "Business Research Team",      "category": "teams" },
@@ -54,6 +55,7 @@
     "ceo-coaching":                { "displayName": "CEO Coaching Team",           "category": "teams" },
     "tech-brainstorm":             { "displayName": "Tech Brainstorm Team",        "category": "teams" },
     "telegram-notify":             { "displayName": "Send Telegram Notification",  "category": "utilities" },
-    "git-commit":                  { "displayName": "Git Commit",                  "category": "utilities" }
+    "git-commit":                  { "displayName": "Git Commit",                  "category": "utilities" },
+    "sec-insider-threat":          { "displayName": "Insider Threat Audit",        "category": "code-quality" }
   }
 }

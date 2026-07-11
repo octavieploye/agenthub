@@ -57,7 +57,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' || process.platform === 'darwin' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true
@@ -68,6 +68,13 @@ function createWindow(): void {
     mainWindow.show()
     log.info('Main window shown')
   })
+
+  // S33: disable DevTools in production — agentHubBridge is callable from DevTools console
+  if (app.isPackaged) {
+    mainWindow.webContents.on('devtools-opened', () => {
+      mainWindow.webContents.closeDevTools()
+    })
+  }
 
   mainWindow.on('close', () => {
     log.info('Main window close event', {

@@ -4,6 +4,14 @@
 
   "skills": [
     {
+      "id": "app-scenario-modeler",
+      "name": "app-scenario-modeler",
+      "description": "Model all scenarios for a software feature — discovery, classification, cascade analysis, constraints, risk/probability, CORE optimisation and EDGE cost decisions. Outputs structured docs per feature.",
+      "category": "dev-skills",
+      "path": ".claude/skills/app-scenario-modeler/SKILL.md",
+      "source": "project"
+    },
+    {
       "id": "skill-creator",
       "name": "skill-creator",
       "description": "Create new skills, teams, workflows, commands — reverse-engineer tasks into reusable artifacts",
@@ -25,6 +33,14 @@
       "description": "Full multi-agent codebase audit + fix + verify cycle",
       "category": "dev-skills",
       "path": ".claude/skills/full-code-review/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "sec-insider-threat",
+      "name": "sec-insider-threat",
+      "description": "Insider threat & IP protection audit — unauthorized access vectors, IP exfiltration, AI prompt injection, reverse-engineering vulnerabilities. Produces prevention report + agent hardening policy fragment.",
+      "category": "dev-skills",
+      "path": ".claude/skills/sec-insider-threat/SKILL.md",
       "source": "project"
     },
     {
