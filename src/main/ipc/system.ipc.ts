@@ -144,12 +144,22 @@ export function registerSystemHandlers(): void {
     }
   )
 
+  // S40: reject remote URL schemes — openPath must be a local filesystem path only
+  const openPathSchema = z.string().min(1).max(4096)
+
   ipcMain.handle(
     IPC_CHANNELS.SYSTEM.OPEN_PATH,
-    async (event, path: string): Promise<IpcResponse<void>> => {
+    async (_event, rawPath: unknown): Promise<IpcResponse<void>> => {
       try {
+        const validation = validateInput(openPathSchema, rawPath)
+        if (!validation.valid) return validation.response
+        const p = validation.data
+        if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//i.test(p) || /^javascript:/i.test(p)) {
+          log.warn('S40: OPEN_PATH rejected remote URL', { scheme: p.slice(0, 20) })
+          return error('OPEN_PATH_REJECTED', 'Remote URLs are not permitted')
+        }
         const { shell } = require('electron')
-        await shell.openPath(path)
+        await shell.openPath(p)
         return success(undefined)
       } catch (err) {
         return error('OPEN_PATH_ERROR', err instanceof Error ? err.message : String(err))

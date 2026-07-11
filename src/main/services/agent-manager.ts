@@ -460,6 +460,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   delete env.AUTH_SECRET
   delete env.FORGEJO_TOKEN
   delete env.FORGEJO_URL
+  // S45: strip Ollama Cloud key — not needed by agent PTY (only used by model-service.ts internally)
+  delete env.OLLAMA_CLOUD_KEY
 
   const shell = process.platform === 'win32' ? 'powershell.exe' : 'zsh'
   const args = process.platform === 'win32' ? [] : ['-l']
