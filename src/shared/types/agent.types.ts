@@ -42,6 +42,7 @@ export interface AgentState {
   executionMode: ExecutionMode
   voiceMode: VoiceMode
   telegramNotify: boolean
+  claudeMdHash?: string | null
 }
 
 export interface AgentSpawnOptions {

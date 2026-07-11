@@ -23,7 +23,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     color: (row.color as string) ?? '#3B82F6',
     executionMode: (row.execution_mode as ExecutionMode) ?? 'native',
     voiceMode: (row.voice_mode as VoiceMode) ?? 'always_on',
-    telegramNotify: false
+    telegramNotify: Boolean(row.telegram_notify as number),
+    claudeMdHash: (row.claude_md_hash as string) ?? null
   }
 }
 
@@ -97,6 +98,8 @@ export function insertAgent(
     color?: string
     executionMode?: ExecutionMode
     voiceMode?: VoiceMode
+    telegramNotify?: boolean
+    claudeMdHash?: string | null
   }
 ): AgentState {
   const id = randomUUID()
@@ -104,10 +107,11 @@ export function insertAgent(
   const color = agent.color ?? '#3B82F6'
   const effortLevel = agent.effortLevel ?? 'medium'
   const voiceMode = agent.voiceMode ?? 'always_on'
+  const telegramNotify = agent.telegramNotify ?? false
 
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, telegram_notify, claude_md_hash, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
@@ -120,6 +124,8 @@ export function insertAgent(
     color,
     agent.executionMode ?? 'native',
     voiceMode,
+    telegramNotify ? 1 : 0,
+    agent.claudeMdHash ?? null,
     now,
     now
   )
@@ -144,8 +150,15 @@ export function insertAgent(
     color,
     executionMode: agent.executionMode ?? 'native',
     voiceMode,
-    telegramNotify: false
+    telegramNotify,
+    claudeMdHash: agent.claudeMdHash ?? null
   }
+}
+
+export function updateAgentTelegramNotify(db: Database.Database, id: string, enabled: boolean): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE agents SET telegram_notify = ?, updated_at = ? WHERE id = ?').run(enabled ? 1 : 0, now, id)
+  log.debug('Agent telegram notify updated', { id, enabled })
 }
 
 export function updateAgentVoiceMode(db: Database.Database, id: string, mode: VoiceMode): void {

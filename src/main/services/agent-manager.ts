@@ -4,7 +4,7 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb, isDbShuttingDown } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, updateAgentTelegramNotify as dbUpdateAgentTelegramNotify, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
@@ -12,10 +12,11 @@ import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath } from './service-orchestrator'
-import { writeFileSync, unlinkSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { tmpdir } from 'os'
-import { app } from 'electron'
+import { tmpdir, homedir } from 'os'
+import { createHash } from 'crypto'
+import { app, webContents } from 'electron'
 import { buildSpawnEnv } from './model-dispatcher'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
@@ -56,6 +57,14 @@ interface ManagedAgent {
   flushTimer: ReturnType<typeof setTimeout> | null
   ipcBatchBuffer: string
   ipcBatchTimer: ReturnType<typeof setTimeout> | null
+  /** Flush interval (ms) used by the IPC batch timer — adaptive under high throughput. */
+  ipcBatchInterval: number
+  /** IPC messages counted in the current 1-second rate window. */
+  ipcRateCount: number
+  /** Consecutive 1-second windows where ipcRateCount exceeded 100 msg/s. */
+  ipcHighRateSeconds: number
+  /** setInterval handle for the per-agent adaptive IPC rate monitor. */
+  ipcRateInterval: ReturnType<typeof setInterval> | null
   cleanTextBuffer: string
   /**
    * Tracks the real parser status immediately — never debounced.
@@ -78,6 +87,8 @@ interface ManagedAgent {
   headlessTerminal: HeadlessTerminalBuffer
   /** True if telegramNotify was enabled at spawn time (agent has prompt suffix). */
   telegramNotifyAtSpawn: boolean
+  /** True once a completion notification has been sent for the current exchange (mid-session toggle path). Reset on next user submit. */
+  hasNotifiedCompletion: boolean
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -88,6 +99,12 @@ const approvalEntryTimes = new Map<string, number>()
 const approvalHoldTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const statusDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const ptyOwners = new Map<string, number>()
+
+// S1: path → repoId cache — avoids repeated DB lookups on hot spawn paths
+const repoPathCache = new Map<string, string>()
+
+// S2: skills index existence — checked once per process lifetime
+let skillsIndexExists: boolean | null = null
 
 const ptyProxy = new PtyProxy({
   logInfo: (message, meta) => log.info(message, meta),
@@ -169,6 +186,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   // (they're giving the agent work), not a signal to suppress notifications.
   const isOneShotDone = agentHasTelegram
     && managed !== undefined && !managed.telegramNotifyAtSpawn
+    && !managed.hasNotifiedCompletion
     && agent.status === 'locked'
     && previousStatus === 'busy'
 
@@ -208,7 +226,13 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           timestamp: new Date().toISOString(),
         }
 
-        if (_telegramNotifier) _telegramNotifier(payload)
+        if (_telegramNotifier) {
+          _telegramNotifier(payload)
+          // Prevent duplicate completion pings for mid-session agents (reset on next user submit)
+          if (isOneShotDone && managed) {
+            managed.hasNotifiedCompletion = true
+          }
+        }
       }
     }
   }
@@ -360,20 +384,37 @@ function cleanupMcpConfig(agentId: string): void {
 export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const db = getDb()
 
-  // Ensure repo exists — auto-create from cwd if repoId is missing or invalid
+  // Sc1: CWD guard — must be the first check before any DB writes or PTY spawn
+  if (!existsSync(options.cwd)) {
+    throw new Error(`CWD does not exist: ${options.cwd}`)
+  }
+
+  // Sc3: compute CLAUDE.md hash before any DB writes
+  const claudeMdPath = join(homedir(), '.claude', 'CLAUDE.md')
+  const claudeMdHash = existsSync(claudeMdPath)
+    ? createHash('sha256').update(readFileSync(claudeMdPath, 'utf8')).digest('hex')
+    : null
+
+  // S1: Ensure repo exists — check path cache first to avoid redundant DB lookups
   let repoId = options.repoId
-  const existingRepo = getRepoById(db, repoId)
-  if (!existingRepo) {
-    // Check if a repo already exists for this path
-    const byPath = getRepoByPath(db, options.cwd)
-    if (byPath) {
-      repoId = byPath.id
-    } else {
-      const repoName = options.cwd.split('/').pop() ?? 'project'
-      log.info('Auto-creating repo for spawn', { repoId, cwd: options.cwd, repoName })
-      const newRepo = insertRepo(db, { name: repoName, path: options.cwd })
-      repoId = newRepo.id
+  const cachedRepoId = repoPathCache.get(options.cwd)
+  if (cachedRepoId) {
+    repoId = cachedRepoId
+  } else {
+    const existingRepo = getRepoById(db, repoId)
+    if (!existingRepo) {
+      // Check if a repo already exists for this path
+      const byPath = getRepoByPath(db, options.cwd)
+      if (byPath) {
+        repoId = byPath.id
+      } else {
+        const repoName = options.cwd.split('/').pop() ?? 'project'
+        log.info('Auto-creating repo for spawn', { repoId, cwd: options.cwd, repoName })
+        const newRepo = insertRepo(db, { name: repoName, path: options.cwd })
+        repoId = newRepo.id
+      }
     }
+    repoPathCache.set(options.cwd, repoId)
   }
 
   const agentState = insertAgent(db, {
@@ -385,12 +426,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     effortLevel: options.effortLevel,
     taskDescription: options.taskDescription,
     color: options.color,
-    voiceMode: options.voiceMode
+    voiceMode: options.voiceMode,
+    telegramNotify: options.telegramNotify ?? false,
+    claudeMdHash
   })
-  agentState.telegramNotify = options.telegramNotify ?? false
-
-  // Track last-used repo for dropdown ordering
-  updateRepoLastUsed(db, repoId)
 
   // Build provider-specific env vars (Ollama needs ANTHROPIC_BASE_URL, AUTH_TOKEN, empty API_KEY)
   const spawnEnv = buildSpawnEnv(
@@ -434,29 +473,27 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
   }
 
-  insertActivityEvent(db, {
-    eventType: 'agent_spawned',
-    entityType: 'agent',
-    entityId: agentState.id,
-    repoId: agentState.repoId,
-    agentId: agentState.id,
-    details: { name: agentState.name, model: agentState.model, provider: agentState.provider }
-  })
-
   const parser = createParser() as ClaudeCliOutputParser
 
   ptyProcess.onData((data: string) => {
-    // 16ms IPC batching — aligns with 60fps, reduces IPC overhead for large code blocks
+    // Adaptive IPC batching — base 16ms (60fps), throttles to 64ms under sustained high throughput
     const managed = agents.get(agentState.id)
     if (managed) {
       managed.ipcBatchBuffer += data
+      managed.ipcRateCount++
       if (!managed.ipcBatchTimer) {
         managed.ipcBatchTimer = setTimeout(() => {
           const batch = managed.ipcBatchBuffer
           managed.ipcBatchBuffer = ''
           managed.ipcBatchTimer = null
-          emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, batch)
-        }, 16)
+          // S3 Change 3: ptyOwner-first routing — send OUTPUT only to the owning window
+          const ownerId = ptyOwners.get(agentState.id)
+          if (ownerId !== undefined) {
+            webContents.fromId(ownerId)?.send(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, batch)
+          } else {
+            emitToAllRenderers(IPC_EVENTS.AGENTS.OUTPUT, agentState.id, batch)
+          }
+        }, managed.ipcBatchInterval)
       }
 
       // Buffer output for batched DB persistence
@@ -619,6 +656,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     const managed = agents.get(agentState.id)
     cancelSilentLockTimer(agentState.id)
     if (managed) {
+      // S3: stop rate monitor
+      if (managed.ipcRateInterval) {
+        clearInterval(managed.ipcRateInterval)
+        managed.ipcRateInterval = null
+      }
       if (managed.ipcBatchTimer) {
         clearTimeout(managed.ipcBatchTimer)
         managed.ipcBatchTimer = null
@@ -637,6 +679,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     flushOutputBuffer(agentState.id)
 
     log.info('Agent exited', { id: agentState.id, exitCode })
+
+    // S16: PATH_MISMATCH detection — scan clean text buffer for shell "command not found" errors
+    if (exitCode !== 0 && managed && /command not found/i.test(managed.cleanTextBuffer)) {
+      emitToAllRenderers(IPC_EVENTS.AGENTS.ERROR_DETAIL, { agentId: agentState.id, errorType: 'PATH_MISMATCH' })
+      log.warn('Agent exit: PATH_MISMATCH detected', { id: agentState.id, exitCode })
+    }
 
     // During shutdown the DB is already closed — skip all DB writes
     // to avoid "The database connection is not open" crashes.
@@ -713,19 +761,58 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     state: agentState, ptyProcess, parser,
     outputBuffer: '', flushTimer: null,
     ipcBatchBuffer: '', ipcBatchTimer: null,
+    ipcBatchInterval: 16,
+    ipcRateCount: 0,
+    ipcHighRateSeconds: 0,
+    ipcRateInterval: null,
     cleanTextBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false,
     hasManualFollowUp: false,
+    hasNotifiedCompletion: false,
     lastFilteredProse: '',
     silentLockTimer: null,
     lastMcpTelegramAt: 0,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify
   })
+
+  // S3: per-agent adaptive IPC rate monitor — throttle to 64ms flush when sustained >100 msg/s
+  const spawnedManaged = agents.get(agentState.id)
+  if (spawnedManaged) {
+    spawnedManaged.ipcRateInterval = setInterval(() => {
+      const m = agents.get(agentState.id)
+      if (!m) return
+      if (m.ipcRateCount > 100) {
+        m.ipcHighRateSeconds++
+      } else {
+        m.ipcHighRateSeconds = 0
+      }
+      m.ipcRateCount = 0
+      if (m.ipcHighRateSeconds >= 3) {
+        m.ipcBatchInterval = 64
+      } else if (m.ipcHighRateSeconds === 0 && m.ipcBatchInterval === 64) {
+        m.ipcBatchInterval = 16
+      }
+    }, 1000)
+  }
+
   emitToAllRenderers(IPC_EVENTS.AGENTS.SPAWNED, agentState)
   emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'busy', 'inferred')
   emitTriageResult(agentState, previousStatusOnSpawn)
+
+  // S1: defer non-critical DB writes so the renderer receives SPAWNED immediately
+  setImmediate(() => {
+    updateRepoLastUsed(db, repoId)
+    insertActivityEvent(db, {
+      eventType: 'agent_spawned',
+      entityType: 'agent',
+      entityId: agentState.id,
+      repoId: agentState.repoId,
+      agentId: agentState.id,
+      details: { name: agentState.name, model: agentState.model, provider: agentState.provider }
+    })
+  })
 
   // Auto-launch claude CLI with the task after shell initializes
   const task = options.taskDescription?.trim()
@@ -759,10 +846,26 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName)
   const mcpFlag = mcpConfigPath ? ` --mcp-config '${mcpConfigPath}'` : ''
 
-  // Inject agenthub skills index as appended system prompt — no project file writes,
-  // context lives only in this PTY session and is gone when the agent exits.
-  const agentHubSkillsIndex = '/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/skills/index.md'
-  const appendSkillsFlag = ` --append-system-prompt-file '${agentHubSkillsIndex}'`
+  // Inject agenthub plugin and skills index into every spawned agent session.
+  // --plugin-dir loads the plugin (hooks + skills + commands) for this session only.
+  // --append-system-prompt-file appends the skills index to the system prompt.
+  // Both paths are resolved dynamically so they work in dev and packaged builds.
+  const pluginDir = app.isPackaged
+    ? join(process.resourcesPath, 'plugin')
+    : join(app.getAppPath(), 'plugin')
+  const pluginFlag = ` --plugin-dir '${pluginDir}'`
+  const skillsIndexPath = join(pluginDir, 'skills', 'index.md')
+  // S2: cache result — skills index path is static for the process lifetime
+  if (skillsIndexExists === null) {
+    skillsIndexExists = existsSync(skillsIndexPath)
+  }
+  const appendSkillsFlag = skillsIndexExists
+    ? ` --append-system-prompt-file '${skillsIndexPath}'`
+    : ''
+  // S2: emit SKILL_INJECT_SKIPPED when index is absent but a skill was requested
+  if (appendSkillsFlag === '' && options.taskDescription && options.taskDescription.trim().length > 0) {
+    emitToAllRenderers(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, agentState.id)
+  }
 
   // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
   // env vars and model routing internally. Claude CLI rejects unknown model names,
@@ -805,19 +908,19 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
       // Append Telegram instruction when telegramNotify is enabled
       const telegramSuffix = agentState.telegramNotify
-        ? '. Telegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
+        ? '\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
         : ''
       // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${appendSkillsFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel, task })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${appendSkillsFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}\n`
       ptyProcess.write(cmd)
       log.info('Sent command (interactive) to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, effort: agentState.effortLevel })
     }, 500)
@@ -833,6 +936,9 @@ export function sendInput(agentId: string, data: string, opts?: { isSystemAction
   if (!opts?.isSystemAction) {
     managed.hasSentInput = true
     managed.hasManualFollowUp = true
+    if (data.includes('\r')) {
+      managed.hasNotifiedCompletion = false
+    }
   }
   log.debug('[Main sendInput]', { agentId, len: data.length, preview: data.slice(0, 80) })
 
@@ -1124,12 +1230,18 @@ export function getPtyProxyPath(agentId: string): string | null {
   return ptyProxy.getSocketPath(agentId)
 }
 
+// S1: exported so db.ipc.ts can invalidate the cache on repo deletion
+export function clearRepoPathCache(): void {
+  repoPathCache.clear()
+}
+
 export function cleanupAllAgents(): void {
   ptyProxy.stopAll()
   for (const [id, managed] of agents) {
     try {
       if (managed.flushTimer) clearTimeout(managed.flushTimer)
       if (managed.ipcBatchTimer) clearTimeout(managed.ipcBatchTimer)
+      if (managed.ipcRateInterval) clearInterval(managed.ipcRateInterval)
       if (managed.silentLockTimer) clearTimeout(managed.silentLockTimer)
       flushOutputBuffer(id)
       cleanupMcpConfig(id)

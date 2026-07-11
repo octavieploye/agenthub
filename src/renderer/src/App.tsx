@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useAgentStore } from './stores/agent-store'
 import { useViewStore } from './stores/view-store'
 import { useThemeStore } from './stores/theme-store'
@@ -166,6 +166,26 @@ function AppMain(): React.JSX.Element {
 
   // CLI version mismatch banner
   const [cliVersionBanner, setCliVersionBanner] = useState<{ hostVersion: string; imageVersion: string } | null>(null)
+
+  // Sc3: CLAUDE.md divergence banner
+  const [claudeMdDivergenceDismissed, setClaudeMdDivergenceDismissed] = useState(false)
+  const claudeMdDivergence = useMemo(() => {
+    const hashes = new Set<string>()
+    for (const agent of agents.values()) {
+      if (agent.claudeMdHash != null) hashes.add(agent.claudeMdHash)
+    }
+    return hashes.size > 1
+  }, [agents])
+
+  // S2: agents whose skill injection was skipped
+  const [skillInjectSkipped, setSkillInjectSkipped] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const unsub = window.agentHub.on.agentSkillInjectSkipped((agentId) => {
+      setSkillInjectSkipped((prev) => new Set(prev).add(agentId))
+    })
+    return unsub
+  }, [])
 
   // Active detail tab tracking
   const [activeDetailTab, setActiveDetailTab] = useState('terminal')
@@ -997,6 +1017,22 @@ function AppMain(): React.JSX.Element {
           </div>
         </div>
       )}
+      {/* Sc3: CLAUDE.md instruction divergence banner */}
+      {claudeMdDivergence && !claudeMdDivergenceDismissed && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-warning/20 border-b border-warning/40 text-warning-content text-xs shrink-0">
+          <span>
+            Instruction divergence detected — agents are running under different CLAUDE.md versions
+          </span>
+          <button
+            className="btn btn-xs btn-ghost"
+            onClick={() => setClaudeMdDivergenceDismissed(true)}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Skip to content link for keyboard navigation */}
       <a
         href="#main-content"
@@ -1044,6 +1080,7 @@ function AppMain(): React.JSX.Element {
             onOpenGuardrails={handleOpenGuardrails}
             onToggleVoiceMode={handleToggleVoiceMode}
             onToggleTelegramNotify={handleToggleTelegramNotify}
+            skillInjectSkipped={skillInjectSkipped}
             onLaunchWithIntent={(text, _skillId) => {
               const agent = activeAgentId ? agents.get(activeAgentId) : null
               const receptive = ['idle', 'locked', 'completed']
@@ -1087,6 +1124,7 @@ function AppMain(): React.JSX.Element {
                     onSpawnAgent={() => setSpawnDialogOpen(true)}
                     onOpenGuardrails={handleOpenGuardrails}
                     onToggleVoiceMode={handleToggleVoiceMode}
+                    skillInjectSkipped={skillInjectSkipped}
                     onLaunchWithIntent={(text, _skillId) => {
                       const agent = activeAgentId ? agents.get(activeAgentId) : null
                       const receptive = ['idle', 'locked', 'completed']

@@ -223,7 +223,9 @@ export const IPC_EVENTS = {
     STATUS_CHANGE: 'on-agents:status-change',
     OUTPUT: 'on-agents:output',
     EXIT: 'on-agents:exit',
-    SPAWNED: 'on-agents:spawned'
+    SPAWNED: 'on-agents:spawned',
+    ERROR_DETAIL: 'on-agents:error-detail',
+    SKILL_INJECT_SKIPPED: 'on-agents:skill-inject-skipped'
   },
   NOTIFICATIONS: {
     TRIAGED: 'on-agents:triaged'

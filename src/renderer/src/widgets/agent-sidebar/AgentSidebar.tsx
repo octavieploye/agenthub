@@ -31,6 +31,7 @@ interface AgentSidebarProps {
   // New props
   skills?: SkillItem[]
   onLaunchWithIntent?: (text: string, skillId?: string) => void
+  skillInjectSkipped?: Set<string>
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -491,6 +492,7 @@ function AgentSidebar({
   onToggleTelegramNotify,
   skills: skillsProp,
   onLaunchWithIntent,
+  skillInjectSkipped,
 }: AgentSidebarProps): React.JSX.Element {
   // Intent state
   const [intentText, setIntentText] = useState('')
@@ -622,6 +624,7 @@ function AgentSidebar({
                 onToggleVoiceMode={onToggleVoiceMode}
                 onToggleTelegramNotify={onToggleTelegramNotify}
                 onOpenGuardrails={onOpenGuardrails}
+                skillInjectSkipped={skillInjectSkipped}
               />
             ))}
           </div>

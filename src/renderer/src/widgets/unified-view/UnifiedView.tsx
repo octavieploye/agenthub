@@ -14,6 +14,7 @@ interface UnifiedViewProps {
   soloedAgentId?: string | null
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
+  skillInjectSkipped?: Set<string>
 }
 
 function useReducedMotion(): boolean {
@@ -22,7 +23,7 @@ function useReducedMotion(): boolean {
   return mql.matches
 }
 
-function UnifiedView({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: UnifiedViewProps): React.JSX.Element {
+function UnifiedView({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify, skillInjectSkipped }: UnifiedViewProps): React.JSX.Element {
   const viewMode = useViewStore((s) => s.viewMode)
   const focusedAgentId = useViewStore((s) => s.focusedAgentId)
   const reducedMotion = useReducedMotion()
@@ -61,6 +62,7 @@ function UnifiedView({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, 
           onContextMenu={onContextMenu}
           onToggleVoiceMode={onToggleVoiceMode}
           onToggleTelegramNotify={onToggleTelegramNotify}
+          skillInjectSkipped={skillInjectSkipped}
         />
       )}
 

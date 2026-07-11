@@ -8,9 +8,10 @@ interface RaidFrameGridProps {
   onContextMenu?: (agentId: string, position: { x: number; y: number }) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
+  skillInjectSkipped?: Set<string>
 }
 
-function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: RaidFrameGridProps): React.JSX.Element {
+function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify, skillInjectSkipped }: RaidFrameGridProps): React.JSX.Element {
   const statusFilter = useViewStore((s) => s.statusFilter)
 
   const filtered = statusFilter
@@ -41,6 +42,7 @@ function RaidFrameGrid({ agents, onSelectAgent, onContextMenu, onToggleVoiceMode
           onContextMenu={onContextMenu ?? (() => {})}
           onToggleVoiceMode={onToggleVoiceMode}
           onToggleTelegramNotify={onToggleTelegramNotify}
+          skillInjectSkipped={skillInjectSkipped}
         />
       ))}
     </div>

@@ -8,6 +8,7 @@ import { registerAllIpcHandlers } from './ipc/register-all'
 import { cleanupAllAgents } from './services/agent-manager'
 import { initializeServices, startServices, stopServices } from './services/service-orchestrator'
 import { getShutdownReason, setShutdownReason } from './shutdown-reason'
+import { initWindowCache } from './utils/emit-to-all-renderers'
 
 log.initialize()
 log.transports.file.level = 'debug'
@@ -111,6 +112,9 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agenthub')
+
+  // S3: seed window cache — avoids BrowserWindow.getAllWindows() on every IPC emit
+  initWindowCache()
 
   // macOS requires an Edit menu for Cmd+C/V/X/A to work
   const menu = Menu.buildFromTemplate([

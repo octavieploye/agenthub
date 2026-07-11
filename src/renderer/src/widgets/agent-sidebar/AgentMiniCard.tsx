@@ -74,6 +74,7 @@ interface AgentMiniCardProps {
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
   onOpenGuardrails?: (agentId: string) => void
+  skillInjectSkipped?: Set<string>
 }
 
 function AgentMiniCard({
@@ -87,6 +88,7 @@ function AgentMiniCard({
   onToggleVoiceMode,
   onToggleTelegramNotify,
   onOpenGuardrails,
+  skillInjectSkipped,
 }: AgentMiniCardProps): React.JSX.Element {
   // Escalation tracking (30s for awaiting/locked)
   const awaitingSinceRef = useRef<number | null>(null)
@@ -244,6 +246,11 @@ function AgentMiniCard({
         <span className="text-[10px] text-base-content/40 shrink-0">
           {STATUS_DISPLAY_LABELS[agent.status] ?? agent.status}
         </span>
+        {skillInjectSkipped?.has(agent.id) && (
+          <span className="badge badge-warning badge-xs shrink-0" title="Skill injection was skipped for this agent">
+            Skill not injected
+          </span>
+        )}
       </div>
       {isActive && (
         <div className="flex gap-1 pb-1.5 px-3 ml-8">

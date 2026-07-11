@@ -394,6 +394,22 @@ const agentHubBridge = {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.KANBAN.DRAFT_READY, handler)
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.KANBAN.DRAFT_READY, handler) }
+    },
+    agentErrorDetail: (callback: (payload: { agentId: string; errorType: string }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: { agentId: string; errorType: string }
+      ): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.AGENTS.ERROR_DETAIL, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.AGENTS.ERROR_DETAIL, handler) }
+    },
+    agentSkillInjectSkipped: (callback: (agentId: string) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        agentId: string
+      ): void => callback(agentId)
+      ipcRenderer.on(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, handler) }
     }
   }
 }

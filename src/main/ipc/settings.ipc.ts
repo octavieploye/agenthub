@@ -21,7 +21,8 @@ export function registerSettingsHandlers(): void {
       if (typeof value !== 'string') return error('VALIDATION_ERROR', 'value must be a string')
       const svc = getSettingsService()
       if (!svc) return error('SERVICE_ERROR', 'SettingsService not initialized')
-      svc.set(key, value)
+      const result = svc.set(key, value)
+      if (result && !result.ok) return error('VALIDATION_ERROR', result.message)
       return success(undefined)
     } catch (err) {
       return error('SETTINGS_ERROR', err instanceof Error ? err.message : String(err))

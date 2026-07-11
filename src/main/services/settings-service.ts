@@ -1,6 +1,9 @@
 import { app } from 'electron'
+import { existsSync } from 'fs'
 import type Database from 'better-sqlite3'
 import type { SettingsExport } from '../../shared/types/settings.types'
+
+const CWD_SETTINGS_KEYS = ['defaultCwd']
 
 interface SettingsServiceDeps {
   logInfo: (message: string, meta?: Record<string, unknown>) => void
@@ -34,13 +37,17 @@ export class SettingsService {
     return row?.value ?? null
   }
 
-  set(key: string, value: string): void {
+  set(key: string, value: string): { ok: false; message: string } | undefined {
+    if (CWD_SETTINGS_KEYS.includes(key) && !existsSync(value)) {
+      return { ok: false, message: `Path does not exist: ${value}` }
+    }
     this.db
       .prepare(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
       )
       .run(key, value)
     this.deps.logInfo('Setting updated', { key })
+    return undefined
   }
 
   delete(key: string): void {

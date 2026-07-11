@@ -27,6 +27,7 @@ interface RaidFrameProps {
   onContextMenu: (agentId: string, position: { x: number; y: number }) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
+  skillInjectSkipped?: Set<string>
 }
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
@@ -60,7 +61,7 @@ function getRaidGlowColor(status: string, agentColor: string): string {
   return agentColor
 }
 
-function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify }: RaidFrameProps): React.JSX.Element {
+function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify, skillInjectSkipped }: RaidFrameProps): React.JSX.Element {
   const repoLabel = agent.cwd.split('/').pop() ?? 'unknown'
   const isTicking = agent.status === 'busy' || agent.status === 'locked'
   const now = useNow(isTicking ? 1000 : 0)
@@ -175,6 +176,11 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
         >
           {repoLabel}
         </span>
+        {skillInjectSkipped?.has(agent.id) && (
+          <span className="badge badge-warning badge-xs shrink-0" title="Skill injection was skipped for this agent">
+            Skill not injected
+          </span>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 flex items-center gap-1">

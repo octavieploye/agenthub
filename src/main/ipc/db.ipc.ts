@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { success, error, validateInput } from './ipc-helpers'
 import { getDb } from '../db/connection'
 import { getAllRepos, insertRepo, deleteRepo, unhideRepo, updateRepoGlowColor } from '../db/queries/repos.queries'
+import { clearRepoPathCache } from '../services/agent-manager'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { RepoConfig } from '../../shared/types/config.types'
 import { z } from 'zod/v4'
@@ -46,6 +47,8 @@ export function registerDbHandlers(): void {
         const validation = validateInput(z.string(), repoId)
         if (!validation.valid) return validation.response
         deleteRepo(getDb(), validation.data)
+        // S1: invalidate repoPathCache so deleted paths are not re-used
+        clearRepoPathCache()
         return success(undefined)
       } catch (err) {
         return error('REMOVE_REPO_ERROR', err instanceof Error ? err.message : String(err))
