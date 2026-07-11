@@ -56,6 +56,8 @@
     "tech-brainstorm":             { "displayName": "Tech Brainstorm Team",        "category": "teams" },
     "telegram-notify":             { "displayName": "Send Telegram Notification",  "category": "utilities" },
     "git-commit":                  { "displayName": "Git Commit",                  "category": "utilities" },
-    "sec-insider-threat":          { "displayName": "Insider Threat Audit",        "category": "code-quality" }
+    "sec-insider-threat":          { "displayName": "Insider Threat Audit",        "category": "code-quality" },
+    "threat-defense":              { "displayName": "Threat Defense Team",         "category": "teams" },
+    "graphic-identity":            { "displayName": "Graphic Identity Team",       "category": "teams" }
   }
 }

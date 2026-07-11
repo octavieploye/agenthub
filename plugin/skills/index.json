@@ -187,6 +187,26 @@
       "team": ".claude/teams/ui-builder/config.json",
       "workflow": ".claude/workflow-team-library/ui-builder/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-threat-defense",
+      "name": "team-threat-defense",
+      "description": "Threat Defense Team Orchestrator — outside threat detection, stealth/AI-driven cyber attacks, injection vectors, secrets/vault exposure, high-speed movement interception. Produces TIP + Hardening Plan.",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-threat-defense/SKILL.md",
+      "team": ".claude/teams/threat-defense/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-graphic-identity",
+      "name": "graphic-identity-team",
+      "description": "Graphic Identity Team Orchestrator — zero to complete brand system: Golden Circle strategy, anti-AI-modeling protocol, 7 linear phases, brand-conscience gate after every phase",
+      "category": "creative-ideation",
+      "path": ".claude/skills/graphic-identity-team/SKILL.md",
+      "team": ".claude/teams/graphic-identity/config.json",
+      "workflow": ".claude/workflow-team-library/graphic-identity/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -286,6 +306,22 @@
       "category": "dev-skills",
       "path": ".claude/teams/ui-builder/config.json",
       "members": ["lead-ui-builder", "uiux-senior", "emotion-ux", "dev-frontend", "animation-engineer", "persona-nontechuser"]
+    },
+    {
+      "id": "threat-defense",
+      "name": "threat-defense",
+      "description": "External threat detection team — attack surface mapping, secrets scanning, injection analysis, stealth/APT detection, incident response",
+      "category": "dev-skills",
+      "path": ".claude/teams/threat-defense/config.json",
+      "members": ["lead-threat-defense", "threat-scout", "secrets-guardian", "injection-analyst", "stealth-detector", "incident-responder"]
+    },
+    {
+      "id": "graphic-identity",
+      "name": "graphic-identity",
+      "description": "Graphic identity team — zero to complete brand system from Golden Circle strategy to delivery specification",
+      "category": "creative-ideation",
+      "path": ".claude/teams/graphic-identity/config.json",
+      "members": ["lead-identity", "identity-strategist", "creative-director", "moodboard-curator", "identity-builder", "brand-architect"]
     }
   ],
 
@@ -361,6 +397,14 @@
       "category": "business-modeling",
       "path": ".claude/workflow-team-library/market-modeling/manifest.md",
       "team": null
+    },
+    {
+      "id": "graphic-identity",
+      "name": "Graphic Identity Methodology",
+      "description": "LINEAR: intake + README → strategy → research → moodboards → logo development → presentation → identity system → delivery",
+      "category": "creative-ideation",
+      "path": ".claude/workflow-team-library/graphic-identity/manifest.md",
+      "team": "graphic-identity"
     }
   ],
 
@@ -426,6 +470,14 @@
     "standalone": [
       "full-code-review", "modelise", "modelise-quick", "modelise-shadow",
       "telegram-notify"
+    ],
+    "threat-defense": [
+      "team-threat-defense", "lead-threat-defense", "threat-scout",
+      "secrets-guardian", "injection-analyst", "stealth-detector", "incident-responder"
+    ],
+    "graphic-identity": [
+      "graphic-identity-team", "lead-identity", "identity-strategist",
+      "creative-director", "moodboard-curator", "identity-builder", "brand-architect"
     ]
   },
 
