@@ -66,6 +66,9 @@
     "app-icon-builder-workflow":   { "displayName": "App Icon Builder Workflow",    "category": "workflows" },
     "landing-lab":                 { "displayName": "Landing Lab Team",             "category": "teams" },
     "team-landing-lab":            { "displayName": "Landing Lab — Value Prop & Copy", "category": "teams" },
-    "landing-lab-workflow":        { "displayName": "Landing Lab Workflow",         "category": "workflows" }
+    "landing-lab-workflow":        { "displayName": "Landing Lab Workflow",         "category": "workflows" },
+    "legal-guardian":              { "displayName": "Legal Guardian Team",           "category": "teams" },
+    "team-legal-guardian":         { "displayName": "Legal Guardian — Scan, Risk & Policy", "category": "teams" },
+    "legal-guardian-workflow":     { "displayName": "Legal Guardian Workflow",       "category": "workflows" }
   }
 }

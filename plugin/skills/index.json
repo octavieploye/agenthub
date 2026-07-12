@@ -237,6 +237,16 @@
       "team": ".claude/teams/landing-lab/config.json",
       "workflow": ".claude/workflow-team-library/landing-lab/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-legal-guardian",
+      "name": "team-legal-guardian",
+      "description": "Legal Guardian Team Orchestrator — 4-phase legal scan, risk classification, policy/contract drafting, and adversarial counter-review for litigation triggers across documents, website, payments, affiliates, and creators",
+      "category": "business-analysis",
+      "path": ".claude/skills/team-legal-guardian/SKILL.md",
+      "team": ".claude/teams/legal-guardian/config.json",
+      "workflow": ".claude/workflow-team-library/legal-guardian/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -376,6 +386,14 @@
       "category": "marketing",
       "path": ".claude/teams/landing-lab/config.json",
       "members": ["lead-landing-lab", "product-researcher", "pain-mapper", "value-prop-architect", "landing-copywriter", "content-builder", "conversion-reviewer"]
+    },
+    {
+      "id": "legal-guardian",
+      "name": "legal-guardian",
+      "description": "Legal Guardian team — full-stack legal risk review: scan, classify, draft policies/contracts, adversarial counter-review for litigation and asset loss vectors",
+      "category": "business-analysis",
+      "path": ".claude/teams/legal-guardian/config.json",
+      "members": ["lead-legal-guardian", "legal-scanner", "risk-assessor", "policy-writer", "counter-legal-advisor"]
     }
   ],
 
@@ -483,6 +501,14 @@
       "category": "marketing",
       "path": ".claude/workflow-team-library/landing-lab/manifest.md",
       "team": "landing-lab"
+    },
+    {
+      "id": "legal-guardian",
+      "name": "Legal Guardian Methodology",
+      "description": "LINEAR: intake → legal scan (7 domains) → risk classification → user gate → policy/contract drafting → adversarial counter-review → Legal Guardian Report",
+      "category": "business-analysis",
+      "path": ".claude/workflow-team-library/legal-guardian/manifest.md",
+      "team": "legal-guardian"
     }
   ],
 
@@ -569,6 +595,10 @@
       "team-landing-lab", "lead-landing-lab", "product-researcher",
       "pain-mapper", "value-prop-architect", "landing-copywriter",
       "content-builder", "conversion-reviewer"
+    ],
+    "legal-guardian": [
+      "team-legal-guardian", "lead-legal-guardian", "legal-scanner",
+      "risk-assessor", "policy-writer", "counter-legal-advisor"
     ]
   },
 
