@@ -58,6 +58,14 @@
     "git-commit":                  { "displayName": "Git Commit",                  "category": "utilities" },
     "sec-insider-threat":          { "displayName": "Insider Threat Audit",        "category": "code-quality" },
     "threat-defense":              { "displayName": "Threat Defense Team",         "category": "teams" },
-    "graphic-identity":            { "displayName": "Graphic Identity Team",       "category": "teams" }
+    "graphic-identity":            { "displayName": "Graphic Identity Team",       "category": "teams" },
+    "team-geo-optimizer":          { "displayName": "GEO Optimizer",                "category": "market-intel" },
+    "geo-optimization":            { "displayName": "GEO Optimization Workflow",    "category": "workflows" },
+    "app-icon-builder":            { "displayName": "App Icon Builder Team",        "category": "teams" },
+    "team-app-icon-builder":       { "displayName": "Build App Icons",              "category": "code-quality" },
+    "app-icon-builder-workflow":   { "displayName": "App Icon Builder Workflow",    "category": "workflows" },
+    "landing-lab":                 { "displayName": "Landing Lab Team",             "category": "teams" },
+    "team-landing-lab":            { "displayName": "Landing Lab — Value Prop & Copy", "category": "teams" },
+    "landing-lab-workflow":        { "displayName": "Landing Lab Workflow",         "category": "workflows" }
   }
 }

@@ -207,6 +207,36 @@
       "team": ".claude/teams/graphic-identity/config.json",
       "workflow": ".claude/workflow-team-library/graphic-identity/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-geo-optimizer",
+      "name": "team-geo-optimizer",
+      "description": "GEO Optimizer Team Orchestrator — AI search visibility, brand entity signals, Google SEO/Ads/Console, robots.txt AI directives, marketplace listing GEO, DataFast measurement. Outputs 90-day GEO Action Plan.",
+      "category": "marketing",
+      "path": ".claude/skills/team-geo-optimizer/SKILL.md",
+      "team": ".claude/teams/geo-optimizer/config.json",
+      "workflow": ".claude/workflow-team-library/geo-optimization/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-app-icon-builder",
+      "name": "team-app-icon-builder",
+      "description": "App Icon Builder Team Orchestrator — researches OS icon specs, converts SVG logo to all required formats (macOS icns, Windows ico, Android/iOS/Linux png sets), verifies output, self-updates OS knowledge base",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-app-icon-builder/SKILL.md",
+      "team": ".claude/teams/app-icon-builder/config.json",
+      "workflow": ".claude/workflow-team-library/app-icon-builder/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-landing-lab",
+      "name": "team-landing-lab",
+      "description": "Landing Lab Team Orchestrator — product research, buyer pain mapping, value proposition, landing page copy, pain-oriented articles, and conversion review in 6 sequential phases",
+      "category": "marketing",
+      "path": ".claude/skills/team-landing-lab/SKILL.md",
+      "team": ".claude/teams/landing-lab/config.json",
+      "workflow": ".claude/workflow-team-library/landing-lab/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -322,6 +352,30 @@
       "category": "creative-ideation",
       "path": ".claude/teams/graphic-identity/config.json",
       "members": ["lead-identity", "identity-strategist", "creative-director", "moodboard-curator", "identity-builder", "brand-architect"]
+    },
+    {
+      "id": "geo-optimizer",
+      "name": "geo-optimizer",
+      "description": "GEO Optimizer team — AI search visibility, entity signals, Google SEO/Ads/Console, marketplace GEO, DataFast measurement",
+      "category": "marketing",
+      "path": ".claude/teams/geo-optimizer/config.json",
+      "members": ["geo-lead", "geo-intel-researcher", "ai-identity-analyst", "technical-geo-auditor", "google-visibility-analyst", "marketplace-geo-specialist"]
+    },
+    {
+      "id": "app-icon-builder",
+      "name": "app-icon-builder",
+      "description": "App icon builder team — OS spec research, SVG-to-icon conversion, verification, self-updating knowledge base",
+      "category": "dev-skills",
+      "path": ".claude/teams/app-icon-builder/config.json",
+      "members": ["icon-lead", "icon-researcher", "icon-builder", "icon-verifier"]
+    },
+    {
+      "id": "landing-lab",
+      "name": "landing-lab",
+      "description": "Landing Lab team — product discovery, pain mapping, value prop, landing page copy, articles, onboarding copy, conversion review",
+      "category": "marketing",
+      "path": ".claude/teams/landing-lab/config.json",
+      "members": ["lead-landing-lab", "product-researcher", "pain-mapper", "value-prop-architect", "landing-copywriter", "content-builder", "conversion-reviewer"]
     }
   ],
 
@@ -405,6 +459,30 @@
       "category": "creative-ideation",
       "path": ".claude/workflow-team-library/graphic-identity/manifest.md",
       "team": "graphic-identity"
+    },
+    {
+      "id": "geo-optimization",
+      "name": "GEO Optimization Methodology",
+      "description": "LINEAR: market intelligence → AI identity audit → technical GEO → per-engine strategy → Google layer → marketplace GEO → measurement + 90-Day Action Plan",
+      "category": "marketing",
+      "path": ".claude/workflow-team-library/geo-optimization/manifest.md",
+      "team": "geo-optimizer"
+    },
+    {
+      "id": "app-icon-builder",
+      "name": "App Icon Builder Methodology",
+      "description": "LINEAR: OS spec check → research (if new OS) → SVG conversion → verification → knowledge-append",
+      "category": "dev-skills",
+      "path": ".claude/workflow-team-library/app-icon-builder/manifest.md",
+      "team": "app-icon-builder"
+    },
+    {
+      "id": "landing-lab",
+      "name": "Landing Lab Methodology",
+      "description": "FORWARD/REVERSE: product discovery → pain mapping → value prop → landing page copy → content → conversion review",
+      "category": "marketing",
+      "path": ".claude/workflow-team-library/landing-lab/manifest.md",
+      "team": "landing-lab"
     }
   ],
 
@@ -478,6 +556,19 @@
     "graphic-identity": [
       "graphic-identity-team", "lead-identity", "identity-strategist",
       "creative-director", "moodboard-curator", "identity-builder", "brand-architect"
+    ],
+    "geo-optimizer": [
+      "team-geo-optimizer", "geo-lead", "geo-intel-researcher",
+      "ai-identity-analyst", "technical-geo-auditor",
+      "google-visibility-analyst", "marketplace-geo-specialist"
+    ],
+    "app-icon-builder": [
+      "icon-lead", "icon-researcher", "icon-builder", "icon-verifier"
+    ],
+    "landing-lab": [
+      "team-landing-lab", "lead-landing-lab", "product-researcher",
+      "pain-mapper", "value-prop-architect", "landing-copywriter",
+      "content-builder", "conversion-reviewer"
     ]
   },
 
