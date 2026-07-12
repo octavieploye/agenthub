@@ -69,6 +69,8 @@
     "landing-lab-workflow":        { "displayName": "Landing Lab Workflow",         "category": "workflows" },
     "legal-guardian":              { "displayName": "Legal Guardian Team",           "category": "teams" },
     "team-legal-guardian":         { "displayName": "Legal Guardian — Scan, Risk & Policy", "category": "teams" },
-    "legal-guardian-workflow":     { "displayName": "Legal Guardian Workflow",       "category": "workflows" }
+    "legal-guardian-workflow":     { "displayName": "Legal Guardian Workflow",       "category": "workflows" },
+    "team-jailbreak-red-team":     { "displayName": "Jailbreak Red Team",            "category": "teams" },
+    "jailbreak-red-team":          { "displayName": "Jailbreak Red Team Workflow",   "category": "workflows" }
   }
 }

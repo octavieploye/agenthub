@@ -247,6 +247,16 @@
       "team": ".claude/teams/legal-guardian/config.json",
       "workflow": ".claude/workflow-team-library/legal-guardian/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-jailbreak-red-team",
+      "name": "team-jailbreak-red-team",
+      "description": "Jailbreak Red Team Orchestrator — generates, classifies, validates, and logs adversarial deception scenarios (T1–T7) targeting Optimaeus/AgentHub LLMs across 8 protected asset categories",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-jailbreak-red-team/SKILL.md",
+      "team": ".claude/teams/jailbreak-red-team/config.json",
+      "workflow": ".claude/workflow-team-library/jailbreak-red-team/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -394,6 +404,14 @@
       "category": "business-analysis",
       "path": ".claude/teams/legal-guardian/config.json",
       "members": ["lead-legal-guardian", "legal-scanner", "risk-assessor", "policy-writer", "counter-legal-advisor"]
+    },
+    {
+      "id": "jailbreak-red-team",
+      "name": "jailbreak-red-team",
+      "description": "Adversarial LLM deception scenario team — generates, classifies, validates, and logs attack patterns across 7 T-code families and 8 protected asset categories",
+      "category": "dev-skills",
+      "path": ".claude/teams/jailbreak-red-team/config.json",
+      "members": ["lead-jailbreak", "jailbreak-scenario-generator", "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"]
     }
   ],
 
@@ -509,6 +527,14 @@
       "category": "business-analysis",
       "path": ".claude/workflow-team-library/legal-guardian/manifest.md",
       "team": "legal-guardian"
+    },
+    {
+      "id": "jailbreak-red-team",
+      "name": "Jailbreak Red Team Methodology",
+      "description": "LINEAR: generate deceptive scenarios → classify (taxonomy + severity) → validate (deceptiveness score + defense pattern) → log (per-run file + master log append)",
+      "category": "dev-skills",
+      "path": ".claude/workflow-team-library/jailbreak-red-team/manifest.md",
+      "team": "jailbreak-red-team"
     }
   ],
 
@@ -599,6 +625,10 @@
     "legal-guardian": [
       "team-legal-guardian", "lead-legal-guardian", "legal-scanner",
       "risk-assessor", "policy-writer", "counter-legal-advisor"
+    ],
+    "jailbreak-red-team": [
+      "team-jailbreak-red-team", "lead-jailbreak", "jailbreak-scenario-generator",
+      "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"
     ]
   },
 
