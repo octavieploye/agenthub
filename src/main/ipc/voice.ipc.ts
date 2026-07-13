@@ -14,11 +14,11 @@ export function registerVoiceHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.VOICE.TRANSCRIBE, async (_event, audioBuffer: ArrayBuffer) => {
+  ipcMain.handle(IPC_CHANNELS.VOICE.TRANSCRIBE, async (_event, audioBuffer: ArrayBuffer, language?: string) => {
     try {
       const svc = getVoiceService()
       if (!svc) return error('SERVICE_ERROR', 'VoiceService not initialized')
-      const result = await svc.transcribe(audioBuffer)
+      const result = await svc.transcribe(audioBuffer, language ?? 'en')
       return success(result)
     } catch (err) {
       return error('VOICE_ERROR', err instanceof Error ? err.message : String(err))

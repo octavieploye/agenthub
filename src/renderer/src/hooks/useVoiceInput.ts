@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { AudioRecorderService } from '../services/audio-recorder'
+import { useViewStore } from '../stores/view-store'
 
-// Trigger words per locale — Whisper could feed detected language in the future
 const TRIGGER_WORDS: Record<string, string[]> = {
   en: ['send'],
-  // Future: fr: ['envoie'], es: ['enviar'], it: ['invia']
+  fr: ['envoie', 'envoyer'],
+  es: ['enviar', 'envía'],
 }
 
 const DEFAULT_LOCALE = 'en'
@@ -34,6 +35,7 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
   const [micError, setMicError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorderService | null>(null)
   const isListeningRef = useRef(false)
+  const voiceLanguage = useViewStore((s) => s.voiceLanguage)
 
   // Cleanup on unmount — stop recording if component unmounts mid-recording
   useEffect(() => {
@@ -75,12 +77,12 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
 
     try {
       const audioBuffer = await recorder.stopRecording()
-      const response = await window.agentHub.voice.transcribe(audioBuffer)
+      const response = await window.agentHub.voice.transcribe(audioBuffer, voiceLanguage)
 
       if (response.success && response.data.transcript) {
         const el = inputRef.current
         if (el) {
-          const { cleaned, triggered } = extractTrigger(response.data.transcript)
+          const { cleaned, triggered } = extractTrigger(response.data.transcript, voiceLanguage)
           const nativeInputValueSetter = el instanceof HTMLTextAreaElement
             ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
             : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
@@ -109,7 +111,7 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
       setIsProcessing(false)
       recorderRef.current = null
     }
-  }, [inputRef, onAutoSend])
+  }, [inputRef, onAutoSend, voiceLanguage])
 
   const toggleListening = useCallback(() => {
     if (isListeningRef.current) {

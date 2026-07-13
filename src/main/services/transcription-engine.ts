@@ -32,25 +32,26 @@ export class WhisperEngine implements TranscriptionEngine {
     return null
   }
 
-  async transcribe(audioBuffer: ArrayBuffer): Promise<string> {
+  async transcribe(audioBuffer: ArrayBuffer, language = 'en'): Promise<string> {
     this.resetIdleTimer()
 
     const tempPath = join(tmpdir(), `agenthub-voice-${Date.now()}.wav`)
     try {
       const wavBuffer = this.pcmToWav(audioBuffer)
       await writeFile(tempPath, wavBuffer)
-      const transcript = await this.runWhisper(tempPath)
-      return transcript.trim()
+      const raw = await this.runWhisper(tempPath, language)
+      return this.sanitize(raw)
     } finally {
       await unlink(tempPath).catch(() => {})
     }
   }
 
-  private runWhisper(wavPath: string): Promise<string> {
+  private runWhisper(wavPath: string, language: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const proc = spawn(this.binaryPath, [
         '-m', this.modelPath,
         '-f', wavPath,
+        '-l', language,
         '--no-timestamps',
         '-otxt',
         '-of', '-'
@@ -104,6 +105,14 @@ export class WhisperEngine implements TranscriptionEngine {
     header.writeUInt32LE(dataSize, 40)
 
     return Buffer.concat([header, pcm])
+  }
+
+  // Strip whisper non-speech tokens: (speaking in foreign language), [BLANK_AUDIO], etc.
+  private sanitize(text: string): string {
+    return text
+      .replace(/\([^)]*\)/g, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .trim()
   }
 
   private resetIdleTimer(): void {

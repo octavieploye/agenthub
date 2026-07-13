@@ -12,6 +12,7 @@ export class VoiceService {
   private engine: WhisperEngine
   private queue: Array<{
     audioBuffer: ArrayBuffer
+    language: string
     resolve: (result: VoiceTranscribeResult) => void
   }> = []
   private processing = false
@@ -34,9 +35,9 @@ export class VoiceService {
     return { status: 'ready' }
   }
 
-  async transcribe(audioBuffer: ArrayBuffer): Promise<VoiceTranscribeResult> {
+  async transcribe(audioBuffer: ArrayBuffer, language = 'en'): Promise<VoiceTranscribeResult> {
     return new Promise((resolve) => {
-      this.queue.push({ audioBuffer, resolve })
+      this.queue.push({ audioBuffer, language, resolve })
       this.processQueue()
     })
   }
@@ -62,7 +63,7 @@ export class VoiceService {
 
     this.processing = true
     try {
-      const transcript = await this.engine.transcribe(item.audioBuffer)
+      const transcript = await this.engine.transcribe(item.audioBuffer, item.language)
       item.resolve({ transcript })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

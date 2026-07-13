@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useViewStore } from '../../../stores/view-store'
 
+const STT_LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'Français' },
+  { value: 'es', label: 'Español' },
+]
+
 type PiperVoice = { id: string; lang: string; name: string; quality: string }
 
 type TtsApi = {
@@ -11,9 +17,11 @@ export function VoiceTab(): React.JSX.Element {
   const ttsVolume = useViewStore((s) => s.ttsVolume)
   const ttsRate = useViewStore((s) => s.ttsRate)
   const piperVoiceId = useViewStore((s) => s.piperVoiceId)
+  const voiceLanguage = useViewStore((s) => s.voiceLanguage)
   const setTtsVolume = useViewStore((s) => s.setTtsVolume)
   const setTtsRate = useViewStore((s) => s.setTtsRate)
   const setPiperVoiceId = useViewStore((s) => s.setPiperVoiceId)
+  const setVoiceLanguage = useViewStore((s) => s.setVoiceLanguage)
 
   const [voices, setVoices] = useState<PiperVoice[]>([])
 
@@ -27,6 +35,20 @@ export function VoiceTab(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
+      <div>
+        <p className="text-xs font-medium text-base-content/70 mb-2">Voice input language</p>
+        <select
+          data-testid="stt-language-select"
+          className="select select-sm select-bordered w-full text-xs"
+          value={voiceLanguage}
+          onChange={(e) => setVoiceLanguage(e.target.value)}
+        >
+          {STT_LANGUAGES.map((l) => (
+            <option key={l.value} value={l.value}>{l.label}</option>
+          ))}
+        </select>
+      </div>
+
       <div>
         <p className="text-xs font-medium text-base-content/70 mb-2">Voice</p>
         <select

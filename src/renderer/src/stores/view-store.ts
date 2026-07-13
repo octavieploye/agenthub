@@ -9,6 +9,7 @@ const VOICE_KEY = 'agenthub:voiceEnabled'
 const TTS_VOLUME_KEY = 'agenthub:ttsVolume'
 const TTS_RATE_KEY = 'agenthub:ttsRate'
 const TTS_VOICE_ID_KEY = 'agenthub:piperVoiceId'
+const VOICE_LANGUAGE_KEY = 'agenthub:voiceLanguage'
 
 function loadSoundEnabled(): boolean {
   try {
@@ -58,6 +59,14 @@ function loadPiperVoiceId(): string {
   }
 }
 
+function loadVoiceLanguage(): string {
+  try {
+    return localStorage.getItem(VOICE_LANGUAGE_KEY) ?? 'en'
+  } catch {
+    return 'en'
+  }
+}
+
 interface ViewStore {
   viewMode: ViewMode
   focusedAgentId: string | null
@@ -68,6 +77,7 @@ interface ViewStore {
   ttsVolume: number
   ttsRate: number
   piperVoiceId: string
+  voiceLanguage: string
   expandedRepoFileTree: string | null
   setViewMode: (mode: ViewMode) => void
   setFocusedAgent: (id: string | null) => void
@@ -78,6 +88,7 @@ interface ViewStore {
   setTtsVolume: (volume: number) => void
   setTtsRate: (rate: number) => void
   setPiperVoiceId: (id: string) => void
+  setVoiceLanguage: (lang: string) => void
   setExpandedRepoFileTree: (repoId: string | null) => void
 }
 
@@ -91,6 +102,7 @@ export const useViewStore = create<ViewStore>((set) => ({
   ttsVolume: loadTtsVolume(),
   ttsRate: loadTtsRate(),
   piperVoiceId: loadPiperVoiceId(),
+  voiceLanguage: loadVoiceLanguage(),
   expandedRepoFileTree: null,
 
   setViewMode: (mode) => set({ viewMode: mode }),
@@ -146,5 +158,14 @@ export const useViewStore = create<ViewStore>((set) => ({
         // ignore
       }
       return { piperVoiceId: id }
+    }),
+  setVoiceLanguage: (lang) =>
+    set(() => {
+      try {
+        localStorage.setItem(VOICE_LANGUAGE_KEY, lang)
+      } catch {
+        // ignore
+      }
+      return { voiceLanguage: lang }
     })
 }))

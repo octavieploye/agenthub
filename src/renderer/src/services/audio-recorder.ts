@@ -29,13 +29,23 @@ export class AudioRecorderService {
       this.samples.push(new Float32Array(input))
     }
 
+    // Route through a silent gain node so the processor fires onaudioprocess
+    // without playing mic audio back to speakers — preventing AEC from
+    // treating the user's voice as echo and cancelling it (sandbox: true issue).
+    const silentGain = this.audioContext.createGain()
+    silentGain.gain.value = 0
     this.source.connect(this.processor)
-    this.processor.connect(this.audioContext.destination)
+    this.processor.connect(silentGain)
+    silentGain.connect(this.audioContext.destination)
     this.recording = true
   }
 
   async stopRecording(): Promise<ArrayBuffer> {
     this.recording = false
+
+    // Capture actual rate before closing — macOS may override the requested 16kHz
+    // in sandboxed mode, so we resample explicitly rather than relying on the header.
+    const capturedRate = this.audioContext?.sampleRate ?? 16000
 
     if (this.source) {
       this.source.disconnect()
@@ -63,10 +73,26 @@ export class AudioRecorderService {
     }
     this.samples = []
 
+    // Resample to exactly 16kHz if macOS gave a different rate in sandboxed mode
+    const TARGET_RATE = 16000
+    let finalSamples = merged
+    if (capturedRate !== TARGET_RATE && merged.length > 0) {
+      const targetLength = Math.ceil(merged.length * (TARGET_RATE / capturedRate))
+      const offlineCtx = new OfflineAudioContext(1, targetLength, TARGET_RATE)
+      const srcBuf = offlineCtx.createBuffer(1, merged.length, capturedRate)
+      srcBuf.getChannelData(0).set(merged)
+      const srcNode = offlineCtx.createBufferSource()
+      srcNode.buffer = srcBuf
+      srcNode.connect(offlineCtx.destination)
+      srcNode.start()
+      const rendered = await offlineCtx.startRendering()
+      finalSamples = rendered.getChannelData(0)
+    }
+
     // Convert Float32 [-1,1] to Int16 PCM
-    const pcm = new Int16Array(merged.length)
-    for (let i = 0; i < merged.length; i++) {
-      const s = Math.max(-1, Math.min(1, merged[i]))
+    const pcm = new Int16Array(finalSamples.length)
+    for (let i = 0; i < finalSamples.length; i++) {
+      const s = Math.max(-1, Math.min(1, finalSamples[i]))
       pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
     }
 

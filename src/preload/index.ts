@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, clipboard } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+const electronAPI = {}
 import { IPC_CHANNELS, IPC_EVENTS } from '../shared/constants/ipc-channels'
 import type { RendererErrorPayload } from '../shared/types/log.types'
 
@@ -185,8 +185,8 @@ const agentHubBridge = {
     }
   },
   voice: {
-    transcribe: (audioBuffer: ArrayBuffer) =>
-      ipcRenderer.invoke(IPC_CHANNELS.VOICE.TRANSCRIBE, audioBuffer),
+    transcribe: (audioBuffer: ArrayBuffer, language?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.VOICE.TRANSCRIBE, audioBuffer, language),
     status: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.STATUS),
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.VOICE.CANCEL)
   },
