@@ -71,6 +71,11 @@
     "team-legal-guardian":         { "displayName": "Legal Guardian — Scan, Risk & Policy", "category": "teams" },
     "legal-guardian-workflow":     { "displayName": "Legal Guardian Workflow",       "category": "workflows" },
     "team-jailbreak-red-team":     { "displayName": "Jailbreak Red Team",            "category": "teams" },
-    "jailbreak-red-team":          { "displayName": "Jailbreak Red Team Workflow",   "category": "workflows" }
+    "jailbreak-red-team":          { "displayName": "Jailbreak Red Team Workflow",   "category": "workflows" },
+    "onboarding-engine":           { "displayName": "Onboarding Engine Team",         "category": "teams" },
+    "team-onboarding-engine":      { "displayName": "Onboarding Engine — Full Playbook", "category": "teams" },
+    "onboarding-engine-workflow":  { "displayName": "Onboarding Engine Workflow",    "category": "workflows" },
+    "impl-lead":                   { "displayName": "Implementation Lead Team",       "category": "teams" },
+    "team-impl-lead":              { "displayName": "Impl Lead — Full Project Audit", "category": "teams" }
   }
 }

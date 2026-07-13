@@ -257,6 +257,26 @@
       "team": ".claude/teams/jailbreak-red-team/config.json",
       "workflow": ".claude/workflow-team-library/jailbreak-red-team/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-onboarding-engine",
+      "name": "team-onboarding-engine",
+      "description": "Onboarding Engine Team Orchestrator — Apple-style onboarding for marketplace clients, affiliates, and creators: experience architecture, Stripe Connect deferred payments, automation triggers, and risk assessment. Outputs a full Onboarding Playbook.",
+      "category": "business-venture",
+      "path": ".claude/skills/team-onboarding-engine/SKILL.md",
+      "team": ".claude/teams/onboarding-engine/config.json",
+      "workflow": ".claude/workflow-team-library/onboarding-engine/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-impl-lead",
+      "name": "team-impl-lead",
+      "description": "Implementation Lead Team Orchestrator — full project audit from scratch: stack, product, content, legal, policies. Produces discovery report, implementation plan, and conformance check.",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-impl-lead/SKILL.md",
+      "team": ".claude/teams/impl-lead/config.json",
+      "workflow": null,
+      "source": "project"
     }
   ],
 
@@ -412,6 +432,22 @@
       "category": "dev-skills",
       "path": ".claude/teams/jailbreak-red-team/config.json",
       "members": ["lead-jailbreak", "jailbreak-scenario-generator", "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"]
+    },
+    {
+      "id": "onboarding-engine",
+      "name": "onboarding-engine",
+      "description": "Onboarding Engine team — Apple-style onboarding design for marketplace clients, affiliates, and creators",
+      "category": "business-venture",
+      "path": ".claude/teams/onboarding-engine/config.json",
+      "members": ["onboarding-lead", "experience-architect", "payment-flow-designer", "automation-blueprint", "onboarding-risk-analyst", "onboarding-copywriter"]
+    },
+    {
+      "id": "impl-lead",
+      "name": "impl-lead",
+      "description": "Implementation Lead team — full project audit: stack scout, product scout, content scout, implementation planner",
+      "category": "dev-skills",
+      "path": ".claude/teams/impl-lead/config.json",
+      "members": ["impl-lead", "impl-scout-stack", "impl-scout-product", "impl-scout-content", "impl-planner"]
     }
   ],
 
@@ -535,6 +571,14 @@
       "category": "dev-skills",
       "path": ".claude/workflow-team-library/jailbreak-red-team/manifest.md",
       "team": "jailbreak-red-team"
+    },
+    {
+      "id": "onboarding-engine",
+      "name": "Onboarding Engine Methodology",
+      "description": "LINEAR: persona segmentation → experience architecture + payment flow → automation blueprint + risk assessment → copy pack → Onboarding Playbook",
+      "category": "business-venture",
+      "path": ".claude/workflow-team-library/onboarding-engine/manifest.md",
+      "team": "onboarding-engine"
     }
   ],
 
@@ -629,6 +673,15 @@
     "jailbreak-red-team": [
       "team-jailbreak-red-team", "lead-jailbreak", "jailbreak-scenario-generator",
       "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"
+    ],
+    "onboarding-engine": [
+      "team-onboarding-engine", "onboarding-lead", "experience-architect",
+      "payment-flow-designer", "automation-blueprint",
+      "onboarding-risk-analyst", "onboarding-copywriter"
+    ],
+    "impl-lead": [
+      "team-impl-lead", "impl-lead", "impl-scout-stack",
+      "impl-scout-product", "impl-scout-content", "impl-planner"
     ]
   },
 
