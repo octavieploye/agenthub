@@ -24,6 +24,30 @@ Invoke when an approved Idea Brief (from the brainstorm team) has been routed to
 
 ## Agent Sequence (mandatory order)
 
+0. **STACK RESEARCH GATE** — mandatory before `feature-architect` begins.
+
+   For every framework, package, or service being considered in any proposed technical approach:
+   - **WebSearch current stable version** — `npm view {package} dist-tags` or equivalent. Never use training-data versions.
+   - **Check deprecation** — is the package deprecated? Are sub-packages deprecated?
+   - **Check peer dependency compatibility** — do all candidate packages declare compatible peer deps with each other?
+   - **Check security advisories** — known CRITICAL/HIGH CVEs?
+   - **Produce a compatibility matrix** before proposing any architecture:
+
+   ```
+   | Package       | Latest Stable | Version Proposed | Compatible With | Status   |
+   |---|---|---|---|---|
+   | framework X   | x.y.z         | x.y.z            | dep A, dep B    | APPROVED |
+   | auth lib      | x.y.z         | x.y.z            | framework X     | APPROVED |
+   ```
+
+   **Gate rules:**
+   - Deprecated package → STOP. Use the replacement.
+   - CRITICAL/HIGH CVE → STOP. Use the patched version.
+   - Incompatible peer deps between proposed packages → STOP. Resolve before proposing the approach.
+   - More than 1 major version behind latest → justify or upgrade.
+
+   Gate output must appear as `STACK APPROVED` in the Feature Brief header before any technical approach is written.
+
 1. `feature-architect` — produces 2–3 technical approaches from the Idea Brief
 2. `sr-backend` + `sr-frontend` — validate feasibility per approach (read-only, run in parallel)
 3. `ux-explorer` — produces 2–3 UX directions based on validated approaches

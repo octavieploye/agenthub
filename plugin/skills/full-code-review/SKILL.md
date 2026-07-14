@@ -16,6 +16,52 @@ You are orchestrating a complete audit, fix, and verify cycle across the entire 
 
 ---
 
+## Phase 0 — DEPENDENCY SECURITY SCAN (runs before Phase 1, blocks if findings exist)
+
+Run before dispatching any audit agents:
+
+```bash
+npm audit --json
+```
+
+Classify findings:
+
+| Severity | Action |
+|---|---|
+| CRITICAL | **HARD STOP** — surface immediately. Phase 1 does NOT begin until user acknowledges each one |
+| HIGH | **HARD STOP** — surface immediately. Phase 1 does NOT begin until user acknowledges each one |
+| MODERATE | Surface as warning, audit continues |
+| LOW | Log only, audit continues |
+
+Also check `package.json` for:
+- Deprecated packages (flag with replacement + upgrade guide)
+- Pinned versions behind their patched equivalent
+
+Output format per finding:
+```
+[CRITICAL] {package}@{current} — {CVE or reason} — patched in: {safe_version}
+```
+
+If CRITICAL/HIGH found, print:
+```
+DEPENDENCY SCAN — BLOCKED
+{list of findings}
+
+Options:
+  A. Upgrade affected packages now (update package.json + npm install)
+  B. Accept-risk with sign-off (user states reason, logged in final report)
+  C. Abort review
+```
+
+Wait for explicit user instruction before proceeding to Phase 1.
+
+If scan is clean:
+```
+DEPENDENCY SCAN — CLEAN
+```
+
+---
+
 ## Phase 1 — AUDIT
 
 Dispatch three sub-agents **simultaneously**:
@@ -139,3 +185,4 @@ Present the final summary table to the user:
 | Deferred | — |
 | Tests passing (final) | — |
 | Tests failing (final) | — |
+| Dependency CRITICAL/HIGH | — (acknowledged / resolved) |
