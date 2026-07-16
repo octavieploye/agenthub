@@ -15,6 +15,7 @@
     "skill-creator":               { "displayName": "Create New Skill",            "category": "code-quality" },
     "test-integrity-review":       { "displayName": "Check Test Integrity",        "category": "code-quality" },
     "full-code-review":            { "displayName": "Full Code Review",            "category": "code-quality" },
+    "team-dev-loop":               { "displayName": "Dev Loop — Iterate Until Done", "category": "code-quality" },
     "token-optimizer":             { "displayName": "Optimize AI Instructions",    "category": "code-quality" },
     "ai-audit":                    { "displayName": "Audit AI Config",             "category": "ai-config" },
     "ai-fix":                      { "displayName": "Fix AI Config",               "category": "ai-config" },
@@ -76,6 +77,15 @@
     "team-onboarding-engine":      { "displayName": "Onboarding Engine — Full Playbook", "category": "teams" },
     "onboarding-engine-workflow":  { "displayName": "Onboarding Engine Workflow",    "category": "workflows" },
     "impl-lead":                   { "displayName": "Implementation Lead Team",       "category": "teams" },
-    "team-impl-lead":              { "displayName": "Impl Lead — Full Project Audit", "category": "teams" }
+    "team-impl-lead":              { "displayName": "Impl Lead — Full Project Audit", "category": "teams" },
+    "team-ecosystem-status":       { "displayName": "Ecosystem Status Team",          "category": "teams" },
+    "ecosystem-status":            { "displayName": "Ecosystem Status",               "category": "teams" },
+    "conversion-architect":        { "displayName": "Conversion Architect Team",       "category": "teams" },
+    "team-conversion-architect":   { "displayName": "Conversion Architect — 0 to 1M", "category": "teams" },
+    "conversion-architect-workflow": { "displayName": "Conversion Architect Workflow",  "category": "workflows" },
+    "clarity-copywriter":            { "displayName": "Clarity Copywriter — CEO Style", "category": "content-voice" },
+    "clarity-copy":                  { "displayName": "Clarity Copy Team",              "category": "teams" },
+    "team-clarity-copy":             { "displayName": "Clarity Copy — CEO Copy Pack",   "category": "teams" },
+    "clarity-copy-workflow":         { "displayName": "Clarity Copy Workflow",           "category": "workflows" }
   }
 }

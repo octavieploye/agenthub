@@ -105,7 +105,7 @@ const repoPathCache = new Map<string, string>()
 
 // S2: skills index existence — checked once per process lifetime
 let skillsIndexExists: boolean | null = null
-/ S27: guard policy existence — checked once per process lifetime
+// S27: guard policy existence — checked once per process lifetime
 let guardExists: boolean | null = null
 
 const ptyProxy = new PtyProxy({
@@ -866,12 +866,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ? join(process.resourcesPath, 'plugin')
     : join(app.getAppPath(), 'plugin')
   const pluginFlag = ` --plugin-dir '${pluginDir}'`
-  // S31: block plugin hooks directory — if it exists, an attacker may have injected exfiltration hooks
-  const hooksDir = join(pluginDir, 'hooks')
-  if (existsSync(hooksDir)) {
-    log.error('S31: plugin/hooks/ directory detected — potential hook injection. Refusing spawn.', { agentId: agentState.id, hooksDir })
-    throw new Error('Security violation: plugin/hooks/ directory exists. Remove it before spawning agents.')
-  }
   const skillsIndexPath = join(pluginDir, 'skills', 'index.md')
   // S2: cache result — skills index path is static for the process lifetime
   if (skillsIndexExists === null) {

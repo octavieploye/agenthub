@@ -88,17 +88,6 @@
     }
   },
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Write|Edit|Read|Grep|Glob|WebFetch|WebSearch|Agent|TaskCreate|TaskUpdate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/skills/token-optimizer/token-audit.sh --mode=stuck-check"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit",
@@ -117,6 +106,18 @@
           {
             "type": "command",
             "command": ".claude/skills/token-optimizer/token-audit.sh --mode=session-end"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"REPO GATE: Before reading any file or dispatching any agent, confirm the target repo with the user. Ask: Which repo is this task for? (full path) — CWD is not confirmation. Wait for explicit user confirmation before proceeding.\"}}'",
+            "timeout": 5
           }
         ]
       }

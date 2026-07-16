@@ -36,6 +36,14 @@
       "source": "project"
     },
     {
+      "id": "team-dev-loop",
+      "name": "team-dev-loop",
+      "description": "Agentic coding loop — review → fix → test, iterates until all tests pass and frontend/backend are wired. Stall detection + configurable max iterations (default 5).",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-dev-loop/SKILL.md",
+      "source": "project"
+    },
+    {
       "id": "sec-insider-threat",
       "name": "sec-insider-threat",
       "description": "Insider threat & IP protection audit — unauthorized access vectors, IP exfiltration, AI prompt injection, reverse-engineering vulnerabilities. Produces prevention report + agent hardening policy fragment.",
@@ -74,7 +82,15 @@
       "category": "business-venture",
       "path": ".claude/skills/vibe-marketing-validation/SKILL.md",
       "source": "project"
-    }
+    },
+    {
+      "id": "clarity-copywriter",
+      "name": "clarity-copywriter",
+      "description": "Generate CEO/manager-style landing page copy, CTAs, and taglines — Bottom Line Up Front, result-first, zero adjective soup, one line = full picture",
+      "category": "marketing",
+      "path": ".claude/skills/clarity-copywriter/SKILL.md",
+      "source": "project"
+    },
   ],
 
   "team-orchestrators": [
@@ -278,6 +294,39 @@
       "workflow": null,
       "source": "project"
     }
+    ,
+    {
+      "id": "team-ecosystem-status",
+      "name": "team-ecosystem-status",
+      "description": "Ecosystem Status Team Orchestrator — full project oversight across AgentHub, OPTimaeus, LLM Packages, and Opeidos. Produces PDF-ready status report with risk register, feature matrix, and ordered action plan.",
+      "category": "business-intelligence",
+      "path": ".claude/skills/team-ecosystem-status/SKILL.md",
+      "team": ".claude/teams/ecosystem-status/config.json",
+      "workflow": ".claude/workflow-team-library/ecosystem-status/manifest.md",
+      "source": "project"
+    }
+    ,
+    {
+      "id": "team-conversion-architect",
+      "name": "team-conversion-architect",
+      "description": "Conversion Architect Team Orchestrator — bounce psychology, CIA-grade page teardown, AI resistance mapping, and 0.1% landing page + checkout blueprint for Opeidos",
+      "category": "marketing",
+      "path": ".claude/skills/team-conversion-architect/SKILL.md",
+      "team": ".claude/teams/conversion-architect/config.json",
+      "workflow": ".claude/workflow-team-library/conversion-architect/manifest.md",
+      "source": "project"
+    }
+    ,
+    {
+      "id": "team-clarity-copy",
+      "name": "team-clarity-copy",
+      "description": "Clarity Copy Team Orchestrator — CEO-style landing page headlines, CTAs, and taglines from product context to finished Copy Pack in 4 phases",
+      "category": "marketing",
+      "path": ".claude/skills/team-clarity-copy/SKILL.md",
+      "team": ".claude/teams/clarity-copy/config.json",
+      "workflow": ".claude/workflow-team-library/clarity-copy/manifest.md",
+      "source": "project"
+    }
   ],
 
   "teams": [
@@ -449,6 +498,24 @@
       "path": ".claude/teams/impl-lead/config.json",
       "members": ["impl-lead", "impl-scout-stack", "impl-scout-product", "impl-scout-content", "impl-planner"]
     }
+    ,
+    {
+      "id": "conversion-architect",
+      "name": "conversion-architect",
+      "description": "Conversion Architecture team — bounce psychology research, CIA page teardown, AI resistance mapping, 0.1% conversion blueprint for Opeidos",
+      "category": "marketing",
+      "path": ".claude/teams/conversion-architect/config.json",
+      "members": ["lead-conversion-architect", "bounce-analyst", "cia-page-reviewer", "ai-resistance-analyst", "conversion-blueprint"]
+    }
+    ,
+    {
+      "id": "clarity-copy",
+      "name": "clarity-copy",
+      "description": "CEO-style copy team — distills product pain to 1 sentence per segment, generates headlines/CTAs/taglines using BLUF principles, validates with critic gate",
+      "category": "marketing",
+      "path": ".claude/teams/clarity-copy/config.json",
+      "members": ["lead-clarity-copy", "pain-distiller", "clarity-writer", "copy-critic"]
+    }
   ],
 
   "workflows": [
@@ -580,6 +647,33 @@
       "path": ".claude/workflow-team-library/onboarding-engine/manifest.md",
       "team": "onboarding-engine"
     }
+    ,
+    {
+      "id": "ecosystem-status",
+      "name": "Ecosystem Status Methodology",
+      "description": "LINEAR: expert snapshots (AgentHub+OPTimaeus+packages) → feature matrix + risk register → synthesis + PDF report",
+      "category": "business-intelligence",
+      "path": ".claude/workflow-team-library/ecosystem-status/manifest.md",
+      "team": "ecosystem-status"
+    }
+    ,
+    {
+      "id": "conversion-architect",
+      "name": "Conversion Architect Methodology",
+      "description": "LINEAR: bounce psychology research (parallel CIA teardown) → AI resistance mapping → 0.1% conversion blueprint → Conversion Architecture Brief",
+      "category": "marketing",
+      "path": ".claude/workflow-team-library/conversion-architect/manifest.md",
+      "team": "conversion-architect"
+    }
+    ,
+    {
+      "id": "clarity-copy",
+      "name": "Clarity Copy Methodology",
+      "description": "LINEAR: context intake → pain distillation → copy generation (CEO/BLUF style) → critic gate → final Copy Pack per product/segment",
+      "category": "marketing",
+      "path": ".claude/workflow-team-library/clarity-copy/manifest.md",
+      "team": "clarity-copy"
+    }
   ],
 
   "commands": {
@@ -682,6 +776,18 @@
     "impl-lead": [
       "team-impl-lead", "impl-lead", "impl-scout-stack",
       "impl-scout-product", "impl-scout-content", "impl-planner"
+    ],
+    "ecosystem-status": [
+      "team-ecosystem-status", "lead-ecosystem", "agenthub-expert",
+      "optimaeus-expert", "llm-pckg-expert", "feature-investigator", "risk-manager"
+    ],
+    "conversion-architect": [
+      "team-conversion-architect", "lead-conversion-architect",
+      "bounce-analyst", "cia-page-reviewer", "ai-resistance-analyst", "conversion-blueprint"
+    ],
+    "clarity-copy": [
+      "team-clarity-copy", "lead-clarity-copy", "pain-distiller",
+      "clarity-writer", "copy-critic"
     ]
   },
 

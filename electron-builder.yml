@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: agenthub
+appId: com.optimaeus.agenthub
+productName: AgentHub
 directories:
   buildResources: build
   output: out
@@ -41,7 +41,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: Optimaeus
   category: Utility
   icon: build/icon.png
 appImage:

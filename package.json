@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Command & Control center for AI coding agents",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Optimaeus",
+  "homepage": "https://agenthub.app",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

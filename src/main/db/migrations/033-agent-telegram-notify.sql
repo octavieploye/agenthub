@@ -1,0 +1,1 @@
+ALTER TABLE agents ADD COLUMN telegram_notify INTEGER NOT NULL DEFAULT 0;

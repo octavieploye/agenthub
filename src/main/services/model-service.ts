@@ -2,10 +2,6 @@ import log from 'electron-log/main'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS } from '../../shared/constants/model-catalog'
 import type { ModelCatalogEntry, ModelCategory } from '../../shared/types/model.types'
 
-const OLLAMA_LOCAL_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434'
-const OLLAMA_CLOUD_HOST = process.env.OLLAMA_CLOUD_HOST ?? 'https://ollama.com'
-const OLLAMA_CLOUD_KEY = process.env.OLLAMA_CLOUD_KEY ?? ''
-
 const OLLAMA_CATEGORY_HINTS: Record<string, ModelCategory> = {
   'qwen3-coder': 'coding',
   'devstral': 'coding',
@@ -89,6 +85,7 @@ function parseOllamaModels(
 }
 
 export async function fetchOllamaLocalModels(): Promise<ModelCatalogEntry[]> {
+  const OLLAMA_LOCAL_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434'
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
@@ -107,6 +104,8 @@ export async function fetchOllamaLocalModels(): Promise<ModelCatalogEntry[]> {
 }
 
 export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
+  const OLLAMA_CLOUD_HOST = process.env.OLLAMA_CLOUD_HOST ?? 'https://ollama.com'
+  const OLLAMA_CLOUD_KEY = process.env.OLLAMA_CLOUD_KEY ?? ''
   if (!OLLAMA_CLOUD_KEY) {
     log.debug('No OLLAMA_CLOUD_KEY set, skipping cloud models')
     return []
