@@ -33,12 +33,20 @@ Skills specific to the agenthub codebase. Machine-readable registry: [index.json
 
 Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use it`
 
+## Frontend Engineering
+
+- [team-frontend](team-frontend/SKILL.md) — **Full pipeline orchestrator**: audit (code review + wire verification) → triage gate → TDD gate → dev-stack fix loop → architect + sr-frontend review → test integrity gate → final log with fixes, files, and next-run recommendations
+- [frontend-code-review](frontend-code-review/SKILL.md) — Senior frontend code review for any stack (React/Vue/Angular/Svelte/vanilla JS) — patterns, TS strict, dead UI, wiring, test gaps — adapts to detected framework
+- [frontend-wire-verifier](frontend-wire-verifier/SKILL.md) — Verifies frontend-to-backend wiring across any communication layer (REST, GraphQL, WebSocket, IPC, Tauri, gRPC, SSE) — finds missing handlers, type mismatches, unguarded calls
+- [test-first-enforcer](test-first-enforcer/SKILL.md) — TDD gate for any language and test runner — red test before any implementation code, gates: understand → red → implement → full suite → refactor
+
 ## Dev Skills
 
 - [skill-creator](skill-creator/SKILL.md) — Create new skills, teams, workflows, commands — reverse-engineer tasks into reusable artifacts
 - [test-integrity-review](test-integrity-review/SKILL.md) — Check code changes for "test changed to pass" patterns during review or before commits
 - [full-code-review](full-code-review/SKILL.md) — Full multi-agent codebase audit + fix + verify cycle
 - [token-optimizer](token-optimizer/SKILL.md) — Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline
+- [chaos-modeling](chaos-modeling/SKILL.md) — Chaos engineering for any project type — 8-domain failure scenarios (load, DB, external APIs, memory, network, filesystem, concurrency, security) + real-time outcome logging + resilience hardening plan
 
 ## Voice & Articulation
 
