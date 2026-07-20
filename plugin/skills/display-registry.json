@@ -37,6 +37,7 @@
     "team-brainstorm":             { "displayName": "Brainstorm Team",                  "category": "intelligence" },
     "team-tech-brainstorm":        { "displayName": "Tech Brainstorm Team",             "category": "intelligence" },
     "team-geo-optimizer":          { "displayName": "GEO Optimizer",                    "category": "intelligence" },
+    "team-seo-geo-crawler":        { "displayName": "SEO/GEO Crawler — Full Audit",     "category": "intelligence" },
     "external-source-to-strategy": { "displayName": "Source to Strategy Brief",         "category": "intelligence" },
     "trustworthy-sources":         { "displayName": "Evaluate Source Credibility",      "category": "intelligence" },
     "vibe-marketing-validation":   { "displayName": "Validate Product Idea",            "category": "intelligence" },
@@ -95,6 +96,10 @@
     "team-hiring-brief":           { "displayName": "Hiring Brief Builder",            "category": "ops" },
     "team-offer-packaging":        { "displayName": "Offer Packaging Sprint",          "category": "ops" },
     "team-financial-model":        { "displayName": "Business Financial Model",        "category": "ops" },
+    "team-before-the-meeting":     { "displayName": "Before the Meeting — Full Bundle", "category": "ops" },
+    "price-proof":                 { "displayName": "Price Proof — Check Your Rate",   "category": "ops" },
+    "proposal-proof":              { "displayName": "Proposal Proof — Review Before Sending", "category": "ops" },
+    "pitch-proof":                 { "displayName": "Pitch Proof — Test Your Pitch",   "category": "ops" },
 
     "_utilities": "── Utilities ───────────────────────────────────────────────────────",
     "telegram-notify":             { "displayName": "Send Telegram Notification",      "category": "utilities" },

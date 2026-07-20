@@ -91,6 +91,70 @@
       "path": ".claude/skills/clarity-copywriter/SKILL.md",
       "source": "project"
     },
+    {
+      "id": "team-frontend",
+      "name": "team-frontend",
+      "description": "Frontend Engineering Team Orchestrator — full pipeline: audit (code review + wire verification) → triage user gate → TDD gate (red test before fix) → dev-stack fix loop → architect + sr-frontend review → test integrity gate → final report with fixes, files touched, and next-run recommendations. Adapts to any project type.",
+      "category": "frontend",
+      "path": "plugin/skills/team-frontend/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "frontend-code-review",
+      "name": "frontend-code-review",
+      "description": "Senior frontend code review for any stack — React/Vue/Angular/Svelte/vanilla JS, TypeScript strict, UI wiring, dead code, state management, test coverage gaps. Adapts to detected framework.",
+      "category": "frontend",
+      "path": "plugin/skills/frontend-code-review/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "frontend-wire-verifier",
+      "name": "frontend-wire-verifier",
+      "description": "Verifies frontend-to-backend wiring across any communication layer — REST, GraphQL, WebSocket, IPC, Tauri, gRPC, SSE. Finds missing handlers, type mismatches, unguarded calls, auth gaps.",
+      "category": "frontend",
+      "path": "plugin/skills/frontend-wire-verifier/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "test-first-enforcer",
+      "name": "test-first-enforcer",
+      "description": "TDD gate for any language and test runner — forces a failing red test before any implementation code is written. Gates: understand → red → implement → full suite → refactor.",
+      "category": "frontend",
+      "path": "plugin/skills/test-first-enforcer/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "chaos-modeling",
+      "name": "chaos-modeling",
+      "description": "Chaos engineering for any project type — 8-domain failure scenarios (load, DB, external APIs, memory, network, filesystem, concurrency, security), real-time outcome logging, and a resilience hardening plan.",
+      "category": "code-quality",
+      "path": "plugin/skills/chaos-modeling/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "price-proof",
+      "name": "price-proof",
+      "description": "Price Proof — stress-test your price before you quote it. ANALYZE → PLAN → COUNTERCHECK → TEST → ACT on pricing decisions for any engagement or service.",
+      "category": "business-venture",
+      "path": "plugin/skills/price-proof/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "proposal-proof",
+      "name": "proposal-proof",
+      "description": "Proposal Proof — stress-test your proposal before you send it. ANALYZE → PLAN → COUNTERCHECK → TEST → ACT on proposal quality from the client's perspective.",
+      "category": "business-venture",
+      "path": "plugin/skills/proposal-proof/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "pitch-proof",
+      "name": "pitch-proof",
+      "description": "Pitch Proof — stress-test your pitch before the meeting. ANALYZE → PLAN → COUNTERCHECK → TEST → ACT on pitch readiness with champion and skeptic simulation.",
+      "category": "business-venture",
+      "path": "plugin/skills/pitch-proof/SKILL.md",
+      "source": "project"
+    }
   ],
 
   "team-orchestrators": [
@@ -327,6 +391,27 @@
       "workflow": ".claude/workflow-team-library/clarity-copy/manifest.md",
       "source": "project"
     }
+    ,
+    {
+      "id": "team-seo-geo-crawler",
+      "name": "team-seo-geo-crawler",
+      "description": "SEO/GEO Crawler Team Orchestrator — crawls any URL as Google + AI bots, runs Google SEO + GEO parallel analysis, then live keyword research. Outputs full audit report + keyword strategy with vocabulary alternatives for non-tech buyers.",
+      "category": "marketing",
+      "path": ".claude/skills/team-seo-geo-crawler/SKILL.md",
+      "team": ".claude/teams/seo-geo-crawler/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-before-the-meeting",
+      "name": "team-before-the-meeting",
+      "description": "Before the Meeting Team Orchestrator — sequential bundle: Price Proof → Proposal Proof → Pitch Proof → Synthesis. Produces a single meeting readiness brief with go/fix/hold verdict.",
+      "category": "business-venture",
+      "path": "plugin/skills/team-before-the-meeting/SKILL.md",
+      "team": ".claude/teams/before-the-meeting/config.json",
+      "workflow": null,
+      "source": "project"
+    }
   ],
 
   "teams": [
@@ -515,6 +600,23 @@
       "category": "marketing",
       "path": ".claude/teams/clarity-copy/config.json",
       "members": ["lead-clarity-copy", "pain-distiller", "clarity-writer", "copy-critic"]
+    }
+    ,
+    {
+      "id": "seo-geo-crawler",
+      "name": "seo-geo-crawler",
+      "description": "SEO/GEO Crawler team — bot crawler, Google SEO expert, GEO engineer, keyword researcher",
+      "category": "marketing",
+      "path": ".claude/teams/seo-geo-crawler/config.json",
+      "members": ["seo-crawler-lead", "seo-bot-crawler", "seo-google-expert", "seo-geo-engineer", "seo-keyword-researcher"]
+    },
+    {
+      "id": "before-the-meeting",
+      "name": "before-the-meeting",
+      "description": "Before the Meeting team — sequential price proof, proposal proof, pitch proof, and synthesis into a single Meeting Readiness Brief",
+      "category": "business-venture",
+      "path": ".claude/teams/before-the-meeting/config.json",
+      "members": ["btm-price-agent", "btm-proposal-agent", "btm-pitch-agent", "btm-synthesizer"]
     }
   ],
 
@@ -788,6 +890,10 @@
     "clarity-copy": [
       "team-clarity-copy", "lead-clarity-copy", "pain-distiller",
       "clarity-writer", "copy-critic"
+    ],
+    "before-the-meeting": [
+      "team-before-the-meeting", "btm-price-agent", "btm-proposal-agent",
+      "btm-pitch-agent", "btm-synthesizer"
     ]
   },
 
