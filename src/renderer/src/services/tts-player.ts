@@ -14,6 +14,7 @@ let currentSource: AudioBufferSourceNode | null = null
 export async function playWav(wavBuffer: ArrayBuffer, volume: number): Promise<void> {
   stopPlayback()
   const ctx = getAudioContext()
+  if (ctx.state === 'suspended') await ctx.resume()
   const audioBuffer = await ctx.decodeAudioData(wavBuffer.slice(0))
 
   const source = ctx.createBufferSource()
