@@ -1168,7 +1168,7 @@ function AppMain(): React.JSX.Element {
                       onDetachTerminal={handleDetachTerminal}
                       proxyActive={activeAgentId ? proxyAgents.has(activeAgentId) : false}
                       onTabChange={setActiveDetailTab}
-                      onReadResponse={stopActiveSpeech}
+                      onReadResponse={readFullResponse}
                     />
                     {activeDetailTab === 'terminal' && (
                       <InlineTaskInput

@@ -91,7 +91,7 @@ function TerminalToolbar({
           <button
             data-testid="toolbar-read-response"
             className="btn btn-xs btn-ghost"
-            title="Read response (Cmd+Shift+S)"
+            title="Read response (Cmd+Shift+I)"
             onClick={() => onReadResponse(agent.id)}
           >
             Read

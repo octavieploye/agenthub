@@ -224,6 +224,70 @@ describe('useAgentTts — onResponseReady', () => {
   })
 })
 
+describe('useAgentTts — readFullResponse stores text regardless of voice state', () => {
+  it('stores response text even when voiceMode is off — Cmd+Shift+I still works', async () => {
+    const agent = makeAgent({ voiceMode: 'off' })
+    const agents = new Map([['agent-1', agent]])
+    const { result } = renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    // Response arrives while voice is off — text must still be stored for later replay
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Important response that should be replayable.')
+    })
+    hub.tts.speak.mockClear()
+
+    // Now replay via Cmd+Shift+I — should work even though voice was off at time of response
+    await act(async () => {
+      result.current.readFullResponse('agent-1')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toContain('Important response that should be replayable.')
+  })
+
+  it('stores response text even when voiceEnabled is false globally', async () => {
+    mockViewState.voiceEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const { result } = renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Response while voice globally off.')
+    })
+    hub.tts.speak.mockClear()
+
+    // Replay should still work
+    await act(async () => {
+      result.current.readFullResponse('agent-1')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toContain('Response while voice globally off.')
+  })
+
+  it('stores text even when soundEnabled is false — manual replay is independent of sound toggle', async () => {
+    mockViewState.soundEnabled = false
+    const agent = makeAgent({ voiceMode: 'always_on' })
+    const agents = new Map([['agent-1', agent]])
+    const { result } = renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.responseReady('agent-1', 'Silent mode response.')
+    })
+    hub.tts.speak.mockClear()
+
+    await act(async () => {
+      result.current.readFullResponse('agent-1')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toContain('Silent mode response.')
+  })
+})
+
 describe('useAgentTts — approval announcement', () => {
   it('speaks approval announcement when agent enters awaiting_approval (always_on)', async () => {
     const agent = makeAgent({ voiceMode: 'always_on', name: 'Sam' })

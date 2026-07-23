@@ -40,19 +40,18 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
 
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
-      const { soundEnabled, voiceEnabled } = useViewStore.getState()
-      if (!soundEnabled) return
-
       const agent = agentsRef.current.get(agentId)
       if (!agent) return
 
-      if (agent.voiceMode === 'off' || !voiceEnabled) {
-        return
-      }
-
+      // Always store text for Cmd+Shift+I replay — independent of voice/sound toggles
       if (cleanText.trim()) {
         lastResponseText.current.set(agentId, cleanText)
       }
+
+      // Voice guards: skip TTS announcement if sound/voice is off
+      const { soundEnabled, voiceEnabled } = useViewStore.getState()
+      if (!soundEnabled) return
+      if (agent.voiceMode === 'off' || !voiceEnabled) return
 
       const announcement = `${agent.name} has responded.`
       const rawLastParagraph = agent.voiceMode === 'always_on' ? extractLastParagraph(cleanText) : null
