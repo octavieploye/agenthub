@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 
-const SETTLE_MS = 1000
+const SETTLE_MS = 100
 
 /**
  * Returns a "settled" status that only updates after the raw status
  * has remained stable for SETTLE_MS. Prevents glow flickering from
  * Claude CLI TUI redraws that cause rapid status changes.
+ *
+ * Reduced from 1000ms to 100ms to keep glow animations in sync with
+ * sound alerts (which fire immediately on triage events).
  */
 export function useSettledStatus(rawStatus: AgentLifecycleStatus): AgentLifecycleStatus {
   const [settled, setSettled] = useState(rawStatus)

@@ -233,6 +233,8 @@ function AppMain(): React.JSX.Element {
   // are now handled by the agentTriaged subscriber below.
   useEffect(() => {
     const pendingMissionComplete = new Map<string, ReturnType<typeof setTimeout>>()
+    // Delayed code_blue timers — suppressed if 'completed' arrives within 2s
+    const pendingCodeBlue = new Map<string, ReturnType<typeof setTimeout>>()
 
     const unsubStatus = window.agentHub.on.agentStatusChange((agentId, status, confidence) => {
       updateStatus(
@@ -329,6 +331,12 @@ function AppMain(): React.JSX.Element {
       if (layers.includes('sound')) {
         // Individual agent completion — always plays (mission_complete fires separately via agentExit)
         if (triageEvent.currentStatus === 'completed') {
+          // Cancel any pending code_blue for this agent — the agent recovered
+          const pendingCB = pendingCodeBlue.get(triageEvent.agentId)
+          if (pendingCB) {
+            clearTimeout(pendingCB)
+            pendingCodeBlue.delete(triageEvent.agentId)
+          }
           playAgentSound('agent_completed', soundDeps.current)
         }
 
@@ -339,10 +347,17 @@ function AppMain(): React.JSX.Element {
         }
       }
 
-      // code_blue: play for error and looping regardless of sound layer
-      // (neither adds requiresSoundAlert — handle explicitly like error)
+      // code_blue: delayed 2s for error/looping — cancelled if 'completed' arrives first.
+      // The 4s status debounce in agent-manager can emit a 'looping' triage event
+      // right before the exit handler emits 'completed', causing a false code-blue alert.
       if (triageEvent.currentStatus === 'error' || triageEvent.currentStatus === 'looping') {
-        playAgentSound('code_blue', soundDeps.current)
+        const existingCB = pendingCodeBlue.get(triageEvent.agentId)
+        if (existingCB) clearTimeout(existingCB)
+        const cbTimer = setTimeout(() => {
+          pendingCodeBlue.delete(triageEvent.agentId)
+          playAgentSound('code_blue', soundDeps.current)
+        }, 2000)
+        pendingCodeBlue.set(triageEvent.agentId, cbTimer)
       }
 
       // Layer 4: Voice TTS — critical events, gated by voiceEnabled
@@ -356,6 +371,10 @@ function AppMain(): React.JSX.Element {
         clearTimeout(timer)
       }
       pendingMissionComplete.clear()
+      for (const timer of pendingCodeBlue.values()) {
+        clearTimeout(timer)
+      }
+      pendingCodeBlue.clear()
       unsubStatus()
       unsubExit()
       unsubTriaged?.()

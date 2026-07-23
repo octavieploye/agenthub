@@ -44,6 +44,12 @@ function getOrCreateHowl(src: string, volume: number): Howl {
     return cached
   }
   const howl = new Howl({ src: [src], volume, preload: true })
+  howl.on('loaderror', (_id: number, err: unknown) => {
+    console.error(`[sound-alert] Failed to load ${src}:`, err)
+  })
+  howl.on('playerror', (_id: number, err: unknown) => {
+    console.error(`[sound-alert] Failed to play ${src}:`, err)
+  })
   howlCache.set(src, howl)
   return howl
 }
