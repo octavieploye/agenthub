@@ -24,7 +24,6 @@ function createDeps(
 const ALL_EVENTS: AgentSoundEvent[] = [
   'agent_spawned',
   'agent_completed',
-  'agent_locked',
   'code_blue',
   'mission_complete',
   'user_approval'
@@ -42,7 +41,7 @@ describe('Sound Alert Service', () => {
   // ── SOUND_MAP structure ──────────────────────────────────────────────────
 
   describe('SOUND_MAP', () => {
-    it('has entries for all 6 event types', () => {
+    it('has entries for all 5 event types', () => {
       for (const event of ALL_EVENTS) {
         expect(SOUND_MAP).toHaveProperty(event)
         expect(SOUND_MAP[event]).toHaveProperty('src')
@@ -57,10 +56,6 @@ describe('Sound Alert Service', () => {
         expect(SOUND_MAP[event].volume).toBeLessThanOrEqual(1.0)
       }
     })
-
-    it('agent_locked volume is greater than agent_completed volume', () => {
-      expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.agent_completed.volume)
-    })
   })
 
   // ── Volume hierarchy ─────────────────────────────────────────────────────
@@ -70,12 +65,11 @@ describe('Sound Alert Service', () => {
       expect(SOUND_MAP.code_blue.volume).toBe(1.0)
     })
 
-    it('volumes are strictly descending: code_blue > agent_locked > user_approval > mission_complete > agent_spawned = agent_completed', () => {
-      expect(SOUND_MAP.code_blue.volume).toBeGreaterThan(SOUND_MAP.agent_locked.volume)
-      expect(SOUND_MAP.agent_locked.volume).toBeGreaterThan(SOUND_MAP.user_approval.volume)
+    it('volumes are descending: code_blue > agent_completed > user_approval > mission_complete > agent_spawned', () => {
+      expect(SOUND_MAP.code_blue.volume).toBeGreaterThan(SOUND_MAP.agent_completed.volume)
+      expect(SOUND_MAP.agent_completed.volume).toBeGreaterThan(SOUND_MAP.user_approval.volume)
       expect(SOUND_MAP.user_approval.volume).toBeGreaterThan(SOUND_MAP.mission_complete.volume)
-      expect(SOUND_MAP.mission_complete.volume).toBeGreaterThan(SOUND_MAP.agent_completed.volume)
-      expect(SOUND_MAP.agent_spawned.volume).toBe(SOUND_MAP.agent_completed.volume)
+      expect(SOUND_MAP.mission_complete.volume).toBeGreaterThan(SOUND_MAP.agent_spawned.volume)
     })
   })
 
@@ -87,33 +81,23 @@ describe('Sound Alert Service', () => {
       expect(deps.playSound).toHaveBeenCalledWith('sounds/state-change.mp3', expect.any(Number))
     })
 
-    it('plays bridge-beep.wav for agent_completed', () => {
+    it('plays alert-yellow.wav for agent_completed', () => {
       playAgentSound('agent_completed', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith('sounds/bridge-beep.wav', expect.any(Number))
-    })
-
-    it('plays alert-yellow.wav for agent_locked', () => {
-      playAgentSound('agent_locked', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith('sounds/alert-yellow.wav', expect.any(Number))
     })
 
     it('plays code-blue.mp3 for code_blue', () => {
       playAgentSound('code_blue', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith('sounds/code-blue.mp3', expect.any(Number))
     })
 
     it('plays mission-complete.wav for mission_complete', () => {
       playAgentSound('mission_complete', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith('sounds/mission-complete.wav', expect.any(Number))
     })
 
     it('plays user-approval.mp3 for user_approval', () => {
       playAgentSound('user_approval', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith('sounds/user-approval.mp3', expect.any(Number))
     })
   })
@@ -126,33 +110,23 @@ describe('Sound Alert Service', () => {
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.5)
     })
 
-    it('passes volume 0.5 for agent_completed', () => {
+    it('passes volume 0.8 for agent_completed', () => {
       playAgentSound('agent_completed', deps)
-
-      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.5)
-    })
-
-    it('passes volume 0.8 for agent_locked', () => {
-      playAgentSound('agent_locked', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.8)
     })
 
     it('passes volume 1.0 for code_blue', () => {
       playAgentSound('code_blue', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 1.0)
     })
 
     it('passes volume 0.6 for mission_complete', () => {
       playAgentSound('mission_complete', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.6)
     })
 
     it('passes volume 0.7 for user_approval', () => {
       playAgentSound('user_approval', deps)
-
       expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.7)
     })
   })
@@ -162,7 +136,6 @@ describe('Sound Alert Service', () => {
   describe('playAgentSound return value', () => {
     it('returns true when sound is played successfully', () => {
       const result = playAgentSound('agent_completed', deps)
-
       expect(result).toBe(true)
     })
 
@@ -175,9 +148,7 @@ describe('Sound Alert Service', () => {
 
     it('returns false when sound is disabled', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
-
       const result = playAgentSound('agent_completed', deps)
-
       expect(result).toBe(false)
     })
   })
@@ -187,27 +158,21 @@ describe('Sound Alert Service', () => {
   describe('sound disabled guard', () => {
     it('does NOT call playSound when isSoundEnabled returns false', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
-
       playAgentSound('agent_completed', deps)
-
       expect(deps.playSound).not.toHaveBeenCalled()
     })
 
     it('does NOT play any event sound when globally disabled', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
-
       for (const event of ALL_EVENTS) {
         playAgentSound(event, deps)
       }
-
       expect(deps.playSound).not.toHaveBeenCalled()
     })
 
     it('checks isSoundEnabled before attempting to play', () => {
       deps = createDeps({ isSoundEnabled: vi.fn().mockReturnValue(false) })
-
       playAgentSound('code_blue', deps)
-
       expect(deps.isSoundEnabled).toHaveBeenCalled()
       expect(deps.playSound).not.toHaveBeenCalled()
     })
@@ -220,7 +185,7 @@ describe('Sound Alert Service', () => {
       expect(statusToSoundEvent('awaiting_approval')).toBe('user_approval')
     })
 
-    it('returns null for locked status (excluded — fires too often during tool calls)', () => {
+    it('returns null for locked status (sound handled by color/animation only)', () => {
       expect(statusToSoundEvent('locked')).toBeNull()
     })
 
@@ -274,10 +239,10 @@ describe('Sound Alert Service', () => {
       expect(getMasterVolume).toHaveBeenCalled()
     })
 
-    it('scales playback volume by master volume (0.5 master × 0.5 base = 0.25)', () => {
+    it('scales playback volume by master volume (0.5 master × 0.8 base = 0.4)', () => {
       deps = createDeps({ getMasterVolume: vi.fn().mockReturnValue(0.5) })
       playAgentSound('agent_completed', deps)
-      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.25)
+      expect(deps.playSound).toHaveBeenCalledWith(expect.any(String), 0.4)
     })
 
     it('scales code_blue (1.0 base) by master volume 0.5 to give 0.5', () => {
@@ -304,14 +269,12 @@ describe('Sound Alert Service', () => {
 
   describe('playSound call count', () => {
     it('calls playSound exactly once per invocation', () => {
-      playAgentSound('agent_locked', deps)
-
+      playAgentSound('agent_completed', deps)
       expect(deps.playSound).toHaveBeenCalledOnce()
     })
 
     it('calls isSoundEnabled exactly once per invocation', () => {
       playAgentSound('agent_completed', deps)
-
       expect(deps.isSoundEnabled).toHaveBeenCalledOnce()
     })
   })

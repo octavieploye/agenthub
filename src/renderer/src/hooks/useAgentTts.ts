@@ -4,11 +4,6 @@ import { cancelSpeech, extractLastParagraph, isReadableParagraph, speak } from '
 import { useViewStore } from '../stores/view-store'
 import { TtsQueue } from '../services/tts-queue'
 
-export interface AgentTtsOptions {
-  /** Called when voiceMode is 'off' and an agent responds — plays a notification sound instead of speaking. */
-  onNotificationSound?: () => void
-}
-
 export interface AgentTtsActions {
   /** Cmd+Shift+S — stops any in-progress TTS. */
   stopActiveSpeech: () => void
@@ -36,11 +31,9 @@ const ttsQueue = new TtsQueue(invokeTts)
  * Cmd+Shift+I → reads the full stored response for the focused agent.
  * Cmd+Shift+S → cancels any in-progress speech.
  */
-export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsOptions): AgentTtsActions {
+export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
   const agentsRef = useRef(agents)
   agentsRef.current = agents
-  const optionsRef = useRef(options)
-  optionsRef.current = options
 
   // Stores the full clean response text per agent for Cmd+Shift+I replay
   const lastResponseText = useRef(new Map<string, string>())
@@ -54,7 +47,6 @@ export function useAgentTts(agents: Map<string, AgentState>, options?: AgentTtsO
       if (!agent) return
 
       if (agent.voiceMode === 'off' || !voiceEnabled) {
-        optionsRef.current?.onNotificationSound?.()
         return
       }
 

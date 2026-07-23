@@ -38,7 +38,7 @@ import type { HealthAnomaly } from '@shared/types/health.types'
 import type { RecoveryInfo } from '@shared/types/recovery.types'
 import type { GuardrailConfig } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
-import type { AgentLifecycleStatus, AgentState } from '@shared/types/agent.types'
+import type { AgentState } from '@shared/types/agent.types'
 import { playAgentSound, createSoundAlertDeps, statusToSoundEvent } from './services/sound-alert'
 import { speakTriageEvent } from './services/voice-tts'
 import type { VoiceTtsDeps } from './services/voice-tts'
@@ -200,9 +200,7 @@ function AppMain(): React.JSX.Element {
 
   // Per-agent TTS — reads response text and speaks on busy→completed
   // When voice is off, plays a notification sound instead
-  const { stopActiveSpeech, readFullResponse } = useAgentTts(agents, {
-    onNotificationSound: () => playAgentSound('agent_locked', soundDeps.current)
-  })
+  const { stopActiveSpeech, readFullResponse } = useAgentTts(agents)
 
   const handleToggleVoiceMode = useCallback(
     async (agentId: string, mode: import('@shared/types/agent.types').VoiceMode) => {
@@ -243,40 +241,14 @@ function AppMain(): React.JSX.Element {
         confidence as Parameters<typeof updateStatus>[2]
       )
 
-      const lifecycleStatus = status as AgentLifecycleStatus
-
       // Track known agents — play spawn sound on first appearance
       if (!knownAgentIds.current.has(agentId)) {
         knownAgentIds.current.add(agentId)
         playAgentSound('agent_spawned', soundDeps.current)
       }
-
-      // mission_complete: all agents done AND more than 1 agent — needs cross-agent context
-      if (lifecycleStatus === 'completed') {
-        const timer = setTimeout(() => {
-          pendingMissionComplete.delete(agentId)
-          const currentAgents = useAgentStore.getState().agents
-          if (currentAgents.size > 1) {
-            const allDone = Array.from(currentAgents.values()).every(
-              (a) => a.status === 'completed' || a.status === 'interrupted'
-            )
-            if (allDone) {
-              playAgentSound('mission_complete', soundDeps.current)
-            }
-          }
-        }, 1800)
-        pendingMissionComplete.set(agentId, timer)
-      }
     })
 
     const unsubExit = window.agentHub.on.agentExit((agentId, exitCode) => {
-      // Cancel any pending mission_complete check for this agent
-      const pending = pendingMissionComplete.get(agentId)
-      if (pending !== undefined) {
-        clearTimeout(pending)
-        pendingMissionComplete.delete(agentId)
-      }
-
       // Terminal persists in terminal-manager — no cleanup needed on exit
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
@@ -291,6 +263,21 @@ function AppMain(): React.JSX.Element {
       } else {
         updateStatus(agentId, 'completed', 'confirmed')
       }
+
+      // mission_complete: check after exit (the definitive "agent done" event)
+      const timer = setTimeout(() => {
+        pendingMissionComplete.delete(agentId)
+        const currentAgents = useAgentStore.getState().agents
+        if (currentAgents.size > 1) {
+          const allDone = Array.from(currentAgents.values()).every(
+            (a) => a.status === 'completed' || a.status === 'interrupted' || a.status === 'error'
+          )
+          if (allDone) {
+            playAgentSound('mission_complete', soundDeps.current)
+          }
+        }
+      }, 500)
+      pendingMissionComplete.set(agentId, timer)
     })
 
     // ── Unified notification routing (agentTriaged) ───────────────────────
@@ -340,15 +327,12 @@ function AppMain(): React.JSX.Element {
 
       // Layer 3: Sound
       if (layers.includes('sound')) {
-        // Handle completed: suppress in multi-agent (mission_complete plays instead)
+        // Individual agent completion — always plays (mission_complete fires separately via agentExit)
         if (triageEvent.currentStatus === 'completed') {
-          const agentCount = useAgentStore.getState().agents.size
-          if (agentCount <= 1) {
-            playAgentSound('agent_completed', soundDeps.current)
-          }
+          playAgentSound('agent_completed', soundDeps.current)
         }
 
-        // Handle awaiting_approval only (locked is excluded — fires too often)
+        // awaiting_approval → user_approval sound
         const soundEvent = statusToSoundEvent(triageEvent.currentStatus)
         if (soundEvent) {
           playAgentSound(soundEvent, soundDeps.current)
