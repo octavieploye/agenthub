@@ -37,6 +37,8 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
 
   // Stores the full clean response text per agent for Cmd+Shift+I replay
   const lastResponseText = useRef(new Map<string, string>())
+  // Tracks agents with pending approval announcements to prevent duplicates
+  const pendingApproval = useRef(new Set<string>())
 
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
@@ -70,13 +72,23 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
       if (!agent) return
       if (agent.voiceMode === 'off' || !voiceEnabled) return
 
+      // Deduplicate: skip if this agent already has a pending approval announcement
+      if (pendingApproval.current.has(agentId)) return
+      pendingApproval.current.add(agentId)
+
       const announcement = `${agent.name} is waiting for your approval.`
       ttsQueue.enqueue(announcement)
+    })
+
+    // Clear approval dedup when agent leaves awaiting_approval (responseReady fires)
+    const unsubResponseClear = window.agentHub.tts.onResponseReady((agentId) => {
+      pendingApproval.current.delete(agentId)
     })
 
     return () => {
       unsubResponseReady()
       unsubApproval()
+      unsubResponseClear()
     }
   }, [])
 

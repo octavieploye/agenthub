@@ -306,6 +306,36 @@ describe('filterTtsResponse', () => {
     expect(result).toBe('Hello! I would be happy to help you today.')
   })
 
+  // ── Claude CLI search/activity lines (Bug 1 + 3) ─────────────────────
+
+  it('filters out "Searching for N patterns, reading N files…" status line', () => {
+    const input = 'Searching for 4 patterns, reading 5 files… (ctrl+o to expand)\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('filters out "Search(pattern: ...)" tool line', () => {
+    const input = 'Search(pattern: "components/workflow/**/*.{ts,tsx}", path: "~/workspace")\nHere is my answer.'
+    expect(filterTtsResponse(input)).toBe('Here is my answer.')
+  })
+
+  it('filters out "Reading N files…" status line', () => {
+    expect(filterTtsResponse('Reading 5 files…')).toBe('')
+  })
+
+  it('filters out lines containing "(ctrl+o to expand)"', () => {
+    expect(filterTtsResponse('some status (ctrl+o to expand)')).toBe('')
+  })
+
+  it('filters out thinking text mixed with terminal artifacts mid-line', () => {
+    const input = 'n  n                                   thinking with high effort'
+    expect(filterTtsResponse(input)).toBe('')
+  })
+
+  it('filters out "thinking with extended" anywhere in a line', () => {
+    const input = '  R  n          thinking with extended thinking'
+    expect(filterTtsResponse(input)).toBe('')
+  })
+
   it('handles spinner overwrite followed by multi-line response via CUP', () => {
     // stripAnsi imported at top of file
     const rawPty = [

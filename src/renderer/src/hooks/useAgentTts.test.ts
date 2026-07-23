@@ -317,6 +317,39 @@ describe('useAgentTts — approval announcement', () => {
     expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
   })
 
+  it('deduplicates rapid approval events for the same agent', async () => {
+    const agent = makeAgent({ voiceMode: 'always_on', name: 'Sam' })
+    const agents = new Map([['agent-1', agent]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    // Same agent fires approval 3 times rapidly (3 tool calls needing approval)
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+      hub._emit.approvalNeeded('agent-1')
+      hub._emit.approvalNeeded('agent-1')
+    })
+
+    // Should only announce once, not 3 times
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
+    expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
+  })
+
+  it('announces different agents separately even in rapid succession', async () => {
+    const agent1 = makeAgent({ id: 'agent-1', voiceMode: 'always_on', name: 'Sam' })
+    const agent2 = makeAgent({ id: 'agent-2', voiceMode: 'always_on', name: 'BuildBot' })
+    const agents = new Map([['agent-1', agent1], ['agent-2', agent2]])
+    renderHook(() => useAgentTts(agents))
+    const hub = (window as unknown as { agentHub: ReturnType<typeof makeAgentHub> }).agentHub
+
+    await act(async () => {
+      hub._emit.approvalNeeded('agent-1')
+      hub._emit.approvalNeeded('agent-2')
+    })
+
+    expect(hub.tts.speak).toHaveBeenCalledTimes(2)
+  })
+
   it('does NOT speak approval when voiceMode is off', async () => {
     const agent = makeAgent({ voiceMode: 'off' })
     const agents = new Map([['agent-1', agent]])

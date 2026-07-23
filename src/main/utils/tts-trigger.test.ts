@@ -266,6 +266,17 @@ describe('TtsTrigger — onBufferReset callback', () => {
     expect(onBufferReset).toHaveBeenCalledTimes(2)
   })
 
+  it('calls onBufferReset on awaiting_approval → busy transition', () => {
+    const emit = vi.fn()
+    const onBufferReset = vi.fn()
+    const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, onBufferReset })
+
+    trigger.onStatusChange('busy', 'awaiting_approval', '')
+    trigger.onStatusChange('awaiting_approval', 'busy', '')
+
+    expect(onBufferReset).toHaveBeenCalledOnce()
+  })
+
   it('does NOT call onBufferReset on busy → locked (that is the emit path)', () => {
     const emit = vi.fn()
     const onBufferReset = vi.fn()

@@ -11,7 +11,7 @@ const BRAILLE_SPINNER_RE = /^[\u2800-\u28FF\s]+$/
 // Spinner chars alone on a line, OR spinner char + space + description text
 // e.g. "✻ Implementing free-text categories…" (Claude CLI tool-call progress lines)
 const DECORATIVE_SPINNER_RE = /^[✻✳✢✺✶✽·\s]+$|^[✻✳✢✺✶✽·]\s+\S/
-const TOOL_CALL_START_RE = /^[●○⧉]|⧉\s/
+const TOOL_CALL_START_RE = /^[●○⧉]|⧉\s|^Search\(/
 const TOOL_CONTINUATION_RE = /^[⎿├└]/
 const TOOL_STATUS_RE = /^[✓✗⏺⏵]/
 const BOX_DRAWING_RE = /^[╭╮╰╯│─]/
@@ -36,7 +36,10 @@ const BARE_PROMPT_RE = /^[\s\-─═~]*[\w\/.@:-]*\s*[‹«\[({].*[›»\])}]\s*
 // Matches any line whose first word is a Claude CLI thinking-mode indicator,
 // including verbose forms: "Thinking…", "Thinking with high effort", "Thinking about…"
 // Claude CLI uses many whimsical spinner words — match known ones + generic "Word…" pattern
-const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking|Reticulating|Pondering|Conjuring|Synthesizing|Analyzing|Processing|Generating|Formulating|Composing|Evaluating|Computing|Rendering|Compiling)\b/i
+const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystallizing|Deciphering|Imagining|Inferring|Nesting|Spelunking|Reticulating|Pondering|Conjuring|Synthesizing|Analyzing|Processing|Generating|Formulating|Composing|Evaluating|Computing|Rendering|Compiling|Searching|Reading)\b/i
+// Mid-line thinking detection — catches "thinking with high effort" even when
+// terminal artifacts prepend characters to the line (e.g. "n  n  thinking with high effort")
+const THINKING_MIDLINE_RE = /thinking with (high|extended|low|standard)\b/i
 // Claude CLI keyboard shortcut footer lines rendered after each response.
 // Examples (after ANSI stripping):
 //   "Esc to interrupt  Ctrl+T to hide task  agent-manager.ts"
@@ -46,6 +49,8 @@ const THINKING_LINE_RE = /^(Thinking|Bootstrapping|Brewing|Caramelizing|Crystall
 const KEYBOARD_HINT_RE = /^[·•]?\s*(esc|ctrl\+\w+|shift\+\w+|tab)\s+to\s+/i
 // Claude CLI permission/bypass prompt lines
 const PERMISSION_PROMPT_RE = /bypass permissions|shift\+tab to cycle/i
+// Claude CLI interactive hints — "(ctrl+o to expand)", "(ctrl+r to retry)", etc.
+const CLI_HINT_RE = /\(ctrl\+\w+\s+to\s+\w+\)/i
 // Safety net for single-word spinner lines ending with ellipsis (e.g. "Reticulating…")
 const SINGLE_WORD_ELLIPSIS_RE = /^[A-Z]\w+…$/
 // Safety net: any line that still begins with an escape character after stripAnsi
@@ -63,6 +68,7 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   if (RESIDUAL_ESCAPE_RE.test(trimmed)) return 'banner'
   if (BRAILLE_SPINNER_RE.test(trimmed) || DECORATIVE_SPINNER_RE.test(trimmed)) return 'spinner'
   if (THINKING_LINE_RE.test(trimmed)) return 'spinner'
+  if (THINKING_MIDLINE_RE.test(trimmed)) return 'spinner'
   if (TOOL_CALL_START_RE.test(trimmed)) return 'tool_call'
   if (TOOL_CONTINUATION_RE.test(trimmed)) return 'tool_call'
   if (TOOL_STATUS_RE.test(trimmed)) return 'tool_call'
@@ -73,6 +79,7 @@ function classifyLine(line: string, prevKind: LineKind, inFencedBlock: boolean):
   if (PROMPT_CHROME_RE.test(line)) return 'prompt'
   if (APPROVAL_PROMPT_RE.test(trimmed)) return 'prompt'
   if (PERMISSION_PROMPT_RE.test(trimmed)) return 'prompt'
+  if (CLI_HINT_RE.test(trimmed)) return 'prompt'
   if (SHELL_COMMAND_RE.test(trimmed)) return 'prompt'
   if (OH_MY_ZSH_RE.test(trimmed)) return 'prompt'
   if (COMMAND_ANYWHERE_RE.test(trimmed)) return 'prompt'
