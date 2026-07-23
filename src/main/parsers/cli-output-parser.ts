@@ -72,7 +72,7 @@ export class ClaudeCliOutputParser implements CliOutputParser {
   private buffer = ''
   private readonly maxBufferSize = 4096
   private statusTransitions: { status: string; timestamp: number }[] = []
-  private readonly loopingThreshold = 8          // locked transitions needed to trigger looping
+  private readonly loopingThreshold = 25         // locked transitions needed to trigger looping
   private readonly loopingWindowMs = 30_000     // 30 second window
   private readonly createdAt: number
   private readonly startupGraceMs: number

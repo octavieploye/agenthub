@@ -47,12 +47,10 @@ export class TtsTrigger {
         clearTimeout(this.timer)
         this.timer = null
       }
-      // Reset buffer on any →busy transition (locked, awaiting_approval, etc.)
-      // so stale content from previous cycles doesn't leak into the next response.
-      if (prevStatus === 'locked' || prevStatus === 'awaiting_approval') {
-        if (prevStatus === 'locked') this.primed = true
-        this.onBufferReset?.()
-      }
+      // Reset buffer on ANY →busy transition so user prompt echo and stale
+      // content from previous cycles don't leak into the next response.
+      if (prevStatus === 'locked') this.primed = true
+      this.onBufferReset?.()
       return
     }
 

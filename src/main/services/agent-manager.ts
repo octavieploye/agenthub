@@ -759,6 +759,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         current.cleanTextBuffer = ''
         return
       }
+      // Guard: suppress gibberish / terminal fragments — require at least 3 real words
+      const wordCount = text.trim().split(/\s+/).filter((w) => w.length > 0).length
+      if (wordCount < 3) {
+        log.debug('[TTS] suppressed RESPONSE_READY — insufficient prose', { agentId: agentState.id, wordCount })
+        current.cleanTextBuffer = ''
+        return
+      }
       current.lastFilteredProse = text
       current.cleanTextBuffer = ''
       log.info('[TTS] emitting RESPONSE_READY', {
@@ -988,7 +995,17 @@ export function sendInput(agentId: string, data: string, opts?: { isSystemAction
     managed.ptyProcess.write(text)
     setTimeout(() => {
       const m = agents.get(agentId)
-      if (m) m.ptyProcess.write('\r')
+      if (m) {
+        m.ptyProcess.write('\r')
+        // Delayed reset: clear any prompt echo that accumulated after the PTY write
+        // but before the agent transitions to busy. Without this, the echo leaks
+        // into the TTS buffer because the busy transition (which normally resets the
+        // buffer) hasn't been detected yet.
+        setTimeout(() => {
+          const m2 = agents.get(agentId)
+          if (m2) m2.cleanTextBuffer = ''
+        }, 100)
+      }
     }, 50)
   } else {
     managed.ptyProcess.write(data)

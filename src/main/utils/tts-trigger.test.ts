@@ -253,17 +253,19 @@ describe('TtsTrigger — onBufferReset callback', () => {
     expect(emit).not.toHaveBeenCalled()
   })
 
-  it('calls onBufferReset on each locked → busy, not on other transitions', () => {
+  it('calls onBufferReset on every →busy transition (not just locked→busy)', () => {
     const emit = vi.fn()
     const onBufferReset = vi.fn()
     const trigger = new TtsTrigger({ debounceMs: 300, onEmit: emit, onBufferReset })
 
     trigger.onStatusChange('busy', 'locked', 'response')
-    trigger.onStatusChange('locked', 'busy', '')
+    trigger.onStatusChange('locked', 'busy', '')        // locked→busy
     trigger.onStatusChange('busy', 'locked', 'response 2')
-    trigger.onStatusChange('locked', 'busy', '')
+    trigger.onStatusChange('locked', 'busy', '')        // locked→busy
+    trigger.onStatusChange('busy', 'completed', '')
+    trigger.onStatusChange('completed', 'busy', '')     // completed→busy
 
-    expect(onBufferReset).toHaveBeenCalledTimes(2)
+    expect(onBufferReset).toHaveBeenCalledTimes(3)
   })
 
   it('calls onBufferReset on awaiting_approval → busy transition', () => {

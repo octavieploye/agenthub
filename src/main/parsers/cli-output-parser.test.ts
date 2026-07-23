@@ -254,9 +254,9 @@ describe('ClaudeCliOutputParser', () => {
       noGraceParser = new ClaudeCliOutputParser({ startupGraceMs: 0 })
     })
 
-    it('detects looping when locked transitions exceed threshold (8) in 30s', () => {
+    it('detects looping when locked transitions exceed threshold (25) in 30s', () => {
       // Simulate rapid busy->locked oscillations
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 24; i++) {
         noGraceParser.resetBuffer()
         noGraceParser.parse('\u28CB Processing...')
         noGraceParser.resetBuffer()
@@ -269,8 +269,8 @@ describe('ClaudeCliOutputParser', () => {
       expect(result).toEqual({ status: 'looping', confidence: 'inferred' })
     })
 
-    it('does not detect looping for fewer than 8 locked transitions', () => {
-      for (let i = 0; i < 3; i++) {
+    it('does not detect looping for normal tool-call rates (15 in 30s)', () => {
+      for (let i = 0; i < 14; i++) {
         noGraceParser.resetBuffer()
         noGraceParser.parse('\u28CB Processing...')
         noGraceParser.resetBuffer()
@@ -285,7 +285,7 @@ describe('ClaudeCliOutputParser', () => {
 
     it('suppresses looping during startup grace period', () => {
       // Default parser has 45s grace — looping should not trigger
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 26; i++) {
         parser.resetBuffer()
         parser.parse('\u28CB Processing...')
         parser.resetBuffer()
