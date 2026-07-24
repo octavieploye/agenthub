@@ -78,7 +78,7 @@ afterEach(() => {
 })
 
 describe('useAgentTts — onResponseReady', () => {
-  it('speaks announcement + last paragraph on responseReady (always_on)', async () => {
+  it('speaks announcement only on responseReady (always_on) — never reads content', async () => {
     const agent = makeAgent({ voiceMode: 'always_on' })
     const agents = new Map([['agent-1', agent]])
     renderHook(() => useAgentTts(agents))
@@ -90,9 +90,8 @@ describe('useAgentTts — onResponseReady', () => {
       hub._emit.responseReady('agent-1', text)
     })
 
-    expect(hub.tts.speak).toHaveBeenCalledTimes(2)
+    expect(hub.tts.speak).toHaveBeenCalledTimes(1)
     expect(hub.tts.speak.mock.calls[0][0].text).toBe('Sam has responded.')
-    expect(hub.tts.speak.mock.calls[1][0].text).toBe('Final response paragraph here.')
   })
 
   it('speaks only announcement on responseReady (speak_up)', async () => {
@@ -317,7 +316,7 @@ describe('useAgentTts — approval announcement', () => {
     expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
   })
 
-  it('deduplicates rapid approval events for the same agent', async () => {
+  it('deduplicates rapid approval events via 30s cooldown', async () => {
     const agent = makeAgent({ voiceMode: 'always_on', name: 'Sam' })
     const agents = new Map([['agent-1', agent]])
     renderHook(() => useAgentTts(agents))
@@ -330,7 +329,7 @@ describe('useAgentTts — approval announcement', () => {
       hub._emit.approvalNeeded('agent-1')
     })
 
-    // Should only announce once, not 3 times
+    // Should only announce once — cooldown blocks re-announcement within 30s
     expect(hub.tts.speak).toHaveBeenCalledTimes(1)
     expect(hub.tts.speak.mock.calls[0][0].text).toBe("Sam is waiting for your approval.")
   })
