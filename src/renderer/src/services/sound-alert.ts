@@ -19,6 +19,7 @@ export const SOUND_MAP: Record<AgentSoundEvent, { src: string; volume: number }>
 export function statusToSoundEvent(status: AgentLifecycleStatus): AgentSoundEvent | null {
   const map: Partial<Record<AgentLifecycleStatus, AgentSoundEvent>> = {
     awaiting_approval: 'user_approval',
+    locked: 'user_approval',
   }
   return map[status] ?? null
 }

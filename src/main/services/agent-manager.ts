@@ -157,7 +157,7 @@ function getNotificationConfig(): NotificationRouterConfig {
   return {
     desktopEnabled: true,
     soundEnabled: true,
-    voiceEnabled: false,
+    voiceEnabled: true,
     telegramEnabled,
   }
 }

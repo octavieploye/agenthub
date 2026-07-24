@@ -20,7 +20,7 @@ const LAYER_RULES: {
 }[] = [
   { layer: 'toast', minLevel: 'low', configKey: null },
   { layer: 'desktop', minLevel: 'medium', configKey: 'desktopEnabled' },
-  { layer: 'voice', minLevel: 'critical', configKey: 'voiceEnabled' },
+  { layer: 'voice', minLevel: 'medium', configKey: 'voiceEnabled' },
   { layer: 'telegram', minLevel: 'medium', configKey: 'telegramEnabled' }
 ]
 
