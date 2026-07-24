@@ -181,25 +181,27 @@ describe('Notification Router', () => {
     })
   })
 
-  // ─── Layer 4 (voice) — critical only when enabled ────────────────────────
+  // ─── Layer 4 (voice) — medium+ when enabled ─────────────────────────────
 
-  describe('Layer 4 (voice) — critical only when enabled', () => {
+  describe('Layer 4 (voice) — medium+ when enabled', () => {
     it('does NOT include voice for low triage level', () => {
       const event = makeTriageEvent({ triageLevel: 'low' })
       const result: RoutingResult = routeNotification(event, allEnabled())
       expect(result.layers).not.toContain('voice')
     })
 
-    it('does NOT include voice for medium triage level', () => {
+    it('includes voice for medium triage level when enabled', () => {
       const event = makeTriageEvent({ triageLevel: 'medium' })
-      const result: RoutingResult = routeNotification(event, allEnabled())
-      expect(result.layers).not.toContain('voice')
+      const config: NotificationRouterConfig = { ...allDisabled(), voiceEnabled: true }
+      const result: RoutingResult = routeNotification(event, config)
+      expect(result.layers).toContain('voice')
     })
 
-    it('does NOT include voice for high triage level', () => {
+    it('includes voice for high triage level when enabled', () => {
       const event = makeTriageEvent({ triageLevel: 'high' })
-      const result: RoutingResult = routeNotification(event, allEnabled())
-      expect(result.layers).not.toContain('voice')
+      const config: NotificationRouterConfig = { ...allDisabled(), voiceEnabled: true }
+      const result: RoutingResult = routeNotification(event, config)
+      expect(result.layers).toContain('voice')
     })
 
     it('includes voice for critical triage level when enabled', () => {
@@ -207,6 +209,13 @@ describe('Notification Router', () => {
       const config: NotificationRouterConfig = { ...allDisabled(), voiceEnabled: true }
       const result: RoutingResult = routeNotification(event, config)
       expect(result.layers).toContain('voice')
+    })
+
+    it('does NOT include voice for medium when voiceEnabled is false', () => {
+      const event = makeTriageEvent({ triageLevel: 'medium' })
+      const config: NotificationRouterConfig = { ...allEnabled(), voiceEnabled: false }
+      const result: RoutingResult = routeNotification(event, config)
+      expect(result.layers).not.toContain('voice')
     })
 
     it('does NOT include voice for critical when voiceEnabled is false', () => {

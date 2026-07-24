@@ -185,8 +185,8 @@ describe('Sound Alert Service', () => {
       expect(statusToSoundEvent('awaiting_approval')).toBe('user_approval')
     })
 
-    it('returns null for locked status (sound handled by color/animation only)', () => {
-      expect(statusToSoundEvent('locked')).toBeNull()
+    it('returns user_approval for locked status (user input needed)', () => {
+      expect(statusToSoundEvent('locked')).toBe('user_approval')
     })
 
     it('returns null for completed status (handled explicitly in App.tsx)', () => {
@@ -221,8 +221,8 @@ describe('Sound Alert Service', () => {
       expect(statusToSoundEvent('tray_running')).toBeNull()
     })
 
-    it('only awaiting_approval returns a non-null sound event', () => {
-      const mappedStatuses: AgentLifecycleStatus[] = ['awaiting_approval']
+    it('awaiting_approval and locked both return a non-null sound event', () => {
+      const mappedStatuses: AgentLifecycleStatus[] = ['awaiting_approval', 'locked']
       for (const status of mappedStatuses) {
         expect(statusToSoundEvent(status)).not.toBeNull()
       }
