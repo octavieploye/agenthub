@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
-import { cancelSpeech, extractLastParagraph, isReadableParagraph, speak } from '../services/voice-speaker'
+import { cancelSpeech, speak } from '../services/voice-speaker'
 import { useViewStore } from '../stores/view-store'
 import { TtsQueue } from '../services/tts-queue'
 
@@ -25,8 +25,8 @@ const ttsQueue = new TtsQueue(invokeTts)
  *
  * The main process accumulates ANSI-stripped PTY text and emits
  * TTS.RESPONSE_READY exactly once per response (on locked/completed).
- * This hook listens for that event, speaks the announcement, and in
- * always_on mode speaks the last paragraph of the clean response text.
+ * This hook listens for that event and speaks a short status announcement
+ * only — it never reads actual agent output aloud.
  *
  * Cmd+Shift+I → reads the full stored response for the focused agent.
  * Cmd+Shift+S → cancels any in-progress speech.
@@ -37,8 +37,8 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
 
   // Stores the full clean response text per agent for Cmd+Shift+I replay
   const lastResponseText = useRef(new Map<string, string>())
-  // Tracks agents with pending approval announcements to prevent duplicates
-  const pendingApproval = useRef(new Set<string>())
+  // Cooldown: skip re-announcing approval for the same agent within 30 seconds
+  const approvalCooldown = useRef(new Map<string, number>())
 
   useEffect(() => {
     const unsubResponseReady = window.agentHub.tts.onResponseReady(async (agentId, cleanText) => {
@@ -55,13 +55,7 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
       if (!soundEnabled) return
       if (agent.voiceMode === 'off' || !voiceEnabled) return
 
-      const announcement = `${agent.name} has responded.`
-      const rawLastParagraph = agent.voiceMode === 'always_on' ? extractLastParagraph(cleanText) : null
-      // minWords=4: permits real 4-word spoken responses while blocking 1-3 word UI chrome
-      const lastParagraph = rawLastParagraph && isReadableParagraph(rawLastParagraph, 4) ? rawLastParagraph : null
-
-      ttsQueue.enqueue(announcement)
-      if (lastParagraph) ttsQueue.enqueue(lastParagraph)
+      ttsQueue.enqueue(`${agent.name} has responded.`)
     })
 
     const unsubApproval = window.agentHub.tts.onApprovalNeeded((agentId) => {
@@ -72,23 +66,19 @@ export function useAgentTts(agents: Map<string, AgentState>): AgentTtsActions {
       if (!agent) return
       if (agent.voiceMode === 'off' || !voiceEnabled) return
 
-      // Deduplicate: skip if this agent already has a pending approval announcement
-      if (pendingApproval.current.has(agentId)) return
-      pendingApproval.current.add(agentId)
+      // Deduplicate: skip if this agent was announced within the last 30 seconds
+      const APPROVAL_COOLDOWN_MS = 30_000
+      const lastAnnounced = approvalCooldown.current.get(agentId) ?? 0
+      if (Date.now() - lastAnnounced < APPROVAL_COOLDOWN_MS) return
+      approvalCooldown.current.set(agentId, Date.now())
 
       const announcement = `${agent.name} is waiting for your approval.`
       ttsQueue.enqueue(announcement)
     })
 
-    // Clear approval dedup when agent leaves awaiting_approval (responseReady fires)
-    const unsubResponseClear = window.agentHub.tts.onResponseReady((agentId) => {
-      pendingApproval.current.delete(agentId)
-    })
-
     return () => {
       unsubResponseReady()
       unsubApproval()
-      unsubResponseClear()
     }
   }, [])
 

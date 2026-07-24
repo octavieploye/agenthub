@@ -20,7 +20,7 @@ export const ModelProviderSchema = z.enum(['anthropic', 'ollama-local', 'ollama-
 
 export const EffortLevelSchema = z.enum(['high', 'medium', 'low'])
 
-export const VoiceModeSchema = z.enum(['off', 'always_on', 'on_complete'])
+export const VoiceModeSchema = z.enum(['off', 'speak_up', 'always_on'])
 
 export const AgentStateSchema = z.object({
   id: z.string(),
