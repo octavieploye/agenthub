@@ -1,6 +1,6 @@
 import log from 'electron-log/main'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS } from '../../shared/constants/model-catalog'
-import type { ModelCatalogEntry, ModelCategory } from '../../shared/types/model.types'
+import type { CapabilityTier, ModelCatalogEntry, ModelCategory, SpeedProfile } from '../../shared/types/model.types'
 
 const OLLAMA_CATEGORY_HINTS: Record<string, ModelCategory> = {
   'qwen3-coder': 'coding',
@@ -103,21 +103,36 @@ export async function fetchOllamaLocalModels(): Promise<ModelCatalogEntry[]> {
   }
 }
 
+/** Build a lookup from hardcoded catalog entries keyed by model id */
+const cloudCatalogIndex = new Map(OLLAMA_CLOUD_MODELS.map((m) => [m.id, m]))
+
+/** Enrich a live-fetched entry with curated metadata from the hardcoded catalog when available */
+function enrichCloudEntry(entry: ModelCatalogEntry): ModelCatalogEntry {
+  const curated = cloudCatalogIndex.get(entry.id)
+  if (!curated) return entry
+  return {
+    ...entry,
+    category: curated.category,
+    capabilityTier: curated.capabilityTier as CapabilityTier,
+    description: curated.description,
+    strengths: curated.strengths,
+    speedProfile: curated.speedProfile as SpeedProfile,
+    claudeComparison: curated.claudeComparison
+  }
+}
+
 export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
   const OLLAMA_CLOUD_HOST = process.env.OLLAMA_CLOUD_HOST ?? 'https://ollama.com'
-  const OLLAMA_CLOUD_KEY = process.env.OLLAMA_CLOUD_KEY ?? ''
-  if (!OLLAMA_CLOUD_KEY) {
-    log.debug('No OLLAMA_CLOUD_KEY set, skipping cloud models')
-    return []
-  }
+  const apiKey = process.env.OLLAMA_API_KEY ?? process.env.OLLAMA_CLOUD_KEY ?? ''
 
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
+    const headers: Record<string, string> = {}
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+
     const response = await fetch(`${OLLAMA_CLOUD_HOST}/api/tags`, {
-      headers: {
-        Authorization: `Bearer ${OLLAMA_CLOUD_KEY}`
-      },
+      headers,
       signal: controller.signal
     })
     clearTimeout(timeout)
@@ -127,7 +142,7 @@ export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
       return []
     }
     const data = await response.json()
-    return parseOllamaModels(data, 'ollama-cloud')
+    return parseOllamaModels(data, 'ollama-cloud').map(enrichCloudEntry)
   } catch (err) {
     log.debug('Ollama cloud not available', { error: err instanceof Error ? err.message : String(err) })
     return []
@@ -135,7 +150,13 @@ export async function fetchOllamaCloudModels(): Promise<ModelCatalogEntry[]> {
 }
 
 export async function listAllModels(): Promise<ModelCatalogEntry[]> {
-  const localModels = await fetchOllamaLocalModels()
+  const [cloudModels, localModels] = await Promise.all([
+    fetchOllamaCloudModels(),
+    fetchOllamaLocalModels()
+  ])
 
-  return [...OLLAMA_CLOUD_MODELS, ...localModels, ...CLAUDE_MODELS]
+  // Fall back to hardcoded catalog if live fetch returned nothing
+  const ollamaCloud = cloudModels.length > 0 ? cloudModels : OLLAMA_CLOUD_MODELS
+
+  return [...ollamaCloud, ...localModels, ...CLAUDE_MODELS]
 }
