@@ -59,6 +59,7 @@
     "clarity-copywriter":          { "displayName": "Clarity Copywriter — CEO Style",  "category": "brand" },
     "team-clarity-copy":           { "displayName": "Clarity Copy Team",               "category": "brand" },
     "team-onboarding-engine":      { "displayName": "Onboarding Engine",               "category": "brand" },
+    "team-content-engine":         { "displayName": "Content Engine — Full Pipeline",  "category": "brand" },
 
     "_build": "── Build & Engineering ─────────────────────────────────────────────────",
     "skill-creator":               { "displayName": "Create New Skill",                 "category": "build" },
@@ -75,10 +76,16 @@
     "team-ai-expert":              { "displayName": "AI Expert Team",                   "category": "build" },
     "team-app-icon-builder":       { "displayName": "Build App Icons",                  "category": "build" },
     "team-impl-lead":              { "displayName": "Impl Lead — Full Project Audit",   "category": "build" },
+    "team-sprint-planner":         { "displayName": "Sprint Planner — Brief to Plan",   "category": "build" },
+    "team-notification-layer":     { "displayName": "Notification Layer Team",          "category": "build" },
     "team-frontend":               { "displayName": "Frontend Pipeline — Full Team",    "category": "build" },
     "frontend-code-review":        { "displayName": "Frontend Code Review",             "category": "build" },
     "frontend-wire-verifier":      { "displayName": "Frontend–Backend Wire Verifier",   "category": "build" },
     "test-first-enforcer":         { "displayName": "Test-First Enforcer (TDD Gate)",   "category": "build" },
+    "team-impl-review":            { "displayName": "Impl Review — Plan vs Code",     "category": "build" },
+    "team-integrity-status":       { "displayName": "Integrity Status — Full Audit",  "category": "build" },
+    "google-oauth-expert":         { "displayName": "Google OAuth 2.0 Expert",         "category": "build" },
+    "apple-oauth-expert":          { "displayName": "Apple OAuth & Auth Expert",        "category": "build" },
 
     "_security": "── Security & Compliance ────────────────────────────────────────────",
     "team-threat-defense":         { "displayName": "Threat Defense Team",              "category": "security" },
@@ -89,6 +96,8 @@
     "team-backend-hardening":      { "displayName": "Full Backend Hardening",           "category": "security" },
     "sec-devops":                  { "displayName": "Security & DevOps Audit",          "category": "security" },
     "risk-manager":                { "displayName": "Risk & Legal Register",            "category": "security" },
+    "ai-act-deployer-checklist":   { "displayName": "EU AI Act Deployer Checklist",    "category": "security" },
+    "google-oauth-expert":         { "displayName": "Google OAuth 2.0 Expert",          "category": "security" },
 
     "_ops": "── Business Operations ──────────────────────────────────────────────────",
     "team-ceo-coaching":           { "displayName": "CEO Coaching Team",               "category": "ops" },

@@ -44,6 +44,14 @@
       "source": "project"
     },
     {
+      "id": "google-oauth-expert",
+      "name": "google-oauth-expert",
+      "description": "Google OAuth 2.0 expert — implementation guidance (web + desktop/installed apps), security hardening, token lifecycle, scope selection, and production readiness. TypeScript/Node.js primary.",
+      "category": "dev-skills",
+      "path": ".claude/skills/google-oauth-expert/SKILL.md",
+      "source": "project"
+    },
+    {
       "id": "sec-insider-threat",
       "name": "sec-insider-threat",
       "description": "Insider threat & IP protection audit — unauthorized access vectors, IP exfiltration, AI prompt injection, reverse-engineering vulnerabilities. Produces prevention report + agent hardening policy fragment.",
@@ -153,6 +161,14 @@
       "description": "Pitch Proof — stress-test your pitch before the meeting. ANALYZE → PLAN → COUNTERCHECK → TEST → ACT on pitch readiness with champion and skeptic simulation.",
       "category": "business-venture",
       "path": "plugin/skills/pitch-proof/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "ai-act-deployer-checklist",
+      "name": "ai-act-deployer-checklist",
+      "description": "EU AI Act Deployer Checklist — guides companies through self-classification (prohibited/high/limited/minimal risk), role identification (provider/deployer/distributor/importer), and obligation mapping with deadlines",
+      "category": "business-analysis",
+      "path": "plugin/skills/ai-act-deployer-checklist/SKILL.md",
       "source": "project"
     }
   ],
@@ -411,6 +427,56 @@
       "team": ".claude/teams/before-the-meeting/config.json",
       "workflow": null,
       "source": "project"
+    },
+    {
+      "id": "team-sprint-planner",
+      "name": "team-sprint-planner",
+      "description": "Sprint Planner Team Orchestrator — intake to approved sprint plan with full ownership matrix, TDD gates, orchestration validation",
+      "category": "dev-skills",
+      "path": "plugin/skills/team-sprint-planner/SKILL.md",
+      "team": ".claude/teams/team-sprint-planner/config.json",
+      "workflow": ".claude/workflow-team-library/sprint-plan-builder/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-notification-layer",
+      "name": "team-notification-layer",
+      "description": "Notification Layer Team Orchestrator — diagnoses and fixes sound alerts (Howler.js), color/glow animations (CSS + useSettledStatus), and TTS voice (Piper + AudioContext). Knows the two-path architecture and every related commit.",
+      "category": "dev-teams",
+      "path": "plugin/skills/team-notification-layer/SKILL.md",
+      "team": ".claude/teams/notification-layer/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-impl-review",
+      "name": "team-impl-review",
+      "description": "Implementation Review Team Orchestrator — post-sprint audit: plan vs git vs code vs integration. Codebase is ground truth. DONE/PARTIAL/MISSING/CONFLICT verdicts with file:line evidence. Loops with team-dev-loop for fixes.",
+      "category": "dev-skills",
+      "path": "plugin/skills/team-impl-review/SKILL.md",
+      "team": ".claude/teams/impl-review/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-content-engine",
+      "name": "team-content-engine",
+      "description": "Content Engine Team Orchestrator — product audit, competitive/SEO research, audience study, 5 personas with V/I/S buyer psychology, objection modeling, multi-channel content strategy + creation (LinkedIn, YouTube, X, website), conditional paid ads/outreach",
+      "category": "marketing",
+      "path": ".claude/skills/team-content-engine/SKILL.md",
+      "team": ".claude/teams/content-engine/config.json",
+      "workflow": ".claude/workflow-team-library/content-engine/manifest.md",
+      "source": "project"
+    },
+    {
+      "id": "team-integrity-status",
+      "name": "team-integrity-status",
+      "description": "Integrity Status Team Orchestrator — full-stack integrity audit: migrations, schema drift, backend, API contracts, frontend, CI/CD, cross-layer architectural assessment",
+      "category": "dev-skills",
+      "path": ".claude/skills/team-integrity-status/SKILL.md",
+      "team": ".claude/teams/integrity-status/config.json",
+      "workflow": ".claude/workflow-team-library/integrity-status/manifest.md",
+      "source": "project"
     }
   ],
 
@@ -462,6 +528,14 @@
       "category": "marketing",
       "path": ".claude/teams/marketing/config.json",
       "members": ["lead-marketing", "persona-profiler", "readiness-analyst", "competitive-intel-marketing", "channel-strategist", "message-architect", "content-creator", "campaign-analyst"]
+    },
+    {
+      "id": "content-engine",
+      "name": "content-engine",
+      "description": "Content engine team — full content marketing pipeline: product audit, competitive/SEO research, audience study, personas, objection modeling, content strategy, multi-channel creation, conditional paid/outreach",
+      "category": "marketing",
+      "path": ".claude/teams/content-engine/config.json",
+      "members": ["lead-content-engine", "product-analyst", "competitive-researcher", "audience-researcher", "persona-builder", "objection-modeler", "content-strategist", "content-writer", "video-scriptwriter", "paid-channel-strategist"]
     },
     {
       "id": "stats",
@@ -617,6 +691,38 @@
       "category": "business-venture",
       "path": ".claude/teams/before-the-meeting/config.json",
       "members": ["btm-price-agent", "btm-proposal-agent", "btm-pitch-agent", "btm-synthesizer"]
+    },
+    {
+      "id": "sprint-planner",
+      "name": "team-sprint-planner",
+      "description": "Sprint Planner team — intake, codebase mapping, sprint design, orchestration validation, approved sprint plan with ownership matrix",
+      "category": "dev-teams",
+      "path": ".claude/teams/team-sprint-planner/config.json",
+      "members": ["sprint-planner-lead", "repo-mapper", "sprint-architect", "orchestration-validator"]
+    },
+    {
+      "id": "notification-layer",
+      "name": "notification-layer",
+      "description": "Notification Layer team — sound alerts, color/glow animations, TTS voice. Path A (direct) and Path B (triage pipeline) architecture.",
+      "category": "dev-teams",
+      "path": ".claude/teams/notification-layer/config.json",
+      "members": ["lead-notification", "sound-specialist", "glow-specialist", "tts-specialist"]
+    },
+    {
+      "id": "impl-review",
+      "name": "impl-review",
+      "description": "Implementation Review team — post-sprint audit: plan vs git vs code vs integration. Codebase is ground truth.",
+      "category": "dev-skills",
+      "path": ".claude/teams/impl-review/config.json",
+      "members": ["impl-review-lead", "impl-review-code", "impl-review-git", "impl-review-integration"]
+    },
+    {
+      "id": "integrity-status",
+      "name": "integrity-status",
+      "description": "Full-stack integrity audit team — migrations, schema drift, backend quality, API contracts, frontend alignment, CI/CD, cross-layer architectural assessment",
+      "category": "dev-skills",
+      "path": ".claude/teams/integrity-status/config.json",
+      "members": ["lead-integrity-status", "integrity-migration", "integrity-infra", "integrity-backend", "integrity-contract", "integrity-frontend", "integrity-cicd", "integrity-architect"]
     }
   ],
 
@@ -775,6 +881,30 @@
       "category": "marketing",
       "path": ".claude/workflow-team-library/clarity-copy/manifest.md",
       "team": "clarity-copy"
+    },
+    {
+      "id": "sprint-plan-builder",
+      "name": "Sprint Plan Builder Methodology",
+      "description": "LINEAR: intake + clarification → codebase mapping → sprint design with ownership matrix → orchestration validation (6 gates) → approved sprint plan",
+      "category": "dev-skills",
+      "path": ".claude/workflow-team-library/sprint-plan-builder/manifest.md",
+      "team": "sprint-planner"
+    },
+    {
+      "id": "content-engine",
+      "name": "Content Engine Methodology",
+      "description": "LINEAR (P8 conditional): product audit → competitive/SEO research + audience study → persona development + objection modeling → content strategy → content creation → paid/outreach",
+      "category": "marketing",
+      "path": ".claude/workflow-team-library/content-engine/manifest.md",
+      "team": "content-engine"
+    },
+    {
+      "id": "integrity-status",
+      "name": "Integrity Status Methodology",
+      "description": "LINEAR: gate → map (migration+infra+backend parallel) → verify (contract+frontend+cicd parallel) → review (architect sequential + sr-backend/sr-frontend) → synthesize report",
+      "category": "dev-skills",
+      "path": ".claude/workflow-team-library/integrity-status/manifest.md",
+      "team": "integrity-status"
     }
   ],
 
@@ -894,6 +1024,29 @@
     "before-the-meeting": [
       "team-before-the-meeting", "btm-price-agent", "btm-proposal-agent",
       "btm-pitch-agent", "btm-synthesizer"
+    ],
+    "sprint-planner": [
+      "team-sprint-planner", "sprint-planner-lead", "repo-mapper",
+      "sprint-architect", "orchestration-validator"
+    ],
+    "notification-layer": [
+      "team-notification-layer", "lead-notification", "sound-specialist",
+      "glow-specialist", "tts-specialist"
+    ],
+    "impl-review": [
+      "team-impl-review", "impl-review-lead", "impl-review-code",
+      "impl-review-git", "impl-review-integration"
+    ],
+    "content-engine": [
+      "team-content-engine", "lead-content-engine", "product-analyst",
+      "competitive-researcher", "audience-researcher", "persona-builder",
+      "objection-modeler", "content-strategist", "content-writer",
+      "video-scriptwriter", "paid-channel-strategist"
+    ],
+    "integrity-status": [
+      "team-integrity-status", "lead-integrity-status", "integrity-migration",
+      "integrity-infra", "integrity-backend", "integrity-contract",
+      "integrity-frontend", "integrity-cicd", "integrity-architect"
     ]
   },
 
