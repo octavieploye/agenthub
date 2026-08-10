@@ -267,7 +267,7 @@ describe('KanbanDispatchModal — spawn dispatch', () => {
     } as any
   })
 
-  it('spawns a new agent and sends prompt on dispatch in spawn mode', async () => {
+  it('spawns a new agent without calling sendInput (backend handles initial prompt via CLI arg)', async () => {
     const task = { ...mockTask, agentId: null, projectId: 'proj-1' }
     render(<KanbanDispatchModal task={task} agentId={null} onClose={vi.fn()} repos={[mockRepo]} />)
     fireEvent.click(screen.getByText('Dispatch'))
@@ -276,9 +276,13 @@ describe('KanbanDispatchModal — spawn dispatch', () => {
         expect.objectContaining({
           repoId: 'repo-1',
           cwd: '/tmp/proj-path',
+          taskDescription: expect.any(String),
         })
       )
-      expect(mockSendInput).toHaveBeenCalledWith('new-agent', expect.stringContaining('\r'))
+      // sendInput must NOT be called in spawn mode — the backend already
+      // passes taskDescription via `claude -- '...'`. Calling sendInput here
+      // would race the 500ms shell init and dump text into raw zsh.
+      expect(mockSendInput).not.toHaveBeenCalled()
       expect(mockTaskUpdate).toHaveBeenCalledWith(
         'task-1',
         expect.objectContaining({ status: 'in_progress', agentId: 'new-agent' })
