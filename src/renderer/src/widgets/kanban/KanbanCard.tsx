@@ -20,6 +20,8 @@ interface KanbanCardProps {
   onDispatch?: () => void
   onBadgeClick?: () => void
   blockedByCount?: number
+  /** Number of blockers that are not yet completed/tested */
+  unresolvedBlockerCount?: number
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -71,7 +73,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
 
 export function KanbanCard({
   task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents,
-  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0
+  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0
 }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -284,14 +286,23 @@ export function KanbanCard({
 
           {/* Footer */}
           <div className="flex items-center gap-1.5">
-            {blockedByCount > 0 && (
-              <span
-                className="text-[10px] text-warning shrink-0"
-                title={`Blocked by ${blockedByCount} task${blockedByCount > 1 ? 's' : ''}`}
-              >
-                ⚠ {blockedByCount}
-              </span>
-            )}
+            {blockedByCount > 0 ? (
+              unresolvedBlockerCount > 0 ? (
+                <span
+                  className="text-[10px] text-warning shrink-0"
+                  title={`${unresolvedBlockerCount} blocker${unresolvedBlockerCount > 1 ? 's' : ''} not done — run sequentially`}
+                >
+                  ⚠ sequential ({unresolvedBlockerCount})
+                </span>
+              ) : (
+                <span
+                  className="text-[10px] text-success shrink-0"
+                  title="All blockers done — safe to run in parallel"
+                >
+                  ✓ parallel
+                </span>
+              )
+            ) : null}
             {task.category && (
               <span
                 className="w-2 h-2 rounded-full shrink-0"

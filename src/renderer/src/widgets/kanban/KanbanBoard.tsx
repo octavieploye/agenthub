@@ -130,6 +130,17 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
     return agents.get(agentId)?.status
   }
 
+  const taskById = new Map(tasks.map((t) => [t.id, t]))
+  const DONE_STATUSES = new Set(['completed', 'tested'])
+
+  function getUnresolvedBlockerCount(task: TaskItem): number {
+    if (!task.blockedBy?.length) return 0
+    return task.blockedBy.filter((id) => {
+      const blocker = taskById.get(id)
+      return !blocker || !DONE_STATUSES.has(blocker.status)
+    }).length
+  }
+
   function getRepoGlowColor(repoId: string): string | undefined {
     return repos.find((r) => r.id === repoId)?.glowColor
   }
@@ -167,6 +178,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 defaultProjectId={selectedProjectId ?? undefined}
                 agents={agentList}
                 blockedByCount={task.blockedBy?.length ?? 0}
+                unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
@@ -218,6 +230,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               defaultProjectId={selectedProjectId ?? undefined}
               agents={agentList}
               blockedByCount={task.blockedBy?.length ?? 0}
+              unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
