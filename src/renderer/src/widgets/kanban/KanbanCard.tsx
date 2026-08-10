@@ -289,17 +289,17 @@ export function KanbanCard({
             {blockedByCount > 0 ? (
               unresolvedBlockerCount > 0 ? (
                 <span
-                  className="text-[10px] text-warning shrink-0"
+                  className="text-[10px] text-warning truncate max-w-[60px]"
                   title={`${unresolvedBlockerCount} blocker${unresolvedBlockerCount > 1 ? 's' : ''} not done — run sequentially`}
                 >
-                  ⚠ sequential ({unresolvedBlockerCount})
+                  ⚠ seq·{unresolvedBlockerCount}
                 </span>
               ) : (
                 <span
-                  className="text-[10px] text-success shrink-0"
+                  className="text-[10px] text-success"
                   title="All blockers done — safe to run in parallel"
                 >
-                  ✓ parallel
+                  ✓ par
                 </span>
               )
             ) : null}
