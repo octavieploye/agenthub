@@ -96,11 +96,12 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
   const [teamName, setTeamName] = useState('dev-stack')
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set())
 
-  const activeAgentCount = Array.from(agents.values()).filter(
+  const activeAgents = Array.from(agents.values()).filter(
     (a) => a.status !== 'completed' && a.status !== 'interrupted'
-  ).length
+  )
+  const activeAgentCount = activeAgents.length
   const spawnCount = mode === 'spawn' ? 1 : 0
-  const wouldExceed = activeAgentCount + selectedRoles.size + spawnCount > 3
+  const wouldExceed = activeAgentCount + selectedRoles.size + spawnCount > 5
 
   const recommendations = buildRecommendations(task, agent?.status)
 
@@ -379,8 +380,14 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
                 ))}
               </div>
               {wouldExceed && (
-                <div className="text-xs text-warning bg-warning/10 rounded-lg p-2">
-                  {activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 3 active agents (CLAUDE.md guideline). You can still dispatch.
+                <div className="text-xs text-warning bg-warning/10 rounded-lg p-2 flex flex-col gap-1">
+                  <span>{activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 5 active agents. You can still dispatch.</span>
+                  {activeAgents.map((a) => (
+                    <span key={a.id} className="text-[10px] text-base-content/50 truncate pl-2">
+                      <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ backgroundColor: a.color }} />
+                      {a.name} — {a.taskDescription || a.status}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -389,8 +396,14 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
 
         {/* Capacity warning — shown outside team section so it's always visible */}
         {wouldExceed && !teamOpen && (
-          <div className="text-xs text-warning bg-warning/10 rounded-lg p-2">
-            {activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 3 active agents (CLAUDE.md guideline). You can still dispatch.
+          <div className="text-xs text-warning bg-warning/10 rounded-lg p-2 flex flex-col gap-1">
+            <span>{activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 5 active agents. You can still dispatch.</span>
+            {activeAgents.map((a) => (
+              <span key={a.id} className="text-[10px] text-base-content/50 truncate pl-2">
+                <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ backgroundColor: a.color }} />
+                {a.name} — {a.taskDescription || a.status}
+              </span>
+            ))}
           </div>
         )}
 

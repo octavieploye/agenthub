@@ -134,13 +134,20 @@ describe('KanbanDispatchModal — team spawn', () => {
     expect(screen.getByLabelText('dev-integration')).toBeInTheDocument()
   })
 
-  it('shows concurrency warning when 3+ roles are checked', () => {
+  it('shows concurrency warning when total would exceed 5 active agents', () => {
+    // 3 active agents + 3 team roles = 6, exceeds limit of 5
+    const agents = new Map([
+      ['agent-1', mockAgent],
+      ['agent-2', { ...mockAgent, id: 'agent-2', name: 'Beta' }],
+      ['agent-3', { ...mockAgent, id: 'agent-3', name: 'Gamma' }],
+    ])
+    useAgentStore.setState({ agents, activeAgentId: null })
     render(<KanbanDispatchModal task={mockTask} agentId="agent-1" onClose={vi.fn()} repos={[mockRepo]} />)
     fireEvent.click(screen.getByText('Team spawn'))
     fireEvent.click(screen.getByLabelText('dev-backend'))
     fireEvent.click(screen.getByLabelText('dev-frontend'))
     fireEvent.click(screen.getByLabelText('dev-integration'))
-    expect(screen.getByText(/exceeds 3 active agents/i)).toBeInTheDocument()
+    expect(screen.getByText(/exceeds 5 active agents/i)).toBeInTheDocument()
   })
 })
 
