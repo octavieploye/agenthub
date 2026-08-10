@@ -6,6 +6,7 @@ import type { DockerStatus } from '@shared/types/docker.types'
 import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
+import { useAgentStore } from '@renderer/stores/agent-store'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
@@ -118,7 +119,12 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
       setSkipPermissions(false)
       setTelegramNotify(false)
       setIsNewProject(false)
-      setSelectedColor(AGENT_COLOR_PALETTE[Math.floor(Math.random() * AGENT_COLOR_PALETTE.length)])
+      // Imperative read — avoids reactive dependency on agents map which
+      // causes the entire form to reset on every agent status change.
+      const currentAgents = useAgentStore.getState().agents
+      const usedColors = new Set(Array.from(currentAgents.values()).map((a) => a.color))
+      const nextColor = AGENT_COLOR_PALETTE.find((c) => !usedColors.has(c)) ?? AGENT_COLOR_PALETTE[0]
+      setSelectedColor(nextColor)
       setTaskHint(prefilledTask ?? '')
     }
   }, [open, loadRepos, loadModels, prefilledRepoId, prefilledTask])
