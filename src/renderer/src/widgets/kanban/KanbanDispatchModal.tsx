@@ -2,10 +2,17 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
+import type { ModelProvider } from '@shared/types/agent.types'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
+
+const CLAUDE_MODEL_OPTIONS: { id: string; name: string; provider: ModelProvider }[] = [
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic' },
+  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic' },
+  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'anthropic' },
+]
 
 const ROLES = ['dev-backend', 'dev-frontend', 'dev-integration']
 
@@ -81,6 +88,9 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
   const [prompt, setPrompt] = useState(() => buildPrompt(task, project?.name))
   const [isDispatching, setIsDispatching] = useState(false)
 
+  const [selectedModel, setSelectedModel] = useState(CLAUDE_MODEL_OPTIONS[0].id)
+  const [skipPermissions, setSkipPermissions] = useState(false)
+
   const [recsOpen, setRecsOpen] = useState(true)
   const [teamOpen, setTeamOpen] = useState(false)
   const [teamName, setTeamName] = useState('dev-stack')
@@ -101,6 +111,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
 
     if (mode === 'spawn') {
       const cwd = resolveCwd(task, projects, repos)
+      const modelEntry = CLAUDE_MODEL_OPTIONS.find((m) => m.id === selectedModel)
       const result = await window.agentHub.agents.spawn({
         repoId: task.repoId,
         name: spawnName.trim() || generateAgentName(task.title),
@@ -108,6 +119,9 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         color: '#6B7280',
         projectId: task.projectId ?? undefined,
         taskDescription: prompt.trim(),
+        model: selectedModel,
+        provider: modelEntry?.provider ?? 'anthropic',
+        skipPermissions,
       })
       if (result.success && result.data) {
         targetAgentId = result.data.id
@@ -148,7 +162,13 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
       }
     }
 
-    window.agentHub.agents.sendInput(targetAgentId, prompt.trim() + '\r')
+    // Only send prompt as user input when dispatching to an existing agent.
+    // For freshly spawned agents, the backend already passes taskDescription
+    // via `claude -- '...'` CLI arg — sending it again here would race the
+    // 500ms shell init delay and dump raw text into zsh (command not found).
+    if (mode === 'existing') {
+      window.agentHub.agents.sendInput(targetAgentId, prompt.trim() + '\r')
+    }
 
     try {
       await window.agentHub.tasks.update(task.id, {
@@ -211,18 +231,54 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
 
         {/* Mode-specific UI */}
         {mode === 'spawn' ? (
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="spawn-agent-name"
-              className="text-xs text-base-content/50 font-medium uppercase tracking-wide"
-            >Agent name</label>
-            <input
-              id="spawn-agent-name"
-              aria-label="Agent name"
-              className="input input-sm input-bordered w-full"
-              value={spawnName}
-              onChange={(e) => setSpawnName(e.target.value)}
-            />
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="spawn-agent-name"
+                className="text-xs text-base-content/50 font-medium uppercase tracking-wide"
+              >Agent name</label>
+              <input
+                id="spawn-agent-name"
+                aria-label="Agent name"
+                className="input input-sm input-bordered w-full"
+                value={spawnName}
+                onChange={(e) => setSpawnName(e.target.value)}
+              />
+            </div>
+
+            {/* Model selector */}
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="dispatch-model"
+                className="text-xs text-base-content/50 font-medium uppercase tracking-wide"
+              >Model</label>
+              <select
+                id="dispatch-model"
+                aria-label="Model"
+                className="select select-sm select-bordered w-full"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+              >
+                {CLAUDE_MODEL_OPTIONS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Autonomous mode toggle */}
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex flex-col">
+                <span className="text-xs text-base-content/50 font-medium uppercase tracking-wide">Autonomous mode</span>
+                <span className="text-[10px] text-base-content/40">Skip permission prompts</span>
+              </div>
+              <input
+                type="checkbox"
+                aria-label="Skip permissions"
+                className="toggle toggle-sm toggle-warning"
+                checked={skipPermissions}
+                onChange={(e) => setSkipPermissions(e.target.checked)}
+              />
+            </label>
           </div>
         ) : (
           <div className="flex items-center gap-2">
