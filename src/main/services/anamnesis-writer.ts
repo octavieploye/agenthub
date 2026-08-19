@@ -74,17 +74,55 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     }
   }
 
+  /** Transform a task event into the Anamnesis write model format. */
+  private buildAnamnesisPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
+    const isEpisodic = event.eventType === 'CARD_TRANSITION' || event.eventType === 'SPRINT_INTAKE'
+
+    if (isEpisodic) {
+      return {
+        source_entity: 'hephaestus',
+        content: {
+          event_type: event.eventType.toLowerCase(),
+          task_id: event.taskId,
+          from_status: event.fromStatus,
+          to_status: event.toStatus,
+          agent_id: event.agentId,
+          ...rawPayload
+        },
+        sovereignty_tier: 1
+      }
+    }
+
+    // CARD_COMPLETED / CARD_INTERRUPTED → ProceduralWrite
+    return {
+      source_entity: 'hephaestus',
+      pattern_type: 'build_sequence',
+      domain: event.eventType === 'CARD_COMPLETED' ? 'task_completion' : 'task_interruption',
+      content: {
+        event_type: event.eventType.toLowerCase(),
+        task_id: event.taskId,
+        from_status: event.fromStatus,
+        to_status: event.toStatus,
+        agent_id: event.agentId,
+        ...rawPayload
+      },
+      confirmed_at: event.createdAt
+    }
+  }
+
   private async sendEvent(event: TaskEvent): Promise<boolean> {
     const path = ENDPOINT_MAP[event.eventType]
     const url = `${this.anamnesisUrl}${path}`
-    let payload: unknown
+    let rawPayload: Record<string, unknown>
     try {
-      payload = JSON.parse(event.payloadJson)
+      rawPayload = JSON.parse(event.payloadJson) as Record<string, unknown>
     } catch (parseErr) {
       log.warn('AnamnesisWriter: corrupted payloadJson, skipping event', { eventId: event.id, err: String(parseErr) })
       this.recordFailure()
       return false
     }
+
+    const body = this.buildAnamnesisPayload(event, rawPayload)
 
     try {
       const res = await this.fetch(url, {
@@ -94,12 +132,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
           'X-Optimaeus-Caller': 'hephaestus',
           ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
         },
-        body: JSON.stringify({
-          ...payload,
-          eventId: event.id,
-          eventType: event.eventType,
-          createdAt: event.createdAt
-        }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
       })
 

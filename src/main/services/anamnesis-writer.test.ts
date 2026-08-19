@@ -65,7 +65,7 @@ it('flush does not throw when Anamnesis is unreachable', async () => {
   expect(getUnsyncedEvents(db)).toHaveLength(1)
 })
 
-it('flush POSTs to /memory/episodic for CARD_TRANSITION events', async () => {
+it('flush POSTs to /memory/episodic for CARD_TRANSITION events with correct Anamnesis payload', async () => {
   const repoId = seedRepo()
   const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
   insertTaskEvent(db, {
@@ -74,7 +74,7 @@ it('flush POSTs to /memory/episodic for CARD_TRANSITION events', async () => {
     fromStatus: 'backlog',
     toStatus: 'today',
     agentId: null,
-    payload: {}
+    payload: { taskTitle: 'Test Task', repoId }
   })
 
   const fetchMock = vi.fn().mockResolvedValue({ ok: true })
@@ -86,9 +86,18 @@ it('flush POSTs to /memory/episodic for CARD_TRANSITION events', async () => {
   expect(url).toBe('http://localhost:9300/memory/episodic')
   expect(opts.method).toBe('POST')
   expect(opts.headers['X-Optimaeus-Caller']).toBe('hephaestus')
+
+  const body = JSON.parse(opts.body)
+  expect(body.source_entity).toBe('hephaestus')
+  expect(body.sovereignty_tier).toBe(1)
+  expect(body.content.event_type).toBe('card_transition')
+  expect(body.content.task_id).toBe(task.id)
+  expect(body.content.from_status).toBe('backlog')
+  expect(body.content.to_status).toBe('today')
+  expect(body.content.taskTitle).toBe('Test Task')
 })
 
-it('flush POSTs to /memory/procedural for CARD_COMPLETED events', async () => {
+it('flush POSTs to /memory/procedural for CARD_COMPLETED events with correct Anamnesis payload', async () => {
   const repoId = seedRepo()
   const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
   insertTaskEvent(db, {
@@ -97,7 +106,7 @@ it('flush POSTs to /memory/procedural for CARD_COMPLETED events', async () => {
     fromStatus: 'in_progress',
     toStatus: 'completed',
     agentId: 'agent-1',
-    payload: {}
+    payload: { taskTitle: 'Completed Task', repoId }
   })
 
   const fetchMock = vi.fn().mockResolvedValue({ ok: true })
@@ -105,8 +114,17 @@ it('flush POSTs to /memory/procedural for CARD_COMPLETED events', async () => {
 
   await writer.flush()
 
-  const [url] = fetchMock.mock.calls[0]
+  const [url, opts] = fetchMock.mock.calls[0]
   expect(url).toBe('http://localhost:9300/memory/procedural')
+
+  const body = JSON.parse(opts.body)
+  expect(body.source_entity).toBe('hephaestus')
+  expect(body.pattern_type).toBe('build_sequence')
+  expect(body.domain).toBe('task_completion')
+  expect(body.content.event_type).toBe('card_completed')
+  expect(body.content.task_id).toBe(task.id)
+  expect(body.content.agent_id).toBe('agent-1')
+  expect(body.confirmed_at).toBeDefined()
 })
 
 it('flush sends Authorization header when authSecret is provided', async () => {
