@@ -216,6 +216,13 @@ export const IPC_CHANNELS = {
     GET_NOTIFICATION_STATS: 'telegram:get-notification-stats',
     GET_NOTIFICATIONS:      'telegram:get-notifications',
   },
+  ORCHESTRATOR: {
+    START:    'orchestrator:start',
+    PAUSE:    'orchestrator:pause',
+    RESUME:   'orchestrator:resume',
+    STATUS:   'orchestrator:status',
+    TASK_LOG: 'orchestrator:task-log',
+  },
 } as const
 
 export const IPC_EVENTS = {
@@ -255,5 +262,9 @@ export const IPC_EVENTS = {
     BLOCKED_SENDER:           'on-telegram:blocked-sender',
     FIRST_CONTACT_LINKED:     'on-telegram:first-contact-linked',
     CONNECTION_STATUS_CHANGED:'on-telegram:connection-status-changed',
+  },
+  ORCHESTRATOR: {
+    STATUS_CHANGE:      'on-orchestrator:status-change',
+    TASK_PHASE_CHANGE:  'on-orchestrator:task-phase-change',
   },
 } as const

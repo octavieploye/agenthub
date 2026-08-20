@@ -4,6 +4,9 @@ import {
   assessComplexity,
   recommend,
   buildSpawnEnv,
+  CLOUD_MODEL_CATALOG,
+  recommendForPhase,
+  checkOllamaCloudHealth,
   type TaskComplexity,
   type QuotaZone,
   type ModelRecommendation,
@@ -249,6 +252,94 @@ describe('Model Dispatcher', () => {
     it('does not set ANTHROPIC_API_KEY for anthropic provider', () => {
       const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
       expect(result.ANTHROPIC_API_KEY).toBeUndefined()
+    })
+  })
+
+  // ─── CLOUD_MODEL_CATALOG ───────────────────────────────────────────
+
+  describe('CLOUD_MODEL_CATALOG', () => {
+    it('has 5 entries', () => {
+      expect(CLOUD_MODEL_CATALOG).toHaveLength(5)
+    })
+
+    it('every entry has id, name, and provider set to ollama-cloud', () => {
+      for (const entry of CLOUD_MODEL_CATALOG) {
+        expect(entry.id).toBeTruthy()
+        expect(entry.name).toBeTruthy()
+        expect(entry.provider).toBe('ollama-cloud')
+      }
+    })
+  })
+
+  // ─── recommendForPhase ────────────────────────────────────────────
+
+  describe('recommendForPhase', () => {
+    it('returns Anthropic provider for dev phase', () => {
+      const result: ModelRecommendation = recommendForPhase('dev', 'implement a feature', false)
+      expect(result.provider).toBe('anthropic')
+      expect(result.model).toContain('sonnet')
+    })
+
+    it('returns Opus for complex dev tasks', () => {
+      const result: ModelRecommendation = recommendForPhase('dev', 'refactor the auth module', false)
+      expect(result.provider).toBe('anthropic')
+      expect(result.model).toContain('opus')
+      expect(result.rationale).toContain('Opus')
+    })
+
+    it('includes cloud alternative for dev phase when cloud available', () => {
+      const result: ModelRecommendation = recommendForPhase('dev', 'implement a feature', true)
+      expect(result.provider).toBe('anthropic')
+      expect(result.alternatives.length).toBeGreaterThan(0)
+    })
+
+    it('returns cloud model for review phase when cloud available', () => {
+      const result: ModelRecommendation = recommendForPhase('review', 'review code changes', true)
+      expect(result.provider).toBe('ollama-cloud')
+      expect(result.model).toBe(CLOUD_MODEL_CATALOG[0].id)
+      expect(result.alternatives).toContain('claude-sonnet-4-20250514')
+    })
+
+    it('returns cloud model for security phase when cloud available', () => {
+      const result: ModelRecommendation = recommendForPhase('security', 'security audit', true)
+      expect(result.provider).toBe('ollama-cloud')
+      expect(result.model).toBe(CLOUD_MODEL_CATALOG[2].id)
+    })
+
+    it('falls back to Sonnet for review phase when cloud unavailable', () => {
+      const result: ModelRecommendation = recommendForPhase('review', 'review code changes', false)
+      expect(result.provider).toBe('anthropic')
+      expect(result.model).toContain('sonnet')
+      expect(result.warnings.length).toBeGreaterThan(0)
+      expect(result.warnings.some((w: string) => w.toLowerCase().includes('ollama cloud not available'))).toBe(true)
+    })
+
+    it('falls back to Sonnet for security phase when cloud unavailable', () => {
+      const result: ModelRecommendation = recommendForPhase('security', 'security scan', false)
+      expect(result.provider).toBe('anthropic')
+      expect(result.model).toContain('sonnet')
+    })
+
+    it('returns empty model for commit phase', () => {
+      const result: ModelRecommendation = recommendForPhase('commit', 'commit changes', false)
+      expect(result.model).toBe('')
+      expect(result.rationale).toContain('GitService directly')
+    })
+
+    it('returns empty model for push phase', () => {
+      const result: ModelRecommendation = recommendForPhase('push', 'push to remote', true)
+      expect(result.model).toBe('')
+      expect(result.rationale).toContain('GitService directly')
+    })
+  })
+
+  // ─── checkOllamaCloudHealth ───────────────────────────────────────
+
+  describe('checkOllamaCloudHealth', () => {
+    it('returns false when fetch fails (network error)', async () => {
+      // Uses the real fetch — no server on localhost:11434 in test env → should fail gracefully
+      const result = await checkOllamaCloudHealth('nonexistent-model')
+      expect(result).toBe(false)
     })
   })
 })

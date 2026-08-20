@@ -128,3 +128,79 @@ export function buildSpawnEnv(
     modelFlag: model
   }
 }
+
+// ─── Cloud Model Catalog ──────────────────────────────────────────────────────
+
+export const CLOUD_MODEL_CATALOG = [
+  { id: 'qwen3:32b-cloud', name: 'Qwen 3 32B', provider: 'ollama-cloud' as ModelProvider },
+  { id: 'ministral:24b-cloud', name: 'Ministral 24B', provider: 'ollama-cloud' as ModelProvider },
+  { id: 'devstral:cloud', name: 'Devstral', provider: 'ollama-cloud' as ModelProvider },
+  { id: 'glm-5.2:cloud', name: 'GLM 5.2', provider: 'ollama-cloud' as ModelProvider },
+  { id: 'gemma4:12b-cloud', name: 'Gemma 4 12B', provider: 'ollama-cloud' as ModelProvider },
+] as const
+
+// ─── Orchestrator Phase Support ───────────────────────────────────────────────
+
+import type { OrchestratorPhase } from '../../shared/types/orchestrator.types'
+
+export function recommendForPhase(
+  phase: OrchestratorPhase,
+  taskDescription: string,
+  ollamaCloudAvailable: boolean
+): ModelRecommendation {
+  // dev phase — always Anthropic (Opus for complex, Sonnet otherwise)
+  if (phase === 'dev') {
+    const complexity = assessComplexity(taskDescription)
+    return {
+      model: complexity === 'complex' ? CLAUDE_OPUS : CLAUDE_SONNET,
+      provider: 'anthropic',
+      rationale: `Dev phase: ${complexity === 'complex' ? 'Opus for complex task' : 'Sonnet for standard task'}`,
+      alternatives: ollamaCloudAvailable ? [CLOUD_MODEL_CATALOG[0].id] : [],
+      warnings: []
+    }
+  }
+
+  // commit/push phases — no model needed (uses GitService directly)
+  if (phase === 'commit' || phase === 'push') {
+    return {
+      model: '',
+      provider: 'anthropic',
+      rationale: `${phase} phase uses GitService directly — no LLM needed`,
+      alternatives: [],
+      warnings: []
+    }
+  }
+
+  // review/security — prefer Ollama cloud if available, else Anthropic Sonnet
+  if (ollamaCloudAvailable) {
+    const preferred = phase === 'security' ? CLOUD_MODEL_CATALOG[2] : CLOUD_MODEL_CATALOG[0]
+    return {
+      model: preferred.id,
+      provider: preferred.provider,
+      rationale: `${phase} phase: using Ollama cloud (${preferred.name}) to conserve Anthropic quota`,
+      alternatives: [CLAUDE_SONNET],
+      warnings: []
+    }
+  }
+
+  return {
+    model: CLAUDE_SONNET,
+    provider: 'anthropic',
+    rationale: `${phase} phase: Ollama cloud unavailable, falling back to Sonnet`,
+    alternatives: [],
+    warnings: ['Ollama cloud not available — using Anthropic quota for review/security']
+  }
+}
+
+// ─── Ollama Cloud Health Check ────────────────────────────────────────────────
+
+export async function checkOllamaCloudHealth(model: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${OLLAMA_LOCAL_URL}/api/tags`)
+    if (!response.ok) return false
+    const data = await response.json() as { models?: Array<{ name: string }> }
+    return data.models?.some(m => m.name === model || m.name.startsWith(model.split(':')[0])) ?? false
+  } catch {
+    return false
+  }
+}

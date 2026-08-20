@@ -29,6 +29,7 @@ import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
+import { KanbanOrchestratorService } from './kanban-orchestrator'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
@@ -61,6 +62,7 @@ let sprintWatcher: SprintWatcher | null = null
 let telegramSidecarService: TelegramSidecarService | null = null
 let telegramSocketServer: TelegramSocketServer | null = null
 let telegramQueueProcessor: TelegramQueueProcessor | null = null
+let kanbanOrchestrator: KanbanOrchestratorService | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -446,6 +448,9 @@ export function initializeServices(db: Database.Database): void {
     })
   }
 
+  // 18. KanbanOrchestratorService — sprint execution engine
+  kanbanOrchestrator = new KanbanOrchestratorService(db)
+
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
   log.info('All services initialized')
@@ -475,6 +480,8 @@ export function stopServices(): void {
   telegramSocketServer?.stop()
   telegramSocketServer = null
   telegramSidecarService?.stop()
+  kanbanOrchestrator?.stop()
+  kanbanOrchestrator = null
   setTelegramNotifier(null)
   setTelegramAgentSync(null)
   log.info('All services stopped')
@@ -550,6 +557,10 @@ export function getTelegramSidecarService(): TelegramSidecarService | null {
 
 export function getTelegramQueueProcessor(): TelegramQueueProcessor | null {
   return telegramQueueProcessor
+}
+
+export function getKanbanOrchestrator(): KanbanOrchestratorService | null {
+  return kanbanOrchestrator
 }
 
 export function getTelegramSocketPath(): string | null {

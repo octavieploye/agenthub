@@ -23,6 +23,7 @@ import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
+import { emitOrchestratorEvent, type OrchestratorEventType } from './orchestrator-events'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
@@ -245,6 +246,13 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
 
   // Keep sidecar agent cache in sync on every status change
   _telegramAgentSync?.()
+
+  // Emit orchestrator bus event for kanban orchestrator to subscribe
+  const orchEventType: OrchestratorEventType | null =
+    triageEvent.isTaskCompleted ? 'agent:completed'
+    : triageEvent.currentStatus === 'error' ? 'agent:failed'
+    : 'agent:status-changed'
+  emitOrchestratorEvent({ type: orchEventType, triageEvent })
 }
 
 function startSilentLockTimer(agentId: string): void {
@@ -852,7 +860,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // instead of attempting a multi-GB local model pull.
   if (agentState.provider === 'ollama-cloud' && modelName && !/cloud/i.test(modelName)) {
     log.warn('Cloud model missing cloud suffix, appending :cloud', { modelName })
-    modelName = `${modelName}-cloud`
+    modelName = `${modelName}:cloud`
   }
   const safeModelName = modelName ? modelName.replace(/'/g, "'\\''") : ''
   const modelFlag = safeModelName ? ` --model '${safeModelName}'` : ''

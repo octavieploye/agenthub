@@ -8,7 +8,12 @@ const ENDPOINT_MAP: Record<TaskEventType, string> = {
   CARD_TRANSITION: '/memory/episodic',
   CARD_COMPLETED: '/memory/procedural',
   CARD_INTERRUPTED: '/memory/procedural',
-  SPRINT_INTAKE: '/memory/episodic'
+  SPRINT_INTAKE: '/memory/episodic',
+  ORCHESTRATOR_TASK_STARTED: '/memory/episodic',
+  ORCHESTRATOR_TASK_REVIEWED: '/memory/procedural',
+  ORCHESTRATOR_TASK_SECURED: '/memory/procedural',
+  ORCHESTRATOR_TASK_COMMITTED: '/memory/procedural',
+  ORCHESTRATOR_SPRINT_COMPLETED: '/memory/episodic',
 }
 
 interface AnamnesisWriterDeps {
@@ -76,7 +81,10 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
 
   /** Transform a task event into the Anamnesis write model format. */
   private buildAnamnesisPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
-    const isEpisodic = event.eventType === 'CARD_TRANSITION' || event.eventType === 'SPRINT_INTAKE'
+    const isEpisodic = event.eventType === 'CARD_TRANSITION'
+      || event.eventType === 'SPRINT_INTAKE'
+      || event.eventType === 'ORCHESTRATOR_TASK_STARTED'
+      || event.eventType === 'ORCHESTRATOR_SPRINT_COMPLETED'
 
     if (isEpisodic) {
       return {

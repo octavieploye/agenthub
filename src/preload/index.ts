@@ -313,6 +313,23 @@ const agentHubBridge = {
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.TELEGRAM.CONNECTION_STATUS_CHANGED, handler) }
     },
   },
+  orchestrator: {
+    start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
+    pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),
+    resume: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME, input),
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.STATUS),
+    taskLog: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.TASK_LOG, input),
+    onStatusChange: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, handler) }
+    },
+    onTaskPhaseChange: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, handler) }
+    },
+  },
   on: {
     agentStatusChange: (
       callback: (agentId: string, status: string, confidence: string) => void

@@ -241,6 +241,15 @@ export interface AgentHubBridge {
     onBlockedSender: (callback: (payload: unknown) => void) => () => void
     onConnectionStatusChanged: (callback: () => void) => () => void
   }
+  orchestrator: {
+    start: (input: unknown) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
+    pause: (input: unknown) => Promise<IpcResponse<void>>
+    resume: (input: unknown) => Promise<IpcResponse<void>>
+    status: () => Promise<IpcResponse<import('./orchestrator.types').OrchestratorStatusResponse>>
+    taskLog: (input: unknown) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
+    onStatusChange: (callback: (payload: unknown) => void) => () => void
+    onTaskPhaseChange: (callback: (payload: unknown) => void) => () => void
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
