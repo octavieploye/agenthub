@@ -101,11 +101,19 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       }
     }
 
-    // CARD_COMPLETED / CARD_INTERRUPTED → ProceduralWrite
+    // Orchestrator procedural events with specialized domains
+    const ORCH_PROCEDURAL: Record<string, { pattern_type: string; domain: string }> = {
+      ORCHESTRATOR_TASK_REVIEWED: { pattern_type: 'code_review', domain: 'quality_assurance' },
+      ORCHESTRATOR_TASK_SECURED: { pattern_type: 'security_scan', domain: 'security_audit' },
+      ORCHESTRATOR_TASK_COMMITTED: { pattern_type: 'orchestrator_execution', domain: 'sprint_execution' },
+    }
+
+    const orchMeta = ORCH_PROCEDURAL[event.eventType]
+
     return {
       source_entity: 'hephaestus',
-      pattern_type: 'build_sequence',
-      domain: event.eventType === 'CARD_COMPLETED' ? 'task_completion' : 'task_interruption',
+      pattern_type: orchMeta?.pattern_type ?? 'build_sequence',
+      domain: orchMeta?.domain ?? (event.eventType === 'CARD_COMPLETED' ? 'task_completion' : 'task_interruption'),
       content: {
         event_type: event.eventType.toLowerCase(),
         task_id: event.taskId,

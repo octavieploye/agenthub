@@ -22,8 +22,10 @@ import {
   getActiveTaskLogByAgentId,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
+import { insertTaskEvent } from '../db/queries/task-events.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
+import { buildExecutionSummary } from './helpers/execution-summary-builder'
 import { recommendForPhase } from './model-dispatcher'
 import {
   onOrchestratorEvent,
@@ -49,6 +51,7 @@ export interface OrchestratorDeps {
   gitStageAll: (repoPath: string) => void
   gitCommit: (repoPath: string, message: string) => string
   gitPush: (repoPath: string) => void
+  onEventInserted?: () => void
 }
 
 export class KanbanOrchestratorService {
@@ -360,6 +363,20 @@ export class KanbanOrchestratorService {
       // Mark task as tested (completed through orchestrator)
       updateTask(this.db, taskId, { status: 'tested' })
 
+      // Build execution summary and emit ORCHESTRATOR_TASK_COMMITTED event
+      const taskLogs = getTaskLogsByTask(this.db, taskId)
+      const summary = buildExecutionSummary(taskId, task.title, taskLogs)
+
+      insertTaskEvent(this.db, {
+        taskId,
+        eventType: 'ORCHESTRATOR_TASK_COMMITTED',
+        fromStatus: 'push',
+        toStatus: 'done',
+        agentId: null,
+        payload: { summary },
+      })
+      this.deps.onEventInserted?.()
+
       log.info('Orchestrator: push phase done, task complete', { taskId })
       return true
     } catch (err) {
@@ -428,6 +445,23 @@ export class KanbanOrchestratorService {
     if (completedCount >= tasks.length && tasks.length > 0) {
       updateRunStatus(this.db, run.id, 'completed')
       log.info('Orchestrator: sprint completed', { runId: run.id, sprintName: run.sprintName })
+
+      // Emit ORCHESTRATOR_SPRINT_COMPLETED event (taskId = run ID prefixed to distinguish from task IDs)
+      insertTaskEvent(this.db, {
+        taskId: `run:${run.id}`,
+        eventType: 'ORCHESTRATOR_SPRINT_COMPLETED',
+        fromStatus: 'running',
+        toStatus: 'completed',
+        agentId: null,
+        payload: {
+          runId: run.id,
+          sprintName: run.sprintName,
+          repoId: run.repoId,
+          taskCount: tasks.length,
+          completedCount,
+        },
+      })
+      this.deps?.onEventInserted?.()
     }
   }
 

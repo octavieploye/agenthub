@@ -5,6 +5,7 @@ import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orche
 import { getRun, insertTaskLog, updateTaskLogStatus, getTaskLogsByRun, getTaskLogsByTask } from '../db/queries/orchestrator.queries'
 import { insertTask, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
+import { getUnsyncedEvents } from '../db/queries/task-events.queries'
 import type { AgentState } from '../../shared/types/agent.types'
 
 vi.mock('electron-log/main', () => ({
@@ -608,6 +609,169 @@ describe('KanbanOrchestratorService', () => {
       const spawnCalls = (deps.spawnAgent as any).mock.calls
       const bDevCall = spawnCalls.find((c: any) => c[0].name?.includes('B'))
       expect(bDevCall).toBeTruthy()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // R7-C Anamnesis integration tests
+  // ---------------------------------------------------------------------------
+
+  describe('C-3: Anamnesis event wiring', () => {
+    it('inserts ORCHESTRATOR_TASK_COMMITTED event when task completes all phases', () => {
+      const agentDev = createMockAgent({ id: 'agent-dev' })
+      const agentReview = createMockAgent({ id: 'agent-review' })
+      const agentSec = createMockAgent({ id: 'agent-sec' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return agentDev
+          if (callCount === 2) return agentReview
+          if (callCount === 3) return agentSec
+          return createMockAgent()
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C3-test', repoId: 'repo-1' })
+      insertTask(db, { repoId: 'repo-1', title: 'Wire Anamnesis', priority: 1, status: 'backlog' })
+
+      // Drive task through all phases
+      service.tick()
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentDev.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentReview.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentSec.id } as any })
+
+      // Verify ORCHESTRATOR_TASK_COMMITTED event was inserted
+      const events = getUnsyncedEvents(db)
+      const committed = events.find(e => e.eventType === 'ORCHESTRATOR_TASK_COMMITTED')
+      expect(committed).toBeTruthy()
+      expect(committed!.toStatus).toBe('done')
+      expect(committed!.fromStatus).toBe('push')
+
+      const payload = JSON.parse(committed!.payloadJson)
+      expect(payload.summary).toBeDefined()
+      expect(payload.summary.taskTitle).toBe('Wire Anamnesis')
+      expect(payload.summary.phases).toBeInstanceOf(Array)
+      expect(payload.summary.debtFlags).toBeInstanceOf(Array)
+    })
+
+    it('inserts ORCHESTRATOR_SPRINT_COMPLETED event when all tasks finish', () => {
+      const agentDev = createMockAgent({ id: 'agent-dev' })
+      const agentReview = createMockAgent({ id: 'agent-review' })
+      const agentSec = createMockAgent({ id: 'agent-sec' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return agentDev
+          if (callCount === 2) return agentReview
+          if (callCount === 3) return agentSec
+          return createMockAgent()
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'Sprint-C3', repoId: 'repo-1' })
+      insertTask(db, { repoId: 'repo-1', title: 'Only task', priority: 1, status: 'backlog' })
+
+      // Complete the single task through all phases
+      service.tick()
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentDev.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentReview.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentSec.id } as any })
+
+      // Verify ORCHESTRATOR_SPRINT_COMPLETED event was inserted
+      const events = getUnsyncedEvents(db)
+      const sprintCompleted = events.find(e => e.eventType === 'ORCHESTRATOR_SPRINT_COMPLETED')
+      expect(sprintCompleted).toBeTruthy()
+      expect(sprintCompleted!.fromStatus).toBe('running')
+      expect(sprintCompleted!.toStatus).toBe('completed')
+
+      expect(sprintCompleted!.taskId).toMatch(/^run:/)
+
+      const payload = JSON.parse(sprintCompleted!.payloadJson)
+      expect(payload.runId).toBeTruthy()
+      expect(payload.sprintName).toBe('Sprint-C3')
+      expect(payload.repoId).toBe('repo-1')
+      expect(payload.taskCount).toBe(1)
+      expect(payload.completedCount).toBe(1)
+    })
+
+    it('execution summary includes phases and debt flags', () => {
+      const agentDev = createMockAgent({ id: 'agent-dev' })
+      const agentReview = createMockAgent({ id: 'agent-review' })
+      const agentSec = createMockAgent({ id: 'agent-sec' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return agentDev
+          if (callCount === 2) return agentReview
+          if (callCount === 3) return agentSec
+          return createMockAgent()
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C3-summary', repoId: 'repo-1' })
+      insertTask(db, { repoId: 'repo-1', title: 'Summary test', priority: 1, status: 'backlog' })
+
+      service.tick()
+
+      // Inject issues into the review phase log before completing it
+      const taskLogs = getTaskLogsByRun(db, run.id)
+      const devLog = taskLogs.find(l => l.phase === 'dev')
+      expect(devLog).toBeTruthy()
+
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentDev.id } as any })
+
+      // Add issues to review log before completing review
+      const logsAfterReview = getTaskLogsByRun(db, run.id)
+      const reviewLog = logsAfterReview.find(l => l.phase === 'review' && l.status === 'active')
+      if (reviewLog) {
+        db.prepare('UPDATE orchestrator_task_log SET issues_json = ? WHERE id = ?')
+          .run(JSON.stringify([{ severity: 'medium', category: 'tech_debt', description: 'missing test coverage' }]), reviewLog.id)
+      }
+
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentReview.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentSec.id } as any })
+
+      const events = getUnsyncedEvents(db)
+      const committed = events.find(e => e.eventType === 'ORCHESTRATOR_TASK_COMMITTED')
+      expect(committed).toBeTruthy()
+
+      const payload = JSON.parse(committed!.payloadJson)
+      expect(payload.summary.phases.length).toBeGreaterThanOrEqual(3)
+      expect(payload.summary.issues.length).toBeGreaterThanOrEqual(1)
+      expect(payload.summary.debtFlags.length).toBeGreaterThanOrEqual(1)
+      expect(payload.summary.debtFlags[0].timeframe).toBe('short') // "missing test" → short
+    })
+
+    it('calls onEventInserted after inserting task events', () => {
+      const agentDev = createMockAgent({ id: 'agent-dev' })
+      const agentReview = createMockAgent({ id: 'agent-review' })
+      const agentSec = createMockAgent({ id: 'agent-sec' })
+      let callCount = 0
+      const onEventInserted = vi.fn()
+      const deps = createMockDeps({
+        onEventInserted,
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return agentDev
+          if (callCount === 2) return agentReview
+          if (callCount === 3) return agentSec
+          return createMockAgent()
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      service.start({ sprintName: 'Flush-test', repoId: 'repo-1' })
+      insertTask(db, { repoId: 'repo-1', title: 'Flush task', priority: 1, status: 'backlog' })
+
+      service.tick()
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentDev.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentReview.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: agentSec.id } as any })
+
+      // onEventInserted called for ORCHESTRATOR_TASK_COMMITTED + ORCHESTRATOR_SPRINT_COMPLETED
+      expect(onEventInserted).toHaveBeenCalledTimes(2)
     })
   })
 })

@@ -291,3 +291,160 @@ it('flush schedules a second flush when more events remain', async () => {
     vi.useRealTimers()
   }
 })
+
+// ---------------------------------------------------------------------------
+// R7-C-1: Orchestrator event payload tests
+// ---------------------------------------------------------------------------
+
+it('flush POSTs EpisodicWrite for ORCHESTRATOR_TASK_STARTED with correct fields', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Auth module', status: 'backlog' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'ORCHESTRATOR_TASK_STARTED',
+    fromStatus: 'backlog',
+    toStatus: 'in_progress',
+    agentId: 'agent-dev-1',
+    payload: { phase: 'dev', model_selected: 'claude-sonnet-4-5-20250514' }
+  })
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  const [url, opts] = fetchMock.mock.calls[0]
+  expect(url).toBe('http://localhost:9300/memory/episodic')
+  const body = JSON.parse(opts.body)
+  expect(body.source_entity).toBe('hephaestus')
+  expect(body.sovereignty_tier).toBe(1)
+  expect(body.content.event_type).toBe('orchestrator_task_started')
+  expect(body.content.phase).toBe('dev')
+  expect(body.content.model_selected).toBe('claude-sonnet-4-5-20250514')
+})
+
+it('flush POSTs ProceduralWrite for ORCHESTRATOR_TASK_REVIEWED with code_review pattern', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Auth module', status: 'in_progress' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'ORCHESTRATOR_TASK_REVIEWED',
+    fromStatus: 'in_progress',
+    toStatus: 'in_progress',
+    agentId: 'agent-review-1',
+    payload: { issues: [{ severity: 'medium', description: 'Missing null guard' }] }
+  })
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  const [url, opts] = fetchMock.mock.calls[0]
+  expect(url).toBe('http://localhost:9300/memory/procedural')
+  const body = JSON.parse(opts.body)
+  expect(body.pattern_type).toBe('code_review')
+  expect(body.domain).toBe('quality_assurance')
+  expect(body.content.issues).toBeDefined()
+})
+
+it('flush POSTs ProceduralWrite for ORCHESTRATOR_TASK_SECURED with security_scan pattern', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Auth module', status: 'in_progress' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'ORCHESTRATOR_TASK_SECURED',
+    fromStatus: 'in_progress',
+    toStatus: 'in_progress',
+    agentId: 'agent-sec-1',
+    payload: { findings: [], scan_type: 'sec-devops' }
+  })
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect(body.pattern_type).toBe('security_scan')
+  expect(body.domain).toBe('security_audit')
+})
+
+it('flush POSTs ProceduralWrite for ORCHESTRATOR_TASK_COMMITTED with orchestrator_execution pattern', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Auth module', status: 'in_progress' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'ORCHESTRATOR_TASK_COMMITTED',
+    fromStatus: 'in_progress',
+    toStatus: 'tested',
+    agentId: null,
+    payload: { taskId: task.id, taskTitle: 'Auth module', phases: [], issues: [], debtFlags: [] }
+  })
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect(body.pattern_type).toBe('orchestrator_execution')
+  expect(body.domain).toBe('sprint_execution')
+})
+
+it('flush POSTs EpisodicWrite for ORCHESTRATOR_SPRINT_COMPLETED', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Sprint task', status: 'in_progress' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'ORCHESTRATOR_SPRINT_COMPLETED',
+    fromStatus: 'in_progress',
+    toStatus: 'completed',
+    agentId: null,
+    payload: { sprintName: 'R7-A', totalTasks: 10, completedTasks: 10 }
+  })
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  const [url] = fetchMock.mock.calls[0]
+  expect(url).toBe('http://localhost:9300/memory/episodic')
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+  expect(body.sovereignty_tier).toBe(1)
+  expect(body.content.event_type).toBe('orchestrator_sprint_completed')
+  expect(body.content.sprintName).toBe('R7-A')
+})
+
+it('all orchestrator event types are mapped in ENDPOINT_MAP', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
+
+  const orchestratorEvents = [
+    'ORCHESTRATOR_TASK_STARTED',
+    'ORCHESTRATOR_TASK_REVIEWED',
+    'ORCHESTRATOR_TASK_SECURED',
+    'ORCHESTRATOR_TASK_COMMITTED',
+    'ORCHESTRATOR_SPRINT_COMPLETED',
+  ] as const
+
+  for (const eventType of orchestratorEvents) {
+    insertTaskEvent(db, {
+      taskId: task.id,
+      eventType,
+      fromStatus: 'in_progress',
+      toStatus: 'in_progress',
+      agentId: null,
+      payload: {}
+    })
+  }
+
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: 'http://localhost:9300', fetch: fetchMock })
+
+  await writer.flush()
+
+  // All 5 orchestrator events should have been sent (no errors)
+  expect(fetchMock).toHaveBeenCalledTimes(5)
+})

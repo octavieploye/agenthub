@@ -458,6 +458,7 @@ export function initializeServices(db: Database.Database): void {
     gitStageAll: (repoPath: string) => gitService!.stageFiles(repoPath, ['-A']),
     gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
     gitPush: (repoPath: string) => gitService!.push(repoPath),
+    onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 
