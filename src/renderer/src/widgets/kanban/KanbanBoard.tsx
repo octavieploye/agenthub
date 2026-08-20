@@ -45,6 +45,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const { setViewMode, setFocusedAgent } = useViewStore()
   const { setActiveAgent } = useAgentStore()
   const taskPhases = useOrchestratorStore((s) => s.taskPhases)
+  const taskLogs = useOrchestratorStore((s) => s.taskLogs)
 
   function navigateToAgent(agentId: string) {
     setActiveAgent(agentId)
@@ -183,7 +184,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 blockedByCount={task.blockedBy?.length ?? 0}
                 unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
                 orchestratorPhase={taskPhases.get(task.id)}
-                phaseHistory={[]}
+                phaseHistory={taskLogs.get(task.id)}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
@@ -237,7 +238,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               blockedByCount={task.blockedBy?.length ?? 0}
               unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
               orchestratorPhase={taskPhases.get(task.id)}
-              phaseHistory={[]}
+              phaseHistory={taskLogs.get(task.id)}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}

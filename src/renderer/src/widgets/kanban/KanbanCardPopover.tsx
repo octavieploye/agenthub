@@ -6,6 +6,7 @@ import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '
 import type { AgentState } from '@shared/types/agent.types'
 import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
 import { useProjectStore } from '../../stores/project-store'
+import { useOrchestratorStore } from '../../stores/orchestrator-store'
 
 interface KanbanCardPopoverProps {
   task: TaskItem
@@ -51,6 +52,9 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
     const rafId = requestAnimationFrame(() => { setVisible(true) })
     return () => cancelAnimationFrame(rafId)
   }, [])
+
+  const fetchTaskLogs = useOrchestratorStore((s) => s.fetchTaskLogs)
+  useEffect(() => { fetchTaskLogs(task.id) }, [task.id, fetchTaskLogs])
 
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? '')

@@ -4,6 +4,7 @@ import type {
   OrchestratorStartInput,
   OrchestratorStatusChangePayload,
   OrchestratorTaskPhaseChangePayload,
+  OrchestratorTaskLog,
   OrchestratorPhase,
   OrchestratorPhaseStatus,
 } from '@shared/types/orchestrator.types'
@@ -22,11 +23,13 @@ interface OrchestratorStore {
   totalCount: number
   failedCount: number
   taskPhases: Map<string, PhaseState>
+  taskLogs: Map<string, OrchestratorTaskLog[]>
   loading: boolean
   error: string | null
 
   // Actions
   fetchStatus: () => Promise<void>
+  fetchTaskLogs: (taskId: string) => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
   pause: () => Promise<boolean>
   resume: () => Promise<boolean>
@@ -43,8 +46,25 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   totalCount: 0,
   failedCount: 0,
   taskPhases: new Map(),
+  taskLogs: new Map(),
   loading: false,
   error: null,
+
+  fetchTaskLogs: async (taskId: string) => {
+    if (get().taskLogs.has(taskId)) return
+    try {
+      const res = await window.agentHub.orchestrator.taskLog({ taskId })
+      if (res.success) {
+        set((state) => {
+          const next = new Map(state.taskLogs)
+          next.set(taskId, res.data)
+          return { taskLogs: next }
+        })
+      }
+    } catch {
+      // silent — phase history is non-critical
+    }
+  },
 
   fetchStatus: async () => {
     set({ loading: true, error: null })
@@ -139,9 +159,11 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => {
     set((state) => {
-      const next = new Map(state.taskPhases)
-      next.set(payload.taskId, { phase: payload.phase, status: payload.status })
-      return { taskPhases: next }
+      const phases = new Map(state.taskPhases)
+      phases.set(payload.taskId, { phase: payload.phase, status: payload.status })
+      const logs = new Map(state.taskLogs)
+      logs.delete(payload.taskId)
+      return { taskPhases: phases, taskLogs: logs }
     })
   },
 
