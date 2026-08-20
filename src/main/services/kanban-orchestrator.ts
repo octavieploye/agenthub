@@ -6,7 +6,10 @@ import type {
   OrchestratorStartInput,
   OrchestratorStatusResponse,
   OrchestratorPhase,
+  OrchestratorStatusChangePayload,
+  OrchestratorTaskPhaseChangePayload,
 } from '../../shared/types/orchestrator.types'
+import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { AgentSpawnOptions, AgentState } from '../../shared/types/agent.types'
 import {
   insertRun,
@@ -52,6 +55,8 @@ export interface OrchestratorDeps {
   gitCommit: (repoPath: string, message: string) => string
   gitPush: (repoPath: string) => void
   onEventInserted?: () => void
+  emitToRenderer?: (channel: string, ...args: unknown[]) => void
+  sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
 }
 
 export class KanbanOrchestratorService {
@@ -93,12 +98,16 @@ export class KanbanOrchestratorService {
     this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
 
     log.info('Orchestrator started', { runId: updated.id, sprint: updated.sprintName })
+    this.emitStatusChange(updated.id, 'running', updated.sprintName)
+    this.notifyTelegram(updated, `Sprint "${updated.sprintName}" started`, 'completed')
     return updated
   }
 
   pause(runId: string): void {
     updateRunStatus(this.db, runId, 'paused')
     this.stopTick()
+    const run = getRun(this.db, runId)
+    this.emitStatusChange(runId, 'paused', run?.sprintName ?? '')
     log.info('Orchestrator paused', { runId })
   }
 
@@ -107,7 +116,33 @@ export class KanbanOrchestratorService {
     if (!this.tickTimer) {
       this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
     }
+    const run = getRun(this.db, runId)
+    this.emitStatusChange(runId, 'running', run?.sprintName ?? '')
     log.info('Orchestrator resumed', { runId })
+  }
+
+  private notifyTelegram(run: OrchestratorRun, summary: string, type: 'completed' | 'failed'): void {
+    if (!run.telegramNotify) return
+    this.deps?.sendTelegramNotification?.(summary, type)
+  }
+
+  private emitStatusChange(runId: string, status: string, sprintName: string): void {
+    const payload: OrchestratorStatusChangePayload = {
+      runId,
+      status: status as OrchestratorStatusChangePayload['status'],
+      sprintName,
+    }
+    this.deps?.emitToRenderer?.(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, payload)
+  }
+
+  private emitTaskPhaseChange(runId: string, taskId: string, phase: OrchestratorPhase, status: string): void {
+    const payload: OrchestratorTaskPhaseChangePayload = {
+      runId,
+      taskId,
+      phase,
+      status: status as OrchestratorTaskPhaseChangePayload['status'],
+    }
+    this.deps?.emitToRenderer?.(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, payload)
   }
 
   getStatus(): OrchestratorStatusResponse {
@@ -226,6 +261,7 @@ export class KanbanOrchestratorService {
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
     updateTask(this.db, taskId, { status: 'in_progress' })
+    this.emitTaskPhaseChange(run.id, taskId, 'dev', 'active')
 
     log.info('Orchestrator: dev phase dispatched', {
       taskId, agentId: agent.id, model: rec.model,
@@ -269,6 +305,7 @@ export class KanbanOrchestratorService {
       providerUsed: rec.provider,
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+    this.emitTaskPhaseChange(run.id, taskId, 'review', 'active')
 
     log.info('Orchestrator: review phase dispatched', { taskId, agentId: agent.id })
     return taskLog
@@ -320,6 +357,7 @@ export class KanbanOrchestratorService {
       providerUsed: rec.provider,
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+    this.emitTaskPhaseChange(run.id, taskId, 'security', 'active')
 
     log.info('Orchestrator: security phase dispatched', { taskId, agentId: agent.id, team: securityTeam })
     return taskLog
@@ -337,12 +375,14 @@ export class KanbanOrchestratorService {
     if (securityBlocked) {
       log.warn('Orchestrator: security blocked commit', { taskId })
       this.pause(run.id)
+      this.notifyTelegram(run, `CRITICAL: Security blocked task "${task.title}" — sprint paused`, 'failed')
       return false
     }
 
     // Commit phase
     const commitLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'commit' })
     updateTaskLogStatus(this.db, commitLog.id, 'active')
+    this.emitTaskPhaseChange(run.id, taskId, 'commit', 'active')
 
     try {
       this.deps.gitStageAll(repoPath)
@@ -350,15 +390,18 @@ export class KanbanOrchestratorService {
       const message = `feat(${scope}): ${task.title} [task-${taskId.slice(0, 8)}]`
       const hash = this.deps.gitCommit(repoPath, message)
       updateTaskLogStatus(this.db, commitLog.id, 'done')
+      this.emitTaskPhaseChange(run.id, taskId, 'commit', 'done')
 
       log.info('Orchestrator: commit phase done', { taskId, hash: hash.slice(0, 8) })
 
       // Push phase
       const pushLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'push' })
       updateTaskLogStatus(this.db, pushLog.id, 'active')
+      this.emitTaskPhaseChange(run.id, taskId, 'push', 'active')
 
       this.deps.gitPush(repoPath)
       updateTaskLogStatus(this.db, pushLog.id, 'done')
+      this.emitTaskPhaseChange(run.id, taskId, 'push', 'done')
 
       // Mark task as tested (completed through orchestrator)
       updateTask(this.db, taskId, { status: 'tested' })
@@ -381,6 +424,7 @@ export class KanbanOrchestratorService {
       return true
     } catch (err) {
       updateTaskLogStatus(this.db, commitLog.id, 'failed')
+      this.notifyTelegram(run, `Commit/push failed for "${task.title}": ${String(err).slice(0, 100)}`, 'failed')
       log.error('Orchestrator: commit/push failed', { taskId, err: String(err) })
       return false
     }
@@ -393,6 +437,7 @@ export class KanbanOrchestratorService {
   private advancePhase(taskId: string, currentPhase: OrchestratorPhase, currentLogId: string, run: OrchestratorRun): void {
     // Mark current phase as done
     updateTaskLogStatus(this.db, currentLogId, 'done')
+    this.emitTaskPhaseChange(run.id, taskId, currentPhase, 'done')
 
     const next = NEXT_PHASE[currentPhase]
 
@@ -444,7 +489,9 @@ export class KanbanOrchestratorService {
 
     if (completedCount >= tasks.length && tasks.length > 0) {
       updateRunStatus(this.db, run.id, 'completed')
+      this.emitStatusChange(run.id, 'completed', run.sprintName)
       log.info('Orchestrator: sprint completed', { runId: run.id, sprintName: run.sprintName })
+      this.notifyTelegram(run, `Sprint "${run.sprintName}" completed — ${completedCount}/${tasks.length} tasks done`, 'completed')
 
       // Emit ORCHESTRATOR_SPRINT_COMPLETED event (taskId = run ID prefixed to distinguish from task IDs)
       insertTaskEvent(this.db, {

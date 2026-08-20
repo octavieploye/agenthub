@@ -242,13 +242,13 @@ export interface AgentHubBridge {
     onConnectionStatusChanged: (callback: () => void) => () => void
   }
   orchestrator: {
-    start: (input: unknown) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
-    pause: (input: unknown) => Promise<IpcResponse<void>>
-    resume: (input: unknown) => Promise<IpcResponse<void>>
+    start: (input: import('./orchestrator.types').OrchestratorStartInput) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
+    pause: (input: { runId: string }) => Promise<IpcResponse<void>>
+    resume: (input: { runId: string }) => Promise<IpcResponse<void>>
     status: () => Promise<IpcResponse<import('./orchestrator.types').OrchestratorStatusResponse>>
-    taskLog: (input: unknown) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
-    onStatusChange: (callback: (payload: unknown) => void) => () => void
-    onTaskPhaseChange: (callback: (payload: unknown) => void) => () => void
+    taskLog: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
+    onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void
+    onTaskPhaseChange: (callback: (payload: import('./orchestrator.types').OrchestratorTaskPhaseChangePayload) => void) => () => void
   }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void

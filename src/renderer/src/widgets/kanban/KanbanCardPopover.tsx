@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState } from '@shared/types/agent.types'
+import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
 import { useProjectStore } from '../../stores/project-store'
 
 interface KanbanCardPopoverProps {
@@ -15,9 +16,34 @@ interface KanbanCardPopoverProps {
   onMouseLeave: () => void
   defaultProjectId?: string
   agents: AgentState[]
+  phaseHistory?: OrchestratorTaskLog[]
 }
 
-export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId, agents }: KanbanCardPopoverProps) {
+const PHASE_ICON: Record<string, string> = {
+  dev: '\u2699',
+  review: '\uD83D\uDC41',
+  security: '\uD83D\uDEE1',
+  commit: '\uD83D\uDCDD',
+  push: '\uD83D\uDE80',
+}
+
+const PHASE_STATUS_CLASS: Record<string, string> = {
+  pending: 'badge-ghost opacity-50',
+  active: 'badge-primary',
+  done: 'badge-success',
+  failed: 'badge-error',
+  skipped: 'badge-ghost',
+}
+
+const PHASE_STATUS_LABEL: Record<string, string> = {
+  pending: 'pending',
+  active: 'running',
+  done: 'done',
+  failed: 'failed',
+  skipped: 'skipped',
+}
+
+export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId, agents, phaseHistory }: KanbanCardPopoverProps) {
   const hasFocusRef = useRef(false)
   const [visible, setVisible] = useState(false)
 
@@ -282,6 +308,33 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
           onChange={(e) => setSectionTargetDate(e.target.value)}
         />
       </div>
+
+      {phaseHistory && phaseHistory.length > 0 && (
+        <>
+          <div className="border-t border-base-300" />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-base-content/50 font-medium uppercase tracking-wide">Orchestrator Phases</label>
+            <div className="flex flex-col gap-0.5">
+              {phaseHistory.map((log) => (
+                <div key={log.id} className="flex items-center gap-2 text-[10px]">
+                  <span className={`badge badge-xs ${PHASE_STATUS_CLASS[log.status]}`}>
+                    {PHASE_ICON[log.phase]} {log.phase}
+                  </span>
+                  <span className="text-base-content/50">{PHASE_STATUS_LABEL[log.status]}</span>
+                  {log.modelUsed && (
+                    <span className="text-base-content/30">{log.modelUsed}</span>
+                  )}
+                  {log.completedAt && log.startedAt && (
+                    <span className="text-base-content/30 ml-auto">
+                      {Math.round((new Date(log.completedAt).getTime() - new Date(log.startedAt).getTime()) / 1000)}s
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="border-t border-base-300" />
 

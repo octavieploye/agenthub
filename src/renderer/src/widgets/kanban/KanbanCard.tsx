@@ -3,6 +3,7 @@ import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText } from 'lucide-rea
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
+import type { OrchestratorPhase, OrchestratorPhaseStatus, OrchestratorTaskLog } from '@shared/types/orchestrator.types'
 import { KanbanCardPopover } from './KanbanCardPopover'
 
 interface KanbanCardProps {
@@ -22,6 +23,12 @@ interface KanbanCardProps {
   blockedByCount?: number
   /** Number of blockers that are not yet completed/tested */
   unresolvedBlockerCount?: number
+  /** Current orchestrator phase + status for this task */
+  orchestratorPhase?: {
+    phase: OrchestratorPhase
+    status: OrchestratorPhaseStatus
+  }
+  phaseHistory?: OrchestratorTaskLog[]
 }
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
@@ -49,6 +56,22 @@ const STATUS_BADGE: Record<string, { label: string; pulse: boolean; class: strin
   interrupted:       { label: 'Stopped',     pulse: false, class: 'text-base-content/40' },
 }
 
+const PHASE_ICON: Record<OrchestratorPhase, string> = {
+  dev:      '\u2699',
+  review:   '\uD83D\uDC41',
+  security: '\uD83D\uDEE1',
+  commit:   '\uD83D\uDCDD',
+  push:     '\uD83D\uDE80'
+}
+
+const PHASE_STATUS_CLASS: Record<OrchestratorPhaseStatus, string> = {
+  pending: 'badge-ghost opacity-50',
+  active:  'badge-primary animate-pulse',
+  done:    'badge-success',
+  failed:  'badge-error',
+  skipped: 'badge-ghost'
+}
+
 function cyclePriority(p: TaskPriority): TaskPriority {
   return p === 1 ? 2 : p === 2 ? 3 : 1
 }
@@ -73,7 +96,8 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
 
 export function KanbanCard({
   task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents,
-  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0
+  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0,
+  orchestratorPhase, phaseHistory
 }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -286,6 +310,14 @@ export function KanbanCard({
 
           {/* Footer */}
           <div className="flex items-center gap-1.5">
+            {orchestratorPhase && (
+              <span
+                className={`badge badge-xs text-[10px] ${PHASE_STATUS_CLASS[orchestratorPhase.status]}`}
+                title={`${orchestratorPhase.phase}: ${orchestratorPhase.status}`}
+              >
+                {PHASE_ICON[orchestratorPhase.phase]} {orchestratorPhase.phase}
+              </span>
+            )}
             {blockedByCount > 0 ? (
               unresolvedBlockerCount > 0 ? (
                 <span
@@ -384,6 +416,7 @@ export function KanbanCard({
           onMouseLeave={scheduleClose}
           defaultProjectId={defaultProjectId}
           agents={agents ?? []}
+          phaseHistory={phaseHistory}
         />
       )}
     </>

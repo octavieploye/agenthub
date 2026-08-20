@@ -459,6 +459,17 @@ export function initializeServices(db: Database.Database): void {
     gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
     gitPush: (repoPath: string) => gitService!.push(repoPath),
     onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
+    emitToRenderer: emitToAllRenderers,
+    sendTelegramNotification: (summary: string, type: 'completed' | 'failed') => {
+      telegramQueueProcessor?.enqueue({
+        type,
+        agentId: 'orchestrator',
+        agentName: 'Kanban Orchestrator',
+        repo: '',
+        summary: summary.slice(0, 200),
+        timestamp: new Date().toISOString(),
+      })
+    },
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 

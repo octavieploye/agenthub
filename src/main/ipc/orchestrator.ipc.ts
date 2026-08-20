@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron'
-import log from 'electron-log/main'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getKanbanOrchestrator } from '../services/service-orchestrator'
+import { success, error, validateInput } from './ipc-helpers'
 
 const startSchema = z.object({
   sprintName: z.string().min(1),
@@ -20,43 +20,60 @@ const taskIdSchema = z.object({
   taskId: z.string().min(1),
 })
 
+function getOrchestrator() {
+  const orchestrator = getKanbanOrchestrator()
+  if (!orchestrator) throw new Error('Orchestrator service not initialized')
+  return orchestrator
+}
+
 export function registerOrchestratorHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, (_event, input: unknown) => {
-    const parsed = startSchema.parse(input)
-    const orchestrator = getKanbanOrchestrator()
-    if (!orchestrator) throw new Error('Orchestrator service not initialized')
+    const v = validateInput(startSchema, input)
+    if (!v.valid) return v.response
     try {
-      return orchestrator.start(parsed)
+      return success(getOrchestrator().start(v.data))
     } catch (err) {
-      log.error('Orchestrator start failed', { err })
-      throw err
+      return error('ORCHESTRATOR_START_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PAUSE, (_event, input: unknown) => {
-    const { runId } = runIdSchema.parse(input)
-    const orchestrator = getKanbanOrchestrator()
-    if (!orchestrator) throw new Error('Orchestrator service not initialized')
-    orchestrator.pause(runId)
+    const v = validateInput(runIdSchema, input)
+    if (!v.valid) return v.response
+    try {
+      getOrchestrator().pause(v.data.runId)
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_PAUSE_FAILED', err instanceof Error ? err.message : String(err))
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RESUME, (_event, input: unknown) => {
-    const { runId } = runIdSchema.parse(input)
-    const orchestrator = getKanbanOrchestrator()
-    if (!orchestrator) throw new Error('Orchestrator service not initialized')
-    orchestrator.resume(runId)
+    const v = validateInput(runIdSchema, input)
+    if (!v.valid) return v.response
+    try {
+      getOrchestrator().resume(v.data.runId)
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_RESUME_FAILED', err instanceof Error ? err.message : String(err))
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.STATUS, () => {
-    const orchestrator = getKanbanOrchestrator()
-    if (!orchestrator) throw new Error('Orchestrator service not initialized')
-    return orchestrator.getStatus()
+    try {
+      return success(getOrchestrator().getStatus())
+    } catch (err) {
+      return error('ORCHESTRATOR_STATUS_FAILED', err instanceof Error ? err.message : String(err))
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.TASK_LOG, (_event, input: unknown) => {
-    const { taskId } = taskIdSchema.parse(input)
-    const orchestrator = getKanbanOrchestrator()
-    if (!orchestrator) throw new Error('Orchestrator service not initialized')
-    return orchestrator.getTaskLog(taskId)
+    const v = validateInput(taskIdSchema, input)
+    if (!v.valid) return v.response
+    try {
+      return success(getOrchestrator().getTaskLog(v.data.taskId))
+    } catch (err) {
+      return error('ORCHESTRATOR_TASK_LOG_FAILED', err instanceof Error ? err.message : String(err))
+    }
   })
 }

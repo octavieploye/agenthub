@@ -9,10 +9,12 @@ import { ProjectManagerModal } from './ProjectManagerModal'
 import { KanbanDispatchModal } from './KanbanDispatchModal'
 import { SprintIntakeModal } from './SprintIntakeModal'
 import { SprintPreviewModal } from './SprintPreviewModal'
+import { OrchestratorControls } from './OrchestratorControls'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority, SprintDraftReadyPayload } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { useViewStore } from '../../stores/view-store'
+import { useOrchestratorStore } from '../../stores/orchestrator-store'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'backlog', label: 'Backlog' },
@@ -42,6 +44,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const [draftMap, setDraftMap] = useState<Map<string, string>>(new Map())
   const { setViewMode, setFocusedAgent } = useViewStore()
   const { setActiveAgent } = useAgentStore()
+  const taskPhases = useOrchestratorStore((s) => s.taskPhases)
 
   function navigateToAgent(agentId: string) {
     setActiveAgent(agentId)
@@ -179,6 +182,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 agents={agentList}
                 blockedByCount={task.blockedBy?.length ?? 0}
                 unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
+                orchestratorPhase={taskPhases.get(task.id)}
+                phaseHistory={[]}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
@@ -231,6 +236,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               agents={agentList}
               blockedByCount={task.blockedBy?.length ?? 0}
               unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
+              orchestratorPhase={taskPhases.get(task.id)}
+              phaseHistory={[]}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
@@ -307,6 +314,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
         >
           <Settings size={14} />
         </button>
+        <OrchestratorControls repos={repos} selectedProjectId={selectedProjectId} />
         <select
           className="select select-sm select-bordered"
           value={agentFilter ?? ''}

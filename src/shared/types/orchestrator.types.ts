@@ -85,3 +85,16 @@ export interface OrchestratorStatusResponse {
   totalCount: number
   failedCount: number
 }
+
+export interface OrchestratorStatusChangePayload {
+  runId: string
+  status: OrchestratorRunStatus
+  sprintName: string
+}
+
+export interface OrchestratorTaskPhaseChangePayload {
+  runId: string
+  taskId: string
+  phase: OrchestratorPhase
+  status: OrchestratorPhaseStatus
+}
