@@ -14,7 +14,7 @@ import { TrayManager } from './tray-manager'
 import { GitService } from './git-service'
 import { FsService } from './fs-service'
 import { initBrainScanner } from './brain-scanner'
-import { getAllRepos } from '../db/queries/repos.queries'
+import { getAllRepos, getRepoById } from '../db/queries/repos.queries'
 import { SkillsService } from './skills-service'
 import { WindowManager } from './window-manager'
 import { SettingsService } from './settings-service'
@@ -29,7 +29,7 @@ import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
-import { KanbanOrchestratorService } from './kanban-orchestrator'
+import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
@@ -449,7 +449,17 @@ export function initializeServices(db: Database.Database): void {
   }
 
   // 18. KanbanOrchestratorService — sprint execution engine
-  kanbanOrchestrator = new KanbanOrchestratorService(db)
+  const orchestratorDeps: OrchestratorDeps = {
+    spawnAgent,
+    getRepoPath: (repoId: string) => {
+      const repo = getRepoById(db, repoId)
+      return repo?.path ?? null
+    },
+    gitStageAll: (repoPath: string) => gitService!.stageFiles(repoPath, ['-A']),
+    gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
+    gitPush: (repoPath: string) => gitService!.push(repoPath),
+  }
+  kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 
   // Kanban + Projects IPC handlers now registered in register-all.ts
 

@@ -292,3 +292,16 @@ export function getActiveTaskLogs(
     .all(runId)
   return rows.map((r) => mapTaskLogRow(r as Record<string, unknown>))
 }
+
+export function getActiveTaskLogByAgentId(
+  db: Database.Database,
+  runId: string,
+  agentId: string
+): OrchestratorTaskLog | null {
+  const row = db
+    .prepare(
+      "SELECT * FROM orchestrator_task_log WHERE run_id = ? AND agent_id = ? AND status = 'active' LIMIT 1"
+    )
+    .get(runId, agentId) as Record<string, unknown> | undefined
+  return row ? mapTaskLogRow(row) : null
+}

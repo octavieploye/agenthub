@@ -5,7 +5,9 @@ import type {
   OrchestratorTaskLog,
   OrchestratorStartInput,
   OrchestratorStatusResponse,
+  OrchestratorPhase,
 } from '../../shared/types/orchestrator.types'
+import type { AgentSpawnOptions, AgentState } from '../../shared/types/agent.types'
 import {
   insertRun,
   getRun,
@@ -15,10 +17,14 @@ import {
   getTaskLogsByRun,
   getTaskLogsByTask,
   getActiveTaskLogs,
+  insertTaskLog,
+  updateTaskLogStatus,
+  getActiveTaskLogByAgentId,
 } from '../db/queries/orchestrator.queries'
-import { getTasksByRepo } from '../db/queries/tasks.queries'
+import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
+import { recommendForPhase } from './model-dispatcher'
 import {
   onOrchestratorEvent,
   offOrchestratorEvent,
@@ -26,15 +32,35 @@ import {
 } from './orchestrator-events'
 
 const TICK_INTERVAL_MS = 30_000
+const STUCK_THRESHOLD_MS = 30 * 60 * 1000
+
+const NEXT_PHASE: Record<OrchestratorPhase, OrchestratorPhase | 'done'> = {
+  dev: 'review',
+  review: 'security',
+  security: 'commit',
+  commit: 'push',
+  push: 'done',
+}
+
+/** Injected dependencies for testability — real implementations come from service-orchestrator. */
+export interface OrchestratorDeps {
+  spawnAgent: (options: AgentSpawnOptions) => AgentState
+  getRepoPath: (repoId: string) => string | null
+  gitStageAll: (repoPath: string) => void
+  gitCommit: (repoPath: string, message: string) => string
+  gitPush: (repoPath: string) => void
+}
 
 export class KanbanOrchestratorService {
   private db: Database.Database
+  private deps: OrchestratorDeps | null
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private completedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   private failedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
 
-  constructor(db: Database.Database) {
+  constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
+    this.deps = deps ?? null
   }
 
   start(input: OrchestratorStartInput): OrchestratorRun {
@@ -124,7 +150,7 @@ export class KanbanOrchestratorService {
     const depMap = getDependencyMap(this.db)
     const allLogs = getTaskLogsByRun(this.db, runId)
 
-    // Tasks currently being processed
+    // Tasks currently being processed (any phase active)
     const activeLogs = new Set(allLogs.filter(l => l.status === 'active').map(l => l.taskId))
 
     // Tasks that have completed all phases (push phase done)
@@ -154,6 +180,257 @@ export class KanbanOrchestratorService {
     return dispatchable.map(t => ({ id: t.id, title: t.title, priority: t.priority }))
   }
 
+  // ---------------------------------------------------------------------------
+  // Phase dispatchers (B-1 through B-4)
+  // ---------------------------------------------------------------------------
+
+  dispatchDevPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
+    if (!this.deps) {
+      log.warn('Orchestrator: no deps injected, cannot dispatch')
+      return null
+    }
+
+    const task = getTaskById(this.db, taskId)
+    if (!task) {
+      log.warn('Orchestrator: task not found', { taskId })
+      return null
+    }
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) {
+      log.warn('Orchestrator: repo path not found', { repoId: run.repoId })
+      return null
+    }
+
+    const rec = recommendForPhase('dev', task.description || task.title, false)
+
+    const agent = this.deps.spawnAgent({
+      repoId: run.repoId,
+      name: `[orch] ${task.title}`,
+      cwd: repoPath,
+      model: rec.model,
+      provider: rec.provider as any,
+      taskDescription: task.description || task.title,
+      skipPermissions: true,
+    })
+
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId,
+      phase: 'dev',
+      modelUsed: rec.model,
+      providerUsed: rec.provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+    updateTask(this.db, taskId, { status: 'in_progress' })
+
+    log.info('Orchestrator: dev phase dispatched', {
+      taskId, agentId: agent.id, model: rec.model,
+    })
+    return taskLog
+  }
+
+  dispatchReviewPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
+    if (!this.deps) return null
+
+    const task = getTaskById(this.db, taskId)
+    if (!task) return null
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) return null
+
+    const rec = recommendForPhase('review', task.description || task.title, false)
+
+    const reviewPrompt = [
+      `Review the code changes for task: ${task.title}`,
+      task.description ? `Description: ${task.description}` : '',
+      'Check for: conflicts with existing code, friction points, tech debt, breaking changes, pattern mismatches.',
+      'Output structured JSON with issues array.',
+    ].filter(Boolean).join('\n')
+
+    const agent = this.deps.spawnAgent({
+      repoId: run.repoId,
+      name: `[review] ${task.title}`,
+      cwd: repoPath,
+      model: rec.model,
+      provider: rec.provider as any,
+      taskDescription: reviewPrompt,
+      skipPermissions: true,
+    })
+
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId,
+      phase: 'review',
+      modelUsed: rec.model,
+      providerUsed: rec.provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+
+    log.info('Orchestrator: review phase dispatched', { taskId, agentId: agent.id })
+    return taskLog
+  }
+
+  dispatchSecurityPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
+    if (!this.deps) return null
+
+    const task = getTaskById(this.db, taskId)
+    if (!task) return null
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) return null
+
+    const rec = recommendForPhase('security', task.description || task.title, false)
+
+    // Select security team based on task properties
+    const desc = (task.description || '').toLowerCase()
+    let securityTeam = 'sec-devops'
+    if (desc.includes('auth') || desc.includes('session') || desc.includes('token')) {
+      securityTeam = 'insider-threat'
+    } else if (desc.includes('user-input') || desc.includes('form') || desc.includes('query')) {
+      securityTeam = 'threat-defense'
+    }
+
+    const securityPrompt = [
+      `Security scan for task: ${task.title}`,
+      `Security team: ${securityTeam}`,
+      task.description ? `Description: ${task.description}` : '',
+      'Scan for: OWASP top 10, injection, XSS, CSRF, data leakage, sovereignty violations.',
+      'Output JSON: { "findings": [...], "recommendation": "pass|block|review" }',
+    ].filter(Boolean).join('\n')
+
+    const agent = this.deps.spawnAgent({
+      repoId: run.repoId,
+      name: `[security] ${task.title}`,
+      cwd: repoPath,
+      model: rec.model,
+      provider: rec.provider as any,
+      taskDescription: securityPrompt,
+      skipPermissions: true,
+    })
+
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId,
+      phase: 'security',
+      modelUsed: rec.model,
+      providerUsed: rec.provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+
+    log.info('Orchestrator: security phase dispatched', { taskId, agentId: agent.id, team: securityTeam })
+    return taskLog
+  }
+
+  executeCommitPhase(taskId: string, run: OrchestratorRun, securityBlocked: boolean): boolean {
+    if (!this.deps) return false
+
+    const task = getTaskById(this.db, taskId)
+    if (!task) return false
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) return false
+
+    if (securityBlocked) {
+      log.warn('Orchestrator: security blocked commit', { taskId })
+      this.pause(run.id)
+      return false
+    }
+
+    // Commit phase
+    const commitLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'commit' })
+    updateTaskLogStatus(this.db, commitLog.id, 'active')
+
+    try {
+      this.deps.gitStageAll(repoPath)
+      const scope = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)
+      const message = `feat(${scope}): ${task.title} [task-${taskId.slice(0, 8)}]`
+      const hash = this.deps.gitCommit(repoPath, message)
+      updateTaskLogStatus(this.db, commitLog.id, 'done')
+
+      log.info('Orchestrator: commit phase done', { taskId, hash: hash.slice(0, 8) })
+
+      // Push phase
+      const pushLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'push' })
+      updateTaskLogStatus(this.db, pushLog.id, 'active')
+
+      this.deps.gitPush(repoPath)
+      updateTaskLogStatus(this.db, pushLog.id, 'done')
+
+      // Mark task as tested (completed through orchestrator)
+      updateTask(this.db, taskId, { status: 'tested' })
+
+      log.info('Orchestrator: push phase done, task complete', { taskId })
+      return true
+    } catch (err) {
+      updateTaskLogStatus(this.db, commitLog.id, 'failed')
+      log.error('Orchestrator: commit/push failed', { taskId, err: String(err) })
+      return false
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase transition coordinator (B-5)
+  // ---------------------------------------------------------------------------
+
+  private advancePhase(taskId: string, currentPhase: OrchestratorPhase, currentLogId: string, run: OrchestratorRun): void {
+    // Mark current phase as done
+    updateTaskLogStatus(this.db, currentLogId, 'done')
+
+    const next = NEXT_PHASE[currentPhase]
+
+    if (next === 'done') {
+      log.info('Orchestrator: task fully completed', { taskId })
+      this.dispatchNextTasks(run)
+      return
+    }
+
+    // Dispatch next phase
+    switch (next) {
+      case 'review':
+        this.dispatchReviewPhase(taskId, run)
+        break
+      case 'security':
+        this.dispatchSecurityPhase(taskId, run)
+        break
+      case 'commit':
+        this.executeCommitPhase(taskId, run, false)
+        // After commit+push, dispatch next tasks
+        this.dispatchNextTasks(run)
+        break
+      case 'push':
+        // push is handled within executeCommitPhase
+        break
+    }
+  }
+
+  private dispatchNextTasks(run: OrchestratorRun): void {
+    const dispatchable = this.getNextDispatchableTasks(run.id)
+    for (const task of dispatchable) {
+      this.dispatchDevPhase(task.id, run)
+    }
+
+    // Check if all tasks are done
+    const allLogs = getTaskLogsByRun(this.db, run.id)
+    const tasks = getTasksByRepo(this.db, run.repoId)
+    const taskLogsByTask = new Map<string, typeof allLogs>()
+    for (const l of allLogs) {
+      const existing = taskLogsByTask.get(l.taskId) ?? []
+      existing.push(l)
+      taskLogsByTask.set(l.taskId, existing)
+    }
+    let completedCount = 0
+    for (const [, logs] of taskLogsByTask) {
+      const pushLog = logs.find(l => l.phase === 'push')
+      if (pushLog?.status === 'done') completedCount++
+    }
+
+    if (completedCount >= tasks.length && tasks.length > 0) {
+      updateRunStatus(this.db, run.id, 'completed')
+      log.info('Orchestrator: sprint completed', { runId: run.id, sprintName: run.sprintName })
+    }
+  }
+
   tick(): void {
     const run = getActiveRun(this.db)
     if (!run || run.status !== 'running') return
@@ -165,16 +442,20 @@ export class KanbanOrchestratorService {
     for (const taskLog of activeLogs) {
       if (taskLog.startedAt) {
         const elapsed = Date.now() - new Date(taskLog.startedAt).getTime()
-        if (elapsed > 30 * 60 * 1000) {
-          log.warn('Orchestrator: stuck agent detected', {
+        if (elapsed > STUCK_THRESHOLD_MS) {
+          log.warn('Orchestrator: stuck agent detected, marking as failed', {
             taskLogId: taskLog.id,
             taskId: taskLog.taskId,
             phase: taskLog.phase,
             elapsedMs: elapsed,
           })
+          updateTaskLogStatus(this.db, taskLog.id, 'failed')
         }
       }
     }
+
+    // Dispatch next tasks if slots available
+    this.dispatchNextTasks(run)
 
     log.debug('Orchestrator tick', { runId: run.id, activeCount: activeLogs.length })
   }
@@ -199,18 +480,47 @@ export class KanbanOrchestratorService {
   }
 
   private onAgentCompleted(event: OrchestratorAgentEvent): void {
-    log.info('Orchestrator: agent completed', {
-      agentId: event.triageEvent.agentId,
-      task: event.triageEvent.taskDescription,
+    const run = getActiveRun(this.db)
+    if (!run) return
+
+    const agentId = event.triageEvent.agentId
+    const activeLog = getActiveTaskLogByAgentId(this.db, run.id, agentId)
+
+    if (!activeLog) {
+      log.debug('Orchestrator: completed agent not tracked by orchestrator', { agentId })
+      return
+    }
+
+    log.info('Orchestrator: agent completed, advancing phase', {
+      agentId,
+      taskId: activeLog.taskId,
+      phase: activeLog.phase,
     })
-    // Phase transition logic will be implemented in R7-B
+
+    this.advancePhase(activeLog.taskId, activeLog.phase, activeLog.id, run)
   }
 
   private onAgentFailed(event: OrchestratorAgentEvent): void {
+    const run = getActiveRun(this.db)
+    if (!run) return
+
+    const agentId = event.triageEvent.agentId
+    const activeLog = getActiveTaskLogByAgentId(this.db, run.id, agentId)
+
+    if (!activeLog) {
+      log.debug('Orchestrator: failed agent not tracked by orchestrator', { agentId })
+      return
+    }
+
     log.warn('Orchestrator: agent failed', {
-      agentId: event.triageEvent.agentId,
-      task: event.triageEvent.taskDescription,
+      agentId,
+      taskId: activeLog.taskId,
+      phase: activeLog.phase,
     })
-    // Error handling will be implemented in R7-B
+
+    updateTaskLogStatus(this.db, activeLog.id, 'failed')
+
+    // Dispatch next tasks (other tasks may be unblocked)
+    this.dispatchNextTasks(run)
   }
 }
