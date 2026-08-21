@@ -1,6 +1,6 @@
 import type { AgentState } from './agent.types'
 
-export type ViewMode = 'raid' | 'channel' | 'terminal' | 'activity' | 'brain'
+export type ViewMode = 'raid' | 'channel' | 'terminal' | 'activity' | 'brain' | 'memory'
 
 export interface SessionSnapshot {
   id: number

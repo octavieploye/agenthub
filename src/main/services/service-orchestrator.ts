@@ -25,6 +25,7 @@ import { ContainerManager } from './container-manager'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import type { IForgejoAdapter } from './adapters/forgejo-adapter'
 import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapters/adapter-factory'
+import { initAnamnesisReader } from './anamnesis-reader'
 import { SprintWatcher } from './sprint-watcher'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
@@ -361,6 +362,12 @@ export function initializeServices(db: Database.Database): void {
   const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
   anamnesisWriter = createAnamnesisAdapter(appMode, db, { anamnesisUrl })
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
+
+  // 15a. AnamnesisReader — lifecycle data reader (system mode only)
+  if (appMode === 'system') {
+    const authSecret = process.env['ANAMNESIS_AUTH_SECRET'] ?? process.env['AUTH_SECRET'] ?? ''
+    initAnamnesisReader({ baseUrl: anamnesisUrl, authSecret, caller: 'hephaestus' })
+  }
 
   const forgejoUrl = process.env['FORGEJO_URL'] ?? 'http://localhost:3000'
   const forgejoToken = process.env['FORGEJO_TOKEN'] ?? ''

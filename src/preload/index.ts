@@ -313,6 +313,17 @@ const agentHubBridge = {
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.TELEGRAM.CONNECTION_STATUS_CHANGED, handler) }
     },
   },
+  lifecycle: {
+    getMetrics: () => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.GET_METRICS),
+    getDistribution: () => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.GET_DISTRIBUTION),
+    getHistory: (limit?: number) => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.GET_HISTORY, limit),
+    getArchived: (params?: { layer?: string; page?: number; page_size?: number }) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.GET_ARCHIVED, params),
+    updatePolicy: (layer: string, policy: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.UPDATE_POLICY, layer, policy),
+    runCycle: () => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.RUN_CYCLE),
+    restore: (archiveId: string) => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.RESTORE, archiveId),
+  },
   orchestrator: {
     start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
     pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),

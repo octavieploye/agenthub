@@ -25,7 +25,8 @@ const VIEW_MODES = [
   { key: 'channel' as const, label: 'Channel' },
   { key: 'terminal' as const, label: 'Terminal' },
   { key: 'activity' as const, label: 'Activity' },
-  { key: 'brain' as const, label: 'Brain' }
+  { key: 'brain' as const, label: 'Brain' },
+  { key: 'memory' as const, label: 'Memory' }
 ]
 
 /** Lucide-style inline SVG icons (16x16) — lucide-react is not installed */

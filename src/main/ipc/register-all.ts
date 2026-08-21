@@ -33,6 +33,7 @@ import { registerTtsHandlers } from './tts.ipc'
 import { registerTelegramIpc } from './telegram.ipc'
 import { registerBrainIpcHandlers } from './brain.ipc'
 import { registerOrchestratorHandlers } from './orchestrator.ipc'
+import { registerLifecycleHandlers } from './lifecycle.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -69,5 +70,6 @@ export function registerAllIpcHandlers(): void {
   registerTelegramIpc()
   registerBrainIpcHandlers()
   registerOrchestratorHandlers()
+  registerLifecycleHandlers()
   log.info('All IPC handlers registered')
 }

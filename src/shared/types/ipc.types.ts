@@ -250,6 +250,15 @@ export interface AgentHubBridge {
     onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void
     onTaskPhaseChange: (callback: (payload: import('./orchestrator.types').OrchestratorTaskPhaseChangePayload) => void) => () => void
   }
+  lifecycle: {
+    getMetrics: () => Promise<IpcResponse<import('./lifecycle.types').LifecycleMetrics>>
+    getDistribution: () => Promise<IpcResponse<import('./lifecycle.types').LayerDistribution[]>>
+    getHistory: (limit?: number) => Promise<IpcResponse<import('./lifecycle.types').LifecycleHistoryEntry[]>>
+    getArchived: (params?: { layer?: string; page?: number; page_size?: number }) => Promise<IpcResponse<import('./lifecycle.types').ArchivedPage>>
+    updatePolicy: (layer: string, policy: import('./lifecycle.types').PolicyUpdateRequest) => Promise<IpcResponse<import('./lifecycle.types').PolicyResponse>>
+    runCycle: () => Promise<IpcResponse<import('./lifecycle.types').LifecycleRunResult>>
+    restore: (archiveId: string) => Promise<IpcResponse<import('./lifecycle.types').RestoreResult>>
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void

@@ -223,6 +223,15 @@ export const IPC_CHANNELS = {
     STATUS:   'orchestrator:status',
     TASK_LOG: 'orchestrator:task-log',
   },
+  LIFECYCLE: {
+    GET_METRICS:      'lifecycle:get-metrics',
+    GET_DISTRIBUTION: 'lifecycle:get-distribution',
+    GET_HISTORY:      'lifecycle:get-history',
+    GET_ARCHIVED:     'lifecycle:get-archived',
+    UPDATE_POLICY:    'lifecycle:update-policy',
+    RUN_CYCLE:        'lifecycle:run-cycle',
+    RESTORE:          'lifecycle:restore',
+  },
 } as const
 
 export const IPC_EVENTS = {
