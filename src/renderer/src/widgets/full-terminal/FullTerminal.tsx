@@ -13,6 +13,7 @@ import {
   getSerializeAddon,
   hasReceivedData,
   onClaudeReady,
+  refreshTerminal,
 } from './terminal-manager'
 import TerminalContextMenu from './TerminalContextMenu'
 
@@ -23,15 +24,16 @@ interface FullTerminalProps {
   onReady?: () => void
   onTitleChange?: (agentId: string, title: string) => void
   onSerialize?: (agentId: string, serialize: () => string) => void
+  skipBootOverlay?: boolean
 }
 
-function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize }: FullTerminalProps): React.JSX.Element {
+function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, onSerialize, skipBootOverlay }: FullTerminalProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Boot overlay: covers the terminal with the xterm background until Claude's welcome box
   // appears, hiding the brief shell prompt / clear sequence on first launch.
   // Skipped for agents that already have data (re-selecting an existing agent).
-  const [bootOverlay, setBootOverlay] = useState(() => !hasReceivedData(agentId))
+  const [bootOverlay, setBootOverlay] = useState(() => !skipBootOverlay && !hasReceivedData(agentId))
 
   useEffect(() => {
     if (!bootOverlay) return
@@ -247,6 +249,7 @@ function FullTerminal({ agentId, agentColor, visible, onReady, onTitleChange, on
           }}
           onClear={() => term?.clear()}
           onSelectAll={() => term?.selectAll()}
+          onRefresh={() => refreshTerminal(agentId)}
           onClose={() => setContextMenu(null)}
         />
       )}

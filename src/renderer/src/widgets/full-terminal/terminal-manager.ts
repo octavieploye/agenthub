@@ -22,6 +22,13 @@ import { watchWebGlContext } from '../../crash-logger'
 let webglFailureCount = 0
 const MAX_WEBGL_FAILURES = 3
 
+// Auto-refresh: track cumulative bytes written per agent within a burst window.
+// When a burst exceeds the threshold and then goes quiet, trigger a refresh to
+// rebuild the WebGL glyph atlas (prevents garbled rendering after heavy output).
+const BURST_BYTE_THRESHOLD = 50_000 // 50 KB of output in a single burst
+const BURST_QUIET_MS = 500 // ms of silence after burst to trigger refresh
+const burstCounters = new Map<string, { bytes: number; timer: ReturnType<typeof setTimeout> | null }>()
+
 // Hardcoded Catppuccin Mocha theme — guaranteed to work without CSS variables.
 const CATPPUCCIN_MOCHA = {
   background: '#1e1e2e',
@@ -79,6 +86,34 @@ function ensureIpcSubscription(): void {
         managed.term.write(data)
       } else {
         managed.pendingWrites.push(data)
+      }
+
+      // Track burst size for auto-refresh after heavy output
+      let burst = burstCounters.get(agentId)
+      if (!burst) {
+        burst = { bytes: 0, timer: null }
+        burstCounters.set(agentId, burst)
+      }
+      burst.bytes += data.length
+      if (burst.timer) clearTimeout(burst.timer)
+      if (burst.bytes >= BURST_BYTE_THRESHOLD) {
+        burst.timer = setTimeout(() => {
+          const b = burstCounters.get(agentId)
+          if (b) {
+            b.bytes = 0
+            b.timer = null
+          }
+          refreshTerminal(agentId)
+        }, BURST_QUIET_MS)
+      } else {
+        // Reset counter if burst stays small
+        burst.timer = setTimeout(() => {
+          const b = burstCounters.get(agentId)
+          if (b) {
+            b.bytes = 0
+            b.timer = null
+          }
+        }, BURST_QUIET_MS)
       }
     } else {
       let buf = preOpenBuffers.get(agentId)
@@ -328,6 +363,31 @@ export function onClaudeReady(agentId: string, cb: () => void): () => void {
 }
 
 /**
+ * Force-refresh terminal rendering — disposes and reloads the WebGL addon
+ * to rebuild the glyph texture atlas, then forces a full re-render.
+ * Fixes garbled characters caused by WebGL atlas corruption during heavy output.
+ */
+export function refreshTerminal(agentId: string): void {
+  const managed = terminals.get(agentId)
+  if (!managed || !managed.opened) return
+
+  // Dispose current WebGL addon to clear corrupted atlas
+  if (managed.webglAddon) {
+    try { managed.webglAddon.dispose() } catch { /* ok */ }
+    managed.webglAddon = null
+  }
+
+  // Reload WebGL with a fresh atlas
+  if (managed.container && webglFailureCount < MAX_WEBGL_FAILURES) {
+    managed.webglAddon = tryLoadWebGL(managed.term, managed.container, agentId)
+  }
+
+  // Force full re-render of all visible rows
+  managed.term.refresh(0, managed.term.rows - 1)
+  managed.fitAddon.fit()
+}
+
+/**
  * Destroy terminal — call when agent is removed from the UI.
  */
 export function destroyTerminal(agentId: string): void {
@@ -341,6 +401,36 @@ export function destroyTerminal(agentId: string): void {
   preOpenBuffers.delete(agentId)
   writtenAgents.delete(agentId)
   claudeReadyCallbacks.delete(agentId)
+  const burst = burstCounters.get(agentId)
+  if (burst?.timer) clearTimeout(burst.timer)
+  burstCounters.delete(agentId)
+}
+
+/**
+ * Inject historical content into the terminal before or after it opens.
+ * Called by breakout windows to replay DB history on mount.
+ * Also marks the agent as having received data so the boot overlay is skipped.
+ */
+export function injectHistory(agentId: string, content: string): void {
+  if (!content) return
+  ensureIpcSubscription()
+  writtenAgents.add(agentId)
+
+  const managed = terminals.get(agentId)
+  if (!managed) {
+    let buf = preOpenBuffers.get(agentId)
+    if (!buf) {
+      buf = []
+      preOpenBuffers.set(agentId, buf)
+    }
+    buf.unshift(content)
+    return
+  }
+  if (managed.opened) {
+    managed.term.write(content)
+  } else {
+    managed.pendingWrites.unshift(content)
+  }
 }
 
 /**

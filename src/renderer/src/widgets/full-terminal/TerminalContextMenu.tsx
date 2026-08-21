@@ -8,6 +8,7 @@ interface TerminalContextMenuProps {
   onSearch: () => void
   onClear: () => void
   onSelectAll: () => void
+  onRefresh: () => void
   onClose: () => void
 }
 
@@ -19,6 +20,7 @@ function TerminalContextMenu({
   onSearch,
   onClear,
   onSelectAll,
+  onRefresh,
   onClose
 }: TerminalContextMenuProps): React.JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -59,7 +61,9 @@ function TerminalContextMenu({
     { label: 'Select All', shortcut: '⌘A', onClick: onSelectAll, enabled: true },
     { type: 'separator' as const },
     { label: 'Search', shortcut: '⌘F', onClick: onSearch, enabled: true },
-    { label: 'Clear', shortcut: '', onClick: onClear, enabled: true }
+    { label: 'Clear', shortcut: '', onClick: onClear, enabled: true },
+    { type: 'separator' as const },
+    { label: 'Refresh', shortcut: '', onClick: onRefresh, enabled: true }
   ]
 
   return (
