@@ -1,3 +1,7 @@
+---
+command: modelise
+---
+
 # Market Modeling — Workflow Manifest
 *Five knowledge traditions. Four phases. No point predictions. No corporate ground truth.*
 

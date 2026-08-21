@@ -1,7 +1,6 @@
 {
   "_generated": "2026-07-03",
   "_description": "Central registry of all skills, teams, workflows, and commands. Agents read this for quick discovery instead of scanning the filesystem.",
-
   "skills": [
     {
       "id": "app-scenario-modeler",
@@ -170,9 +169,24 @@
       "category": "business-analysis",
       "path": "plugin/skills/ai-act-deployer-checklist/SKILL.md",
       "source": "project"
+    },
+    {
+      "id": "notion-skills-tree",
+      "name": "notion-skills-tree",
+      "description": "Notion workspace orchestrator — organizes all project, business, and entity data in Notion via MCP bridge. On-demand only. CEO/manager-level communication.",
+      "category": "business-intelligence",
+      "path": "plugin/skills/notion-skills-tree/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "anamnesis-expert",
+      "name": "anamnesis-expert",
+      "description": "Anamnesis system oracle — DB schemas, memory layers, API contracts, entity connections, build state, competitive positioning, and integration status",
+      "category": "business-intelligence",
+      "path": "plugin/skills/anamnesis-expert/SKILL.md",
+      "source": "project"
     }
   ],
-
   "team-orchestrators": [
     {
       "id": "team-business",
@@ -373,8 +387,7 @@
       "team": ".claude/teams/impl-lead/config.json",
       "workflow": null,
       "source": "project"
-    }
-    ,
+    },
     {
       "id": "team-ecosystem-status",
       "name": "team-ecosystem-status",
@@ -384,8 +397,7 @@
       "team": ".claude/teams/ecosystem-status/config.json",
       "workflow": ".claude/workflow-team-library/ecosystem-status/manifest.md",
       "source": "project"
-    }
-    ,
+    },
     {
       "id": "team-conversion-architect",
       "name": "team-conversion-architect",
@@ -395,8 +407,7 @@
       "team": ".claude/teams/conversion-architect/config.json",
       "workflow": ".claude/workflow-team-library/conversion-architect/manifest.md",
       "source": "project"
-    }
-    ,
+    },
     {
       "id": "team-clarity-copy",
       "name": "team-clarity-copy",
@@ -406,8 +417,7 @@
       "team": ".claude/teams/clarity-copy/config.json",
       "workflow": ".claude/workflow-team-library/clarity-copy/manifest.md",
       "source": "project"
-    }
-    ,
+    },
     {
       "id": "team-seo-geo-crawler",
       "name": "team-seo-geo-crawler",
@@ -425,6 +435,26 @@
       "category": "business-venture",
       "path": "plugin/skills/team-before-the-meeting/SKILL.md",
       "team": ".claude/teams/before-the-meeting/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-proposal-strategist",
+      "name": "team-proposal-strategist",
+      "description": "Proposal Strategist Team Orchestrator — methodology-driven B2B proposal drafting with 5 phases: intake, structure, draft with decision flags, quality gate (commitment extraction + legal scan + facts manifest), and client-perspective stress-test.",
+      "category": "business-operations",
+      "path": "plugin/skills/team-proposal-strategist/SKILL.md",
+      "team": null,
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-business-communicator",
+      "name": "team-business-communicator",
+      "description": "Business Communicator Team Orchestrator — drafts difficult professional communications across 6 scenario families with 3 tone variants, escalation sequences, response anticipation, and legal-threshold gating.",
+      "category": "business-decisions",
+      "path": "plugin/skills/team-business-communicator/SKILL.md",
+      "team": null,
       "workflow": null,
       "source": "project"
     },
@@ -477,9 +507,58 @@
       "team": ".claude/teams/integrity-status/config.json",
       "workflow": ".claude/workflow-team-library/integrity-status/manifest.md",
       "source": "project"
+    },
+    {
+      "id": "team-competitive-landscape",
+      "name": "team-competitive-landscape",
+      "description": "Competitive Landscape Team Orchestrator — parallel competitor audits, ecosystem analysis, business synthesis, Notion publish via ollama-cloud bridge",
+      "category": "business-analysis",
+      "path": "plugin/skills/team-competitive-landscape/SKILL.md",
+      "team": ".claude/teams/competitive-landscape/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-command-tester",
+      "name": "team-command-tester",
+      "description": "Command Tester Team Orchestrator — stress-tests and validates output quality of any skill, team, or multi-team workflow via real integration tests, headless xterm capture, token measurement, and LLM-as-judge scoring",
+      "category": "dev-skills",
+      "path": "plugin/skills/team-command-tester/SKILL.md",
+      "team": ".claude/teams/command-tester/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-architecture-triage",
+      "name": "team-architecture-triage",
+      "description": "Architecture Triage Team Orchestrator — inventories blueprint repo, cross-references against live repos, categorizes files (CURRENT/IMPLEMENTED/OUTDATED/RESEARCH/ABANDONED/FUTURE), produces triage report, executes user-approved archival. NEVER deletes.",
+      "category": "business-intelligence",
+      "path": "plugin/skills/team-architecture-triage/SKILL.md",
+      "team": ".claude/teams/architecture-triage/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-project-status-report",
+      "name": "team-project-status-report",
+      "description": "Project Status Report Team Orchestrator — 6 agents in 3 phases: expert trio (product, package, risk) → investigation pair (features, readiness) → lead synthesis. Produces PDF-ready status report with exec summary, product matrix, dependency map, risk register, and ordered action plan.",
+      "category": "business-intelligence",
+      "path": "plugin/skills/team-project-status-report/SKILL.md",
+      "team": ".claude/teams/project-status-report/config.json",
+      "workflow": null,
+      "source": "project"
+    },
+    {
+      "id": "team-ux-challenge",
+      "name": "team-ux-challenge",
+      "description": "UX Challenge Team Orchestrator — adversarial UX↔UI brainstorm + 4-persona critique + least-friction convergence, producing a converged design handed to the sprint planner",
+      "category": "dev-skills",
+      "path": "plugin/skills/team-ux-challenge/SKILL.md",
+      "team": ".claude/teams/ux-challenge/config.json",
+      "workflow": "plugin/workflows/ux-challenge/manifest.md",
+      "source": "project"
     }
   ],
-
   "teams": [
     {
       "id": "dev-stack",
@@ -487,7 +566,23 @@
       "description": "Project-local dev team for backend, frontend, integration, testing, troubleshooting, and git ops",
       "category": "dev-teams",
       "path": ".claude/teams/dev-stack/config.json",
-      "members": ["lead", "scout-backend", "scout-frontend", "scout-integration", "dev-backend", "dev-frontend", "dev-integration", "architect", "troubleshooter", "tester-backend", "tester-frontend", "uiux-senior", "persona-nontechuser", "sec-devops", "git-ops"]
+      "members": [
+        "lead",
+        "scout-backend",
+        "scout-frontend",
+        "scout-integration",
+        "dev-backend",
+        "dev-frontend",
+        "dev-integration",
+        "architect",
+        "troubleshooter",
+        "tester-backend",
+        "tester-frontend",
+        "ux-architect",
+        "persona-nontechuser",
+        "sec-devops",
+        "git-ops"
+      ]
     },
     {
       "id": "business",
@@ -495,7 +590,15 @@
       "description": "Business intelligence and strategy team",
       "category": "business-intelligence",
       "path": ".claude/teams/business/config.json",
-      "members": ["lead-business", "market-researcher", "business-analyst", "strategist", "positioning-expert", "investment-curator", "ceo-advisor"]
+      "members": [
+        "lead-business",
+        "market-researcher",
+        "business-analyst",
+        "strategist",
+        "positioning-expert",
+        "investment-curator",
+        "ceo-advisor"
+      ]
     },
     {
       "id": "brain",
@@ -503,7 +606,13 @@
       "description": "Meta-intelligence team — ecosystem orientation, project status, strategy context",
       "category": "business-intelligence",
       "path": ".claude/teams/brain/config.json",
-      "members": ["lead-brain", "ecosystem-architect", "project-navigator", "strategy-advisor", "memory-curator"]
+      "members": [
+        "lead-brain",
+        "ecosystem-architect",
+        "project-navigator",
+        "strategy-advisor",
+        "memory-curator"
+      ]
     },
     {
       "id": "data",
@@ -511,7 +620,12 @@
       "description": "Data intelligence team — session archival, cross-session analysis",
       "category": "business-intelligence",
       "path": ".claude/teams/data/config.json",
-      "members": ["lead-data", "data-architect", "opportunity-analyst", "risk-analyst"]
+      "members": [
+        "lead-data",
+        "data-architect",
+        "opportunity-analyst",
+        "risk-analyst"
+      ]
     },
     {
       "id": "brainstorm",
@@ -519,7 +633,12 @@
       "description": "General ideation team — concept exploration, challenge, synthesis",
       "category": "creative-ideation",
       "path": ".claude/teams/brainstorm/config.json",
-      "members": ["lead-brainstorm", "concept-explorer", "idea-challenger", "synthesis-builder"]
+      "members": [
+        "lead-brainstorm",
+        "concept-explorer",
+        "idea-challenger",
+        "synthesis-builder"
+      ]
     },
     {
       "id": "marketing",
@@ -527,7 +646,16 @@
       "description": "Marketing and communication team",
       "category": "marketing",
       "path": ".claude/teams/marketing/config.json",
-      "members": ["lead-marketing", "persona-profiler", "readiness-analyst", "competitive-intel-marketing", "channel-strategist", "message-architect", "content-creator", "campaign-analyst"]
+      "members": [
+        "lead-marketing",
+        "persona-profiler",
+        "readiness-analyst",
+        "competitive-intel-marketing",
+        "channel-strategist",
+        "message-architect",
+        "content-creator",
+        "campaign-analyst"
+      ]
     },
     {
       "id": "content-engine",
@@ -535,7 +663,18 @@
       "description": "Content engine team — full content marketing pipeline: product audit, competitive/SEO research, audience study, personas, objection modeling, content strategy, multi-channel creation, conditional paid/outreach",
       "category": "marketing",
       "path": ".claude/teams/content-engine/config.json",
-      "members": ["lead-content-engine", "product-analyst", "competitive-researcher", "audience-researcher", "persona-builder", "objection-modeler", "content-strategist", "content-writer", "video-scriptwriter", "paid-channel-strategist"]
+      "members": [
+        "lead-content-engine",
+        "product-analyst",
+        "competitive-researcher",
+        "audience-researcher",
+        "persona-builder",
+        "objection-modeler",
+        "content-strategist",
+        "content-writer",
+        "video-scriptwriter",
+        "paid-channel-strategist"
+      ]
     },
     {
       "id": "stats",
@@ -543,7 +682,14 @@
       "description": "Statistics and probability team",
       "category": "business-modeling",
       "path": ".claude/teams/stats/config.json",
-      "members": ["lead-stats", "quant-analyst", "risk-modeler", "market-stats-researcher", "behavioral-analyst", "decision-modeler"]
+      "members": [
+        "lead-stats",
+        "quant-analyst",
+        "risk-modeler",
+        "market-stats-researcher",
+        "behavioral-analyst",
+        "decision-modeler"
+      ]
     },
     {
       "id": "ai-expert",
@@ -551,7 +697,13 @@
       "description": "AI configuration quality team",
       "category": "ai-engineering",
       "path": ".claude/teams/ai-expert/config.json",
-      "members": ["lead-ai-engineer", "config-auditor", "prompt-optimizer", "workflow-analyst", "framework-builder"]
+      "members": [
+        "lead-ai-engineer",
+        "config-auditor",
+        "prompt-optimizer",
+        "workflow-analyst",
+        "framework-builder"
+      ]
     },
     {
       "id": "tech-brainstorm",
@@ -559,7 +711,13 @@
       "description": "Technical ideation team — Idea Brief to Feature Brief",
       "category": "dev-skills",
       "path": ".claude/teams/tech-brainstorm/config.json",
-      "members": ["lead-tech-brainstorm", "feature-architect", "sr-backend", "sr-frontend", "ux-explorer"]
+      "members": [
+        "lead-tech-brainstorm",
+        "feature-architect",
+        "sr-backend",
+        "sr-frontend",
+        "ux-explorer"
+      ]
     },
     {
       "id": "ceo-coaching",
@@ -567,7 +725,13 @@
       "description": "CEO coaching team — intake, inner game, outer game, synthesis",
       "category": "business-venture",
       "path": ".claude/teams/ceo-coaching/config.json",
-      "members": ["lead-ceo-coaching", "ceo-profiler", "ceo-inner", "ceo-outer", "ceo-synthesizer"]
+      "members": [
+        "lead-ceo-coaching",
+        "ceo-profiler",
+        "ceo-inner",
+        "ceo-outer",
+        "ceo-synthesizer"
+      ]
     },
     {
       "id": "design-research",
@@ -575,7 +739,12 @@
       "description": "Frontend design research team — landing trends, emotional UX, Tailwind animations",
       "category": "dev-skills",
       "path": ".claude/teams/design-research/config.json",
-      "members": ["lead-design-research", "trend-scout", "emotion-ux", "animation-engineer"]
+      "members": [
+        "lead-design-research",
+        "competitor-trend-researcher",
+        "emotion-ux",
+        "animation-engineer"
+      ]
     },
     {
       "id": "ui-builder",
@@ -583,7 +752,14 @@
       "description": "UI Builder team — coherent, non-tech-user-friendly UI from feature request to validated implementation",
       "category": "dev-skills",
       "path": ".claude/teams/ui-builder/config.json",
-      "members": ["lead-ui-builder", "uiux-senior", "emotion-ux", "dev-frontend", "animation-engineer", "persona-nontechuser"]
+      "members": [
+        "lead-ui-builder",
+        "ux-architect",
+        "emotion-ux",
+        "dev-frontend",
+        "animation-engineer",
+        "persona-nontechuser"
+      ]
     },
     {
       "id": "threat-defense",
@@ -591,7 +767,14 @@
       "description": "External threat detection team — attack surface mapping, secrets scanning, injection analysis, stealth/APT detection, incident response",
       "category": "dev-skills",
       "path": ".claude/teams/threat-defense/config.json",
-      "members": ["lead-threat-defense", "threat-scout", "secrets-guardian", "injection-analyst", "stealth-detector", "incident-responder"]
+      "members": [
+        "lead-threat-defense",
+        "threat-scout",
+        "secrets-guardian",
+        "injection-analyst",
+        "stealth-detector",
+        "incident-responder"
+      ]
     },
     {
       "id": "graphic-identity",
@@ -599,7 +782,14 @@
       "description": "Graphic identity team — zero to complete brand system from Golden Circle strategy to delivery specification",
       "category": "creative-ideation",
       "path": ".claude/teams/graphic-identity/config.json",
-      "members": ["lead-identity", "identity-strategist", "creative-director", "moodboard-curator", "identity-builder", "brand-architect"]
+      "members": [
+        "lead-identity",
+        "identity-strategist",
+        "creative-director",
+        "moodboard-curator",
+        "identity-builder",
+        "brand-architect"
+      ]
     },
     {
       "id": "geo-optimizer",
@@ -607,7 +797,14 @@
       "description": "GEO Optimizer team — AI search visibility, entity signals, Google SEO/Ads/Console, marketplace GEO, DataFast measurement",
       "category": "marketing",
       "path": ".claude/teams/geo-optimizer/config.json",
-      "members": ["geo-lead", "geo-intel-researcher", "ai-identity-analyst", "technical-geo-auditor", "google-visibility-analyst", "marketplace-geo-specialist"]
+      "members": [
+        "geo-lead",
+        "geo-intel-researcher",
+        "ai-identity-analyst",
+        "technical-geo-auditor",
+        "google-visibility-analyst",
+        "marketplace-geo-specialist"
+      ]
     },
     {
       "id": "app-icon-builder",
@@ -615,7 +812,12 @@
       "description": "App icon builder team — OS spec research, SVG-to-icon conversion, verification, self-updating knowledge base",
       "category": "dev-skills",
       "path": ".claude/teams/app-icon-builder/config.json",
-      "members": ["icon-lead", "icon-researcher", "icon-builder", "icon-verifier"]
+      "members": [
+        "icon-lead",
+        "icon-researcher",
+        "icon-builder",
+        "icon-verifier"
+      ]
     },
     {
       "id": "landing-lab",
@@ -623,7 +825,15 @@
       "description": "Landing Lab team — product discovery, pain mapping, value prop, landing page copy, articles, onboarding copy, conversion review",
       "category": "marketing",
       "path": ".claude/teams/landing-lab/config.json",
-      "members": ["lead-landing-lab", "product-researcher", "pain-mapper", "value-prop-architect", "landing-copywriter", "content-builder", "conversion-reviewer"]
+      "members": [
+        "lead-landing-lab",
+        "product-researcher",
+        "pain-mapper",
+        "value-prop-architect",
+        "landing-copywriter",
+        "content-builder",
+        "conversion-reviewer"
+      ]
     },
     {
       "id": "legal-guardian",
@@ -631,7 +841,13 @@
       "description": "Legal Guardian team — full-stack legal risk review: scan, classify, draft policies/contracts, adversarial counter-review for litigation and asset loss vectors",
       "category": "business-analysis",
       "path": ".claude/teams/legal-guardian/config.json",
-      "members": ["lead-legal-guardian", "legal-scanner", "risk-assessor", "policy-writer", "counter-legal-advisor"]
+      "members": [
+        "lead-legal-guardian",
+        "legal-scanner",
+        "risk-assessor",
+        "policy-writer",
+        "counter-legal-advisor"
+      ]
     },
     {
       "id": "jailbreak-red-team",
@@ -639,7 +855,13 @@
       "description": "Adversarial LLM deception scenario team — generates, classifies, validates, and logs attack patterns across 7 T-code families and 8 protected asset categories",
       "category": "dev-skills",
       "path": ".claude/teams/jailbreak-red-team/config.json",
-      "members": ["lead-jailbreak", "jailbreak-scenario-generator", "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"]
+      "members": [
+        "lead-jailbreak",
+        "jailbreak-scenario-generator",
+        "jailbreak-classifier",
+        "jailbreak-probe-validator",
+        "jailbreak-log-builder"
+      ]
     },
     {
       "id": "onboarding-engine",
@@ -647,7 +869,14 @@
       "description": "Onboarding Engine team — Apple-style onboarding design for marketplace clients, affiliates, and creators",
       "category": "business-venture",
       "path": ".claude/teams/onboarding-engine/config.json",
-      "members": ["onboarding-lead", "experience-architect", "payment-flow-designer", "automation-blueprint", "onboarding-risk-analyst", "onboarding-copywriter"]
+      "members": [
+        "onboarding-lead",
+        "experience-architect",
+        "payment-flow-designer",
+        "automation-blueprint",
+        "onboarding-risk-analyst",
+        "onboarding-copywriter"
+      ]
     },
     {
       "id": "impl-lead",
@@ -655,34 +884,54 @@
       "description": "Implementation Lead team — full project audit: stack scout, product scout, content scout, implementation planner",
       "category": "dev-skills",
       "path": ".claude/teams/impl-lead/config.json",
-      "members": ["impl-lead", "impl-scout-stack", "impl-scout-product", "impl-scout-content", "impl-planner"]
-    }
-    ,
+      "members": [
+        "impl-lead",
+        "impl-scout-stack",
+        "impl-scout-product",
+        "impl-scout-content",
+        "impl-planner"
+      ]
+    },
     {
       "id": "conversion-architect",
       "name": "conversion-architect",
       "description": "Conversion Architecture team — bounce psychology research, CIA page teardown, AI resistance mapping, 0.1% conversion blueprint for Opeidos",
       "category": "marketing",
       "path": ".claude/teams/conversion-architect/config.json",
-      "members": ["lead-conversion-architect", "bounce-analyst", "cia-page-reviewer", "ai-resistance-analyst", "conversion-blueprint"]
-    }
-    ,
+      "members": [
+        "lead-conversion-architect",
+        "bounce-analyst",
+        "cia-page-reviewer",
+        "ai-resistance-analyst",
+        "conversion-blueprint"
+      ]
+    },
     {
       "id": "clarity-copy",
       "name": "clarity-copy",
       "description": "CEO-style copy team — distills product pain to 1 sentence per segment, generates headlines/CTAs/taglines using BLUF principles, validates with critic gate",
       "category": "marketing",
       "path": ".claude/teams/clarity-copy/config.json",
-      "members": ["lead-clarity-copy", "pain-distiller", "clarity-writer", "copy-critic"]
-    }
-    ,
+      "members": [
+        "lead-clarity-copy",
+        "pain-distiller",
+        "clarity-writer",
+        "copy-critic"
+      ]
+    },
     {
       "id": "seo-geo-crawler",
       "name": "seo-geo-crawler",
       "description": "SEO/GEO Crawler team — bot crawler, Google SEO expert, GEO engineer, keyword researcher",
       "category": "marketing",
       "path": ".claude/teams/seo-geo-crawler/config.json",
-      "members": ["seo-crawler-lead", "seo-bot-crawler", "seo-google-expert", "seo-geo-engineer", "seo-keyword-researcher"]
+      "members": [
+        "seo-crawler-lead",
+        "seo-bot-crawler",
+        "seo-google-expert",
+        "seo-geo-engineer",
+        "seo-keyword-researcher"
+      ]
     },
     {
       "id": "before-the-meeting",
@@ -690,7 +939,12 @@
       "description": "Before the Meeting team — sequential price proof, proposal proof, pitch proof, and synthesis into a single Meeting Readiness Brief",
       "category": "business-venture",
       "path": ".claude/teams/before-the-meeting/config.json",
-      "members": ["btm-price-agent", "btm-proposal-agent", "btm-pitch-agent", "btm-synthesizer"]
+      "members": [
+        "btm-price-agent",
+        "btm-proposal-agent",
+        "btm-pitch-agent",
+        "btm-synthesizer"
+      ]
     },
     {
       "id": "sprint-planner",
@@ -698,7 +952,12 @@
       "description": "Sprint Planner team — intake, codebase mapping, sprint design, orchestration validation, approved sprint plan with ownership matrix",
       "category": "dev-teams",
       "path": ".claude/teams/team-sprint-planner/config.json",
-      "members": ["sprint-planner-lead", "repo-mapper", "sprint-architect", "orchestration-validator"]
+      "members": [
+        "sprint-planner-lead",
+        "repo-mapper",
+        "sprint-architect",
+        "orchestration-validator"
+      ]
     },
     {
       "id": "notification-layer",
@@ -706,7 +965,12 @@
       "description": "Notification Layer team — sound alerts, color/glow animations, TTS voice. Path A (direct) and Path B (triage pipeline) architecture.",
       "category": "dev-teams",
       "path": ".claude/teams/notification-layer/config.json",
-      "members": ["lead-notification", "sound-specialist", "glow-specialist", "tts-specialist"]
+      "members": [
+        "lead-notification",
+        "sound-specialist",
+        "glow-specialist",
+        "tts-specialist"
+      ]
     },
     {
       "id": "impl-review",
@@ -714,7 +978,12 @@
       "description": "Implementation Review team — post-sprint audit: plan vs git vs code vs integration. Codebase is ground truth.",
       "category": "dev-skills",
       "path": ".claude/teams/impl-review/config.json",
-      "members": ["impl-review-lead", "impl-review-code", "impl-review-git", "impl-review-integration"]
+      "members": [
+        "impl-review-lead",
+        "impl-review-code",
+        "impl-review-git",
+        "impl-review-integration"
+      ]
     },
     {
       "id": "integrity-status",
@@ -722,10 +991,96 @@
       "description": "Full-stack integrity audit team — migrations, schema drift, backend quality, API contracts, frontend alignment, CI/CD, cross-layer architectural assessment",
       "category": "dev-skills",
       "path": ".claude/teams/integrity-status/config.json",
-      "members": ["lead-integrity-status", "integrity-migration", "integrity-infra", "integrity-backend", "integrity-contract", "integrity-frontend", "integrity-cicd", "integrity-architect"]
+      "members": [
+        "lead-integrity-status",
+        "integrity-migration",
+        "integrity-infra",
+        "integrity-backend",
+        "integrity-contract",
+        "integrity-frontend",
+        "integrity-cicd",
+        "integrity-architect"
+      ]
+    },
+    {
+      "id": "competitive-landscape",
+      "name": "competitive-landscape",
+      "description": "Competitive Landscape team — parallel competitor audits, ecosystem analysis, business synthesis, Notion publish",
+      "category": "business-analysis",
+      "path": ".claude/teams/competitive-landscape/config.json",
+      "members": [
+        "lead-competitive-landscape",
+        "competitor-auditor",
+        "ecosystem-analyst",
+        "competitive-synthesizer"
+      ]
+    },
+    {
+      "id": "command-tester",
+      "name": "command-tester",
+      "description": "Command Tester team — stress-test and validate output quality of skills, teams, and multi-team workflows",
+      "category": "dev-skills",
+      "path": ".claude/teams/command-tester/config.json",
+      "members": [
+        "lead-command-tester",
+        "test-planner",
+        "scenario-runner",
+        "output-capturer",
+        "token-measurer",
+        "output-judge",
+        "rendering-tester",
+        "report-builder"
+      ]
+    },
+    {
+      "id": "architecture-triage",
+      "name": "architecture-triage",
+      "description": "Architecture Triage team — inventories blueprint repo, cross-references live repos, categorizes files, archives with user approval",
+      "category": "business-intelligence",
+      "path": ".claude/teams/architecture-triage/config.json",
+      "members": [
+        "triage-lead",
+        "inventory-scout",
+        "repo-census-scout",
+        "cross-reference-analyst",
+        "archive-executor"
+      ]
+    },
+    {
+      "id": "project-status-report",
+      "name": "project-status-report",
+      "description": "Project Status Report team — 6 agents in 3 phases: expert trio + investigation pair + lead synthesis. PDF-ready status report.",
+      "category": "business-intelligence",
+      "path": ".claude/teams/project-status-report/config.json",
+      "members": [
+        "lead-status",
+        "product-expert",
+        "package-expert",
+        "risk-manager",
+        "feature-investigator",
+        "readiness-analyst"
+      ]
+    },
+    {
+      "id": "ux-challenge",
+      "name": "ux-challenge",
+      "description": "UX Challenge team — adversarial UX↔UI brainstorm + 4-persona critique + least-friction convergence",
+      "category": "dev-skills",
+      "path": ".claude/teams/ux-challenge/config.json",
+      "members": [
+        "lead-ux-challenge",
+        "competitor-trend-researcher",
+        "ux-architect",
+        "ui-designer",
+        "technical-critic",
+        "sceptical-critic",
+        "time-to-think-critic",
+        "roi-critic",
+        "emotional-onboarding",
+        "content-layout-expert"
+      ]
     }
   ],
-
   "workflows": [
     {
       "id": "business",
@@ -854,8 +1209,7 @@
       "category": "business-venture",
       "path": ".claude/workflow-team-library/onboarding-engine/manifest.md",
       "team": "onboarding-engine"
-    }
-    ,
+    },
     {
       "id": "ecosystem-status",
       "name": "Ecosystem Status Methodology",
@@ -863,8 +1217,7 @@
       "category": "business-intelligence",
       "path": ".claude/workflow-team-library/ecosystem-status/manifest.md",
       "team": "ecosystem-status"
-    }
-    ,
+    },
     {
       "id": "conversion-architect",
       "name": "Conversion Architect Methodology",
@@ -872,8 +1225,7 @@
       "category": "marketing",
       "path": ".claude/workflow-team-library/conversion-architect/manifest.md",
       "team": "conversion-architect"
-    }
-    ,
+    },
     {
       "id": "clarity-copy",
       "name": "Clarity Copy Methodology",
@@ -905,151 +1257,386 @@
       "category": "dev-skills",
       "path": ".claude/workflow-team-library/integrity-status/manifest.md",
       "team": "integrity-status"
+    },
+    {
+      "id": "upgrade-sprint",
+      "name": "Upgrade Sprint Methodology",
+      "description": "LINEAR: dependency audit (scout-frontend) → execute upgrade + fix breaking changes (dev-frontend) → visual regression tests (tester-frontend) → senior validation gate (sr-frontend). For any major frontend dependency upgrade.",
+      "category": "dev-skills",
+      "path": "plugin/workflows/upgrade-sprint/manifest.md",
+      "team": null
+    },
+    {
+      "id": "memory-write-gate",
+      "name": "Memory Write Gate",
+      "description": "Evaluates whether data is substantial enough to enter Anamnesis. 5W1H evaluation (What/Why/When/Where/How + substantiveness score). Security screening for memory poisoning (OWASP ASI06). Callable by users or agents before any memory write.",
+      "category": "dev-skills",
+      "path": "plugin/skills/memory-write-gate/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "team-knowledge-manager",
+      "name": "Knowledge Manager",
+      "description": "Knowledge management lifecycle: capture (post-session), brief (pre-session), audit (periodic). Dispatches knowledge-curator and memory-write-gate. COMING SOON — requires Anamnesis.",
+      "category": "dev-skills",
+      "path": "plugin/skills/team-knowledge-manager/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "ux-challenge",
+      "name": "UX Challenge Workflow",
+      "description": "Adversarial UX↔UI design workflow — WEBSITE | APPLICATION modes, 8 stages from research to sprint handoff",
+      "category": "dev-skills",
+      "path": "plugin/workflows/ux-challenge/manifest.md",
+      "team": "ux-challenge"
     }
   ],
-
   "commands": {
     "dev-stack": [
-      "team", "scout-backend", "scout-frontend", "scout-integration",
-      "dev-backend", "dev-frontend", "dev-integration", "architect",
-      "troubleshooter", "tester-backend", "tester-frontend",
-      "uiux-senior", "persona-nontechuser", "sec-devops", "git-commit"
+      "team",
+      "scout-backend",
+      "scout-frontend",
+      "scout-integration",
+      "dev-backend",
+      "dev-frontend",
+      "dev-integration",
+      "architect",
+      "troubleshooter",
+      "tester-backend",
+      "tester-frontend",
+      "ux-architect",
+      "persona-nontechuser",
+      "sec-devops",
+      "git-commit"
     ],
     "business": [
-      "team-business", "market-researcher", "business-analyst",
-      "strategist", "positioning-expert", "investment-curator", "ceo-advisor"
+      "team-business",
+      "market-researcher",
+      "business-analyst",
+      "strategist",
+      "positioning-expert",
+      "investment-curator",
+      "ceo-advisor"
     ],
     "brain": [
-      "team-brain", "ecosystem-architect", "project-navigator",
-      "strategy-advisor", "memory-curator"
+      "team-brain",
+      "ecosystem-architect",
+      "project-navigator",
+      "strategy-advisor",
+      "memory-curator"
     ],
     "data": [
-      "team-data", "data-architect", "opportunity-analyst", "risk-analyst"
+      "team-data",
+      "data-architect",
+      "opportunity-analyst",
+      "risk-analyst"
     ],
     "brainstorm": [
-      "team-brainstorm", "concept-explorer", "idea-challenger", "synthesis-builder"
+      "team-brainstorm",
+      "concept-explorer",
+      "idea-challenger",
+      "synthesis-builder"
     ],
     "marketing": [
-      "team-marketing", "persona-profiler", "readiness-analyst",
-      "competitive-intel-marketing", "channel-strategist",
-      "message-architect", "content-creator", "campaign-analyst"
+      "team-marketing",
+      "persona-profiler",
+      "readiness-analyst",
+      "competitive-intel-marketing",
+      "channel-strategist",
+      "message-architect",
+      "content-creator",
+      "campaign-analyst"
     ],
     "stats": [
-      "team-stats", "quant-analyst", "risk-modeler",
-      "market-stats-researcher", "behavioral-analyst", "decision-modeler"
+      "team-stats",
+      "quant-analyst",
+      "risk-modeler",
+      "market-stats-researcher",
+      "behavioral-analyst",
+      "decision-modeler"
     ],
     "ai-expert": [
-      "team-ai-expert", "config-auditor", "prompt-optimizer",
-      "workflow-analyst", "framework-builder",
-      "ai-audit", "ai-fix", "ai-pre-build", "ai-post-sprint"
+      "team-ai-expert",
+      "config-auditor",
+      "prompt-optimizer",
+      "workflow-analyst",
+      "framework-builder",
+      "ai-audit",
+      "ai-fix",
+      "ai-pre-build",
+      "ai-post-sprint"
     ],
     "tech-brainstorm": [
-      "team-tech-brainstorm", "feature-architect", "sr-backend",
-      "sr-frontend", "ux-explorer"
+      "team-tech-brainstorm",
+      "feature-architect",
+      "sr-backend",
+      "sr-frontend",
+      "ux-explorer"
     ],
     "ceo-coaching": [
-      "ceo-coaching-team", "ceo-coaching-profiler", "ceo-coaching-inner",
-      "ceo-coaching-outer", "ceo-coaching-synthesizer"
+      "ceo-coaching-team",
+      "ceo-coaching-profiler",
+      "ceo-coaching-inner",
+      "ceo-coaching-outer",
+      "ceo-coaching-synthesizer"
     ],
     "market-sim": [
-      "market-sim-start", "market-sim-p1", "market-sim-p2", "market-sim-p3",
-      "market-sim-p4", "market-sim-p5", "market-sim-p6"
+      "market-sim-start",
+      "market-sim-p1",
+      "market-sim-p2",
+      "market-sim-p3",
+      "market-sim-p4",
+      "market-sim-p5",
+      "market-sim-p6"
     ],
     "destructuring": [
-      "destructuring-full", "destructuring-business", "destructuring-competitor",
-      "destructuring-market", "destructuring-dynamics", "destructuring-patterns"
+      "destructuring-full",
+      "destructuring-business",
+      "destructuring-competitor",
+      "destructuring-market",
+      "destructuring-dynamics",
+      "destructuring-patterns"
     ],
     "design-research": [
-      "team-design-research", "lead-design-research", "trend-scout",
-      "emotion-ux", "animation-engineer"
+      "team-design-research",
+      "lead-design-research",
+      "competitor-trend-researcher",
+      "emotion-ux",
+      "animation-engineer"
     ],
     "ui-builder": [
-      "team-ui-builder", "lead-ui-builder", "uiux-senior",
-      "emotion-ux", "dev-frontend", "animation-engineer", "persona-nontechuser"
+      "team-ui-builder",
+      "lead-ui-builder",
+      "ux-architect",
+      "emotion-ux",
+      "dev-frontend",
+      "animation-engineer",
+      "persona-nontechuser"
     ],
     "standalone": [
-      "full-code-review", "modelise", "modelise-quick", "modelise-shadow",
-      "telegram-notify"
+      "full-code-review",
+      "modelise",
+      "modelise-quick",
+      "modelise-shadow",
+      "telegram-notify",
+      "persona-panel"
     ],
     "threat-defense": [
-      "team-threat-defense", "lead-threat-defense", "threat-scout",
-      "secrets-guardian", "injection-analyst", "stealth-detector", "incident-responder"
+      "team-threat-defense",
+      "lead-threat-defense",
+      "threat-scout",
+      "secrets-guardian",
+      "injection-analyst",
+      "stealth-detector",
+      "incident-responder"
     ],
     "graphic-identity": [
-      "graphic-identity-team", "lead-identity", "identity-strategist",
-      "creative-director", "moodboard-curator", "identity-builder", "brand-architect"
+      "graphic-identity-team",
+      "lead-identity",
+      "identity-strategist",
+      "creative-director",
+      "moodboard-curator",
+      "identity-builder",
+      "brand-architect"
     ],
     "geo-optimizer": [
-      "team-geo-optimizer", "geo-lead", "geo-intel-researcher",
-      "ai-identity-analyst", "technical-geo-auditor",
-      "google-visibility-analyst", "marketplace-geo-specialist"
+      "team-geo-optimizer",
+      "geo-lead",
+      "geo-intel-researcher",
+      "ai-identity-analyst",
+      "technical-geo-auditor",
+      "google-visibility-analyst",
+      "marketplace-geo-specialist"
     ],
     "app-icon-builder": [
-      "icon-lead", "icon-researcher", "icon-builder", "icon-verifier"
+      "icon-lead",
+      "icon-researcher",
+      "icon-builder",
+      "icon-verifier"
     ],
     "landing-lab": [
-      "team-landing-lab", "lead-landing-lab", "product-researcher",
-      "pain-mapper", "value-prop-architect", "landing-copywriter",
-      "content-builder", "conversion-reviewer"
+      "team-landing-lab",
+      "lead-landing-lab",
+      "product-researcher",
+      "pain-mapper",
+      "value-prop-architect",
+      "landing-copywriter",
+      "content-builder",
+      "conversion-reviewer"
     ],
     "legal-guardian": [
-      "team-legal-guardian", "lead-legal-guardian", "legal-scanner",
-      "risk-assessor", "policy-writer", "counter-legal-advisor"
+      "team-legal-guardian",
+      "lead-legal-guardian",
+      "legal-scanner",
+      "risk-assessor",
+      "policy-writer",
+      "counter-legal-advisor"
     ],
     "jailbreak-red-team": [
-      "team-jailbreak-red-team", "lead-jailbreak", "jailbreak-scenario-generator",
-      "jailbreak-classifier", "jailbreak-probe-validator", "jailbreak-log-builder"
+      "team-jailbreak-red-team",
+      "lead-jailbreak",
+      "jailbreak-scenario-generator",
+      "jailbreak-classifier",
+      "jailbreak-probe-validator",
+      "jailbreak-log-builder"
     ],
     "onboarding-engine": [
-      "team-onboarding-engine", "onboarding-lead", "experience-architect",
-      "payment-flow-designer", "automation-blueprint",
-      "onboarding-risk-analyst", "onboarding-copywriter"
+      "team-onboarding-engine",
+      "onboarding-lead",
+      "experience-architect",
+      "payment-flow-designer",
+      "automation-blueprint",
+      "onboarding-risk-analyst",
+      "onboarding-copywriter"
     ],
     "impl-lead": [
-      "team-impl-lead", "impl-lead", "impl-scout-stack",
-      "impl-scout-product", "impl-scout-content", "impl-planner"
+      "team-impl-lead",
+      "impl-lead",
+      "impl-scout-stack",
+      "impl-scout-product",
+      "impl-scout-content",
+      "impl-planner"
     ],
     "ecosystem-status": [
-      "team-ecosystem-status", "lead-ecosystem", "agenthub-expert",
-      "optimaeus-expert", "llm-pckg-expert", "feature-investigator", "risk-manager"
+      "team-ecosystem-status",
+      "lead-ecosystem",
+      "agenthub-expert",
+      "optimaeus-expert",
+      "llm-pckg-expert",
+      "feature-investigator",
+      "risk-manager"
     ],
     "conversion-architect": [
-      "team-conversion-architect", "lead-conversion-architect",
-      "bounce-analyst", "cia-page-reviewer", "ai-resistance-analyst", "conversion-blueprint"
+      "team-conversion-architect",
+      "lead-conversion-architect",
+      "bounce-analyst",
+      "cia-page-reviewer",
+      "ai-resistance-analyst",
+      "conversion-blueprint"
     ],
     "clarity-copy": [
-      "team-clarity-copy", "lead-clarity-copy", "pain-distiller",
-      "clarity-writer", "copy-critic"
+      "team-clarity-copy",
+      "lead-clarity-copy",
+      "pain-distiller",
+      "clarity-writer",
+      "copy-critic"
     ],
     "before-the-meeting": [
-      "team-before-the-meeting", "btm-price-agent", "btm-proposal-agent",
-      "btm-pitch-agent", "btm-synthesizer"
+      "team-before-the-meeting",
+      "btm-price-agent",
+      "btm-proposal-agent",
+      "btm-pitch-agent",
+      "btm-synthesizer"
+    ],
+    "proposal-strategist": [
+      "team-proposal-strategist",
+      "ps-intake",
+      "ps-structure",
+      "ps-drafter",
+      "ps-quality-gate",
+      "ps-stress-test"
+    ],
+    "business-communicator": [
+      "team-business-communicator",
+      "bc-intake",
+      "bc-drafter",
+      "bc-legal-gate",
+      "bc-refiner"
     ],
     "sprint-planner": [
-      "team-sprint-planner", "sprint-planner-lead", "repo-mapper",
-      "sprint-architect", "orchestration-validator"
+      "team-sprint-planner",
+      "sprint-planner-lead",
+      "repo-mapper",
+      "sprint-architect",
+      "orchestration-validator"
     ],
     "notification-layer": [
-      "team-notification-layer", "lead-notification", "sound-specialist",
-      "glow-specialist", "tts-specialist"
+      "team-notification-layer",
+      "lead-notification",
+      "sound-specialist",
+      "glow-specialist",
+      "tts-specialist"
     ],
     "impl-review": [
-      "team-impl-review", "impl-review-lead", "impl-review-code",
-      "impl-review-git", "impl-review-integration"
+      "team-impl-review",
+      "impl-review-lead",
+      "impl-review-code",
+      "impl-review-git",
+      "impl-review-integration"
     ],
     "content-engine": [
-      "team-content-engine", "lead-content-engine", "product-analyst",
-      "competitive-researcher", "audience-researcher", "persona-builder",
-      "objection-modeler", "content-strategist", "content-writer",
-      "video-scriptwriter", "paid-channel-strategist"
+      "team-content-engine",
+      "lead-content-engine",
+      "product-analyst",
+      "competitive-researcher",
+      "audience-researcher",
+      "persona-builder",
+      "objection-modeler",
+      "content-strategist",
+      "content-writer",
+      "video-scriptwriter",
+      "paid-channel-strategist"
     ],
     "integrity-status": [
-      "team-integrity-status", "lead-integrity-status", "integrity-migration",
-      "integrity-infra", "integrity-backend", "integrity-contract",
-      "integrity-frontend", "integrity-cicd", "integrity-architect"
+      "team-integrity-status",
+      "lead-integrity-status",
+      "integrity-migration",
+      "integrity-infra",
+      "integrity-backend",
+      "integrity-contract",
+      "integrity-frontend",
+      "integrity-cicd",
+      "integrity-architect"
+    ],
+    "competitive-landscape": [
+      "team-competitive-landscape",
+      "lead-competitive-landscape",
+      "competitor-auditor",
+      "ecosystem-analyst",
+      "competitive-synthesizer"
+    ],
+    "command-tester": [
+      "team-command-tester",
+      "lead-command-tester",
+      "test-planner",
+      "scenario-runner",
+      "output-capturer",
+      "token-measurer",
+      "output-judge",
+      "rendering-tester",
+      "report-builder"
+    ],
+    "architecture-triage": [
+      "team-architecture-triage",
+      "triage-lead",
+      "inventory-scout",
+      "repo-census-scout",
+      "cross-reference-analyst",
+      "archive-executor"
+    ],
+    "project-status-report": [
+      "team-project-status-report",
+      "lead-status",
+      "product-expert",
+      "package-expert",
+      "risk-manager",
+      "feature-investigator",
+      "readiness-analyst"
+    ],
+    "ux-challenge": [
+      "team-ux-challenge",
+      "lead-ux-challenge",
+      "competitor-trend-researcher",
+      "ux-architect",
+      "ui-designer",
+      "technical-critic",
+      "sceptical-critic",
+      "time-to-think-critic",
+      "roi-critic",
+      "emotional-onboarding",
+      "content-layout-expert"
     ]
   },
-
   "notes": {
     "empty-directories": [
       {

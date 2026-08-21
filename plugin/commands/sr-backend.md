@@ -36,6 +36,25 @@ Test surface: {which test files would need to cover this — no writing, just id
 Backend open questions for feature-architect: {unresolved ambiguities}
 ```
 
+**verif-code-gate (MANDATORY per approach):**
+
+Before assessing feasibility, check whether the proposed feature/service/data structure already exists in the target repo:
+
+1. Extract the key functionalities from the approach (e.g., "trust_score service", "drift detector", "webhook handler")
+2. Run targeted searches: `grep`, `glob` for each functionality name across the repo
+3. Add a section to each Backend Assessment:
+
+```
+Existence check (verif-code-gate):
+  - {feature}: EXISTS | PARTIAL | NOT_FOUND — {file:line or search evidence}
+```
+
+- `EXISTS` → flag immediately: "This feature already exists. Approach must reference existing code, not rebuild."
+- `PARTIAL` → note what exists and what is missing
+- `NOT_FOUND` → confirmed safe to build (include search commands run)
+
+This check prevents Feature Briefs from proposing to build functionality that is already implemented.
+
 **Key areas to check in the codebase:**
 - `src/main/services/` — existing services, assess if the approach extends or conflicts
 - `src/main/db/migrations/` — migration history, assess migration complexity

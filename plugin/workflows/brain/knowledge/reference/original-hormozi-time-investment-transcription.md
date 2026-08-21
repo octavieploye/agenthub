@@ -1,4 +1,4 @@
-# ORIGINAL: Hormozi Time Investment Transcription (raw, as provided)
+# ORIGINAL: [source] Time Investment Transcription (raw, as provided)
 TYPE: raw transcription
 DATE: 2026-06-25
 SOURCE: Video transcription provided by user

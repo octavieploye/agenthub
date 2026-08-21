@@ -1,0 +1,86 @@
+{
+  "_description": "Opeidos Workflow QC Certificate — filled by Gate 7 of the workflow-qc skill. Store as {workflow_id}/qc-certificate.json on the Hetzner workflow volume. Served by Opeidos API alongside step content.",
+  "workflow_id": "",
+  "workflow_name": "",
+  "version": "",
+  "qc_mode": "",
+  "qc_run_date": "",
+  "qc_run_by": "",
+  "gates": {
+    "gate_1_scope": {
+      "result": "",
+      "scanned_files": 0,
+      "forbidden_terms_found": [],
+      "owner_data_found": [],
+      "distributable": false
+    },
+    "gate_2_structure": {
+      "result": "",
+      "check_manifest": "",
+      "check_paths": "",
+      "check_token_counts": "",
+      "check_load_order": "",
+      "check_file_formats": "",
+      "check_self_contained": "",
+      "warnings": [],
+      "failures": []
+    },
+    "gate_3_content": {
+      "result": "",
+      "layer_1_pii": "CLEAN",
+      "layer_1_legal_risk": "CLEAN",
+      "layer_1_product_deps": "CLEAN",
+      "layer_2_named_entities": [],
+      "layer_3_semantic": "not_run",
+      "human_review_needed": false,
+      "review_items": []
+    },
+    "gate_4_injection": {
+      "result": "",
+      "steps_tested": 0,
+      "probe_1_repeat": "",
+      "probe_2_ignore": "",
+      "probe_3_reveal": "",
+      "probe_4_translate": "",
+      "probe_5_name": "",
+      "patches_applied": 0,
+      "note": "not_run_in_lightweight_mode"
+    },
+    "gate_5_llm_compat": {
+      "result": "",
+      "peak_tokens_in_context": 0,
+      "role_complexity_bump": false,
+      "output_format_bump": false,
+      "lost_in_middle_risk": false,
+      "minimum_llm_tier": 0,
+      "tier_1_compatible": false,
+      "tier_2_compatible": false,
+      "tier_3_compatible": false,
+      "tier_4_compatible": false,
+      "tier_5_compatible": false,
+      "live_simulation_result": "not_run",
+      "recommended_minimum_model": ""
+    },
+    "gate_6_output_quality": {
+      "result": "",
+      "model_used": "",
+      "quality_score": 0,
+      "sections_present": [],
+      "sections_incomplete": [],
+      "sections_missing": [],
+      "scoring_fields_populated": "",
+      "forbidden_content_in_output": [],
+      "recommendations": [],
+      "note": "not_run_in_lightweight_mode"
+    },
+    "gate_7_certification": {
+      "prerequisite_check": "PASS",
+      "denied_at": null,
+      "denied_reason": null
+    }
+  },
+  "distribution_ready": false,
+  "certified_at": "",
+  "minimum_llm_tier": 0,
+  "notes": ""
+}

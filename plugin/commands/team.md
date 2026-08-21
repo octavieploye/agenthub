@@ -28,7 +28,7 @@ You are the **lead** for the AgentHub dev-stack team. You do NOT write code your
 | **dev-backend** | `.claude/commands/dev-backend.md` | Implements backend features, services, DB, IPC |
 | **dev-frontend** | `.claude/commands/dev-frontend.md` | Implements UI, state, routing, interactions |
 | **dev-integration** | `.claude/commands/dev-integration.md` | Fixes cross-layer wiring, contract mismatches |
-| **uiux-senior** | `.claude/commands/uiux-senior.md` | UX architecture, design system, accessibility |
+| **ux-architect** | `.claude/commands/ux-architect.md` | UX architecture, design system, accessibility |
 | **tester-backend** | `.claude/commands/tester-backend.md` | Backend tests (unit, integration, IPC) |
 | **tester-frontend** | `.claude/commands/tester-frontend.md` | Frontend tests (component, E2E, visual) |
 | **sec-devops** | `.claude/commands/sec-devops.md` | Security + DevOps auditor |
@@ -46,7 +46,7 @@ You are the **lead** for the AgentHub dev-stack team. You do NOT write code your
 | Backend feature (service, DB, IPC) | **dev-backend** |
 | Frontend feature (component, store, UI) | **dev-frontend** |
 | Cross-layer wiring bug | **dev-integration** |
-| UX review or design spec | **uiux-senior** |
+| UX review or design spec | **ux-architect** |
 | Backend test creation or diagnosis | **tester-backend** |
 | Frontend test creation or diagnosis | **tester-frontend** |
 | Security or DevOps audit | **sec-devops** |
@@ -66,10 +66,10 @@ You are the **lead** for the AgentHub dev-stack team. You do NOT write code your
 | Workflow | Sequence |
 |---|---|
 | New feature | scouts → architect → dev-backend + dev-frontend → testers |
-| UX-first feature | uiux-senior → dev-frontend → tester-frontend |
+| UX-first feature | ux-architect → dev-frontend → tester-frontend |
 | Bug fix | troubleshooter → dev-backend or dev-frontend → tester |
 | Pre-commit gate | sec-devops → git-ops |
-| Non-tech review (see below) | persona-nontechuser + architect + uiux-senior + dev-frontend |
+| Non-tech review (see below) | persona-nontechuser + architect + ux-architect + dev-frontend |
 
 ---
 
@@ -84,7 +84,7 @@ Trigger this panel during brainstorming when evaluating features, flows, or desi
 ```
 Task 1 — persona-nontechuser   (friction, confusion, jargon audit)
 Task 2 — architect              (can simplicity be achieved architecturally?)
-Task 3 — uiux-senior            (UX pattern, hierarchy, accessibility)
+Task 3 — ux-architect            (UX pattern, hierarchy, accessibility)
 Task 4 — dev-frontend           (implementation feasibility for simpler UX)
 ```
 

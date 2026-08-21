@@ -47,6 +47,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [full-code-review](full-code-review/SKILL.md) — Full multi-agent codebase audit + fix + verify cycle
 - [token-optimizer](token-optimizer/SKILL.md) — Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline
 - [chaos-modeling](chaos-modeling/SKILL.md) — Chaos engineering for any project type — 8-domain failure scenarios (load, DB, external APIs, memory, network, filesystem, concurrency, security) + real-time outcome logging + resilience hardening plan
+- [workflow-qc](workflow-qc/SKILL.md) — 7-gate dual-mode Opeidos workflow certification: scope block, structure validation, forbidden content scan, prompt injection resistance, LLM compatibility, output quality, certification + DB record
 
 ## Voice & Articulation
 
@@ -56,6 +57,10 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 
 - [external-source-to-strategy](external-source-to-strategy/SKILL.md) — Turn a transcript, article, or framework into a competitive brief, priority todos, and memory reference scoped to this project
 - [trustworthy-sources](trustworthy-sources/SKILL.md) — Evaluate whether a source is credible enough to cite as evidence for a factual, design, or business decision (5-source convergence rule, corporate ≠ trustworthy)
+
+## Notion Integration
+
+- [notion-skills-tree](notion-skills-tree/SKILL.md) — Notion workspace orchestrator: organizes projects, business intel, entity status via MCP bridge. On-demand, CEO-level, autonomous with strict modification protocol.
 
 ## Business Venture
 
@@ -73,6 +78,8 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 ## Workflows
 
 - [market-modeling](../workflows/market-modeling/manifest.md) — Five-tradition market intelligence: harvest → five-lens analysis → shadow review → synthesis
+- [upgrade-sprint](../workflows/upgrade-sprint/manifest.md) — Safe major dependency upgrade: audit (scout-frontend) → upgrade + fix (dev-frontend) → visual regression (tester-frontend) → senior validation (sr-frontend)
+- [ux-challenge](../workflows/ux-challenge/manifest.md) — Adversarial UX↔UI design workflow: WEBSITE | APPLICATION modes, 8 stages from research to sprint handoff
 
 ## Team Orchestrators
 
@@ -87,6 +94,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [team-ceo-coaching](team-ceo-coaching/SKILL.md) — CEO coaching: intake profiling, inner/outer game coaching, session synthesis
 - [team-design-research](team-design-research/SKILL.md) — Landing page trends, emotional UX patterns, Tailwind animations — outputs Design Research Brief
 - [team-ui-builder](team-ui-builder/SKILL.md) — End-to-end UI build: UX architecture + emotional design + Tailwind/CSS + micro-interactions + non-tech validation — outputs UI Build Summary + code
+- [team-ux-challenge](team-ux-challenge/SKILL.md) — Adversarial UX↔UI brainstorm + 4-persona critique + least-friction convergence — outputs converged design + plan handed to sprint planner
 
 ## Display Registry
 

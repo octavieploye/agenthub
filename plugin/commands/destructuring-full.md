@@ -33,3 +33,48 @@ Summarize all four outputs. Highlight:
 - Strongest force and biggest barrier (from market-dynamics)
 
 Note: To extract patterns, run /destructuring-full on at least one more subject, then run /destructuring-patterns.
+
+## Output Format
+
+### Full Pipeline Result (Step 6)
+
+```
+FULL DESTRUCTURING — [Subject Name]
+====================================
+
+CROSS-LAYER CONVERGENCE MATRIX
+| Finding | Competitor (micro) | Business (internal) | Market (mid) | Dynamics (macro) | Layers confirming |
+|---|---|---|---|---|---|
+[findings that appear across multiple layers — minimum 3 rows]
+
+Convergence rule: a finding is load-bearing when confirmed across ≥3 of 4 layers.
+
+TOP 3 COMPETITORS BY RING
+| # | Competitor | Ring | Key strength | Key vulnerability |
+|---|---|---|---|---|
+[from CompetitorMap — Ring 1 = direct, Ring 2 = adjacent, Ring 3 = potential]
+
+MARKET POSITION SUMMARY
+  Current position:       [leader | challenger | niche | entrant]
+  Offer structure:        [one sentence from BusinessProfile]
+  Revenue model:          [from BusinessProfile]
+  Moat assessment:        [from BusinessProfile — durable / fragile / absent]
+
+TOP ENTRY VECTOR
+  Segment:                [from MarketStrategyMap]
+  Channel:                [from MarketStrategyMap]
+  Why this vector:        [2-3 sentences synthesizing market + dynamics evidence]
+
+FORCE ASSESSMENT
+| Force | Direction | Strength (1-5) | Evidence |
+|---|---|---|---|
+[from MarketDynamicsMap — Porter's forces + macro forces]
+
+STRONGEST FORCE:    [name + why]
+BIGGEST BARRIER:    [name + why]
+
+STRATEGIC IMPLICATIONS
+  1. [implication derived from cross-layer convergence]
+  2. [...]
+  3. [...]
+```

@@ -1,7 +1,7 @@
 # KNOWLEDGE: Human Constraints — The Real Time Budget
 OWNER:  lead-brain + strategy-advisor
 UPDATED: 2026-06-26
-SOURCE: Biological baselines, Hormozi backward planning, Loehr/Schwartz energy research
+SOURCE: Biological baselines, [source] backward planning, Loehr/Schwartz energy research
 
 ---
 

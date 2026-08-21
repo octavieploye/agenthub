@@ -1,6 +1,6 @@
 ---
 name: 'market-sim-p5'
-description: 'Run Phase 5 of the Market Intelligence workflow: Business Strategy Destructuring. Replaces the former Hormozi offer engineering phase. Use /destructuring-business directly for standalone use.'
+description: 'Run Phase 5 of the Market Intelligence workflow: Business Strategy Destructuring. Replaces the former [source] offer engineering phase. Use /destructuring-business directly for standalone use.'
 ---
 
 This phase has been replaced by the destructuring package.

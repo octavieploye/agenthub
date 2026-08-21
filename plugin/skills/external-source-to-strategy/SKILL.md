@@ -173,6 +173,6 @@ Then add a one-line entry to `MEMORY.md` under the relevant section:
 ## File Naming
 
 Use a short, descriptive slug that survives across conversations:
-- Source type first if helpful: `hormozi-supply-demand`, `generative-ui-competitive`
+- Source type first if helpful: `[source]-supply-demand`, `generative-ui-competitive`
 - Avoid dates in filename (date goes in doc frontmatter)
 - Same slug used for all three outputs: brainstorm doc, todo file, memory reference

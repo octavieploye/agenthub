@@ -20,8 +20,8 @@ Source: https://www.paulgraham.com/makersschedule.html
 - **Partitioned days/weeks:** Graham coded dinner-to-3am, then business stuff 11am-to-dinner
 - **Meeting placement:** If a meeting involves a maker, schedule at very beginning or very end of day
 
-### Hormozi's Evolution Model
-Source: Video transcription (Alex Hormozi)
+### [source]'s Evolution Model
+Source: Video transcription ([source])
 
 - **V1:** Maker time during nights, weekends, early mornings (starting out, no calendar control)
 - **V2:** 50/50 split — first half maker, second half manager. Plan day back-to-front from 5pm.
@@ -193,7 +193,7 @@ Sources:
 - Score tasks 1-10 on revenue impact. Below 5 = delegate, automate, or delete.
 - Your time is worth $200-$1,000/hr on high-impact work — don't waste it on low-value tasks
 
-### Theory of Constraints (Hormozi)
+### Theory of Constraints ([source])
 - Every business has ONE primary factor limiting growth
 - Ask: "What problem, if solved, makes all other problems pale?"
 - Focus there. Postpone everything else.
@@ -242,7 +242,7 @@ Sources:
 - https://cmaconsult.com/blog/maximize-your-productivity-with-the-3-3-3-method/
 - https://indiehackerstacks.com/blog/10-task-prioritization-methods-for-solopreneurs
 - https://thedankoe.com/letters/the-future-of-productivity/
-- https://www.under30ceo.com/alex-hormozi-explains-the-power-of-strategic-prioritization/
+- https://www.under30ceo.com/alex-[source]-explains-the-power-of-strategic-prioritization/
 
 ---
 

@@ -2,7 +2,7 @@
 OWNER:  lead-brain + strategy-advisor
 UPDATED: 2026-06-26
 SOURCE: Project management research (CPM, workback scheduling), content production
-        pipelines, Hormozi backward planning
+        pipelines, [source] backward planning
 
 ---
 

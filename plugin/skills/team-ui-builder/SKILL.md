@@ -40,8 +40,8 @@ Do NOT use for:
 ## Agent Sequence
 
 1. **lead-ui-builder** — pre-flight, reads input, checks for existing brief, states phase plan
-2. **[Phase 1 — optional]** trend-scout OR Agent+WebSearch — 2026 SaaS UI trend harvest (skip if brief exists)
-3. **[Phase 2]** uiux-senior + emotion-ux (parallel, max 2 active) — UX architecture + emotional design
+2. **[Phase 1 — optional]** competitor-trend-researcher OR Agent+WebSearch — 2026 SaaS UI trend harvest (skip if brief exists)
+3. **[Phase 2]** ux-architect + emotion-ux (parallel, max 2 active) — UX architecture + emotional design
 4. **[Phase 3]** dev-frontend + animation-engineer (parallel, max 2 active) — implementation + micro-interactions
 5. **[Phase 4]** persona-nontechuser — non-tech validation, pass/fail per criterion
 6. **lead-ui-builder** — compiles UI Build Summary, presents to user for approval
@@ -59,7 +59,7 @@ Do NOT use for:
 
 | Mistake | Fix |
 |---|---|
-| Starting Phase 3 before Phase 2 outputs reviewed | Lead must review both uiux-senior and emotion-ux outputs first |
+| Starting Phase 3 before Phase 2 outputs reviewed | Lead must review both ux-architect and emotion-ux outputs first |
 | Animation-engineer decorating instead of communicating | Every animation must answer: does this clarify, guide, or confirm something? |
 | Skipping persona-nontechuser for "simple" features | Validation is not optional — simple features have the most jargon-blindness risk |
 | Using design-research team when you need this team | design-research = research brief only. ui-builder = full implementation |

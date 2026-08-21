@@ -49,7 +49,7 @@ Invoke when an approved Idea Brief (from the brainstorm team) has been routed to
    Gate output must appear as `STACK APPROVED` in the Feature Brief header before any technical approach is written.
 
 1. `feature-architect` — produces 2–3 technical approaches from the Idea Brief
-2. `sr-backend` + `sr-frontend` — validate feasibility per approach (read-only, run in parallel)
+2. `sr-backend` + `sr-frontend` — validate feasibility per approach (read-only, run in parallel). `sr-backend` runs **verif-code-gate**: checks whether proposed features/services already exist in the target repo before assessing feasibility. EXISTS findings block the approach from proposing to "build" what already exists.
 3. `ux-explorer` — produces 2–3 UX directions based on validated approaches
 4. User review — user selects approach + UX direction
 5. Lead-tech-brainstorm assembles the Feature Brief from selected directions

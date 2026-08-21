@@ -1,7 +1,7 @@
 # KNOWLEDGE: Task Prioritization Rules
 OWNER:  lead-brain + strategy-advisor
 UPDATED: 2026-06-25
-SOURCE: Business research — Hormozi, Graham, Koe, MoSCoW, Eisenhower, IPA framework, critical path method
+SOURCE: Business research — [source], Graham, Koe, MoSCoW, Eisenhower, IPA framework, critical path method
 
 ---
 
@@ -180,10 +180,10 @@ These mistakes cause solopreneurs to stall:
 ## SOURCES
 
 - Income Producing Activities (IPA): agilebrandguide.com, diefreestudios.com
-- Theory of Constraints: Alex Hormozi (under30ceo.com, linkedin.com)
+- Theory of Constraints: [source] (under30ceo.com, linkedin.com)
 - Critical Path Method: Asana, Wrike, Atlassian
 - MoSCoW: ProductPlan, Agile Business Consortium, monday.com
 - Eisenhower Matrix: Asana, Todoist
 - Leverage Hierarchy: businessinitiative.org
 - Focus Rule: Dan Koe (thedankoe.com)
-- Hormozi prioritization: paulhypepage.com, medium.com
+- [source] prioritization: paulhypepage.com, medium.com

@@ -31,8 +31,8 @@ Runs a 4-agent research team that maps current web design trends, emotional UX p
 
 ## Agent Sequence
 
-1. **lead-design-research** — opens the session, defines scope, activates trend-scout
-2. **trend-scout** — researches and documents current landing page trends (Phase 1)
+1. **lead-design-research** — opens the session, defines scope, activates competitor-trend-researcher
+2. **competitor-trend-researcher** — researches and documents current landing page trends (Phase 1)
 3. **emotion-ux** — maps emotional UX patterns relevant to the target context (Phase 2)
 4. **animation-engineer** — documents animation and interaction patterns (Phase 3)
 5. **lead-design-research** — synthesizes all outputs into the final Design Research Brief
@@ -41,6 +41,6 @@ Runs a 4-agent research team that maps current web design trends, emotional UX p
 
 - Never activate more than 3 teammates at once
 - Lead does not summarize until all three specialist reports are complete
-- trend-scout uses WebSearch — 5-source convergence rule applies
+- competitor-trend-researcher uses WebSearch — 5-source convergence rule applies
 - animation-engineer produces implementation specs, NOT production code
-- Final brief must be usable by `dev-frontend` or `uiux-senior` without re-research
+- Final brief must be usable by `dev-frontend` or `ux-architect` without re-research

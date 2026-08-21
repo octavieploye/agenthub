@@ -1,7 +1,7 @@
 # KNOWLEDGE: Time Investment — Manager vs Maker Schedule
 OWNER:  lead-brain + strategy-advisor
 UPDATED: 2026-06-26
-SOURCE: Paul Graham (2009 essay), Alex Hormozi (time management framework), Cal Newport (Deep Work)
+SOURCE: Paul Graham (2009 essay), [source] (time management framework), Cal Newport (Deep Work)
 
 ---
 

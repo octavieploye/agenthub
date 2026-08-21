@@ -1,7 +1,7 @@
 # ORIGINAL: Time Investment — Manager vs Maker Schedule (v1 narrative format)
 TYPE: first structured version before compact rewrite
 DATE: 2026-06-25
-SOURCE: Structured from Hormozi transcription
+SOURCE: Structured from [source] transcription
 
 ---
 
