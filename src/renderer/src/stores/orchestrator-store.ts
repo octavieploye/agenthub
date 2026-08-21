@@ -7,6 +7,7 @@ import type {
   OrchestratorTaskLog,
   OrchestratorPhase,
   OrchestratorPhaseStatus,
+  RetryFailure,
 } from '@shared/types/orchestrator.types'
 
 interface PhaseState {
@@ -25,12 +26,15 @@ interface OrchestratorStore {
   failedCount: number
   taskPhases: Map<string, PhaseState>
   taskLogs: Map<string, OrchestratorTaskLog[]>
+  retryFailures: RetryFailure[]
   loading: boolean
   error: string | null
 
   // Actions
   fetchStatus: () => Promise<void>
   fetchTaskLogs: (taskId: string) => Promise<void>
+  fetchRetryFailures: () => Promise<void>
+  acknowledgeRetryFailures: () => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
   startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<void>
   cancel: () => Promise<void>
@@ -51,6 +55,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   failedCount: 0,
   taskPhases: new Map(),
   taskLogs: new Map(),
+  retryFailures: [],
   loading: false,
   error: null,
 
@@ -67,6 +72,28 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
       }
     } catch {
       // silent — phase history is non-critical
+    }
+  },
+
+  fetchRetryFailures: async () => {
+    try {
+      const res = await window.agentHub.orchestrator.getRetryFailures()
+      if (res.success) {
+        set({ retryFailures: res.data })
+      }
+    } catch {
+      // silent — retry failures are non-critical
+    }
+  },
+
+  acknowledgeRetryFailures: async () => {
+    try {
+      const res = await window.agentHub.orchestrator.acknowledgeRetryFailures()
+      if (res.success) {
+        set({ retryFailures: [] })
+      }
+    } catch {
+      // silent
     }
   },
 

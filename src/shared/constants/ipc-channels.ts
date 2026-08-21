@@ -223,6 +223,8 @@ export const IPC_CHANNELS = {
     STATUS:   'orchestrator:status',
     TASK_LOG: 'orchestrator:task-log',
     CANCEL:   'orchestrator:cancel',
+    RETRY_FAILURES: 'orchestrator:retry-failures',
+    ACKNOWLEDGE_RETRY_FAILURES: 'orchestrator:acknowledge-retry-failures',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',

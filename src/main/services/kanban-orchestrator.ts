@@ -8,6 +8,7 @@ import type {
   OrchestratorPhase,
   OrchestratorStatusChangePayload,
   OrchestratorTaskPhaseChangePayload,
+  RetryFailure,
 } from '../../shared/types/orchestrator.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { AgentSpawnOptions, AgentState } from '../../shared/types/agent.types'
@@ -23,12 +24,16 @@ import {
   insertTaskLog,
   updateTaskLogStatus,
   getActiveTaskLogByAgentId,
+  getUnacknowledgedRetryFailures,
+  acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
+  insertRetryFailure,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
+import { checkOllamaHealthWithRetry } from './helpers/ollama-cloud-health'
 import { recommendForPhase } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
 import {
@@ -739,6 +744,82 @@ export class KanbanOrchestratorService {
     this.dispatchNextTasks(run)
 
     log.debug('Orchestrator tick', { runId: run.id, activeCount: activeLogs.length })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retry failure queries (Task 3.12, 3.14)
+  // ---------------------------------------------------------------------------
+
+  getRetryFailures(): RetryFailure[] {
+    return getUnacknowledgedRetryFailures(this.db)
+  }
+
+  acknowledgeRetryFailures(): void {
+    dbAcknowledgeRetryFailures(this.db)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task 3.3: Retry-wrapped spawn for ollama-cloud/local providers
+  // ---------------------------------------------------------------------------
+
+  private async retrySpawnWithHealthCheck(
+    taskId: string,
+    run: OrchestratorRun,
+    phase: OrchestratorPhase,
+    spawnFn: () => void,
+    provider: string,
+    baseUrl: string
+  ): Promise<boolean> {
+    const health = await checkOllamaHealthWithRetry(baseUrl)
+
+    if (health.available) {
+      spawnFn()
+      return true
+    }
+
+    // Task 3.5: Record retry failure in DB
+    insertRetryFailure(this.db, {
+      taskId,
+      provider,
+      attempts: health.attempts,
+      lastError: health.lastError,
+      diagnostics: health.diagnostics,
+    })
+
+    // Set task note and mark as interrupted
+    const task = getTaskById(this.db, taskId)
+    if (task) {
+      updateTask(this.db, taskId, {
+        status: 'backlog',
+      })
+    }
+
+    // Mark the task log as failed
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId,
+      phase,
+      providerUsed: provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'failed')
+    this.emitTaskPhaseChange(run.id, taskId, phase, 'failed')
+
+    // Task 3.4: Telegram notification on retry exhaustion
+    this.notifyTelegram(
+      run,
+      `Retry exhausted for "${task?.title ?? taskId}" (${provider}, ${health.attempts} attempts): ${health.lastError ?? 'unknown error'}`,
+      'failed'
+    )
+
+    log.warn('Orchestrator: retry exhausted for provider', {
+      taskId,
+      phase,
+      provider,
+      attempts: health.attempts,
+      lastError: health.lastError,
+    })
+
+    return false
   }
 
   stop(): void {

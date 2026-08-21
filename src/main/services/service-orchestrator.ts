@@ -37,6 +37,7 @@ import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clear
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
+import { cleanupOldRetryFailures } from '../db/queries/orchestrator.queries'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
@@ -146,6 +147,8 @@ export function initializeServices(db: Database.Database): void {
   purgeDeadAgents(db, 24)
   // Reset any non-terminal agents left over from a crashed or force-quit session
   resetStaleAgentsOnStartup(db)
+  // Clean up acknowledged retry failures older than 30 days
+  cleanupOldRetryFailures(db)
   // 1. GuardrailsManager — standalone, no deps
   guardrailsManager = new GuardrailsManager({
     readFile: (path: string) => {

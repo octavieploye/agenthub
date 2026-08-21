@@ -309,3 +309,73 @@ export function getActiveTaskLogByAgentId(
     .get(runId, agentId) as Record<string, unknown> | undefined
   return row ? mapTaskLogRow(row) : null
 }
+
+// ---------------------------------------------------------------------------
+// Retry failures
+// ---------------------------------------------------------------------------
+
+export interface RetryFailureRow {
+  id: string
+  taskId: string
+  provider: string
+  attempts: number
+  lastError: string | null
+  diagnostics: string | null
+  createdAt: string
+}
+
+export function insertRetryFailure(
+  db: Database.Database,
+  input: {
+    taskId: string
+    provider: string
+    attempts: number
+    lastError?: string | null
+    diagnostics?: string | null
+  }
+): void {
+  const id = randomUUID()
+  db.prepare(
+    `INSERT INTO retry_failures (id, task_id, provider, attempts, last_error, diagnostics)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, input.taskId, input.provider, input.attempts, input.lastError ?? null, input.diagnostics ?? null)
+  log.info('Retry failure recorded', { id, taskId: input.taskId, provider: input.provider })
+}
+
+export function getUnacknowledgedRetryFailures(db: Database.Database): RetryFailureRow[] {
+  const rows = db.prepare(
+    `SELECT id, task_id, provider, attempts, last_error, diagnostics, created_at
+     FROM retry_failures
+     WHERE acknowledged_at IS NULL
+     ORDER BY created_at DESC`
+  ).all() as Record<string, unknown>[]
+  return rows.map(r => ({
+    id: r.id as string,
+    taskId: r.task_id as string,
+    provider: r.provider as string,
+    attempts: r.attempts as number,
+    lastError: (r.last_error as string) ?? null,
+    diagnostics: (r.diagnostics as string) ?? null,
+    createdAt: r.created_at as string,
+  }))
+}
+
+export function acknowledgeRetryFailures(db: Database.Database): void {
+  db.prepare(
+    `UPDATE retry_failures SET acknowledged_at = datetime('now')
+     WHERE acknowledged_at IS NULL`
+  ).run()
+  log.info('Retry failures acknowledged')
+}
+
+export function cleanupOldRetryFailures(db: Database.Database): number {
+  const result = db.prepare(
+    `DELETE FROM retry_failures
+     WHERE acknowledged_at IS NOT NULL
+     AND acknowledged_at < datetime('now', '-30 days')`
+  ).run()
+  if (result.changes > 0) {
+    log.info('Cleaned up old retry failures', { count: result.changes })
+  }
+  return result.changes
+}

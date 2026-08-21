@@ -88,4 +88,21 @@ export function registerOrchestratorHandlers(): void {
       return error('ORCHESTRATOR_CANCEL_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES, () => {
+    try {
+      return success(getOrchestrator().getRetryFailures())
+    } catch (err) {
+      return error('ORCHESTRATOR_RETRY_FAILURES_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES, () => {
+    try {
+      getOrchestrator().acknowledgeRetryFailures()
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_ACK_RETRY_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
 }
