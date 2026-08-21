@@ -5,6 +5,8 @@ import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@share
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState } from '@shared/types/agent.types'
 import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
+import { CLOUD_MODEL_OPTIONS, ANTHROPIC_MODEL_OPTIONS, PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
+import type { ValidProvider } from '@shared/constants/cloud-models'
 import { useProjectStore } from '../../stores/project-store'
 import { useOrchestratorStore } from '../../stores/orchestrator-store'
 
@@ -65,6 +67,9 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [epicName, setEpicName] = useState(task.epicName ?? '')
   const [sprintName, setSprintName] = useState(task.sprintName ?? '')
   const [sectionTargetDate, setSectionTargetDate] = useState(task.sectionTargetDate ?? '')
+  const [modelOverride, setModelOverride] = useState(task.modelOverride ?? '')
+  const [providerOverride, setProviderOverride] = useState(task.providerOverride ?? '')
+  const [requiresApproval, setRequiresApproval] = useState(task.requiresApproval ?? false)
 
   const agentList = agents
   const { projects, createProject, linkRepo } = useProjectStore()
@@ -103,6 +108,9 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
       sectionTargetDate: sectionTargetDate || null,
       agentId: selectedAgentId,
       projectId: selectedProjectId,
+      modelOverride: modelOverride || null,
+      providerOverride: (providerOverride as ValidProvider) || null,
+      requiresApproval,
     })
     onClose()
   }
@@ -302,16 +310,68 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
         />
       </div>
 
-      {/* Target Date */}
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-base-content/50 font-medium uppercase tracking-wide">Target Date</label>
-        <input
-          type="date"
-          className="input input-xs input-bordered w-full"
-          value={sectionTargetDate}
-          onChange={(e) => setSectionTargetDate(e.target.value)}
-        />
-      </div>
+      {/* Scheduling section */}
+      <details className="collapse collapse-arrow bg-base-300/30 rounded-lg" open={!!(sectionTargetDate || modelOverride || requiresApproval)}>
+        <summary className="collapse-title text-xs text-base-content/50 font-medium uppercase tracking-wide min-h-0 py-2 px-3">
+          Scheduling
+        </summary>
+        <div className="collapse-content flex flex-col gap-2 px-3 pb-2">
+          {/* Target Date */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-base-content/50">Target Date</label>
+            <input
+              type="date"
+              className="input input-xs input-bordered w-full"
+              value={sectionTargetDate}
+              onChange={(e) => setSectionTargetDate(e.target.value)}
+            />
+          </div>
+
+          {/* Model / Provider */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-base-content/50">Model Override</label>
+            <select
+              className="select select-xs select-bordered w-full"
+              value={modelOverride ? `${providerOverride}::${modelOverride}` : ''}
+              onChange={(e) => {
+                const val = e.target.value
+                if (!val) {
+                  setModelOverride('')
+                  setProviderOverride('')
+                } else {
+                  const [prov, ...modelParts] = val.split('::')
+                  setProviderOverride(prov)
+                  setModelOverride(modelParts.join('::'))
+                }
+              }}
+            >
+              <option value="">Auto (recommended)</option>
+              <optgroup label="Ollama Cloud">
+                {CLOUD_MODEL_OPTIONS.map((m) => (
+                  <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Anthropic">
+                {ANTHROPIC_MODEL_OPTIONS.map((m) => (
+                  <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                ))}
+              </optgroup>
+              <option value="ollama-local::">Ollama Local (auto-detect)</option>
+            </select>
+          </div>
+
+          {/* Requires Approval */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="toggle toggle-xs toggle-primary"
+              checked={requiresApproval}
+              onChange={(e) => setRequiresApproval(e.target.checked)}
+            />
+            <span className="text-xs text-base-content/70">Requires approval</span>
+          </label>
+        </div>
+      </details>
 
       {phaseHistory && phaseHistory.length > 0 && (
         <>

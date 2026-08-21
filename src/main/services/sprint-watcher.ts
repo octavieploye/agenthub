@@ -204,10 +204,14 @@ export class SprintWatcher {
             description: story.description,
             priority: story.priority,
             status: 'backlog',
+            category: story.category ?? null,
             sprintName: payload.sprintName,
             epicName: epic.name,
             projectId: resolvedProjectId,
-            sectionTargetDate: epic.targetDate ?? null
+            sectionTargetDate: epic.targetDate ?? null,
+            requiresApproval: story.requiresApproval ?? false,
+            modelOverride: story.modelOverride,
+            providerOverride: story.providerOverride,
           })
           if (story.localId) localIdToRealId.set(story.localId, task.id)
         }
@@ -255,6 +259,14 @@ function validateSprintPayload(payload: SprintIntakePayload): string | null {
     for (const task of epic.tasks) {
       if (task.title.length > 500) return `task title exceeds 500 characters: "${task.title.slice(0, 50)}"`
       if ((task.description?.length ?? 0) > 10_000) return `task description exceeds 10000 characters for task "${task.title.slice(0, 50)}"`
+    }
+  }
+
+  // Validate epic targetDate format
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+  for (const epic of payload.epics) {
+    if (epic.targetDate && !ISO_DATE_RE.test(epic.targetDate)) {
+      return `Epic "${epic.name}" has invalid targetDate "${epic.targetDate}" (expected YYYY-MM-DD)`
     }
   }
 

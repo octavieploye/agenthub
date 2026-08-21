@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Play, Pause, RotateCcw } from 'lucide-react'
+import { Play, Pause, RotateCcw, X } from 'lucide-react'
 import { useOrchestratorStore } from '../../stores/orchestrator-store'
 import type { OrchestratorRunStatus } from '@shared/types/orchestrator.types'
 import type { RepoConfig } from '@shared/types/config.types'
@@ -22,6 +22,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     runStatus,
     sprintName,
     runId,
+    singleTaskId,
     completedCount,
     totalCount,
     failedCount,
@@ -31,6 +32,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     start,
     pause,
     resume,
+    cancel,
     handleStatusChange,
     handleTaskPhaseChange,
     clearError,
@@ -174,6 +176,18 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
           title="Resume orchestrator"
         >
           <Play size={14} />
+        </button>
+      )}
+
+      {/* Cancel button — single-task runs only */}
+      {singleTaskId && (isRunning || isPaused) && (
+        <button
+          className="btn btn-sm btn-error btn-outline"
+          onClick={cancel}
+          disabled={loading}
+          title="Cancel single-task pipeline"
+        >
+          <X size={14} />
         </button>
       )}
 

@@ -141,6 +141,10 @@ export interface SprintStoryInput {
   description: string
   priority: TaskPriority
   dependsOn?: string[]
+  category?: string
+  requiresApproval?: boolean
+  modelOverride?: string
+  providerOverride?: string
 }
 
 export interface SprintEpicInput {

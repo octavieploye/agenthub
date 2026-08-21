@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText, Rocket } from 'lucide-react'
+import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText, Rocket, Calendar, Lock, Unlock, Shield } from 'lucide-react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
 import type { OrchestratorPhase, OrchestratorPhaseStatus, OrchestratorTaskLog } from '@shared/types/orchestrator.types'
+import { PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
+import { isSupervisedCategory } from '@shared/constants/category-classifier'
 import { KanbanCardPopover } from './KanbanCardPopover'
 
 interface KanbanCardProps {
@@ -312,6 +314,38 @@ export function KanbanCard({
           {/* Sprint label */}
           {task.sprintName && (
             <span className="text-[10px] text-base-content/40 truncate max-w-[90px]">{task.sprintName}</span>
+          )}
+
+          {/* Scheduling indicators row */}
+          {(task.sectionTargetDate || task.providerOverride || task.requiresApproval || (task.category && isSupervisedCategory(task.category))) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {task.sectionTargetDate && (() => {
+                const today = new Date().toISOString().slice(0, 10)
+                const color = task.sectionTargetDate < today ? 'text-error' : task.sectionTargetDate === today ? 'text-warning' : 'text-base-content/40'
+                return (
+                  <span className={`flex items-center gap-0.5 text-[10px] ${color}`} title={`Target: ${task.sectionTargetDate}`}>
+                    <Calendar size={10} />
+                    <span>{task.sectionTargetDate.slice(5)}</span>
+                  </span>
+                )
+              })()}
+              {task.providerOverride && (
+                <span
+                  className="badge badge-xs badge-ghost text-[9px] font-mono"
+                  title={task.providerOverride}
+                >
+                  {PROVIDER_BADGE_LABEL[task.providerOverride] ?? task.providerOverride}
+                </span>
+              )}
+              {task.requiresApproval ? (
+                <Lock size={10} className="text-warning/70" title="Requires approval" />
+              ) : task.sectionTargetDate ? (
+                <Unlock size={10} className="text-success/50" title="Auto-dispatch eligible" />
+              ) : null}
+              {task.category && isSupervisedCategory(task.category) && (
+                <Shield size={10} className="text-info/50" title="Supervised category" />
+              )}
+            </div>
           )}
 
           {/* Footer */}
