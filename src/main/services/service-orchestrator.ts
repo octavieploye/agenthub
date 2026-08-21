@@ -31,6 +31,7 @@ import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
+import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
@@ -65,6 +66,7 @@ let telegramSidecarService: TelegramSidecarService | null = null
 let telegramSocketServer: TelegramSocketServer | null = null
 let telegramQueueProcessor: TelegramQueueProcessor | null = null
 let kanbanOrchestrator: KanbanOrchestratorService | null = null
+let dateWatcher: DateWatcherService | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -483,6 +485,15 @@ export function initializeServices(db: Database.Database): void {
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 
+  // Task 4.19: DateWatcherService — polls for date-triggered tasks
+  const dateWatcherDeps: DateWatcherDeps = {
+    startOrchestratorRun: (input) => kanbanOrchestrator!.start(input),
+    sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
+    onEventInserted: orchestratorDeps.onEventInserted,
+    getOllamaBaseUrl: () => 'http://localhost:11434',
+  }
+  dateWatcher = new DateWatcherService(db, dateWatcherDeps)
+
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
   log.info('All services initialized')
@@ -493,6 +504,7 @@ export function startServices(): void {
   claudeMonitor?.start().catch((err) => log.error('ClaudeMonitor start failed', err))
   healthMonitor?.startWatchdog()
   autoPauseService?.startReminderTimer()
+  dateWatcher?.start()
   log.info('All periodic services started')
 }
 
@@ -507,6 +519,8 @@ export function stopServices(): void {
   piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   sprintWatcher?.stop()
+  dateWatcher?.stop()
+  dateWatcher = null
   telegramQueueProcessor?.stop()
   telegramQueueProcessor = null
   telegramSocketServer?.stop()
@@ -593,6 +607,10 @@ export function getTelegramQueueProcessor(): TelegramQueueProcessor | null {
 
 export function getKanbanOrchestrator(): KanbanOrchestratorService | null {
   return kanbanOrchestrator
+}
+
+export function getDateWatcher(): DateWatcherService | null {
+  return dateWatcher
 }
 
 export function getTelegramSocketPath(): string | null {

@@ -107,6 +107,7 @@ export type TaskEventType =
   | 'ORCHESTRATOR_TASK_SECURED'
   | 'ORCHESTRATOR_TASK_COMMITTED'
   | 'ORCHESTRATOR_SPRINT_COMPLETED'
+  | 'DATE_TRIGGER_FIRED'
 
 export interface TaskEvent {
   id: string

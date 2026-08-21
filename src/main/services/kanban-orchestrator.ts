@@ -33,6 +33,7 @@ import { insertTaskEvent } from '../db/queries/task-events.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
+import { isSupervisedCategory } from '../../shared/constants/category-classifier'
 import { checkOllamaHealthWithRetry } from './helpers/ollama-cloud-health'
 import { recommendForPhase } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
@@ -740,10 +741,90 @@ export class KanbanOrchestratorService {
       }
     }
 
+    // Task 4.5: Check date triggers before dispatching
+    this.checkDateTriggers(run)
+
     // Dispatch next tasks if slots available
     this.dispatchNextTasks(run)
 
     log.debug('Orchestrator tick', { runId: run.id, activeCount: activeLogs.length })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task 4.1-4.6, 4.8: Date trigger checking for active-run mode
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check tasks in the active run for date triggers.
+   * Tasks with sectionTargetDate within [today - 1 day, today] that haven't
+   * been triggered yet get either promoted or dispatched based on category/approval.
+   */
+  checkDateTriggers(run: OrchestratorRun): void {
+    // Skip for single-task runs — no date trigger logic needed
+    if (run.singleTaskId) return
+
+    const today = new Date().toISOString().slice(0, 10)
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+
+    const tasks = getTasksByRepo(this.db, run.repoId)
+
+    for (const task of tasks) {
+      // Skip tasks without target dates
+      if (!task.sectionTargetDate) continue
+
+      // Task 4.6: Guard against re-triggering — already fired today
+      if (task.dateTriggerFiredAt === today) continue
+
+      // Only trigger tasks in eligible statuses (backlog or today)
+      if (task.status !== 'backlog' && task.status !== 'today') continue
+
+      // Task 4.15 (inline): Staleness window — only [yesterday, today]
+      if (task.sectionTargetDate < yesterday || task.sectionTargetDate > today) continue
+
+      // Task 4.4: Set date_trigger_fired_at to persist dedup
+      updateTask(this.db, task.id, { dateTriggerFiredAt: today })
+
+      // Emit DATE_TRIGGER_FIRED event
+      insertTaskEvent(this.db, {
+        taskId: task.id,
+        eventType: 'DATE_TRIGGER_FIRED',
+        fromStatus: task.status,
+        toStatus: task.status,
+        agentId: null,
+        payload: { sectionTargetDate: task.sectionTargetDate, today },
+      })
+      this.deps?.onEventInserted?.()
+
+      // Task 4.2: Apply category safety gate
+      if (isSupervisedCategory(task.category)) {
+        // Supervised: always promote to "Today" + notify, never auto-dispatch
+        if (task.status !== 'today') {
+          updateTask(this.db, task.id, { status: 'today' })
+        }
+        this.notifyTelegram(run, `Date trigger: "${task.title}" promoted to Today (supervised category)`, 'completed')
+        log.info('Orchestrator: date trigger — promoted supervised task', { taskId: task.id, category: task.category })
+        continue
+      }
+
+      // Task 4.3: Unsupervised category — check requiresApproval
+      if (task.requiresApproval) {
+        // Requires approval: promote to "Today" + notify, do not auto-dispatch
+        if (task.status !== 'today') {
+          updateTask(this.db, task.id, { status: 'today' })
+        }
+        this.notifyTelegram(run, `Date trigger: "${task.title}" promoted to Today (requires approval)`, 'completed')
+        log.info('Orchestrator: date trigger — promoted task (requires approval)', { taskId: task.id })
+        continue
+      }
+
+      // Unsupervised + no approval needed = auto-dispatch via pipeline
+      // Task will be picked up by dispatchNextTasks() on the next pass
+      if (task.status !== 'today') {
+        updateTask(this.db, task.id, { status: 'today' })
+      }
+      this.notifyTelegram(run, `Date trigger: "${task.title}" auto-dispatching (unsupervised)`, 'completed')
+      log.info('Orchestrator: date trigger — auto-dispatching unsupervised task', { taskId: task.id, category: task.category })
+    }
   }
 
   // ---------------------------------------------------------------------------
