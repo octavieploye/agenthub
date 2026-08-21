@@ -20,6 +20,7 @@ export interface OrchestratorRun {
   updatedAt: string
   startedAt: string | null
   completedAt: string | null
+  singleTaskId: string | null
 }
 
 export interface OrchestratorTaskLog {
@@ -76,6 +77,7 @@ export interface OrchestratorStartInput {
   projectId?: string
   concurrencyCap?: number
   telegramNotify?: boolean
+  singleTaskId?: string
 }
 
 export interface OrchestratorStatusResponse {
@@ -84,6 +86,7 @@ export interface OrchestratorStatusResponse {
   completedCount: number
   totalCount: number
   failedCount: number
+  singleTaskId: string | null
 }
 
 export interface OrchestratorStatusChangePayload {

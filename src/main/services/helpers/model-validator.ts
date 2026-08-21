@@ -1,0 +1,34 @@
+import { CLOUD_MODEL_CATALOG } from '../model-dispatcher'
+
+const ANTHROPIC_MODELS = ['claude-sonnet-4-20250514', 'claude-opus-4-20250514'] as const
+
+/**
+ * Validates that a model override is a known model for the given provider.
+ * Returns null if valid, or an error message string if invalid.
+ */
+export function validateModelOverride(
+  model: string | null | undefined,
+  provider: string | null | undefined
+): string | null {
+  if (!model) return null
+  if (!provider) return null
+
+  if (provider === 'anthropic') {
+    if (!ANTHROPIC_MODELS.includes(model as typeof ANTHROPIC_MODELS[number])) {
+      return `Unknown Anthropic model: "${model}". Valid: ${ANTHROPIC_MODELS.join(', ')}`
+    }
+    return null
+  }
+
+  if (provider === 'ollama-cloud') {
+    const known = CLOUD_MODEL_CATALOG.some(m => m.id === model)
+    if (!known) {
+      return `Unknown Ollama Cloud model: "${model}". Valid: ${CLOUD_MODEL_CATALOG.map(m => m.id).join(', ')}`
+    }
+    return null
+  }
+
+  // ollama-local — we cannot validate at save time (depends on what's pulled locally).
+  // Validation happens at dispatch time via /api/tags check.
+  return null
+}

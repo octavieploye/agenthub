@@ -4,7 +4,7 @@ export type TaskStatus = 'backlog' | 'today' | 'in_progress' | 'completed' | 'te
 
 export type TaskCategory = string
 
-export const KNOWN_CATEGORIES: TaskCategory[] = ['backend', 'frontend', 'database', 'schema', 'functionality']
+export const KNOWN_CATEGORIES: TaskCategory[] = ['backend', 'frontend', 'database', 'schema', 'functionality', 'marketing', 'research', 'business', 'content']
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   1: 'High',
@@ -26,7 +26,11 @@ export const CATEGORY_LABEL: Record<string, string> = {
   frontend: 'Frontend',
   database: 'Database',
   schema: 'Schema',
-  functionality: 'Functionality'
+  functionality: 'Functionality',
+  marketing: 'Marketing',
+  research: 'Research',
+  business: 'Business',
+  content: 'Content'
 }
 
 export interface TaskItem {
@@ -45,6 +49,10 @@ export interface TaskItem {
   projectId: string | null
   sectionTargetDate: string | null
   note: string | null
+  requiresApproval: boolean
+  modelOverride: string | null
+  providerOverride: string | null
+  dateTriggerFiredAt: string | null
   blockedBy: string[]
   createdAt: string
   updatedAt: string
@@ -62,6 +70,9 @@ export interface CreateTaskInput {
   projectId?: string | null
   sectionTargetDate?: string | null
   note?: string | null
+  requiresApproval?: boolean
+  modelOverride?: string
+  providerOverride?: string
   localId?: string
   dependsOn?: string[]
 }
@@ -80,6 +91,10 @@ export interface UpdateTaskInput {
   projectId?: string | null
   sectionTargetDate?: string | null
   note?: string | null
+  requiresApproval?: boolean
+  modelOverride?: string | null
+  providerOverride?: string | null
+  dateTriggerFiredAt?: string | null
 }
 
 export type TaskEventType =

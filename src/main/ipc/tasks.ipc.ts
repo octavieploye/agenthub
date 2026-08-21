@@ -14,12 +14,15 @@ import {
 } from '../db/queries/tasks.queries'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { TaskItem, CreateTaskInput, UpdateTaskInput, TaskStatus } from '../../shared/types/task.types'
-import { z } from 'zod/v4'
+import { z } from 'zod'
+import { validateModelOverride } from '../services/helpers/model-validator'
 
 const categorySchema = z
-  .enum(['backend', 'frontend', 'database', 'schema', 'functionality'])
+  .enum(['backend', 'frontend', 'database', 'schema', 'functionality', 'marketing', 'research', 'business', 'content'])
   .nullable()
   .optional()
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be ISO date format YYYY-MM-DD').nullable().optional()
 
 const createTaskSchema = z.object({
   repoId: z.string(),
@@ -33,7 +36,11 @@ const createTaskSchema = z.object({
   sprintName: z.string().optional(),
   epicName: z.string().optional(),
   projectId: z.string().nullable().optional(),
-  note: z.string().nullable().optional()
+  sectionTargetDate: isoDateSchema,
+  note: z.string().nullable().optional(),
+  requiresApproval: z.boolean().optional(),
+  modelOverride: z.string().optional(),
+  providerOverride: z.enum(['anthropic', 'ollama-local', 'ollama-cloud']).optional()
 })
 
 const updateTaskSchema = z.object({
@@ -50,8 +57,12 @@ const updateTaskSchema = z.object({
   sprintName: z.string().nullable().optional(),
   epicName: z.string().nullable().optional(),
   projectId: z.string().nullable().optional(),
-  sectionTargetDate: z.string().nullable().optional(),
-  note: z.string().nullable().optional()
+  sectionTargetDate: isoDateSchema,
+  note: z.string().nullable().optional(),
+  requiresApproval: z.boolean().optional(),
+  modelOverride: z.string().nullable().optional(),
+  providerOverride: z.enum(['anthropic', 'ollama-local', 'ollama-cloud']).nullable().optional(),
+  dateTriggerFiredAt: isoDateSchema
 })
 
 export function registerTasksHandlers(): void {
@@ -101,7 +112,12 @@ export function registerTasksHandlers(): void {
       try {
         const validation = validateInput(createTaskSchema, input)
         if (!validation.valid) return validation.response
-        const result = insertTask(getDb(), validation.data as CreateTaskInput)
+        const validated = validation.data as CreateTaskInput
+        if (validated.modelOverride || validated.providerOverride) {
+          const modelError = validateModelOverride(validated.modelOverride, validated.providerOverride)
+          if (modelError) return error('VALIDATION_ERROR', modelError)
+        }
+        const result = insertTask(getDb(), validated)
         return success(result)
       } catch (err) {
         return error('TASKS_CREATE_ERROR', err instanceof Error ? err.message : String(err))
@@ -117,7 +133,12 @@ export function registerTasksHandlers(): void {
         if (!idValidation.valid) return idValidation.response
         const inputValidation = validateInput(updateTaskSchema, input)
         if (!inputValidation.valid) return inputValidation.response
-        updateTask(getDb(), idValidation.data, inputValidation.data as UpdateTaskInput)
+        const validated = inputValidation.data as UpdateTaskInput
+        if (validated.modelOverride !== undefined || validated.providerOverride !== undefined) {
+          const modelError = validateModelOverride(validated.modelOverride, validated.providerOverride)
+          if (modelError) return error('VALIDATION_ERROR', modelError)
+        }
+        updateTask(getDb(), idValidation.data, validated)
         return success(undefined)
       } catch (err) {
         return error('TASKS_UPDATE_ERROR', err instanceof Error ? err.message : String(err))

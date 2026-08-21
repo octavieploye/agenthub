@@ -43,6 +43,10 @@ const CATEGORY_DOT_COLOR: Record<string, string> = {
   database:      '#F59E0B',
   schema:        '#2DD4BF',
   functionality: '#22C55E',
+  marketing:     '#EC4899',
+  research:      '#A78BFA',
+  business:      '#F97316',
+  content:       '#06B6D4',
 }
 const DEFAULT_DOT_COLOR = '#6B7280'
 

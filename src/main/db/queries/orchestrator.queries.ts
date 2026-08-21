@@ -25,7 +25,8 @@ function mapRunRow(row: Record<string, unknown>): OrchestratorRun {
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     startedAt: (row.started_at as string) ?? null,
-    completedAt: (row.completed_at as string) ?? null
+    completedAt: (row.completed_at as string) ?? null,
+    singleTaskId: (row.single_task_id as string) ?? null
   }
 }
 
@@ -60,6 +61,7 @@ export function insertRun(
     projectId?: string
     concurrencyCap?: number
     telegramNotify?: boolean
+    singleTaskId?: string
   }
 ): OrchestratorRun {
   const id = randomUUID()
@@ -67,8 +69,8 @@ export function insertRun(
 
   db.prepare(
     `INSERT INTO orchestrator_runs
-       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?)`
+       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, single_task_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.sprintName,
@@ -76,6 +78,7 @@ export function insertRun(
     input.repoId,
     input.concurrencyCap ?? 3,
     input.telegramNotify ? 1 : 0,
+    input.singleTaskId ?? null,
     now,
     now
   )
@@ -93,7 +96,8 @@ export function insertRun(
     createdAt: now,
     updatedAt: now,
     startedAt: null,
-    completedAt: null
+    completedAt: null,
+    singleTaskId: input.singleTaskId ?? null
   }
 }
 
@@ -106,7 +110,7 @@ export function getRun(db: Database.Database, id: string): OrchestratorRun | nul
 
 export function getActiveRun(db: Database.Database): OrchestratorRun | null {
   const row = db
-    .prepare("SELECT * FROM orchestrator_runs WHERE status = 'running' LIMIT 1")
+    .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') LIMIT 1")
     .get() as Record<string, unknown> | undefined
   return row ? mapRunRow(row) : null
 }

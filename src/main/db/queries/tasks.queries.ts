@@ -23,6 +23,10 @@ function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): T
     projectId: (row.project_id as string) ?? null,
     sectionTargetDate: (row.section_target_date as string) ?? null,
     note: (row.note as string) ?? null,
+    requiresApproval: Boolean(row.requires_approval),
+    modelOverride: (row.model_override as string) ?? null,
+    providerOverride: (row.provider_override as string) ?? null,
+    dateTriggerFiredAt: (row.date_trigger_fired_at as string) ?? null,
     blockedBy: depMap?.get(id) ?? [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
@@ -83,8 +87,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, model_override, provider_override, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -98,6 +102,9 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.projectId ?? null,
     input.sectionTargetDate ?? null,
     input.note ?? null,
+    input.requiresApproval ? 1 : 0,
+    input.modelOverride ?? null,
+    input.providerOverride ?? null,
     now,
     now
   )
@@ -126,6 +133,10 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     projectId: input.projectId ?? null,
     sectionTargetDate: input.sectionTargetDate ?? null,
     note: input.note ?? null,
+    requiresApproval: input.requiresApproval ?? false,
+    modelOverride: input.modelOverride ?? null,
+    providerOverride: input.providerOverride ?? null,
+    dateTriggerFiredAt: null,
     blockedBy: [],
     createdAt: now,
     updatedAt: now
@@ -188,6 +199,22 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   if (input.note !== undefined) {
     sets.push('note = ?')
     values.push(input.note)
+  }
+  if (input.requiresApproval !== undefined) {
+    sets.push('requires_approval = ?')
+    values.push(input.requiresApproval ? 1 : 0)
+  }
+  if (input.modelOverride !== undefined) {
+    sets.push('model_override = ?')
+    values.push(input.modelOverride)
+  }
+  if (input.providerOverride !== undefined) {
+    sets.push('provider_override = ?')
+    values.push(input.providerOverride)
+  }
+  if (input.dateTriggerFiredAt !== undefined) {
+    sets.push('date_trigger_fired_at = ?')
+    values.push(input.dateTriggerFiredAt)
   }
 
   values.push(id)
