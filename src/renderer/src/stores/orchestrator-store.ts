@@ -19,6 +19,7 @@ interface OrchestratorStore {
   runStatus: OrchestratorRunStatus | null
   sprintName: string | null
   runId: string | null
+  singleTaskId: string | null
   completedCount: number
   totalCount: number
   failedCount: number
@@ -31,6 +32,8 @@ interface OrchestratorStore {
   fetchStatus: () => Promise<void>
   fetchTaskLogs: (taskId: string) => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
+  startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<void>
+  cancel: () => Promise<void>
   pause: () => Promise<boolean>
   resume: () => Promise<boolean>
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => void
@@ -42,6 +45,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   runStatus: null,
   sprintName: null,
   runId: null,
+  singleTaskId: null,
   completedCount: 0,
   totalCount: 0,
   failedCount: 0,
@@ -76,6 +80,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
           runStatus: run?.status ?? null,
           sprintName: run?.sprintName ?? null,
           runId: run?.id ?? null,
+          singleTaskId: run?.singleTaskId ?? null,
           completedCount,
           totalCount,
           failedCount,
@@ -149,12 +154,69 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
+  startSingleTask: async (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const res = await window.agentHub.orchestrator.start({
+        sprintName: sprintName || `pipeline-${taskId.slice(0, 8)}`,
+        repoId,
+        projectId,
+        singleTaskId: taskId,
+        concurrencyCap: 1,
+      })
+      if (res.success && res.data) {
+        set({
+          runId: res.data.id,
+          runStatus: res.data.status,
+          sprintName: res.data.sprintName,
+          singleTaskId: res.data.singleTaskId ?? taskId,
+          completedCount: 0,
+          totalCount: 1,
+          failedCount: 0,
+        })
+      } else {
+        set({ error: res.error?.message || 'Failed to start pipeline' })
+      }
+    } catch (e) {
+      set({ error: (e as Error).message })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  cancel: async () => {
+    const runId = get().runId
+    if (!runId) return
+    set({ loading: true, error: null })
+    try {
+      const res = await window.agentHub.orchestrator.cancel({ runId })
+      if (res.success) {
+        set({ runStatus: 'failed', singleTaskId: null })
+      } else {
+        set({ error: res.error?.message || 'Failed to cancel' })
+      }
+    } catch (e) {
+      set({ error: (e as Error).message })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => {
-    set({
-      runStatus: payload.status,
-      sprintName: payload.sprintName,
-      runId: payload.runId,
-    })
+    if (payload.status === 'completed' || payload.status === 'failed') {
+      set({
+        runStatus: payload.status,
+        sprintName: payload.sprintName,
+        runId: payload.runId,
+        singleTaskId: null,
+      })
+    } else {
+      set({
+        runStatus: payload.status,
+        sprintName: payload.sprintName,
+        runId: payload.runId,
+      })
+    }
   },
 
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => {

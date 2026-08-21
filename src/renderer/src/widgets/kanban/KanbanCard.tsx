@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText } from 'lucide-react'
+import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText, Rocket } from 'lucide-react'
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
@@ -19,6 +19,8 @@ interface KanbanCardProps {
   onDelete?: () => void
   onEdit?: (input: UpdateTaskInput) => void
   onDispatch?: () => void
+  onAutoPipeline?: () => void
+  isOrchestratorActive?: boolean
   onBadgeClick?: () => void
   blockedByCount?: number
   /** Number of blockers that are not yet completed/tested */
@@ -100,7 +102,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
 
 export function KanbanCard({
   task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents,
-  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0,
+  onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onAutoPipeline, isOrchestratorActive, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0,
   orchestratorPhase, phaseHistory
 }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
@@ -376,6 +378,19 @@ export function KanbanCard({
                 onClick={(e) => { e.stopPropagation(); onDispatch() }}
               >
                 <Zap size={12} />
+              </button>
+            )}
+            {onAutoPipeline && (
+              <button
+                className={`opacity-0 group-hover:opacity-100 transition-opacity btn btn-xs btn-ghost h-5 min-h-0 px-1 ${isOrchestratorActive ? 'btn-disabled opacity-40' : 'text-primary/60 hover:text-primary'}`}
+                title={isOrchestratorActive ? 'Orchestrator already active' : 'Run 5-phase pipeline'}
+                onMouseEnter={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!isOrchestratorActive) onAutoPipeline()
+                }}
+              >
+                <Rocket size={12} />
               </button>
             )}
             {onDelete && (

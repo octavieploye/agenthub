@@ -222,6 +222,7 @@ export const IPC_CHANNELS = {
     RESUME:   'orchestrator:resume',
     STATUS:   'orchestrator:status',
     TASK_LOG: 'orchestrator:task-log',
+    CANCEL:   'orchestrator:cancel',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',

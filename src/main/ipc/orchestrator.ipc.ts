@@ -10,6 +10,7 @@ const startSchema = z.object({
   projectId: z.string().optional(),
   concurrencyCap: z.number().int().min(1).max(10).optional(),
   telegramNotify: z.boolean().optional(),
+  singleTaskId: z.string().optional(),
 })
 
 const runIdSchema = z.object({
@@ -74,6 +75,17 @@ export function registerOrchestratorHandlers(): void {
       return success(getOrchestrator().getTaskLog(v.data.taskId))
     } catch (err) {
       return error('ORCHESTRATOR_TASK_LOG_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.CANCEL, (_event, input: unknown) => {
+    const v = validateInput(runIdSchema, input)
+    if (!v.valid) return v.response
+    try {
+      getOrchestrator().cancel(v.data.runId)
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_CANCEL_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
 }

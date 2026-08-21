@@ -328,6 +328,7 @@ const agentHubBridge = {
     start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
     pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),
     resume: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME, input),
+    cancel: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.CANCEL, input),
     status: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.STATUS),
     taskLog: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.TASK_LOG, input),
     onStatusChange: (callback: (payload: unknown) => void) => {

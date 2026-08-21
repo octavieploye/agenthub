@@ -46,6 +46,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const { setActiveAgent } = useAgentStore()
   const taskPhases = useOrchestratorStore((s) => s.taskPhases)
   const taskLogs = useOrchestratorStore((s) => s.taskLogs)
+  const runStatus = useOrchestratorStore((s) => s.runStatus)
+  const startSingleTask = useOrchestratorStore((s) => s.startSingleTask)
+  const isOrchestratorActive = runStatus === 'running' || runStatus === 'paused'
 
   function navigateToAgent(agentId: string) {
     setActiveAgent(agentId)
@@ -189,6 +192,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 onEdit={(input) => updateTaskRemote(task.id, input)}
                 onDelete={() => deleteTask(task.id)}
                 onDispatch={() => setDispatchModalTask(task)}
+                onAutoPipeline={() => startSingleTask(task.id, task.repoId, task.sprintName, selectedProjectId ?? undefined)}
+                isOrchestratorActive={isOrchestratorActive}
                 onBadgeClick={task.agentId ? () => navigateToAgent(task.agentId!) : undefined}
               />
             ))}
@@ -243,6 +248,8 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               onEdit={(input) => updateTaskRemote(task.id, input)}
               onDelete={() => deleteTask(task.id)}
               onDispatch={() => setDispatchModalTask(task)}
+              onAutoPipeline={() => startSingleTask(task.id, task.repoId, task.sprintName, selectedProjectId ?? undefined)}
+              isOrchestratorActive={isOrchestratorActive}
               onBadgeClick={task.agentId ? () => navigateToAgent(task.agentId!) : undefined}
             />
           ))}

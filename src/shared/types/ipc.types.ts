@@ -245,6 +245,7 @@ export interface AgentHubBridge {
     start: (input: import('./orchestrator.types').OrchestratorStartInput) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
     pause: (input: { runId: string }) => Promise<IpcResponse<void>>
     resume: (input: { runId: string }) => Promise<IpcResponse<void>>
+    cancel: (input: { runId: string }) => Promise<IpcResponse<void>>
     status: () => Promise<IpcResponse<import('./orchestrator.types').OrchestratorStatusResponse>>
     taskLog: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
     onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void

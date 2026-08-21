@@ -30,6 +30,7 @@ import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
 import { recommendForPhase } from './model-dispatcher'
+import { validateModelOverride } from './helpers/model-validator'
 import {
   onOrchestratorEvent,
   offOrchestratorEvent,
@@ -65,6 +66,8 @@ export class KanbanOrchestratorService {
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private completedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   private failedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
+  /** Task 2.10: synchronous git mutex — one commit/push per repo at a time */
+  private gitLockActive = new Map<string, boolean>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -72,23 +75,27 @@ export class KanbanOrchestratorService {
   }
 
   start(input: OrchestratorStartInput): OrchestratorRun {
-    const existing = getActiveRun(this.db)
-    if (existing) {
-      throw new Error(`Orchestrator already running: ${existing.id} (${existing.sprintName})`)
-    }
+    // Task 2.1: Wrap ONLY DB operations in transaction, forward singleTaskId
+    const updated = this.db.transaction(() => {
+      const existing = getActiveRun(this.db)
+      if (existing) {
+        throw new Error(`Orchestrator already running: ${existing.id} (${existing.sprintName})`)
+      }
 
-    const run = insertRun(this.db, {
-      sprintName: input.sprintName,
-      repoId: input.repoId,
-      projectId: input.projectId,
-      concurrencyCap: input.concurrencyCap ?? 3,
-      telegramNotify: input.telegramNotify ?? false,
-    })
+      const run = insertRun(this.db, {
+        sprintName: input.sprintName,
+        repoId: input.repoId,
+        projectId: input.projectId,
+        concurrencyCap: input.concurrencyCap ?? 3,
+        telegramNotify: input.telegramNotify ?? false,
+        singleTaskId: input.singleTaskId,
+      })
 
-    updateRunStatus(this.db, run.id, 'running')
-    const updated = getRun(this.db, run.id)!
+      updateRunStatus(this.db, run.id, 'running')
+      return getRun(this.db, run.id)!
+    })()
 
-    // Subscribe to orchestrator events
+    // Event subscriptions and tick timer happen OUTSIDE transaction
     this.completedHandler = (event) => this.onAgentCompleted(event)
     this.failedHandler = (event) => this.onAgentFailed(event)
     onOrchestratorEvent('agent:completed', this.completedHandler)
@@ -101,6 +108,94 @@ export class KanbanOrchestratorService {
     this.emitStatusChange(updated.id, 'running', updated.sprintName)
     this.notifyTelegram(updated, `Sprint "${updated.sprintName}" started`, 'completed')
     return updated
+  }
+
+  /** Task 2.2: Start a single task pipeline (no tick timer, immediate dispatch) */
+  startSingleTask(input: OrchestratorStartInput): OrchestratorRun {
+    if (!input.singleTaskId) {
+      throw new Error('startSingleTask requires singleTaskId')
+    }
+
+    // Validate task exists in DB
+    const task = getTaskById(this.db, input.singleTaskId)
+    if (!task) {
+      throw new Error(`Task not found: ${input.singleTaskId}`)
+    }
+
+    // If task has no sprintName, generate one
+    const sprintName = input.sprintName || task.sprintName || `pipeline-${input.singleTaskId.slice(0, 8)}`
+
+    // Create the run via transaction
+    const updated = this.db.transaction(() => {
+      const existing = getActiveRun(this.db)
+      if (existing) {
+        throw new Error(`Orchestrator already running: ${existing.id} (${existing.sprintName})`)
+      }
+
+      const run = insertRun(this.db, {
+        sprintName,
+        repoId: input.repoId,
+        projectId: input.projectId,
+        concurrencyCap: input.concurrencyCap ?? 1,
+        telegramNotify: input.telegramNotify ?? false,
+        singleTaskId: input.singleTaskId,
+      })
+
+      updateRunStatus(this.db, run.id, 'running')
+      return getRun(this.db, run.id)!
+    })()
+
+    // Subscribe event listeners (same as start, but NO tick timer)
+    this.completedHandler = (event) => this.onAgentCompleted(event)
+    this.failedHandler = (event) => this.onAgentFailed(event)
+    onOrchestratorEvent('agent:completed', this.completedHandler)
+    onOrchestratorEvent('agent:failed', this.failedHandler)
+
+    log.info('Orchestrator single-task started', {
+      runId: updated.id,
+      taskId: input.singleTaskId,
+      sprint: updated.sprintName,
+    })
+    this.emitStatusChange(updated.id, 'running', updated.sprintName)
+    this.notifyTelegram(updated, `Single task "${task.title}" started`, 'completed')
+
+    // Dispatch immediately (no tick timer = no auto-dispatch otherwise)
+    this.dispatchNextTasks(updated)
+
+    return updated
+  }
+
+  /** Task 2.3: Cancel an active run */
+  cancel(runId: string): void {
+    const run = getRun(this.db, runId)
+    if (!run) {
+      throw new Error(`Run not found: ${runId}`)
+    }
+    if (run.status !== 'running' && run.status !== 'paused') {
+      throw new Error(`Cannot cancel run with status "${run.status}" — must be running or paused`)
+    }
+
+    // Mark run as failed
+    updateRunStatus(this.db, runId, 'failed')
+
+    // Mark all active task logs for this run as failed
+    const activeLogs = getActiveTaskLogs(this.db, runId)
+    for (const taskLog of activeLogs) {
+      updateTaskLogStatus(this.db, taskLog.id, 'failed')
+    }
+
+    // Clean up event listeners and tick timer
+    this.stop()
+
+    // Emit status change
+    this.emitStatusChange(runId, 'failed', run.sprintName)
+
+    log.info('Orchestrator cancelled', { runId, sprintName: run.sprintName })
+
+    // Send telegram notification if enabled
+    if (run.telegramNotify) {
+      this.notifyTelegram(run, `Sprint "${run.sprintName}" cancelled`, 'failed')
+    }
   }
 
   pause(runId: string): void {
@@ -148,13 +243,30 @@ export class KanbanOrchestratorService {
   getStatus(): OrchestratorStatusResponse {
     const run = getActiveRun(this.db)
     if (!run) {
-      return { run: null, activeTasks: [], completedCount: 0, totalCount: 0, failedCount: 0 }
+      return { run: null, activeTasks: [], completedCount: 0, totalCount: 0, failedCount: 0, singleTaskId: null }
     }
 
     const allLogs = getTaskLogsByRun(this.db, run.id)
     const activeTasks = allLogs.filter(l => l.status === 'active')
 
-    // Count at task level: group logs by taskId, check push phase
+    // Task 2.5: Branch for single-task mode
+    if (run.singleTaskId) {
+      const taskLogs = allLogs.filter(l => l.taskId === run.singleTaskId)
+      const pushLog = taskLogs.find(l => l.phase === 'push')
+      const completedCount = pushLog?.status === 'done' ? 1 : 0
+      const failedCount = taskLogs.some(l => l.status === 'failed') ? 1 : 0
+
+      return {
+        run,
+        activeTasks,
+        completedCount,
+        totalCount: 1,
+        failedCount,
+        singleTaskId: run.singleTaskId,
+      }
+    }
+
+    // Batch mode: count at task level, group logs by taskId, check push phase
     const taskLogsByTask = new Map<string, typeof allLogs>()
     for (const l of allLogs) {
       const existing = taskLogsByTask.get(l.taskId) ?? []
@@ -173,7 +285,7 @@ export class KanbanOrchestratorService {
     const tasks = getTasksByRepo(this.db, run.repoId)
     const totalCount = tasks.length
 
-    return { run, activeTasks, completedCount, totalCount, failedCount }
+    return { run, activeTasks, completedCount, totalCount, failedCount, singleTaskId: run.singleTaskId ?? null }
   }
 
   getTaskLog(taskId: string): OrchestratorTaskLog[] {
@@ -240,14 +352,25 @@ export class KanbanOrchestratorService {
       return null
     }
 
-    const rec = recommendForPhase('dev', task.description || task.title, false)
+    // Task 2.7: Respect modelOverride/providerOverride from task
+    const { model, provider } = this.resolveModelForPhase('dev', task.description || task.title, task.modelOverride, task.providerOverride)
+
+    // Task 2.9: Re-validate model at dispatch time
+    const validationError = validateModelOverride(model, provider)
+    if (validationError) {
+      log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
+      const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'dev', modelUsed: model, providerUsed: provider })
+      updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      this.emitTaskPhaseChange(run.id, taskId, 'dev', 'failed')
+      return null
+    }
 
     const agent = this.deps.spawnAgent({
       repoId: run.repoId,
       name: `[orch] ${task.title}`,
       cwd: repoPath,
-      model: rec.model,
-      provider: rec.provider as any,
+      model,
+      provider: provider as AgentSpawnOptions['provider'],
       taskDescription: task.description || task.title,
       skipPermissions: true,
     })
@@ -256,15 +379,15 @@ export class KanbanOrchestratorService {
       runId: run.id,
       taskId,
       phase: 'dev',
-      modelUsed: rec.model,
-      providerUsed: rec.provider,
+      modelUsed: model,
+      providerUsed: provider,
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
     updateTask(this.db, taskId, { status: 'in_progress' })
     this.emitTaskPhaseChange(run.id, taskId, 'dev', 'active')
 
     log.info('Orchestrator: dev phase dispatched', {
-      taskId, agentId: agent.id, model: rec.model,
+      taskId, agentId: agent.id, model,
     })
     return taskLog
   }
@@ -278,7 +401,18 @@ export class KanbanOrchestratorService {
     const repoPath = this.deps.getRepoPath(run.repoId)
     if (!repoPath) return null
 
-    const rec = recommendForPhase('review', task.description || task.title, false)
+    // Task 2.7: Respect modelOverride/providerOverride from task
+    const { model, provider } = this.resolveModelForPhase('review', task.description || task.title, task.modelOverride, task.providerOverride)
+
+    // Task 2.9: Re-validate model at dispatch time
+    const validationError = validateModelOverride(model, provider)
+    if (validationError) {
+      log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
+      const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'review', modelUsed: model, providerUsed: provider })
+      updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      this.emitTaskPhaseChange(run.id, taskId, 'review', 'failed')
+      return null
+    }
 
     const reviewPrompt = [
       `Review the code changes for task: ${task.title}`,
@@ -291,8 +425,8 @@ export class KanbanOrchestratorService {
       repoId: run.repoId,
       name: `[review] ${task.title}`,
       cwd: repoPath,
-      model: rec.model,
-      provider: rec.provider as any,
+      model,
+      provider: provider as AgentSpawnOptions['provider'],
       taskDescription: reviewPrompt,
       skipPermissions: true,
     })
@@ -301,8 +435,8 @@ export class KanbanOrchestratorService {
       runId: run.id,
       taskId,
       phase: 'review',
-      modelUsed: rec.model,
-      providerUsed: rec.provider,
+      modelUsed: model,
+      providerUsed: provider,
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
     this.emitTaskPhaseChange(run.id, taskId, 'review', 'active')
@@ -320,7 +454,18 @@ export class KanbanOrchestratorService {
     const repoPath = this.deps.getRepoPath(run.repoId)
     if (!repoPath) return null
 
-    const rec = recommendForPhase('security', task.description || task.title, false)
+    // Task 2.7: Respect modelOverride/providerOverride from task
+    const { model, provider } = this.resolveModelForPhase('security', task.description || task.title, task.modelOverride, task.providerOverride)
+
+    // Task 2.9: Re-validate model at dispatch time
+    const validationError = validateModelOverride(model, provider)
+    if (validationError) {
+      log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
+      const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'security', modelUsed: model, providerUsed: provider })
+      updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      this.emitTaskPhaseChange(run.id, taskId, 'security', 'failed')
+      return null
+    }
 
     // Select security team based on task properties
     const desc = (task.description || '').toLowerCase()
@@ -343,8 +488,8 @@ export class KanbanOrchestratorService {
       repoId: run.repoId,
       name: `[security] ${task.title}`,
       cwd: repoPath,
-      model: rec.model,
-      provider: rec.provider as any,
+      model,
+      provider: provider as AgentSpawnOptions['provider'],
       taskDescription: securityPrompt,
       skipPermissions: true,
     })
@@ -353,8 +498,8 @@ export class KanbanOrchestratorService {
       runId: run.id,
       taskId,
       phase: 'security',
-      modelUsed: rec.model,
-      providerUsed: rec.provider,
+      modelUsed: model,
+      providerUsed: provider,
     })
     updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
     this.emitTaskPhaseChange(run.id, taskId, 'security', 'active')
@@ -379,11 +524,18 @@ export class KanbanOrchestratorService {
       return false
     }
 
+    // Task 2.10: Git mutex — skip if another commit/push is active for this repo
+    if (this.gitLockActive.get(run.repoId)) {
+      log.warn('Orchestrator: git lock active for repo, skipping commit (will retry on next tick)', { taskId, repoId: run.repoId })
+      return false
+    }
+
     // Commit phase
     const commitLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'commit' })
     updateTaskLogStatus(this.db, commitLog.id, 'active')
     this.emitTaskPhaseChange(run.id, taskId, 'commit', 'active')
 
+    this.gitLockActive.set(run.repoId, true)
     try {
       this.deps.gitStageAll(repoPath)
       const scope = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)
@@ -427,6 +579,8 @@ export class KanbanOrchestratorService {
       this.notifyTelegram(run, `Commit/push failed for "${task.title}": ${String(err).slice(0, 100)}`, 'failed')
       log.error('Orchestrator: commit/push failed', { taskId, err: String(err) })
       return false
+    } finally {
+      this.gitLockActive.set(run.repoId, false)
     }
   }
 
@@ -443,6 +597,22 @@ export class KanbanOrchestratorService {
 
     if (next === 'done') {
       log.info('Orchestrator: task fully completed', { taskId })
+
+      // Task 2.6: Auto-complete for single-task mode
+      if (run.singleTaskId) {
+        // Verify push phase actually completed (not just that we reached 'done' state)
+        const taskLogs = getTaskLogsByTask(this.db, taskId)
+        const pushLog = taskLogs.find(l => l.phase === 'push')
+        if (pushLog?.status === 'done') {
+          updateRunStatus(this.db, run.id, 'completed')
+          this.emitStatusChange(run.id, 'completed', run.sprintName)
+          log.info('Orchestrator: single-task pipeline completed', { runId: run.id, taskId })
+          this.notifyTelegram(run, `Task "${run.sprintName}" pipeline completed`, 'completed')
+          this.stop()
+          return
+        }
+      }
+
       this.dispatchNextTasks(run)
       return
     }
@@ -467,6 +637,36 @@ export class KanbanOrchestratorService {
   }
 
   private dispatchNextTasks(run: OrchestratorRun): void {
+    // Task 2.4: singleTaskId filter — skip dependency solver, only consider the single task
+    if (run.singleTaskId) {
+      const allLogs = getTaskLogsByRun(this.db, run.id)
+      const taskLogs = allLogs.filter(l => l.taskId === run.singleTaskId)
+
+      // Check if task already has an active log (any phase)
+      const hasActive = taskLogs.some(l => l.status === 'active')
+      if (hasActive) return
+
+      // Check if push phase is done (task fully completed)
+      const pushLog = taskLogs.find(l => l.phase === 'push')
+      if (pushLog?.status === 'done') {
+        // Task 2.6: Auto-complete single-task run
+        updateRunStatus(this.db, run.id, 'completed')
+        this.emitStatusChange(run.id, 'completed', run.sprintName)
+        log.info('Orchestrator: single-task pipeline completed (via dispatchNextTasks)', { runId: run.id, taskId: run.singleTaskId })
+        this.notifyTelegram(run, `Task "${run.sprintName}" pipeline completed`, 'completed')
+        this.stop()
+        return
+      }
+
+      // If no logs exist yet, dispatch dev phase
+      if (taskLogs.length === 0) {
+        this.dispatchDevPhase(run.singleTaskId, run)
+      }
+      // Otherwise, phase transitions are handled by advancePhase
+      return
+    }
+
+    // Batch mode: use dependency solver
     const dispatchable = this.getNextDispatchableTasks(run.id)
     for (const task of dispatchable) {
       this.dispatchDevPhase(task.id, run)
@@ -551,6 +751,34 @@ export class KanbanOrchestratorService {
       offOrchestratorEvent('agent:failed', this.failedHandler)
       this.failedHandler = null
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task 2.7: Model/provider resolution helper
+  // ---------------------------------------------------------------------------
+
+  /** Resolve model + provider for a dispatch phase, respecting task-level overrides. */
+  private resolveModelForPhase(
+    phase: OrchestratorPhase,
+    taskDescription: string,
+    modelOverride: string | null,
+    providerOverride: string | null
+  ): { model: string; provider: string } {
+    // If both overrides are set, use them directly
+    if (modelOverride && providerOverride) {
+      return { model: modelOverride, provider: providerOverride }
+    }
+
+    // If only provider is set, use recommendForPhase but with the overridden provider
+    // (recommendForPhase picks the default model for the phase)
+    if (providerOverride && !modelOverride) {
+      const rec = recommendForPhase(phase, taskDescription, providerOverride === 'ollama-cloud')
+      return { model: rec.model, provider: providerOverride }
+    }
+
+    // No overrides — use standard recommendation
+    const rec = recommendForPhase(phase, taskDescription, false)
+    return { model: rec.model, provider: rec.provider }
   }
 
   private stopTick(): void {
