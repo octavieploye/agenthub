@@ -18,6 +18,7 @@ const WORKFLOW_CATEGORIES: Record<string, string> = {
   brainstorm: 'business-venture',
   'tech-brainstorm': 'dev-skills',
   stats: 'business-modeling',
+  'ux-challenge': 'dev-skills',
 }
 
 export interface SkillsServiceDeps {
@@ -81,8 +82,14 @@ export class SkillsService {
         command = 'node'
         args = [skill.path]
       } else {
-        // .md — original behavior
-        const content = readFileSync(skill.path, 'utf-8')
+        // .md — use command override if present, otherwise use file content
+        let content: string
+        if (skill.command) {
+          const commandSkill = skills.find((s) => s.id === skill.command)
+          content = commandSkill ? readFileSync(commandSkill.path, 'utf-8') : `/${skill.command}`
+        } else {
+          content = readFileSync(skill.path, 'utf-8')
+        }
         command = 'claude'
         args = ['--print', '-p', content]
       }
@@ -117,25 +124,38 @@ export class SkillsService {
   private scanSkills(repoPath?: string): SkillItem[] {
     const skills: SkillItem[] = []
     const agenthubPath = this.deps.agenthubPath
+    const isAgentHub = agenthubPath && repoPath && this.normalizePath(repoPath) === this.normalizePath(agenthubPath)
 
-    // Scan project repo (if provided and different from agenthub)
+    // Scan project repo (if provided and different from agenthub).
+    // Wrapped in try/catch so a failing project scan never blocks the agenthub scan.
     if (repoPath) {
-      const projectSkills = this.scanRepo(repoPath)
-      const isAgentHub = agenthubPath && this.normalizePath(repoPath) === this.normalizePath(agenthubPath)
-      const origin = isAgentHub ? 'agenthub' as const : 'project' as const
-      for (const s of projectSkills) s.origin = origin
-      skills.push(...projectSkills)
+      try {
+        const projectSkills = this.scanRepo(repoPath)
+        const origin = isAgentHub ? 'agenthub' as const : 'project' as const
+        for (const s of projectSkills) s.origin = origin
+        skills.push(...projectSkills)
+      } catch (err) {
+        this.deps.logWarning('Failed to scan project repo — agenthub skills will still load', {
+          repoPath,
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
     }
 
-    // Always scan agenthub repo as well (if configured and different from project)
-    if (agenthubPath) {
-      const isAlreadyScanned = repoPath && this.normalizePath(repoPath) === this.normalizePath(agenthubPath)
-      if (!isAlreadyScanned) {
+    // Always scan agenthub repo as well (if configured and different from project).
+    // This scan is independent — agenthub skills are ALWAYS available.
+    if (agenthubPath && !isAgentHub) {
+      try {
         const agenthubSkills = this.scanRepo(agenthubPath)
         for (const s of agenthubSkills) s.origin = 'agenthub'
         skills.push(...agenthubSkills)
+      } catch (err) {
+        this.deps.logWarning('Failed to scan agenthub repo', {
+          agenthubPath,
+          error: err instanceof Error ? err.message : String(err)
+        })
       }
-    } else {
+    } else if (!agenthubPath) {
       // Fallback: scan globally installed plugin when agenthubPath is not configured
       const globalPluginPath = this.deps.globalPluginPath ?? join(homedir(), '.claude', 'plugins', 'agenthub')
       if (existsSync(globalPluginPath)) {
@@ -249,9 +269,18 @@ export class SkillsService {
       const manifestPath = join(workflowDir, entry, 'manifest.md')
       if (!existsSync(manifestPath)) continue
 
+      let command: string | undefined
+      try {
+        const content = readFileSync(manifestPath, 'utf-8')
+        const fm = this.parseFrontmatter(content)
+        if (fm.command) command = fm.command
+      } catch { /* ignore */ }
+
       const parsed = this.parseSkillFile(manifestPath, workflowDir, 'project')
       const category = WORKFLOW_CATEGORIES[entry] ?? 'workflows'
-      items.push({ ...parsed, id: entry, category, source: 'workflow' })
+      const item: SkillItem = { ...parsed, id: entry, category, source: 'workflow' }
+      if (command) item.command = command
+      items.push(item)
     }
     return items
   }

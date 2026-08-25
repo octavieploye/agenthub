@@ -452,11 +452,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   )
   const { modelFlag: _modelFlag, ...providerEnv } = spawnEnv
 
+  // Resolve the agenthub root — instruction source for all engines.
+  // Agents spawned with a different CWD still need agenthub's rules, skills, and guardrails.
+  const agenthubRoot = app.isPackaged
+    ? join(process.resourcesPath, '..')
+    : app.getAppPath()
+
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     ...providerEnv,
     ...(options.envOverrides ?? {}),
     AGENTHUB_BUILDER: '1',   // signals plugin hook: this is a builder session
+    AGENTHUB_HOME: agenthubRoot,  // agents can read this to know where instructions live
     // Point zsh dotfile lookup to an empty dir so oh-my-zsh and user .zshrc
     // don't pollute the terminal before Claude CLI appears.
     // /etc/zprofile still runs, keeping macOS PATH (path_helper) intact.
@@ -911,6 +918,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     emitToAllRenderers(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, agentState.id)
   }
 
+  // S46: When CWD differs from agenthub, Claude CLI won't auto-discover agenthub's
+  // project CLAUDE.md (it walks up from CWD). Inject it explicitly so agents always
+  // get the full instruction layer (team rules, behavioral guardrails, coding standards,
+  // destructive command ban, etc.) regardless of which repo they work in.
+  const cwdNormalized = options.cwd.replace(/\/+$/, '')
+  const agenthubNormalized = agenthubRoot.replace(/\/+$/, '')
+  const isWorkingInAgenthub = cwdNormalized === agenthubNormalized
+  const agenthubClaudeMdPath = join(agenthubRoot, '.claude', 'CLAUDE.md')
+  const appendAgenthubRulesFlag = !isWorkingInAgenthub && existsSync(agenthubClaudeMdPath)
+    ? ` --append-system-prompt-file '${agenthubClaudeMdPath}'`
+    : ''
+
   // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
   // env vars and model routing internally. Claude CLI rejects unknown model names,
   // so the env-var-only approach does NOT work.
@@ -958,17 +977,17 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       // S24: log metadata only — never log full cmd string (reveals plugin paths + task content)
-      log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
+      log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}\n`
       ptyProcess.write(cmd)
       // S24: log metadata only
-      log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag })
+      log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag })
     }, 500)
   }
 
