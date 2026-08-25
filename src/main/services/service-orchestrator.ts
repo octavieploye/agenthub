@@ -34,7 +34,7 @@ import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orche
 import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -470,6 +470,7 @@ export function initializeServices(db: Database.Database): void {
     gitStageAll: (repoPath: string) => gitService!.stageFiles(repoPath, ['-A']),
     gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
     gitPush: (repoPath: string) => gitService!.push(repoPath),
+    getAgentOutput,
     onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
     emitToRenderer: emitToAllRenderers,
     sendTelegramNotification: (summary: string, type: 'completed' | 'failed') => {

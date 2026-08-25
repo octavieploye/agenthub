@@ -23,6 +23,7 @@ import {
   getActiveTaskLogs,
   insertTaskLog,
   updateTaskLogStatus,
+  updateTaskLogSummary,
   getActiveTaskLogByAgentId,
   getUnacknowledgedRetryFailures,
   acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
@@ -37,6 +38,8 @@ import { isSupervisedCategory } from '../../shared/constants/category-classifier
 import { checkOllamaHealthWithRetry } from './helpers/ollama-cloud-health'
 import { recommendForPhase } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
+import { parseSecurityOutput, type SecurityParseResult } from './helpers/security-output-parser'
+import { getPhaseProfile, shouldSkipSecurity, shouldLoopBack } from './helpers/phase-profile'
 import {
   onOrchestratorEvent,
   offOrchestratorEvent,
@@ -45,6 +48,7 @@ import {
 
 const TICK_INTERVAL_MS = 30_000
 const STUCK_THRESHOLD_MS = 30 * 60 * 1000
+const MAX_PHASE_RETRIES = 3
 
 const NEXT_PHASE: Record<OrchestratorPhase, OrchestratorPhase | 'done'> = {
   dev: 'review',
@@ -61,6 +65,7 @@ export interface OrchestratorDeps {
   gitStageAll: (repoPath: string) => void
   gitCommit: (repoPath: string, message: string) => string
   gitPush: (repoPath: string) => void
+  getAgentOutput?: (agentId: string) => string | null
   onEventInserted?: () => void
   emitToRenderer?: (channel: string, ...args: unknown[]) => void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
@@ -74,6 +79,12 @@ export class KanbanOrchestratorService {
   private failedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   /** Task 2.10: synchronous git mutex — one commit/push per repo at a time */
   private gitLockActive = new Map<string, boolean>()
+  /** Security loop-back cycle count per task (C1-C3, loop-back) */
+  private securityCycleCount = new Map<string, number>()
+  /** Phase retry count per task+phase key (C4) */
+  private phaseRetryCount = new Map<string, number>()
+  /** Tasks awaiting security approval from the user (C3) */
+  private pendingSecurityApproval = new Map<string, SecurityParseResult>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -100,6 +111,9 @@ export class KanbanOrchestratorService {
       updateRunStatus(this.db, run.id, 'running')
       return getRun(this.db, run.id)!
     })()
+
+    // M1: Validate all dependency IDs exist before starting
+    this.validateDependencies(updated.repoId)
 
     // Event subscriptions and tick timer happen OUTSIDE transaction
     this.completedHandler = (event) => this.onAgentCompleted(event)
@@ -324,13 +338,24 @@ export class KanbanOrchestratorService {
       }
     }
 
-    // Build dependency-aware task list
-    const depTasks: Array<DependencyTask & { title: string }> = tasks.map(t => ({
-      id: t.id,
-      priority: t.priority,
-      blockedBy: depMap.get(t.id) ?? [],
-      title: t.title,
-    }))
+    // C4: Exclude tasks whose retry count is exhausted
+    const permanentlyFailed = new Set<string>()
+    for (const [key, count] of this.phaseRetryCount) {
+      if (count >= MAX_PHASE_RETRIES) {
+        const taskId = key.split(':')[0]
+        permanentlyFailed.add(taskId)
+      }
+    }
+
+    // Build dependency-aware task list (excluding permanently failed tasks)
+    const depTasks: Array<DependencyTask & { title: string }> = tasks
+      .filter(t => !permanentlyFailed.has(t.id))
+      .map(t => ({
+        id: t.id,
+        priority: t.priority,
+        blockedBy: depMap.get(t.id) ?? [],
+        title: t.title,
+      }))
 
     const dispatchable = getDispatchableTasks(depTasks, activeLogs, completedTasks, run.concurrencyCap)
     return dispatchable.map(t => ({ id: t.id, title: t.title, priority: t.priority }))
@@ -340,9 +365,20 @@ export class KanbanOrchestratorService {
   // Phase dispatchers (B-1 through B-4)
   // ---------------------------------------------------------------------------
 
+  /** Guard: returns true if there is already an active log for this task+phase in this run. */
+  private hasActiveLogForPhase(runId: string, taskId: string, phase: OrchestratorPhase): boolean {
+    const logs = getTaskLogsByTask(this.db, taskId)
+    return logs.some(l => l.runId === runId && l.phase === phase && l.status === 'active')
+  }
+
   dispatchDevPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
     if (!this.deps) {
       log.warn('Orchestrator: no deps injected, cannot dispatch')
+      return null
+    }
+
+    if (this.hasActiveLogForPhase(run.id, taskId, 'dev')) {
+      log.warn('Orchestrator: duplicate dev dispatch blocked', { taskId })
       return null
     }
 
@@ -401,6 +437,11 @@ export class KanbanOrchestratorService {
   dispatchReviewPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
     if (!this.deps) return null
 
+    if (this.hasActiveLogForPhase(run.id, taskId, 'review')) {
+      log.warn('Orchestrator: duplicate review dispatch blocked', { taskId })
+      return null
+    }
+
     const task = getTaskById(this.db, taskId)
     if (!task) return null
 
@@ -453,6 +494,11 @@ export class KanbanOrchestratorService {
 
   dispatchSecurityPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
     if (!this.deps) return null
+
+    if (this.hasActiveLogForPhase(run.id, taskId, 'security')) {
+      log.warn('Orchestrator: duplicate security dispatch blocked', { taskId })
+      return null
+    }
 
     const task = getTaskById(this.db, taskId)
     if (!task) return null
@@ -552,14 +598,23 @@ export class KanbanOrchestratorService {
 
       log.info('Orchestrator: commit phase done', { taskId, hash: hash.slice(0, 8) })
 
-      // Push phase
+      // Push phase — separate try/catch so commit log stays 'done' if push fails
       const pushLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'push' })
       updateTaskLogStatus(this.db, pushLog.id, 'active')
       this.emitTaskPhaseChange(run.id, taskId, 'push', 'active')
 
-      this.deps.gitPush(repoPath)
-      updateTaskLogStatus(this.db, pushLog.id, 'done')
-      this.emitTaskPhaseChange(run.id, taskId, 'push', 'done')
+      try {
+        this.deps.gitPush(repoPath)
+        updateTaskLogStatus(this.db, pushLog.id, 'done')
+        this.emitTaskPhaseChange(run.id, taskId, 'push', 'done')
+      } catch (pushErr) {
+        // M2: Push failed — mark push log (not commit log) as failed
+        updateTaskLogStatus(this.db, pushLog.id, 'failed')
+        this.emitTaskPhaseChange(run.id, taskId, 'push', 'failed')
+        this.notifyTelegram(run, `Push failed for "${task.title}": ${String(pushErr).slice(0, 100)}`, 'failed')
+        log.error('Orchestrator: push failed (commit succeeded)', { taskId, err: String(pushErr) })
+        return false
+      }
 
       // Mark task as tested (completed through orchestrator)
       updateTask(this.db, taskId, { status: 'tested' })
@@ -582,8 +637,9 @@ export class KanbanOrchestratorService {
       return true
     } catch (err) {
       updateTaskLogStatus(this.db, commitLog.id, 'failed')
-      this.notifyTelegram(run, `Commit/push failed for "${task.title}": ${String(err).slice(0, 100)}`, 'failed')
-      log.error('Orchestrator: commit/push failed', { taskId, err: String(err) })
+      this.emitTaskPhaseChange(run.id, taskId, 'commit', 'failed')
+      this.notifyTelegram(run, `Commit failed for "${task.title}": ${String(err).slice(0, 100)}`, 'failed')
+      log.error('Orchestrator: commit failed', { taskId, err: String(err) })
       return false
     } finally {
       this.gitLockActive.set(run.repoId, false)
@@ -628,14 +684,50 @@ export class KanbanOrchestratorService {
       case 'review':
         this.dispatchReviewPhase(taskId, run)
         break
-      case 'security':
-        this.dispatchSecurityPhase(taskId, run)
+      case 'security': {
+        // Category-based phase profile: skip security for design/ui/style tasks
+        const task = getTaskById(this.db, taskId)
+        const profile = getPhaseProfile(task?.category ?? null)
+        if (shouldSkipSecurity(profile)) {
+          log.info('Orchestrator: skipping security phase (category profile)', { taskId, category: task?.category })
+          // Skip security, go straight to commit — only dispatch next if commit succeeds
+          const committed = this.executeCommitPhase(taskId, run, false)
+          if (committed) this.dispatchNextTasks(run)
+        } else {
+          this.dispatchSecurityPhase(taskId, run)
+        }
         break
-      case 'commit':
-        this.executeCommitPhase(taskId, run, false)
-        // After commit+push, dispatch next tasks
-        this.dispatchNextTasks(run)
+      }
+      case 'commit': {
+        // C1+C2: Parse security output and gate on CRITICAL findings
+        const secResult = this.getSecurityResult(taskId, run.id)
+        if (secResult.hasCritical || secResult.recommendation === 'block') {
+          // Check if loop-back is possible
+          const task = getTaskById(this.db, taskId)
+          const profile = getPhaseProfile(task?.category ?? null)
+          const cycleCount = this.securityCycleCount.get(taskId) ?? 0
+          if (shouldLoopBack(profile, cycleCount)) {
+            // Loop back: security → dev → review → security
+            this.securityCycleCount.set(taskId, cycleCount + 1)
+            log.info('Orchestrator: security loop-back, restarting dev phase', {
+              taskId, cycle: cycleCount + 1, maxCycles: profile.maxSecurityCycles,
+            })
+            this.notifyTelegram(run,
+              `Security loop-back for "${task?.title ?? taskId}" (cycle ${cycleCount + 1}/${profile.maxSecurityCycles}): ${secResult.findings.length} findings`,
+              'failed')
+            // Re-dispatch dev phase with security findings as context
+            this.dispatchDevPhaseWithSecurityContext(taskId, run, secResult)
+          } else {
+            // C3: Max cycles reached or no loop-back — pause and escalate
+            this.pendingSecurityApproval.set(taskId, secResult)
+            this.executeCommitPhase(taskId, run, true)
+          }
+        } else {
+          const committed = this.executeCommitPhase(taskId, run, false)
+          if (committed) this.dispatchNextTasks(run)
+        }
         break
+      }
       case 'push':
         // push is handled within executeCommitPhase
         break
@@ -664,9 +756,43 @@ export class KanbanOrchestratorService {
         return
       }
 
+      // C4: Check if max retries exhausted for this task
+      const hasExhaustedRetries = Array.from(this.phaseRetryCount.entries())
+        .some(([key, count]) => key.startsWith(run.singleTaskId!) && count >= MAX_PHASE_RETRIES)
+
+      if (hasExhaustedRetries) {
+        updateRunStatus(this.db, run.id, 'failed')
+        this.emitStatusChange(run.id, 'failed', run.sprintName)
+        log.error('Orchestrator: single-task max retries exhausted', { runId: run.id, taskId: run.singleTaskId })
+        this.notifyTelegram(run, `Task "${run.sprintName}" failed after max retries`, 'failed')
+        this.stop()
+        return
+      }
+
       // If no logs exist yet, dispatch dev phase
       if (taskLogs.length === 0) {
         this.dispatchDevPhase(run.singleTaskId, run)
+        return
+      }
+
+      // C4: If last phase failed but retries remain, re-dispatch same phase
+      const lastLog = taskLogs.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))[0]
+      if (lastLog?.status === 'failed') {
+        // Re-dispatch the failed phase
+        switch (lastLog.phase) {
+          case 'dev':
+            this.dispatchDevPhase(run.singleTaskId, run)
+            break
+          case 'review':
+            this.dispatchReviewPhase(run.singleTaskId, run)
+            break
+          case 'security':
+            this.dispatchSecurityPhase(run.singleTaskId, run)
+            break
+          default:
+            // commit/push failures are not retried via agent dispatch
+            break
+        }
       }
       // Otherwise, phase transitions are handled by advancePhase
       return
@@ -913,6 +1039,11 @@ export class KanbanOrchestratorService {
       offOrchestratorEvent('agent:failed', this.failedHandler)
       this.failedHandler = null
     }
+    // Clear run-scoped state to prevent stale data between runs
+    this.securityCycleCount.clear()
+    this.phaseRetryCount.clear()
+    this.pendingSecurityApproval.clear()
+    this.gitLockActive.clear()
   }
 
   // ---------------------------------------------------------------------------
@@ -950,6 +1081,184 @@ export class KanbanOrchestratorService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // M1: Validate dependency IDs before starting
+  // ---------------------------------------------------------------------------
+
+  private validateDependencies(repoId: string): void {
+    const tasks = getTasksByRepo(this.db, repoId)
+    const taskIds = new Set(tasks.map(t => t.id))
+    const depMap = getDependencyMap(this.db)
+
+    for (const [taskId, deps] of depMap) {
+      if (!taskIds.has(taskId)) continue // dependency for a task in another repo
+      for (const depId of deps) {
+        if (!taskIds.has(depId)) {
+          throw new Error(
+            `Broken dependency: task ${taskId} depends on ${depId} which does not exist in repo ${repoId}`
+          )
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // C1/C2: Retrieve and parse security result for a task
+  // ---------------------------------------------------------------------------
+
+  private getSecurityResult(taskId: string, runId: string): SecurityParseResult {
+    const taskLogs = getTaskLogsByTask(this.db, taskId)
+    // Find the most recent security phase log for THIS run only
+    const securityLogs = taskLogs
+      .filter(l => l.phase === 'security' && l.status === 'done' && l.runId === runId)
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+
+    const latestSecLog = securityLogs[0]
+    if (!latestSecLog?.summaryJson) {
+      // No stored output — try getting it from the agent directly
+      if (latestSecLog?.agentId && this.deps?.getAgentOutput) {
+        const rawOutput = this.deps.getAgentOutput(latestSecLog.agentId)
+        return parseSecurityOutput(rawOutput)
+      }
+      // No output available — default to 'review' (safe)
+      return parseSecurityOutput(null)
+    }
+
+    // Parse the stored summaryJson — reconstruct directly if it's our own structure
+    try {
+      const stored = JSON.parse(latestSecLog.summaryJson) as Record<string, unknown>
+      if (stored.recommendation && Array.isArray(stored.findings)) {
+        return {
+          recommendation: stored.recommendation as SecurityParseResult['recommendation'],
+          findings: stored.findings as SecurityParseResult['findings'],
+          hasCritical: Boolean(stored.hasCritical),
+          hasHigh: Boolean(stored.hasHigh),
+          raw: latestSecLog.summaryJson,
+        }
+      }
+    } catch {
+      // Invalid JSON in summaryJson — fall through to raw parse
+    }
+
+    return parseSecurityOutput(latestSecLog.summaryJson)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Loop-back: Re-dispatch dev phase with security findings as context
+  // ---------------------------------------------------------------------------
+
+  private dispatchDevPhaseWithSecurityContext(
+    taskId: string,
+    run: OrchestratorRun,
+    secResult: SecurityParseResult
+  ): void {
+    if (!this.deps) {
+      log.warn('Orchestrator: no deps injected, cannot dispatch loop-back', { taskId })
+      return
+    }
+
+    const task = getTaskById(this.db, taskId)
+    if (!task) {
+      log.warn('Orchestrator: task not found for loop-back', { taskId })
+      return
+    }
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) {
+      log.warn('Orchestrator: repo path not found for loop-back', { repoId: run.repoId })
+      return
+    }
+
+    // Build a prompt that includes the security findings
+    const findingsSummary = secResult.findings
+      .map(f => `[${f.severity.toUpperCase()}] ${f.category}: ${f.description}${f.file ? ` (${f.file}:${f.line ?? '?'})` : ''}`)
+      .join('\n')
+
+    const { model, provider } = this.resolveModelForPhase(
+      'dev', task.description || task.title,
+      task.modelOverride, task.providerOverride
+    )
+
+    const validationError = validateModelOverride(model, provider)
+    if (validationError) {
+      log.warn('Orchestrator: model validation failed during loop-back', { taskId, error: validationError })
+      return
+    }
+
+    const cycleCount = this.securityCycleCount.get(taskId) ?? 1
+    const loopBackPrompt = [
+      `SECURITY LOOP-BACK (cycle ${cycleCount}): Fix the following security findings for task: ${task.title}`,
+      task.description ? `Original description: ${task.description}` : '',
+      `Security recommendation: ${secResult.recommendation}`,
+      'Security findings to fix:',
+      findingsSummary,
+      '',
+      'Fix ALL findings above. Do not introduce new security issues.',
+    ].filter(Boolean).join('\n')
+
+    const agent = this.deps.spawnAgent({
+      repoId: run.repoId,
+      name: `[fix-sec] ${task.title}`,
+      cwd: repoPath,
+      model,
+      provider: provider as AgentSpawnOptions['provider'],
+      taskDescription: loopBackPrompt,
+      skipPermissions: true,
+    })
+
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId,
+      phase: 'dev',
+      modelUsed: model,
+      providerUsed: provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+    this.emitTaskPhaseChange(run.id, taskId, 'dev', 'active')
+
+    log.info('Orchestrator: dev phase dispatched (security loop-back)', {
+      taskId, agentId: agent.id, cycle: cycleCount,
+    })
+  }
+
+  // ---------------------------------------------------------------------------
+  // C3: Human approval gate for security findings
+  // ---------------------------------------------------------------------------
+
+  approveSecurityFindings(runId: string, taskId: string, approved: boolean): void {
+    const run = getRun(this.db, runId)
+    if (!run) throw new Error(`Run not found: ${runId}`)
+    if (run.status !== 'running' && run.status !== 'paused') {
+      throw new Error(`Cannot approve security for run with status "${run.status}" — must be running or paused`)
+    }
+
+    const pending = this.pendingSecurityApproval.get(taskId)
+    if (!pending) throw new Error(`No pending security approval for task: ${taskId}`)
+
+    this.pendingSecurityApproval.delete(taskId)
+
+    if (approved) {
+      log.info('Orchestrator: security findings approved by human, proceeding to commit', { runId, taskId })
+      // Resume run if it was paused by the security gate
+      if (run.status === 'paused') {
+        this.resume(runId)
+      }
+      this.executeCommitPhase(taskId, run, false)
+      this.dispatchNextTasks(run)
+    } else {
+      log.info('Orchestrator: security findings rejected by human, failing task', { runId, taskId })
+      // Mark task as permanently failed — set retry count to max to prevent re-dispatch
+      updateTask(this.db, taskId, { status: 'backlog' })
+      this.phaseRetryCount.set(`${taskId}:security`, MAX_PHASE_RETRIES)
+      this.notifyTelegram(run, `Task "${taskId}" rejected after security review`, 'failed')
+      this.dispatchNextTasks(run)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent event handlers
+  // ---------------------------------------------------------------------------
+
   private onAgentCompleted(event: OrchestratorAgentEvent): void {
     const run = getActiveRun(this.db)
     if (!run) return
@@ -960,6 +1269,24 @@ export class KanbanOrchestratorService {
     if (!activeLog) {
       log.debug('Orchestrator: completed agent not tracked by orchestrator', { agentId })
       return
+    }
+
+    // C1: Store security phase output for later parsing
+    if (activeLog.phase === 'security' && this.deps?.getAgentOutput) {
+      const rawOutput = this.deps.getAgentOutput(agentId)
+      if (rawOutput) {
+        const parsed = parseSecurityOutput(rawOutput)
+        const summaryJson = JSON.stringify({
+          recommendation: parsed.recommendation,
+          findings: parsed.findings,
+          hasCritical: parsed.hasCritical,
+          hasHigh: parsed.hasHigh,
+        })
+        const issuesJson = parsed.findings.length > 0
+          ? JSON.stringify(parsed.findings)
+          : null
+        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson)
+      }
     }
 
     log.info('Orchestrator: agent completed, advancing phase', {
@@ -983,13 +1310,32 @@ export class KanbanOrchestratorService {
       return
     }
 
+    // C4: Track retry count per task+phase
+    const retryKey = `${activeLog.taskId}:${activeLog.phase}`
+    const retries = (this.phaseRetryCount.get(retryKey) ?? 0) + 1
+    this.phaseRetryCount.set(retryKey, retries)
+
     log.warn('Orchestrator: agent failed', {
       agentId,
       taskId: activeLog.taskId,
       phase: activeLog.phase,
+      retryCount: retries,
     })
 
     updateTaskLogStatus(this.db, activeLog.id, 'failed')
+
+    if (retries >= MAX_PHASE_RETRIES) {
+      // Max retries reached — mark task as failed, don't retry
+      log.error('Orchestrator: max retries reached for task phase', {
+        taskId: activeLog.taskId,
+        phase: activeLog.phase,
+        retries,
+      })
+      updateTask(this.db, activeLog.taskId, { status: 'backlog' })
+      this.notifyTelegram(run,
+        `Task "${activeLog.taskId}" failed after ${retries} retries in ${activeLog.phase} phase`,
+        'failed')
+    }
 
     // Dispatch next tasks (other tasks may be unblocked)
     this.dispatchNextTasks(run)

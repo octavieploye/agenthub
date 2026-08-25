@@ -225,6 +225,7 @@ export const IPC_CHANNELS = {
     CANCEL:   'orchestrator:cancel',
     RETRY_FAILURES: 'orchestrator:retry-failures',
     ACKNOWLEDGE_RETRY_FAILURES: 'orchestrator:acknowledge-retry-failures',
+    APPROVE_SECURITY: 'orchestrator:approve-security',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',

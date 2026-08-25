@@ -67,6 +67,8 @@ interface ManagedAgent {
   /** setInterval handle for the per-agent adaptive IPC rate monitor. */
   ipcRateInterval: ReturnType<typeof setInterval> | null
   cleanTextBuffer: string
+  /** Read-only output buffer for orchestrator — never reset by TTS. */
+  orchestratorBuffer: string
   /**
    * Tracks the real parser status immediately — never debounced.
    * Used as previousStatus for TtsTrigger so it always sees accurate
@@ -530,6 +532,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       managed.headlessTerminal.write(data)
       // Accumulate ANSI-stripped text for TTS response capture
       managed.cleanTextBuffer += stripAnsi(data)
+      managed.orchestratorBuffer += stripAnsi(data)
       if (!managed.flushTimer) {
         managed.flushTimer = setTimeout(() => {
           flushOutputBuffer(agentState.id)
@@ -801,6 +804,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ipcHighRateSeconds: 0,
     ipcRateInterval: null,
     cleanTextBuffer: '',
+    orchestratorBuffer: '',
     ttsStatus: agentState.status, ttsTrigger,
     hasSentInput: false,
     hasManualFollowUp: false,
@@ -1174,6 +1178,12 @@ export function getAgentState(agentId: string): AgentState | null {
   const managed = agents.get(agentId)
   if (managed) return managed.state
   return getAgentById(getDb(), agentId)
+}
+
+/** Return the agent's accumulated output for orchestrator (ANSI-stripped, never reset by TTS). */
+export function getAgentOutput(agentId: string): string | null {
+  const managed = agents.get(agentId)
+  return managed?.orchestratorBuffer ?? null
 }
 
 export function listAgents(): AgentState[] {

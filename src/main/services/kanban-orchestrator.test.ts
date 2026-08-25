@@ -774,4 +774,457 @@ describe('KanbanOrchestratorService', () => {
       expect(onEventInserted).toHaveBeenCalledTimes(2)
     })
   })
+
+  // ---------------------------------------------------------------------------
+  // C1: Security output parsing — onAgentCompleted stores parsed output
+  // ---------------------------------------------------------------------------
+
+  describe('C1: security output parsing', () => {
+    it('stores parsed security output in task log summaryJson', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'pass',
+              findings: [{ severity: 'low', category: 'style', description: 'minor naming issue' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C1-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'C1 test', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      // Security completes — should store output
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      const logs = getTaskLogsByTask(db, task.id)
+      const secLog = logs.find(l => l.phase === 'security')
+      expect(secLog?.summaryJson).toBeTruthy()
+      const summary = JSON.parse(secLog!.summaryJson!)
+      expect(summary.recommendation).toBe('pass')
+      expect(summary.findings).toHaveLength(1)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // C2: Gate commit on CRITICAL findings
+  // ---------------------------------------------------------------------------
+
+  describe('C2: commit gating on CRITICAL', () => {
+    it('blocks commit and pauses run when security finds CRITICAL (no loop-back for refactor)', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'block',
+              findings: [{ severity: 'critical', category: 'injection', description: 'SQL injection in query builder' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C2-test', repoId: 'repo-1' })
+      // refactor category = security-once profile, no loop-back
+      const task = insertTask(db, { repoId: 'repo-1', title: 'C2 test', category: 'refactor', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      // Commit should be blocked — run paused
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('paused')
+
+      // gitCommit should not have been called
+      expect(deps.gitCommit).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // C3: Human approval gate
+  // ---------------------------------------------------------------------------
+
+  describe('C3: security approval gate', () => {
+    it('approveSecurityFindings(approved=true) proceeds to commit', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'block',
+              findings: [{ severity: 'critical', category: 'xss', description: 'reflected XSS' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C3-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'C3 test', category: 'refactor', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      // Run should be paused
+      expect(getRun(db, run.id)!.status).toBe('paused')
+
+      // Approve
+      service.approveSecurityFindings(run.id, task.id, true)
+
+      // Commit should have been called
+      expect(deps.gitCommit).toHaveBeenCalled()
+      const updatedTask = getTaskById(db, task.id)
+      expect(updatedTask!.status).toBe('tested')
+    })
+
+    it('approveSecurityFindings(approved=false) moves task to backlog', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'block',
+              findings: [{ severity: 'critical', category: 'injection', description: 'SQL injection' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C3-reject', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'C3 reject', category: 'refactor', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      // Reject
+      service.approveSecurityFindings(run.id, task.id, false)
+
+      const updatedTask = getTaskById(db, task.id)
+      expect(updatedTask!.status).toBe('backlog')
+      expect(deps.gitCommit).not.toHaveBeenCalled()
+    })
+
+    it('approveSecurityFindings throws for non-existent pending approval', () => {
+      const service = trackService(new KanbanOrchestratorService(db))
+      const run = service.start({ sprintName: 'C3-err', repoId: 'repo-1' })
+      expect(() => service.approveSecurityFindings(run.id, 'fake-task', true)).toThrow(/no pending/i)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // C4: Max retry count for agent failures
+  // ---------------------------------------------------------------------------
+
+  describe('C4: max retry count', () => {
+    it('marks task as backlog after MAX_PHASE_RETRIES failures', () => {
+      const agents = [
+        createMockAgent({ id: 'batch-fail-0' }),
+        createMockAgent({ id: 'batch-fail-1' }),
+        createMockAgent({ id: 'batch-fail-2' }),
+      ]
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => agents[callCount++] ?? createMockAgent()),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'C4-test', repoId: 'repo-1' })
+      insertTask(db, { repoId: 'repo-1', title: 'Flaky task', status: 'backlog' })
+
+      // tick dispatches agent-0
+      service.tick()
+      // Fail agent-0 — onAgentFailed re-dispatches agent-1 via dispatchNextTasks
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[0].id } as any })
+      // Fail agent-1 — re-dispatches agent-2
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[1].id } as any })
+      // Fail agent-2 — max retries reached, task goes to backlog
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[2].id } as any })
+
+      const tasks = service.getNextDispatchableTasks(run.id)
+      expect(tasks).toHaveLength(0) // permanently failed, not dispatchable
+
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(3)
+    })
+
+    it('single-task mode fails run after MAX_PHASE_RETRIES', () => {
+      const agents = [
+        createMockAgent({ id: 'agent-0' }),
+        createMockAgent({ id: 'agent-1' }),
+        createMockAgent({ id: 'agent-2' }),
+      ]
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => agents[callCount++] ?? createMockAgent()),
+      })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Single flaky', status: 'backlog' })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.startSingleTask({
+        sprintName: 'C4-single',
+        repoId: 'repo-1',
+        singleTaskId: task.id,
+      })
+
+      // startSingleTask dispatches agent-0 automatically
+      // Fail it — retry 1
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[0].id } as any })
+      // dispatchNextTasks re-dispatches agent-1
+      // Fail it — retry 2
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[1].id } as any })
+      // dispatchNextTasks re-dispatches agent-2
+      // Fail it — retry 3 (max)
+      service['onAgentFailed']({ type: 'agent:failed', triageEvent: { agentId: agents[2].id } as any })
+
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('failed')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // M1: Validate dependency IDs at start
+  // ---------------------------------------------------------------------------
+
+  describe('M1: dependency validation', () => {
+    it('throws on broken dependency ID', () => {
+      const service = trackService(new KanbanOrchestratorService(db))
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Valid task', status: 'backlog' })
+      // Insert a dependency pointing to non-existent task
+      db.prepare('INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)').run(task.id, 'non-existent-id')
+
+      expect(() =>
+        service.start({ sprintName: 'M1-test', repoId: 'repo-1' })
+      ).toThrow(/broken dependency/i)
+    })
+
+    it('passes when all dependency IDs exist', () => {
+      const service = trackService(new KanbanOrchestratorService(db))
+      const t1 = insertTask(db, { repoId: 'repo-1', title: 'A', status: 'backlog' })
+      const t2 = insertTask(db, { repoId: 'repo-1', title: 'B', status: 'backlog' })
+      insertTaskDependency(db, t2.id, t1.id)
+
+      expect(() =>
+        service.start({ sprintName: 'M1-ok', repoId: 'repo-1' })
+      ).not.toThrow()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // M2: Push error handling — push failure marks pushLog failed, not commitLog
+  // ---------------------------------------------------------------------------
+
+  describe('M2: push error separation', () => {
+    it('marks pushLog as failed and commitLog as done on push error', () => {
+      const deps = createMockDeps({
+        gitPush: vi.fn(() => { throw new Error('remote rejected') }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'M2-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Push fail test', status: 'in_progress' })
+
+      const result = service.executeCommitPhase(task.id, run, false)
+
+      expect(result).toBe(false)
+      const logs = getTaskLogsByTask(db, task.id)
+      const commitLog = logs.find(l => l.phase === 'commit')
+      const pushLog = logs.find(l => l.phase === 'push')
+      expect(commitLog?.status).toBe('done')
+      expect(pushLog?.status).toBe('failed')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Security loop-back mechanism
+  // ---------------------------------------------------------------------------
+
+  describe('security loop-back', () => {
+    it('loops task back to dev phase when CRITICAL found on full-loop category', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      const fixAgent = createMockAgent({ id: 'fix-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          if (callCount === 3) return secAgent
+          return fixAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'block',
+              findings: [{ severity: 'critical', category: 'injection', description: 'SQL injection' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'loop-test', repoId: 'repo-1' })
+      // backend category = full-loop profile
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Loop test', category: 'backend', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      // Security completes with CRITICAL → should loop back to dev
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      // Should have spawned a fix agent (4th spawnAgent call)
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(4)
+      const lastSpawnCall = (deps.spawnAgent as any).mock.calls[3][0]
+      expect(lastSpawnCall.taskDescription).toContain('SECURITY LOOP-BACK')
+      expect(lastSpawnCall.taskDescription).toContain('SQL injection')
+      expect(lastSpawnCall.name).toContain('[fix-sec]')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Category-based phase profiles — skip security for design
+  // ---------------------------------------------------------------------------
+
+  describe('category-based phase profiles', () => {
+    it('skips security phase for design category', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          return reviewAgent
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'design-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Design task', category: 'design', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      // Review completes — should skip security and go to commit
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+
+      // Only 2 agents spawned (dev + review), no security agent
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(2)
+
+      // Commit+push should have happened
+      expect(deps.gitCommit).toHaveBeenCalled()
+      expect(deps.gitPush).toHaveBeenCalled()
+
+      const logs = getTaskLogsByTask(db, task.id)
+      expect(logs.find(l => l.phase === 'security')).toBeUndefined()
+      expect(logs.find(l => l.phase === 'commit')?.status).toBe('done')
+      expect(logs.find(l => l.phase === 'push')?.status).toBe('done')
+    })
+
+    it('runs security once for refactor category without loop-back', () => {
+      const devAgent = createMockAgent({ id: 'dev-agent' })
+      const reviewAgent = createMockAgent({ id: 'review-agent' })
+      const secAgent = createMockAgent({ id: 'sec-agent' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        }),
+        getAgentOutput: vi.fn((agentId: string) => {
+          if (agentId === secAgent.id) {
+            return JSON.stringify({
+              recommendation: 'block',
+              findings: [{ severity: 'critical', category: 'xss', description: 'XSS vulnerability' }],
+            })
+          }
+          return null
+        }),
+      })
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'refactor-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Refactor task', category: 'refactor', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: devAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: reviewAgent.id } as any })
+      service['onAgentCompleted']({ type: 'agent:completed', triageEvent: { agentId: secAgent.id } as any })
+
+      // Should NOT loop back — refactor is security-once
+      // Should escalate to human (pause + pending approval)
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(3) // no 4th spawn for loop-back
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('paused')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Cancel
+  // ---------------------------------------------------------------------------
+
+  describe('cancel', () => {
+    it('marks run as failed and cleans up active task logs', () => {
+      const deps = createMockDeps()
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'cancel-test', repoId: 'repo-1' })
+      const task = insertTask(db, { repoId: 'repo-1', title: 'Cancel me', status: 'backlog' })
+
+      service.dispatchDevPhase(task.id, run)
+      service.cancel(run.id)
+
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('failed')
+
+      const logs = getTaskLogsByTask(db, task.id)
+      expect(logs.every(l => l.status !== 'active')).toBe(true)
+    })
+  })
 })

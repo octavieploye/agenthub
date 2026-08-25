@@ -111,3 +111,9 @@ export interface RetryFailure {
   diagnostics: string | null
   createdAt: string
 }
+
+export interface SecurityApprovalInput {
+  runId: string
+  taskId: string
+  approved: boolean
+}

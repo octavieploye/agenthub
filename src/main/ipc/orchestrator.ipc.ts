@@ -105,4 +105,21 @@ export function registerOrchestratorHandlers(): void {
       return error('ORCHESTRATOR_ACK_RETRY_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
+
+  const securityApprovalSchema = z.object({
+    runId: z.string().min(1),
+    taskId: z.string().min(1),
+    approved: z.boolean(),
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.APPROVE_SECURITY, (_event, input: unknown) => {
+    const v = validateInput(securityApprovalSchema, input)
+    if (!v.valid) return v.response
+    try {
+      getOrchestrator().approveSecurityFindings(v.data.runId, v.data.taskId, v.data.approved)
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_APPROVE_SECURITY_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
 }

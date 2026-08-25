@@ -333,6 +333,7 @@ const agentHubBridge = {
     taskLog: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.TASK_LOG, input),
     getRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES),
     acknowledgeRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES),
+    approveSecurity: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_SECURITY, input),
     onStatusChange: (callback: (payload: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, handler)
