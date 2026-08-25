@@ -5,10 +5,12 @@ export class AudioRecorderService {
   private processor: ScriptProcessorNode | null = null
   private samples: Float32Array[] = []
   private recording = false
+  private cancelled = false
 
   async startRecording(): Promise<void> {
     if (this.recording) return
 
+    this.cancelled = false
     this.samples = []
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -18,6 +20,14 @@ export class AudioRecorderService {
         noiseSuppression: true
       }
     })
+
+    // stopRecording() may have been called while getUserMedia was pending —
+    // release the just-acquired stream rather than leaking an open mic.
+    if (this.cancelled) {
+      this.stream.getTracks().forEach((t) => t.stop())
+      this.stream = null
+      return
+    }
 
     this.audioContext = new AudioContext({ sampleRate: 16000 })
     this.source = this.audioContext.createMediaStreamSource(this.stream)
@@ -41,6 +51,7 @@ export class AudioRecorderService {
   }
 
   async stopRecording(): Promise<ArrayBuffer> {
+    this.cancelled = true
     this.recording = false
 
     // Capture actual rate before closing — macOS may override the requested 16kHz

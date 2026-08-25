@@ -35,21 +35,25 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
   const [micError, setMicError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorderService | null>(null)
   const isListeningRef = useRef(false)
+  const startingRef = useRef(false)
   const voiceLanguage = useViewStore((s) => s.voiceLanguage)
 
-  // Cleanup on unmount — stop recording if component unmounts mid-recording
+  // Cleanup on unmount — always release the mic if a recorder exists, even when
+  // startRecording() is still awaiting getUserMedia (isListeningRef may be false).
   useEffect(() => {
     return () => {
-      if (isListeningRef.current && recorderRef.current) {
+      if (recorderRef.current) {
         recorderRef.current.stopRecording().catch(() => {})
         recorderRef.current = null
-        isListeningRef.current = false
       }
+      isListeningRef.current = false
+      startingRef.current = false
     }
   }, [])
 
   const startListening = useCallback(async () => {
-    if (isListeningRef.current || isProcessing) return
+    if (isListeningRef.current || startingRef.current || isProcessing) return
+    startingRef.current = true
     setMicError(null)
     const recorder = new AudioRecorderService()
     recorderRef.current = recorder
@@ -64,12 +68,14 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
         : 'Could not access microphone'
       setMicError(msg)
       recorderRef.current = null
+    } finally {
+      startingRef.current = false
     }
   }, [isProcessing])
 
   const stopListening = useCallback(async () => {
     const recorder = recorderRef.current
-    if (!recorder || !isListeningRef.current) return
+    if (!recorder) return
 
     isListeningRef.current = false
     setIsListening(false)
