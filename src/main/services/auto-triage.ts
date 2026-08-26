@@ -36,7 +36,7 @@ export function triageAgentEvent(input: TriageInput): TriageEvent {
     timestamp: Date.now(),
     reason: rule.reason,
     requiresUserAction: input.currentStatus === 'awaiting_approval' || input.currentStatus === 'locked',
-    requiresSoundAlert: input.currentStatus === 'awaiting_approval',
+    requiresSoundAlert: input.currentStatus === 'awaiting_approval' || input.currentStatus === 'locked',
     isTaskCompleted: input.currentStatus === 'completed'
   }
 }

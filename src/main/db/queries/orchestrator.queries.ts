@@ -6,12 +6,23 @@ import type {
   OrchestratorRunStatus,
   OrchestratorPhase,
   OrchestratorPhaseStatus,
-  OrchestratorTaskLog
+  OrchestratorTaskLog,
+  OrchestratorTriggerSource
 } from '../../../shared/types/orchestrator.types'
 
 // ---------------------------------------------------------------------------
 // Row mappers
 // ---------------------------------------------------------------------------
+
+function parseTaskIds(value: unknown): string[] | null {
+  if (value == null) return null
+  try {
+    const parsed = JSON.parse(value as string)
+    return Array.isArray(parsed) ? (parsed as string[]) : null
+  } catch {
+    return null
+  }
+}
 
 function mapRunRow(row: Record<string, unknown>): OrchestratorRun {
   return {
@@ -26,7 +37,10 @@ function mapRunRow(row: Record<string, unknown>): OrchestratorRun {
     updatedAt: row.updated_at as string,
     startedAt: (row.started_at as string) ?? null,
     completedAt: (row.completed_at as string) ?? null,
-    singleTaskId: (row.single_task_id as string) ?? null
+    singleTaskId: (row.single_task_id as string) ?? null,
+    startedBy: (row.started_by as string) ?? null,
+    triggerSource: (row.trigger_source as OrchestratorTriggerSource) ?? null,
+    taskIds: parseTaskIds(row.task_ids_json)
   }
 }
 
@@ -62,15 +76,19 @@ export function insertRun(
     concurrencyCap?: number
     telegramNotify?: boolean
     singleTaskId?: string
+    startedBy?: string
+    triggerSource?: OrchestratorTriggerSource
+    taskIds?: string[]
   }
 ): OrchestratorRun {
   const id = randomUUID()
   const now = new Date().toISOString()
+  const taskIdsJson = input.taskIds && input.taskIds.length > 0 ? JSON.stringify(input.taskIds) : null
 
   db.prepare(
     `INSERT INTO orchestrator_runs
-       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, single_task_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?)`
+       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, single_task_id, started_by, trigger_source, task_ids_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.sprintName,
@@ -79,6 +97,9 @@ export function insertRun(
     input.concurrencyCap ?? 3,
     input.telegramNotify ? 1 : 0,
     input.singleTaskId ?? null,
+    input.startedBy ?? null,
+    input.triggerSource ?? null,
+    taskIdsJson,
     now,
     now
   )
@@ -97,7 +118,10 @@ export function insertRun(
     updatedAt: now,
     startedAt: null,
     completedAt: null,
-    singleTaskId: input.singleTaskId ?? null
+    singleTaskId: input.singleTaskId ?? null,
+    startedBy: input.startedBy ?? null,
+    triggerSource: input.triggerSource ?? null,
+    taskIds: input.taskIds ?? null
   }
 }
 

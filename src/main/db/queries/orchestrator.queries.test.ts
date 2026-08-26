@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import { runMigrations } from '../migration-runner'
 import { insertRepo } from './repos.queries'
 import { insertTask } from './tasks.queries'
+import type { OrchestratorTriggerSource } from '../../../shared/types/orchestrator.types'
 import {
   insertRun,
   getRun,
@@ -72,6 +73,43 @@ describe('orchestrator.queries', () => {
       expect(run.projectId).toBe('proj-123')
       expect(run.concurrencyCap).toBe(5)
       expect(run.telegramNotify).toBe(true)
+    })
+
+    it('persists startedBy and triggerSource and returns them via getRun', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, {
+        sprintName: 'R7-A',
+        repoId,
+        startedBy: 'user',
+        triggerSource: 'manual'
+      })
+
+      expect(run.startedBy).toBe('user')
+      expect(run.triggerSource).toBe('manual')
+
+      const found = getRun(db, run.id)
+      expect(found).not.toBeNull()
+      expect(found!.startedBy).toBe('user')
+      expect(found!.triggerSource).toBe('manual')
+    })
+
+    it('defaults startedBy and triggerSource to null when not provided', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'R7-A', repoId })
+
+      expect(run.startedBy).toBeNull()
+      expect(run.triggerSource).toBeNull()
+    })
+
+    it('rejects an invalid triggerSource value (CHECK constraint)', () => {
+      const repoId = seedRepo()
+      expect(() =>
+        insertRun(db, {
+          sprintName: 'R7-A',
+          repoId,
+          triggerSource: 'invalid-source' as OrchestratorTriggerSource
+        })
+      ).toThrow()
     })
   })
 

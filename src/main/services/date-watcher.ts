@@ -12,18 +12,14 @@ import { isSupervisedCategory } from '../../shared/constants/category-classifier
 import { checkOllamaHealthWithRetry } from './helpers/ollama-cloud-health'
 import { insertRetryFailure } from '../db/queries/orchestrator.queries'
 import type { TaskItem } from '../../shared/types/task.types'
+import type { OrchestratorStartInput } from '../../shared/types/orchestrator.types'
+import { isOrchestratorEnabled } from './orchestrator-settings'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 const STALENESS_DAYS = 1
 
 export interface DateWatcherDeps {
-  startOrchestratorRun: (input: {
-    sprintName: string
-    repoId: string
-    projectId?: string
-    concurrencyCap?: number
-    telegramNotify?: boolean
-  }) => unknown
+  startOrchestratorRun: (input: OrchestratorStartInput) => unknown
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
   onEventInserted?: () => void
   getOllamaBaseUrl?: () => string
@@ -58,6 +54,13 @@ export class DateWatcherService {
    * checks date triggers, batches eligible tasks per repo.
    */
   poll(): void {
+    // S74: Stop polling if orchestrator disabled at runtime
+    if (!isOrchestratorEnabled(this.db)) {
+      log.info('DateWatcher: orchestrator disabled at runtime, stopping')
+      this.stop()
+      return
+    }
+
     const today = new Date().toISOString().slice(0, 10)
     const yesterday = new Date(Date.now() - STALENESS_DAYS * 86_400_000).toISOString().slice(0, 10)
 
@@ -223,6 +226,9 @@ export class DateWatcherService {
           repoId,
           projectId,
           telegramNotify: true,
+          triggerSource: 'date-watcher',
+          taskIds: tasks.map((t) => t.id),
+          confirmed: false,
         })
         this.notify(
           `DateWatcher: started batch run "${sprintName}" with ${tasks.length} tasks`,

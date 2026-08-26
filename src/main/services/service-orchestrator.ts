@@ -520,10 +520,8 @@ export function initializeServices(db: Database.Database): void {
     onEventInserted: orchestratorDeps.onEventInserted,
     getOllamaBaseUrl: () => 'http://localhost:11434',
   }
-  // S3: DateWatcher is flag-gated — only constructed when the orchestrator kill-switch is on
-  if (isOrchestratorEnabled(db)) {
-    dateWatcher = new DateWatcherService(db, dateWatcherDeps)
-  }
+  // R-011: Always construct DateWatcher — poll() already gates on isOrchestratorEnabled (S74)
+  dateWatcher = new DateWatcherService(db, dateWatcherDeps)
 
   // Kanban + Projects IPC handlers now registered in register-all.ts
 

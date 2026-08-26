@@ -36,7 +36,7 @@ interface OrchestratorStore {
   fetchRetryFailures: () => Promise<void>
   acknowledgeRetryFailures: () => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
-  startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<void>
+  startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<boolean>
   cancel: () => Promise<void>
   pause: () => Promise<boolean>
   resume: () => Promise<boolean>
@@ -190,8 +190,10 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
         projectId,
         singleTaskId: taskId,
         concurrencyCap: 1,
+        confirmed: true,
+        triggerSource: 'single-task',
       })
-      if (res.success && res.data) {
+      if (res.success) {
         set({
           runId: res.data.id,
           runStatus: res.data.status,
@@ -200,14 +202,16 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
           completedCount: 0,
           totalCount: 1,
           failedCount: 0,
+          loading: false,
         })
+        return true
       } else {
-        set({ error: res.error?.message || 'Failed to start pipeline' })
+        set({ error: res.error.message, loading: false })
+        return false
       }
     } catch (e) {
-      set({ error: (e as Error).message })
-    } finally {
-      set({ loading: false })
+      set({ error: (e as Error).message, loading: false })
+      return false
     }
   },
 
@@ -220,7 +224,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
       if (res.success) {
         set({ runStatus: 'failed', singleTaskId: null })
       } else {
-        set({ error: res.error?.message || 'Failed to cancel' })
+        set({ error: res.error.message })
       }
     } catch (e) {
       set({ error: (e as Error).message })

@@ -57,9 +57,9 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     }
   }, [handleStatusChange, handleTaskPhaseChange])
 
-  // Re-fetch counts when status changes to keep progress in sync
+  // Re-fetch counts when status changes to keep progress in sync (including terminal states)
   useEffect(() => {
-    if (runStatus === 'running' || runStatus === 'paused') {
+    if (runStatus === 'running' || runStatus === 'paused' || runStatus === 'completed' || runStatus === 'failed') {
       fetchStatus()
     }
   }, [runStatus, fetchStatus])
@@ -70,6 +70,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
       sprintName: formSprintName.trim(),
       repoId: formRepoId,
       projectId: selectedProjectId ?? undefined,
+      confirmed: true,
     })
     if (ok) {
       setShowStartForm(false)
@@ -179,13 +180,13 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
         </button>
       )}
 
-      {/* Cancel button — single-task runs only */}
-      {singleTaskId && (isRunning || isPaused) && (
+      {/* Cancel button — available for all active runs */}
+      {(isRunning || isPaused) && (
         <button
           className="btn btn-sm btn-error btn-outline"
           onClick={cancel}
           disabled={loading}
-          title="Cancel single-task pipeline"
+          title={singleTaskId ? 'Cancel single-task pipeline' : 'Cancel sprint run'}
         >
           <X size={14} />
         </button>

@@ -27,15 +27,14 @@ import {
   getActiveTaskLogByAgentId,
   getUnacknowledgedRetryFailures,
   acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
-  insertRetryFailure,
 } from '../db/queries/orchestrator.queries'
-import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
+import { getTasksByRepo, getTasksBySprint, getTaskById, updateTask } from '../db/queries/tasks.queries'
+import type { TaskItem } from '../../shared/types/task.types'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
 import { isSupervisedCategory } from '../../shared/constants/category-classifier'
-import { checkOllamaHealthWithRetry } from './helpers/ollama-cloud-health'
 import { recommendForPhase } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
 import { parseSecurityOutput, type SecurityParseResult } from './helpers/security-output-parser'
@@ -45,18 +44,22 @@ import {
   offOrchestratorEvent,
   type OrchestratorAgentEvent,
 } from './orchestrator-events'
+import { isOrchestratorEnabled } from './orchestrator-settings'
+import { GUARDRAIL_PROMPTS, OPERATING_RULES } from './orchestrator-rules'
 
 const TICK_INTERVAL_MS = 30_000
 const STUCK_THRESHOLD_MS = 30 * 60 * 1000
-const MAX_PHASE_RETRIES = 3
 
-const NEXT_PHASE: Record<OrchestratorPhase, OrchestratorPhase | 'done'> = {
-  dev: 'review',
-  review: 'security',
-  security: 'commit',
-  commit: 'push',
-  push: 'done',
-}
+/** R-004: Shared auto-trigger check — triggers that bypass the manual confirmation gate */
+const AUTO_TRIGGER_SOURCES = new Set(['date-watcher', 'sprint-watcher', 'single-task'])
+
+const NEXT_PHASE: Record<OrchestratorPhase, OrchestratorPhase | 'done'> = OPERATING_RULES.phaseOrder.reduce(
+  (acc, phase, index) => {
+    acc[phase] = OPERATING_RULES.phaseOrder[index + 1] ?? 'done'
+    return acc
+  },
+  {} as Record<OrchestratorPhase, OrchestratorPhase | 'done'>
+)
 
 /** Injected dependencies for testability — real implementations come from service-orchestrator. */
 export interface OrchestratorDeps {
@@ -85,6 +88,8 @@ export class KanbanOrchestratorService {
   private phaseRetryCount = new Map<string, number>()
   /** Tasks awaiting security approval from the user (C3) */
   private pendingSecurityApproval = new Map<string, SecurityParseResult>()
+  /** S5: total agents spawned per run (budget cap) */
+  private agentsSpawnedByRun = new Map<string, number>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -92,6 +97,19 @@ export class KanbanOrchestratorService {
   }
 
   start(input: OrchestratorStartInput): OrchestratorRun {
+    if (!isOrchestratorEnabled(this.db)) {
+      throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
+    }
+
+    // S4 + S73: Manual start requires confirmation; auto-triggers are pre-authorized
+    const isAutoTrigger = AUTO_TRIGGER_SOURCES.has(input.triggerSource ?? '')
+    if (!isAutoTrigger && input.confirmed !== true) {
+      throw new Error('ORCHESTRATOR_NOT_CONFIRMED: manual start requires confirmed: true')
+    }
+    if (isAutoTrigger) {
+      log.info('Orchestrator: auto-dispatch authorized via trigger source', { triggerSource: input.triggerSource })
+    }
+
     // Task 2.1: Wrap ONLY DB operations in transaction, forward singleTaskId
     const updated = this.db.transaction(() => {
       const existing = getActiveRun(this.db)
@@ -106,14 +124,17 @@ export class KanbanOrchestratorService {
         concurrencyCap: input.concurrencyCap ?? 3,
         telegramNotify: input.telegramNotify ?? false,
         singleTaskId: input.singleTaskId,
+        startedBy: input.startedBy ?? 'user',
+        triggerSource: input.triggerSource ?? 'manual',
+        taskIds: input.taskIds,
       })
 
       updateRunStatus(this.db, run.id, 'running')
       return getRun(this.db, run.id)!
     })()
 
-    // M1: Validate all dependency IDs exist before starting
-    this.validateDependencies(updated.repoId)
+    // M1: Validate all dependency IDs exist before starting (scoped to the run's task set)
+    this.validateDependencies(this.resolveRunTasks(updated))
 
     // Event subscriptions and tick timer happen OUTSIDE transaction
     this.completedHandler = (event) => this.onAgentCompleted(event)
@@ -127,11 +148,53 @@ export class KanbanOrchestratorService {
     log.info('Orchestrator started', { runId: updated.id, sprint: updated.sprintName })
     this.emitStatusChange(updated.id, 'running', updated.sprintName)
     this.notifyTelegram(updated, `Sprint "${updated.sprintName}" started`, 'completed')
+
+    // R-002: When singleTaskId is present via start(), dispatch immediately like startSingleTask()
+    if (updated.singleTaskId) {
+      this.dispatchNextTasks(updated)
+    }
+
     return updated
+  }
+
+  /**
+   * S4: Resolve the scoped task list for a manual start WITHOUT creating a run
+   * or dispatching anything. Returns the pick-list the user must confirm.
+   */
+  previewRun(input: OrchestratorStartInput): { id: string; title: string; priority: number }[] {
+    const throwaway: OrchestratorRun = {
+      id: '',
+      sprintName: input.sprintName,
+      projectId: input.projectId ?? null,
+      repoId: input.repoId,
+      status: 'idle',
+      concurrencyCap: input.concurrencyCap ?? 3,
+      telegramNotify: input.telegramNotify ?? false,
+      createdAt: '',
+      updatedAt: '',
+      startedAt: null,
+      completedAt: null,
+      singleTaskId: input.singleTaskId ?? null,
+      startedBy: input.startedBy ?? null,
+      triggerSource: input.triggerSource ?? null,
+      taskIds: input.taskIds ?? null,
+    }
+    return this.resolveRunTasks(throwaway).map((t) => ({ id: t.id, title: t.title, priority: t.priority }))
   }
 
   /** Task 2.2: Start a single task pipeline (no tick timer, immediate dispatch) */
   startSingleTask(input: OrchestratorStartInput): OrchestratorRun {
+    if (!isOrchestratorEnabled(this.db)) {
+      throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
+    }
+
+    // S76: Require confirmation for manual single-task starts; auto-triggers are pre-authorized
+    // Default triggerSource for single-task is 'single-task' (resolved here before the gate)
+    const resolvedTriggerSource = input.triggerSource ?? 'single-task'
+    if (!AUTO_TRIGGER_SOURCES.has(resolvedTriggerSource) && input.confirmed !== true) {
+      throw new Error('ORCHESTRATOR_NOT_CONFIRMED: manual start requires confirmed: true')
+    }
+
     if (!input.singleTaskId) {
       throw new Error('startSingleTask requires singleTaskId')
     }
@@ -159,6 +222,8 @@ export class KanbanOrchestratorService {
         concurrencyCap: input.concurrencyCap ?? 1,
         telegramNotify: input.telegramNotify ?? false,
         singleTaskId: input.singleTaskId,
+        startedBy: input.startedBy ?? 'user',
+        triggerSource: input.triggerSource ?? 'single-task',
       })
 
       updateRunStatus(this.db, run.id, 'running')
@@ -185,7 +250,12 @@ export class KanbanOrchestratorService {
     return updated
   }
 
-  /** Task 2.3: Cancel an active run */
+  /**
+   * Task 2.3: Cancel an active run.
+   * R-006: Intentionally NOT gated on isOrchestratorEnabled — cancel is a shutdown
+   * action that must work even when the kill-switch is disabled, so a runaway
+   * orchestrator can always be stopped.
+   */
   cancel(runId: string): void {
     const run = getRun(this.db, runId)
     if (!run) {
@@ -227,6 +297,10 @@ export class KanbanOrchestratorService {
   }
 
   resume(runId: string): void {
+    // S72: Block resume when kill-switch is off
+    if (!isOrchestratorEnabled(this.db)) {
+      throw new Error('ORCHESTRATOR_DISABLED: cannot resume — orchestrator.enabled is not set to true')
+    }
     updateRunStatus(this.db, runId, 'running')
     if (!this.tickTimer) {
       this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
@@ -239,6 +313,41 @@ export class KanbanOrchestratorService {
   private notifyTelegram(run: OrchestratorRun, summary: string, type: 'completed' | 'failed'): void {
     if (!run.telegramNotify) return
     this.deps?.sendTelegramNotification?.(summary, type)
+  }
+
+  /** S5: Gate a spawn on the run's agent + wall-clock budget. Returns false (and pauses) on breach. */
+  private checkBudget(run: OrchestratorRun): boolean {
+    const fresh = getRun(this.db, run.id) ?? run
+    const { maxAgents, maxWallClockMs } = OPERATING_RULES.limits
+
+    const spawned = this.agentsSpawnedByRun.get(run.id) ?? 0
+    if (spawned >= maxAgents) {
+      this.pauseForBudget(fresh, `agent budget exceeded (${spawned}/${maxAgents} agents spawned)`)
+      return false
+    }
+
+    if (fresh.startedAt) {
+      const elapsed = Date.now() - new Date(fresh.startedAt).getTime()
+      if (elapsed > maxWallClockMs) {
+        this.pauseForBudget(
+          fresh,
+          `wall-clock budget exceeded (${Math.round(elapsed / 60_000)}min > ${Math.round(maxWallClockMs / 60_000)}min)`
+        )
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private pauseForBudget(run: OrchestratorRun, reason: string): void {
+    this.pause(run.id)
+    this.notifyTelegram(run, `Orchestrator auto-paused: ${reason}`, 'failed')
+    log.warn('Orchestrator: budget breach, auto-paused', { runId: run.id, reason })
+  }
+
+  private recordSpawn(runId: string): void {
+    this.agentsSpawnedByRun.set(runId, (this.agentsSpawnedByRun.get(runId) ?? 0) + 1)
   }
 
   private emitStatusChange(runId: string, status: string, sprintName: string): void {
@@ -301,8 +410,8 @@ export class KanbanOrchestratorService {
       else if (logs.some(l => l.status === 'failed')) failedCount++
     }
 
-    // Get total kanban tasks for the repo
-    const tasks = getTasksByRepo(this.db, run.repoId)
+    // Get total kanban tasks for the run's scope
+    const tasks = this.resolveRunTasks(run)
     const totalCount = tasks.length
 
     return { run, activeTasks, completedCount, totalCount, failedCount, singleTaskId: run.singleTaskId ?? null }
@@ -316,7 +425,7 @@ export class KanbanOrchestratorService {
     const run = getRun(this.db, runId)
     if (!run) return []
 
-    const tasks = getTasksByRepo(this.db, run.repoId)
+    const tasks = this.resolveRunTasks(run)
     const depMap = getDependencyMap(this.db)
     const allLogs = getTaskLogsByRun(this.db, runId)
 
@@ -341,7 +450,7 @@ export class KanbanOrchestratorService {
     // C4: Exclude tasks whose retry count is exhausted
     const permanentlyFailed = new Set<string>()
     for (const [key, count] of this.phaseRetryCount) {
-      if (count >= MAX_PHASE_RETRIES) {
+      if (count >= OPERATING_RULES.maxPhaseRetries) {
         const taskId = key.split(':')[0]
         permanentlyFailed.add(taskId)
       }
@@ -376,6 +485,8 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: no deps injected, cannot dispatch')
       return null
     }
+
+    if (!this.checkBudget(run)) return null
 
     if (this.hasActiveLogForPhase(run.id, taskId, 'dev')) {
       log.warn('Orchestrator: duplicate dev dispatch blocked', { taskId })
@@ -413,9 +524,15 @@ export class KanbanOrchestratorService {
       cwd: repoPath,
       model,
       provider: provider as AgentSpawnOptions['provider'],
-      taskDescription: task.description || task.title,
+      taskDescription: [
+        GUARDRAIL_PROMPTS.dev,
+        '[TASK CONTENT START]',
+        task.description || task.title,
+        '[TASK CONTENT END]',
+      ].filter(Boolean).join('\n\n'),
       skipPermissions: true,
     })
+    this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
       runId: run.id,
@@ -436,6 +553,8 @@ export class KanbanOrchestratorService {
 
   dispatchReviewPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
     if (!this.deps) return null
+
+    if (!this.checkBudget(run)) return null
 
     if (this.hasActiveLogForPhase(run.id, taskId, 'review')) {
       log.warn('Orchestrator: duplicate review dispatch blocked', { taskId })
@@ -462,11 +581,14 @@ export class KanbanOrchestratorService {
     }
 
     const reviewPrompt = [
-      `Review the code changes for task: ${task.title}`,
-      task.description ? `Description: ${task.description}` : '',
+      GUARDRAIL_PROMPTS.review,
       'Check for: conflicts with existing code, friction points, tech debt, breaking changes, pattern mismatches.',
       'Output structured JSON with issues array.',
-    ].filter(Boolean).join('\n')
+      '[TASK CONTENT START]',
+      `Review the code changes for task: ${task.title}`,
+      task.description ? `Description: ${task.description}` : '',
+      '[TASK CONTENT END]',
+    ].filter(Boolean).join('\n\n')
 
     const agent = this.deps.spawnAgent({
       repoId: run.repoId,
@@ -477,6 +599,7 @@ export class KanbanOrchestratorService {
       taskDescription: reviewPrompt,
       skipPermissions: true,
     })
+    this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
       runId: run.id,
@@ -494,6 +617,8 @@ export class KanbanOrchestratorService {
 
   dispatchSecurityPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
     if (!this.deps) return null
+
+    if (!this.checkBudget(run)) return null
 
     if (this.hasActiveLogForPhase(run.id, taskId, 'security')) {
       log.warn('Orchestrator: duplicate security dispatch blocked', { taskId })
@@ -529,12 +654,15 @@ export class KanbanOrchestratorService {
     }
 
     const securityPrompt = [
+      GUARDRAIL_PROMPTS.security,
+      'Scan for: OWASP top 10, injection, XSS, CSRF, data leakage, sovereignty violations.',
+      'Output JSON: { "findings": [...], "recommendation": "pass|block|review" }',
+      '[TASK CONTENT START]',
       `Security scan for task: ${task.title}`,
       `Security team: ${securityTeam}`,
       task.description ? `Description: ${task.description}` : '',
-      'Scan for: OWASP top 10, injection, XSS, CSRF, data leakage, sovereignty violations.',
-      'Output JSON: { "findings": [...], "recommendation": "pass|block|review" }',
-    ].filter(Boolean).join('\n')
+      '[TASK CONTENT END]',
+    ].filter(Boolean).join('\n\n')
 
     const agent = this.deps.spawnAgent({
       repoId: run.repoId,
@@ -545,6 +673,7 @@ export class KanbanOrchestratorService {
       taskDescription: securityPrompt,
       skipPermissions: true,
     })
+    this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
       runId: run.id,
@@ -690,6 +819,10 @@ export class KanbanOrchestratorService {
         const profile = getPhaseProfile(task?.category ?? null)
         if (shouldSkipSecurity(profile)) {
           log.info('Orchestrator: skipping security phase (category profile)', { taskId, category: task?.category })
+          // R-005: Record skipped phase in audit trail
+          const skippedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'security', modelUsed: 'n/a', providerUsed: 'n/a' })
+          updateTaskLogStatus(this.db, skippedLog.id, 'skipped')
+          this.emitTaskPhaseChange(run.id, taskId, 'security', 'skipped')
           // Skip security, go straight to commit — only dispatch next if commit succeeds
           const committed = this.executeCommitPhase(taskId, run, false)
           if (committed) this.dispatchNextTasks(run)
@@ -758,7 +891,7 @@ export class KanbanOrchestratorService {
 
       // C4: Check if max retries exhausted for this task
       const hasExhaustedRetries = Array.from(this.phaseRetryCount.entries())
-        .some(([key, count]) => key.startsWith(run.singleTaskId!) && count >= MAX_PHASE_RETRIES)
+        .some(([key, count]) => key.startsWith(run.singleTaskId!) && count >= OPERATING_RULES.maxPhaseRetries)
 
       if (hasExhaustedRetries) {
         updateRunStatus(this.db, run.id, 'failed')
@@ -806,7 +939,7 @@ export class KanbanOrchestratorService {
 
     // Check if all tasks are done
     const allLogs = getTaskLogsByRun(this.db, run.id)
-    const tasks = getTasksByRepo(this.db, run.repoId)
+    const tasks = this.resolveRunTasks(run)
     const taskLogsByTask = new Map<string, typeof allLogs>()
     for (const l of allLogs) {
       const existing = taskLogsByTask.get(l.taskId) ?? []
@@ -845,6 +978,26 @@ export class KanbanOrchestratorService {
   }
 
   tick(): void {
+    // S72: Runtime kill-switch — auto-pause if disabled mid-run
+    // R-001: Clear timer FIRST to guarantee shutdown even if pause() throws
+    if (!isOrchestratorEnabled(this.db)) {
+      if (this.tickTimer) {
+        clearInterval(this.tickTimer)
+        this.tickTimer = null
+      }
+      const activeRun = getActiveRun(this.db)
+      if (activeRun && activeRun.status === 'running') {
+        log.warn('Orchestrator: kill-switch disabled at runtime, auto-pausing', { runId: activeRun.id })
+        try {
+          this.pause(activeRun.id)
+        } catch (err) {
+          log.error('Orchestrator: failed to pause on kill-switch disable', { runId: activeRun.id, error: String(err) })
+        }
+        this.notifyTelegram(activeRun, 'Orchestrator auto-paused: kill-switch disabled at runtime', 'failed')
+      }
+      return
+    }
+
     const run = getActiveRun(this.db)
     if (!run || run.status !== 'running') return
 
@@ -892,7 +1045,7 @@ export class KanbanOrchestratorService {
     const today = new Date().toISOString().slice(0, 10)
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
-    const tasks = getTasksByRepo(this.db, run.repoId)
+    const tasks = this.resolveRunTasks(run)
 
     for (const task of tasks) {
       // Skip tasks without target dates
@@ -965,70 +1118,6 @@ export class KanbanOrchestratorService {
     dbAcknowledgeRetryFailures(this.db)
   }
 
-  // ---------------------------------------------------------------------------
-  // Task 3.3: Retry-wrapped spawn for ollama-cloud/local providers
-  // ---------------------------------------------------------------------------
-
-  private async retrySpawnWithHealthCheck(
-    taskId: string,
-    run: OrchestratorRun,
-    phase: OrchestratorPhase,
-    spawnFn: () => void,
-    provider: string,
-    baseUrl: string
-  ): Promise<boolean> {
-    const health = await checkOllamaHealthWithRetry(baseUrl)
-
-    if (health.available) {
-      spawnFn()
-      return true
-    }
-
-    // Task 3.5: Record retry failure in DB
-    insertRetryFailure(this.db, {
-      taskId,
-      provider,
-      attempts: health.attempts,
-      lastError: health.lastError,
-      diagnostics: health.diagnostics,
-    })
-
-    // Set task note and mark as interrupted
-    const task = getTaskById(this.db, taskId)
-    if (task) {
-      updateTask(this.db, taskId, {
-        status: 'backlog',
-      })
-    }
-
-    // Mark the task log as failed
-    const taskLog = insertTaskLog(this.db, {
-      runId: run.id,
-      taskId,
-      phase,
-      providerUsed: provider,
-    })
-    updateTaskLogStatus(this.db, taskLog.id, 'failed')
-    this.emitTaskPhaseChange(run.id, taskId, phase, 'failed')
-
-    // Task 3.4: Telegram notification on retry exhaustion
-    this.notifyTelegram(
-      run,
-      `Retry exhausted for "${task?.title ?? taskId}" (${provider}, ${health.attempts} attempts): ${health.lastError ?? 'unknown error'}`,
-      'failed'
-    )
-
-    log.warn('Orchestrator: retry exhausted for provider', {
-      taskId,
-      phase,
-      provider,
-      attempts: health.attempts,
-      lastError: health.lastError,
-    })
-
-    return false
-  }
-
   stop(): void {
     this.stopTick()
     if (this.completedHandler) {
@@ -1044,6 +1133,7 @@ export class KanbanOrchestratorService {
     this.phaseRetryCount.clear()
     this.pendingSecurityApproval.clear()
     this.gitLockActive.clear()
+    this.agentsSpawnedByRun.clear()
   }
 
   // ---------------------------------------------------------------------------
@@ -1085,17 +1175,38 @@ export class KanbanOrchestratorService {
   // M1: Validate dependency IDs before starting
   // ---------------------------------------------------------------------------
 
-  private validateDependencies(repoId: string): void {
-    const tasks = getTasksByRepo(this.db, repoId)
+  /**
+   * Resolve the task list a run is allowed to touch.
+   *
+   * Precedence:
+   * 1. Explicit `taskIds` (date-watcher batch, single-task batch) — filter by ID.
+   * 2. A real sprint name (not the synthetic `date-trigger-*` label) — sprint-scoped.
+   * 3. Fallback — repo-wide (legacy runs where sprintName was a cosmetic label).
+   */
+  private resolveRunTasks(run: OrchestratorRun): TaskItem[] {
+    if (run.taskIds && run.taskIds.length > 0) {
+      const idSet = new Set(run.taskIds)
+      return getTasksByRepo(this.db, run.repoId).filter((t) => idSet.has(t.id))
+    }
+
+    if (run.sprintName && !run.sprintName.startsWith('date-trigger-')) {
+      const sprintTasks = getTasksBySprint(this.db, run.repoId, run.sprintName)
+      if (sprintTasks.length > 0) return sprintTasks
+    }
+
+    return getTasksByRepo(this.db, run.repoId)
+  }
+
+  private validateDependencies(tasks: TaskItem[]): void {
     const taskIds = new Set(tasks.map(t => t.id))
     const depMap = getDependencyMap(this.db)
 
     for (const [taskId, deps] of depMap) {
-      if (!taskIds.has(taskId)) continue // dependency for a task in another repo
+      if (!taskIds.has(taskId)) continue // dependency for a task outside the run's scope
       for (const depId of deps) {
         if (!taskIds.has(depId)) {
           throw new Error(
-            `Broken dependency: task ${taskId} depends on ${depId} which does not exist in repo ${repoId}`
+            `Broken dependency: task ${taskId} depends on ${depId} which does not exist in the run's task set`
           )
         }
       }
@@ -1136,8 +1247,8 @@ export class KanbanOrchestratorService {
           raw: latestSecLog.summaryJson,
         }
       }
-    } catch {
-      // Invalid JSON in summaryJson — fall through to raw parse
+    } catch (parseErr) {
+      log.warn('Orchestrator: invalid JSON in security summaryJson, falling back to raw parse', { taskId, error: String(parseErr) })
     }
 
     return parseSecurityOutput(latestSecLog.summaryJson)
@@ -1156,6 +1267,8 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: no deps injected, cannot dispatch loop-back', { taskId })
       return
     }
+
+    if (!this.checkBudget(run)) return
 
     const task = getTaskById(this.db, taskId)
     if (!task) {
@@ -1187,14 +1300,17 @@ export class KanbanOrchestratorService {
 
     const cycleCount = this.securityCycleCount.get(taskId) ?? 1
     const loopBackPrompt = [
-      `SECURITY LOOP-BACK (cycle ${cycleCount}): Fix the following security findings for task: ${task.title}`,
-      task.description ? `Original description: ${task.description}` : '',
+      GUARDRAIL_PROMPTS.dev,
+      `SECURITY LOOP-BACK (cycle ${cycleCount}): Fix the security findings listed below.`,
       `Security recommendation: ${secResult.recommendation}`,
       'Security findings to fix:',
       findingsSummary,
-      '',
       'Fix ALL findings above. Do not introduce new security issues.',
-    ].filter(Boolean).join('\n')
+      '[TASK CONTENT START]',
+      task.title,
+      task.description ? `Description: ${task.description}` : '',
+      '[TASK CONTENT END]',
+    ].filter(Boolean).join('\n\n')
 
     const agent = this.deps.spawnAgent({
       repoId: run.repoId,
@@ -1205,6 +1321,7 @@ export class KanbanOrchestratorService {
       taskDescription: loopBackPrompt,
       skipPermissions: true,
     })
+    this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
       runId: run.id,
@@ -1249,7 +1366,7 @@ export class KanbanOrchestratorService {
       log.info('Orchestrator: security findings rejected by human, failing task', { runId, taskId })
       // Mark task as permanently failed — set retry count to max to prevent re-dispatch
       updateTask(this.db, taskId, { status: 'backlog' })
-      this.phaseRetryCount.set(`${taskId}:security`, MAX_PHASE_RETRIES)
+      this.phaseRetryCount.set(`${taskId}:security`, OPERATING_RULES.maxPhaseRetries)
       this.notifyTelegram(run, `Task "${taskId}" rejected after security review`, 'failed')
       this.dispatchNextTasks(run)
     }
@@ -1324,7 +1441,7 @@ export class KanbanOrchestratorService {
 
     updateTaskLogStatus(this.db, activeLog.id, 'failed')
 
-    if (retries >= MAX_PHASE_RETRIES) {
+    if (retries >= OPERATING_RULES.maxPhaseRetries) {
       // Max retries reached — mark task as failed, don't retry
       log.error('Orchestrator: max retries reached for task phase', {
         taskId: activeLog.taskId,

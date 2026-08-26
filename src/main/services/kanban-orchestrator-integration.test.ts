@@ -9,7 +9,7 @@ import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { AgentState } from '../../shared/types/agent.types'
 
 vi.mock('electron-log/main', () => ({
-  default: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
+  default: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }
 }))
 
 let db: Database.Database
@@ -41,7 +41,7 @@ function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
     executionMode: 'native',
     voiceMode: 'off',
     telegramNotify: false,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -54,7 +54,7 @@ function createMockDeps(overrides: Partial<OrchestratorDeps> = {}): Orchestrator
     gitPush: vi.fn(),
     emitToRenderer: vi.fn(),
     sendTelegramNotification: vi.fn(),
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -63,6 +63,10 @@ beforeEach(() => {
   runMigrations(db, __dirname + '/../db/migrations')
   db.prepare(
     "INSERT INTO repos (id, name, path, created_at, last_used_at) VALUES ('repo-1', 'test', '/tmp/test', datetime('now'), datetime('now'))"
+  ).run()
+  // S3: orchestrator is flag-gated — enable it for the enabled-path integration tests
+  db.prepare(
+    "INSERT INTO settings (key, value) VALUES ('orchestrator.enabled', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'"
   ).run()
 })
 
@@ -88,7 +92,7 @@ describe('KanbanOrchestrator Integration', () => {
           if (callCount === 1) return devAgent
           if (callCount === 2) return reviewAgent
           return secAgent
-        }),
+        })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
 
@@ -98,12 +102,13 @@ describe('KanbanOrchestrator Integration', () => {
         repoId: 'repo-1',
         concurrencyCap: 3,
         telegramNotify: true,
+        confirmed: true
       })
       const task = insertTask(db, {
         repoId: 'repo-1',
         title: 'Build auth module',
         description: 'Implement JWT authentication',
-        status: 'backlog',
+        status: 'backlog'
       })
 
       // Dispatch dev phase
@@ -117,7 +122,7 @@ describe('KanbanOrchestrator Integration', () => {
       // Simulate dev agent completion → review phase dispatched
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: devAgent.id } as any,
+        triageEvent: { agentId: devAgent.id } as any
       })
       expect(deps.spawnAgent).toHaveBeenCalledTimes(2)
 
@@ -129,7 +134,7 @@ describe('KanbanOrchestrator Integration', () => {
       // Simulate review agent completion → security phase dispatched
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: reviewAgent.id } as any,
+        triageEvent: { agentId: reviewAgent.id } as any
       })
       expect(deps.spawnAgent).toHaveBeenCalledTimes(3)
 
@@ -140,7 +145,7 @@ describe('KanbanOrchestrator Integration', () => {
       // Simulate security agent completion → commit+push executed synchronously
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: secAgent.id } as any,
+        triageEvent: { agentId: secAgent.id } as any
       })
 
       // Verify all 5 phase logs are done
@@ -210,30 +215,31 @@ describe('KanbanOrchestrator Integration', () => {
           if (callCount === 1) return devAgent
           if (callCount === 2) return reviewAgent
           return secAgent
-        }),
+        })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({
         sprintName: 'Security-Block-Test',
         repoId: 'repo-1',
         telegramNotify: true,
+        confirmed: true
       })
       const task = insertTask(db, {
         repoId: 'repo-1',
         title: 'Risky endpoint',
         description: 'Add public API with auth bypass',
-        status: 'backlog',
+        status: 'backlog'
       })
 
       // Advance through dev and review
       service.dispatchDevPhase(task.id, run)
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: devAgent.id } as any,
+        triageEvent: { agentId: devAgent.id } as any
       })
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: reviewAgent.id } as any,
+        triageEvent: { agentId: reviewAgent.id } as any
       })
 
       // Verify security phase is now active
@@ -243,7 +249,7 @@ describe('KanbanOrchestrator Integration', () => {
       // Simulate security agent failure
       service['onAgentFailed']({
         type: 'agent:failed',
-        triageEvent: { agentId: secAgent.id } as any,
+        triageEvent: { agentId: secAgent.id } as any
       })
 
       // Verify the security phase log is marked as failed
@@ -274,29 +280,30 @@ describe('KanbanOrchestrator Integration', () => {
           if (callCount === 1) return devAgent
           if (callCount === 2) return reviewAgent
           return secAgent
-        }),
+        })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({
         sprintName: 'Explicit-Block-Test',
         repoId: 'repo-1',
         telegramNotify: true,
+        confirmed: true
       })
       const task = insertTask(db, {
         repoId: 'repo-1',
         title: 'Blocked task',
-        status: 'backlog',
+        status: 'backlog'
       })
 
       // Advance through dev and review
       service.dispatchDevPhase(task.id, run)
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: devAgent.id } as any,
+        triageEvent: { agentId: devAgent.id } as any
       })
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: reviewAgent.id } as any,
+        triageEvent: { agentId: reviewAgent.id } as any
       })
 
       // Manually execute commit with securityBlocked=true
@@ -335,26 +342,27 @@ describe('KanbanOrchestrator Integration', () => {
           if (callCount === 3) return agentA_sec
           if (callCount === 4) return agentB_dev
           return createMockAgent({ id: `extra-${callCount}` })
-        }),
+        })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({
         sprintName: 'Dep-Order-Test',
         repoId: 'repo-1',
         concurrencyCap: 3,
+        confirmed: true
       })
 
       const taskA = insertTask(db, {
         repoId: 'repo-1',
         title: 'Foundation module',
         priority: 1,
-        status: 'backlog',
+        status: 'backlog'
       })
       const taskB = insertTask(db, {
         repoId: 'repo-1',
         title: 'Feature on top',
         priority: 2,
-        status: 'backlog',
+        status: 'backlog'
       })
       // B depends on A
       insertTaskDependency(db, taskB.id, taskA.id)
@@ -370,21 +378,21 @@ describe('KanbanOrchestrator Integration', () => {
 
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: agentA_dev.id } as any,
+        triageEvent: { agentId: agentA_dev.id } as any
       })
       // Review dispatched for A
       expect(deps.spawnAgent).toHaveBeenCalledTimes(2)
 
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: agentA_review.id } as any,
+        triageEvent: { agentId: agentA_review.id } as any
       })
       // Security dispatched for A
       expect(deps.spawnAgent).toHaveBeenCalledTimes(3)
 
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: agentA_sec.id } as any,
+        triageEvent: { agentId: agentA_sec.id } as any
       })
       // After commit+push for A, dispatchNextTasks should find B and dispatch its dev phase
       expect(deps.spawnAgent).toHaveBeenCalledTimes(4)
@@ -422,25 +430,26 @@ describe('KanbanOrchestrator Integration', () => {
           if (callCount === 1) return devAgent
           if (callCount === 2) return reviewAgent
           return createMockAgent({ id: `pr-extra-${callCount}` })
-        }),
+        })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({
         sprintName: 'Pause-Resume-Test',
         repoId: 'repo-1',
         concurrencyCap: 3,
+        confirmed: true
       })
       const task = insertTask(db, {
         repoId: 'repo-1',
         title: 'Pausable task',
-        status: 'backlog',
+        status: 'backlog'
       })
 
       // Dispatch dev and advance to review
       service.dispatchDevPhase(task.id, run)
       service['onAgentCompleted']({
         type: 'agent:completed',
-        triageEvent: { agentId: devAgent.id } as any,
+        triageEvent: { agentId: devAgent.id } as any
       })
 
       // Verify review is active

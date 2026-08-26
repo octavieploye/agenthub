@@ -467,6 +467,7 @@ export function KanbanCard({
           onClose={() => setPopoverVisible(false)}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
+          onDispatch={onDispatch}
           defaultProjectId={defaultProjectId}
           agents={agents ?? []}
           phaseHistory={phaseHistory}

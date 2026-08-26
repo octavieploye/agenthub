@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getKanbanOrchestrator } from '../services/service-orchestrator'
+import { getDb } from '../db/connection'
+import { isOrchestratorEnabled } from '../services/orchestrator-settings'
 import { success, error, validateInput } from './ipc-helpers'
 
 const startSchema = z.object({
@@ -11,6 +13,10 @@ const startSchema = z.object({
   concurrencyCap: z.number().int().min(1).max(10).optional(),
   telegramNotify: z.boolean().optional(),
   singleTaskId: z.string().optional(),
+  confirmed: z.boolean().optional(),
+  startedBy: z.string().optional(),
+  triggerSource: z.enum(['manual', 'date-watcher', 'sprint-watcher', 'single-task']).optional(),
+  taskIds: z.array(z.string()).optional(),
 })
 
 const runIdSchema = z.object({
@@ -28,9 +34,35 @@ function getOrchestrator() {
 }
 
 export function registerOrchestratorHandlers(): void {
-  // NEUTRALISED: Orchestrator disabled until safeguards are implemented
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, () => {
-    return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled until safeguards are implemented. Use brainstorm-to-sprint workflow instead.')
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, (_event, input: unknown) => {
+    const v = validateInput(startSchema, input)
+    if (!v.valid) return v.response
+    if (!isOrchestratorEnabled(getDb())) {
+      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
+    }
+    // S4: Defense in depth — reject manual start without explicit confirmation
+    if (v.data.confirmed !== true) {
+      return error('ORCHESTRATOR_NOT_CONFIRMED', 'Manual start requires confirmed: true')
+    }
+    // R-003: Restrict triggerSource from renderer — only 'manual' and 'single-task' are valid from IPC
+    const allowedFromIpc = new Set(['manual', 'single-task'])
+    const sanitized = { ...v.data, triggerSource: allowedFromIpc.has(v.data.triggerSource ?? '') ? v.data.triggerSource : 'manual' as const }
+    try {
+      const run = getOrchestrator().start(sanitized)
+      return success(run)
+    } catch (err) {
+      return error('ORCHESTRATOR_START_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PREVIEW, (_event, input: unknown) => {
+    const v = validateInput(startSchema, input)
+    if (!v.valid) return v.response
+    try {
+      return success(getOrchestrator().previewRun(v.data))
+    } catch (err) {
+      return error('ORCHESTRATOR_PREVIEW_FAILED', err instanceof Error ? err.message : String(err))
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PAUSE, (_event, input: unknown) => {
@@ -47,6 +79,10 @@ export function registerOrchestratorHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RESUME, (_event, input: unknown) => {
     const v = validateInput(runIdSchema, input)
     if (!v.valid) return v.response
+    // S72: Gate resume on kill-switch
+    if (!isOrchestratorEnabled(getDb())) {
+      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
+    }
     try {
       getOrchestrator().resume(v.data.runId)
       return success(undefined)

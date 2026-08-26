@@ -4,6 +4,7 @@ import { runMigrations } from '../migration-runner'
 import {
   getAllTasks,
   getTasksByRepo,
+  getTasksBySprint,
   getTasksByStatus,
   getTaskById,
   insertTask,
@@ -86,6 +87,26 @@ describe('tasks.queries', () => {
       const tasks = getTasksByRepo(db, repo1)
       expect(tasks).toHaveLength(1)
       expect(tasks[0].title).toBe('Repo1 task')
+    })
+  })
+
+  describe('getTasksBySprint', () => {
+    it('filters by repo and sprint name', () => {
+      const repoId = seedRepo()
+      insertTask(db, { repoId, title: 'R7-A task 1', sprintName: 'R7-A' })
+      insertTask(db, { repoId, title: 'R7-A task 2', sprintName: 'R7-A' })
+      insertTask(db, { repoId, title: 'R7-B task', sprintName: 'R7-B' })
+
+      const tasks = getTasksBySprint(db, repoId, 'R7-A')
+      expect(tasks).toHaveLength(2)
+      expect(tasks.every((t) => t.sprintName === 'R7-A')).toBe(true)
+    })
+
+    it('returns empty array when no tasks match the sprint', () => {
+      const repoId = seedRepo()
+      insertTask(db, { repoId, title: 'R7-B task', sprintName: 'R7-B' })
+
+      expect(getTasksBySprint(db, repoId, 'R7-A')).toEqual([])
     })
   })
 
@@ -210,6 +231,45 @@ describe('tasks.queries', () => {
       const fetched = getTaskById(db, task.id)
       expect(fetched?.projectId).toBeNull()
       expect(fetched?.sectionTargetDate).toBeNull()
+    })
+  })
+
+  describe('provider_override validation', () => {
+    it('accepts valid provider_override values on insert', () => {
+      const repoId = seedRepo()
+      for (const prov of ['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex']) {
+        const task = insertTask(db, { repoId, title: `Task ${prov}`, providerOverride: prov })
+        expect(task.providerOverride).toBe(prov)
+      }
+    })
+
+    it('accepts null/undefined provider_override on insert', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'No provider' })
+      expect(task.providerOverride).toBeNull()
+    })
+
+    it('throws on invalid provider_override during insert', () => {
+      const repoId = seedRepo()
+      expect(() => {
+        insertTask(db, { repoId, title: 'Bad', providerOverride: 'invalid-provider' })
+      }).toThrow(/Invalid provider_override/)
+    })
+
+    it('accepts valid provider_override on update', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Task' })
+      updateTask(db, task.id, { providerOverride: 'openai-codex' })
+      const updated = getTaskById(db, task.id)
+      expect(updated!.providerOverride).toBe('openai-codex')
+    })
+
+    it('throws on invalid provider_override during update', () => {
+      const repoId = seedRepo()
+      const task = insertTask(db, { repoId, title: 'Task' })
+      expect(() => {
+        updateTask(db, task.id, { providerOverride: 'bogus' })
+      }).toThrow(/Invalid provider_override/)
     })
   })
 

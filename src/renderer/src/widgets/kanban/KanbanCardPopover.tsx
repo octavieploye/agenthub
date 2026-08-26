@@ -17,6 +17,7 @@ interface KanbanCardPopoverProps {
   onClose: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
+  onDispatch?: () => void
   defaultProjectId?: string
   agents: AgentState[]
   phaseHistory?: OrchestratorTaskLog[]
@@ -46,7 +47,7 @@ const PHASE_STATUS_LABEL: Record<string, string> = {
   skipped: 'skipped',
 }
 
-export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, defaultProjectId, agents, phaseHistory }: KanbanCardPopoverProps) {
+export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnter, onMouseLeave, onDispatch, defaultProjectId, agents, phaseHistory }: KanbanCardPopoverProps) {
   const hasFocusRef = useRef(false)
   const [visible, setVisible] = useState(false)
 
@@ -414,6 +415,12 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
 
       {/* Footer */}
       <div className="flex justify-end gap-2 pt-1">
+        {onDispatch && (
+          <button
+            className="btn btn-xs btn-warning mr-auto"
+            onClick={() => { onClose(); onDispatch() }}
+          >⚡ Dispatch</button>
+        )}
         <button className="btn btn-xs btn-ghost" onClick={onClose}>Cancel</button>
         <button
           className="btn btn-xs btn-primary"

@@ -196,10 +196,10 @@ describe('Auto-Triage Engine', () => {
       expect(result.requiresSoundAlert).toBe(true)
     })
 
-    it('is false for locked (toast/desktop only, no sound)', () => {
+    it('is true for locked (agent needs user input)', () => {
       const input = makeInput({ currentStatus: 'locked' })
       const result: TriageEvent = triageAgentEvent(input)
-      expect(result.requiresSoundAlert).toBe(false)
+      expect(result.requiresSoundAlert).toBe(true)
     })
 
     it('is false for busy', () => {

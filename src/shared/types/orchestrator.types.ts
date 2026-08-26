@@ -1,5 +1,7 @@
 export type OrchestratorRunStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed'
 
+export type OrchestratorTriggerSource = 'manual' | 'date-watcher' | 'sprint-watcher' | 'single-task'
+
 export type OrchestratorPhase = 'dev' | 'review' | 'security' | 'commit' | 'push'
 
 export type OrchestratorPhaseStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped'
@@ -21,6 +23,9 @@ export interface OrchestratorRun {
   startedAt: string | null
   completedAt: string | null
   singleTaskId: string | null
+  startedBy: string | null
+  triggerSource: OrchestratorTriggerSource | null
+  taskIds: string[] | null
 }
 
 export interface OrchestratorTaskLog {
@@ -78,6 +83,10 @@ export interface OrchestratorStartInput {
   concurrencyCap?: number
   telegramNotify?: boolean
   singleTaskId?: string
+  startedBy?: string
+  triggerSource?: OrchestratorTriggerSource
+  taskIds?: string[]
+  confirmed?: boolean
 }
 
 export interface OrchestratorStatusResponse {
