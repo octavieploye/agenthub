@@ -1,94 +1,183 @@
 ---
 name: team-impl-lead
-description: Implementation Lead Team Orchestrator — full project audit from scratch: stack, architecture, product, content, legal, policies, processes. Produces discovery report + implementation plan + conformance check.
+description: Implementation Lead Team Orchestrator — scope-aware project audit with 3 modes (light/dev/full). Produces discovery report + implementation plan. Scope-aware — inherits from parent or asks user. Light mode for small tasks skips scouts entirely.
 category: dev-skills
 ---
 
 # Team Implementation Lead
 
-Full project audit from scratch. Invoke when starting a new project or when you need to understand the current state of an existing project and produce an implementation plan that checks what exists, what is missing, and what needs to be built.
+Project audit and implementation planning. Adapts to task size: light mode for small tasks, dev mode for features, full mode for new projects.
 
 ## When to Use
 
-- Starting a new project (Opeidos, a new feature set, a new Optimaeus entity)
-- Returning to a project after a gap — need to re-orient and verify conformance
-- A project has many moving parts (onboarding, architecture, content, legal) and you need a unified plan
-- You want to know: "what exists vs. what's missing vs. what needs to be built?"
-- You suspect gaps in architecture, legal coverage, UX flows, or documentation
+- Starting a new project or returning after a gap → `full` mode
+- Building a feature or refactoring a module → `dev` mode
+- Small bug fix or 2-5 file change → `light` mode
+- Chained by `brainstorm-to-sprint` or other parent orchestrator → inherits scope
 
-## What You Need Before Starting
+## Scope Detection — Three Modes
 
-- Project name or identifier
-- Root directory or repo path (impl-lead will ask if not provided)
-- Any existing spec, brief, or feature list (optional — scouts will discover independently)
-- Scope: full audit (default) or specific dimensions (stack only / product only / content only)
+**Check on entry:** Was scope provided? How large is the task?
 
-## What This Team Produces
+### Chained Mode (scope provided by parent)
 
-- `docs/impl-lead/{project-slug}/01-discovery-report.md` — everything found, organized by dimension
-- `docs/impl-lead/{project-slug}/02-implementation-plan.md` — what needs to be built, prioritized P0/P1/P2
-- `docs/impl-lead/{project-slug}/03-conformance-check.md` — what matches plan vs. what is missing or misaligned
-- `docs/impl-lead/{project-slug}/04-open-questions.md` — questions for the user + suggestions discovered during audit
+When spawned by a parent orchestrator (`brainstorm-to-sprint`, `team-sprint-planner`, or any skill that passes a brief/sprint/scope):
 
-## Agent Sequence
+- Inherit the scope exactly as given — do NOT expand it
+- Do NOT run intake (Phase 1) — the parent already defined the task
+- Do NOT ask for repo confirmation — the parent already confirmed
+- Skip directly to the appropriate phase based on scope size
 
-0. **impl-lead** — Phase 0: STACK RESEARCH GATE (mandatory before any scout work begins).
-   See full protocol below.
+### Standalone Mode (direct user invocation)
 
-1. **impl-lead** — Phase 1: intake. Asks user for project scope, path, any existing specs. Decides which scouts to activate.
-2. **impl-scout-stack** — Phase 2a (parallel): maps architecture, tech stack, DB schema, migrations, services, workflows, infra, .claude/ config. Produces `stack-map.md`.
-3. **impl-scout-product** — Phase 2b (parallel): maps features, views, pages, UX flows, onboarding, detectors, AI models, component tree. Produces `product-map.md`.
-4. **impl-scout-content** — Phase 2c (parallel): maps content, copy, legal docs, policies, compliance, processes, documentation. Produces `content-map.md`.
-5. **impl-lead** — Phase 3: reviews all scout maps, flags contradictions or missing sections, asks user if anything is unexpected.
-6. **impl-planner** — Phase 4: synthesizes stack-map + product-map + content-map into implementation plan + conformance check.
-7. **impl-lead** — Phase 5: reviews planner output, adds open questions and suggestions, presents everything to user for approval, writes files only after confirmation.
+Run Phase 1 intake. Determine mode from what the user asked:
 
-## Phase 0 — STACK RESEARCH GATE
+| User says | Mode | What runs |
+|---|---|---|
+| "audit from scratch", "what exists vs missing", "full audit" | `full` | All scouts + planner |
+| "map the stack", "stack only" | `stack-only` | `impl-scout-stack` only + planner |
+| "map the product", "product only" | `product-only` | `impl-scout-product` only + planner |
+| "build feature X", "implement this brief", multi-file feature | `dev` | `impl-scout-stack` + `impl-scout-product` + planner |
+| "fix this bug", "small change", < 5 files, "light" | `light` | No scouts — impl-lead reads files directly |
 
-**This gate runs before Phase 1 intake. It cannot be skipped. No implementation plan, no scout work, no file writing starts until the gate is APPROVED.**
-
-For every package, framework, and service in the proposed tech stack:
-
-1. **WebSearch current stable version** — `npm view {package} dist-tags` or equivalent. Never assume a version from training data.
-2. **Check deprecation** — is the package itself deprecated? Are any of its sub-packages deprecated? (`npm view {package}` shows deprecation notices)
-3. **Check peer dependencies** — do all packages in the stack declare compatible peer deps with each other? (`npm view {package}@{version} peerDependencies`)
-4. **Check security advisories** — `npm audit` equivalent or GitHub Advisories search for known CVEs
-5. **Confirm compatibility matrix** — produce a table:
-
-```
-| Package         | Latest Stable | Version Chosen | Compatible With | Status |
-|---|---|---|---|---|
-| next            | x.y.z         | x.y.z          | react@18, clerk | APPROVED |
-| @clerk/nextjs   | x.y.z         | x.y.z          | next@15.x       | APPROVED |
-| ...             | ...           | ...            | ...             | ...     |
-```
-
-**Gate rules:**
-- If ANY package is deprecated → STOP. Identify the replacement. Use the replacement.
-- If ANY package has a known CRITICAL/HIGH CVE → STOP. Identify the patched version. Use it.
-- If ANY two packages have incompatible peer deps → STOP. Resolve before proceeding.
-- If latest major version is more than 1 major behind → STOP. Justify staying on older major or upgrade.
-
-**Output:** A signed-off `STACK APPROVED` block in the discovery report before any other section.
-
-Only after the user acknowledges the stack approval does Phase 1 begin.
+If mode is ambiguous, ask: "This looks like a {mode} task — confirm? (light / dev / full)"
 
 ---
 
+## Light Mode (< 5 files or user says "light")
+
+For small tasks that don't need scouts or output files:
+
+1. impl-lead reads the relevant files directly (max 5 files)
+2. Confirms scope with user: "I'll touch these files: {list}. Correct?"
+3. Produces a 1-paragraph inline plan — no output files written
+4. Done — hand off to `team-dev-loop` or direct coding
+
+**No scouts. No planner. No output files. No Phase 0.**
+
+---
+
+## Phase 1 — INTAKE (standalone mode only)
+
+impl-lead asks:
+- Project name or identifier
+- Root directory or repo path (confirm with user)
+- Task description — what needs to be built or checked
+- Any existing spec, brief, or feature list
+
+From the answers, impl-lead determines:
+- **Mode**: light / stack-only / product-only / dev / full
+- **Project type**: `commercial` or `internal` (affects impl-scout-content scope)
+- **Scope**: which files/directories/modules are in play
+
+If mode is `light`: skip to Light Mode above.
+Otherwise: proceed to Phase 2.
+
+---
+
+## Phase 2 — DISCOVERY (scouts + stack gate in parallel)
+
+### Stack Research Gate (runs in parallel with scouts)
+
+For every package, framework, and service in the current or proposed tech stack:
+
+1. **WebSearch current stable version** — `npm view {package} dist-tags` or equivalent
+2. **Check deprecation** — is the package deprecated?
+3. **Check peer dependencies** — compatible across the stack?
+4. **Check security advisories** — known CRITICAL/HIGH CVEs?
+5. **Produce compatibility matrix:**
+
+```
+| Package | Latest Stable | Version In Use | Compatible With | Status |
+|---|---|---|---|---|
+| ... | x.y.z | x.y.z | ... | APPROVED / FLAGGED |
+```
+
+**Gate rules:**
+- Deprecated → STOP, identify replacement
+- CRITICAL/HIGH CVE → STOP, identify patched version
+- Incompatible peer deps → STOP, resolve before proceeding
+- More than 1 major behind → justify or upgrade
+
+### Scout Dispatch (mode-dependent, in parallel with stack gate)
+
+| Mode | Scouts dispatched | Max agents |
+|---|---|---|
+| `stack-only` | `impl-scout-stack` | 1 scout + stack gate = 2 |
+| `product-only` | `impl-scout-product` | 1 scout + stack gate = 2 |
+| `dev` | `impl-scout-stack` + `impl-scout-product` | 2 scouts + stack gate = 3 |
+| `full` | `impl-scout-stack` + `impl-scout-product` + `impl-scout-content` | 3 scouts (stack gate runs as part of impl-lead, not a separate agent) |
+
+**impl-scout-content receives a project-type parameter:**
+- `commercial` → full 8-section scan (marketing, legal, MoR, company status, content strategy)
+- `internal` → sections 4 (Project Documentation) + 5 (Compliance Signals) only
+
+impl-lead determines project-type during Phase 1 intake. Default: `internal` for AgentHub/Anamnesis/Hermes repos, `commercial` for Hephaestus/Opeidos repos.
+
+**Wait for all dispatched agents to complete before Phase 3.**
+
+---
+
+## Phase 3 — PLAN & PRESENT
+
+Dispatch `impl-planner` with all completed scout maps.
+
+impl-planner performs (per its existing command definition):
+1. **Cross-Map Reconciliation** — flags contradictions, overlaps, cascade gaps between scout maps
+2. **Implementation Plan** — prioritized table (P0/P1/P2) of what needs to be built
+3. **Conformance Check** — what exists vs what's expected (CONFORMANT / NON-CONFORMANT / MISSING / UNKNOWN)
+4. **Open Items** — questions, suggestions, risks
+
+impl-planner returns two documents:
+- `implementation-plan.md` — plan + conformance + open items (all in one)
+- `discovery-report.md` — merged scout maps
+
+impl-lead presents both to the user. **No files written until user approves.**
+
+If user approves: write to `docs/impl-lead/{project-slug}/`:
+- `discovery-report.md`
+- `implementation-plan.md`
+
+If user requests changes: revise the plan inline, re-present.
+
+---
+
+## What This Team Produces
+
+- `docs/impl-lead/{project-slug}/discovery-report.md` — everything found, organized by dimension
+- `docs/impl-lead/{project-slug}/implementation-plan.md` — prioritized build list + conformance check + open questions
+
+In light mode: inline plan only, no files.
+
 ## Key Rules
 
-- impl-lead always runs Phase 1 first — never skip user intake
-- All 3 scouts run in parallel during Phase 2 (3 active agents, within the 3-agent cap)
-- impl-planner does NOT run until all 3 scout maps are complete
-- This team is read-only during discovery — no file changes, no commits during Phases 1-4
+- impl-lead runs intake in standalone mode only — chained mode skips it
+- Scouts only run in dev/full/stack-only/product-only modes — never in light mode
+- impl-planner does NOT run until all dispatched scouts are complete
+- This team is read-only during discovery — no file changes, no commits
 - All outputs shown to user for review before any files are written to disk
 - STOP AND ASK if: project path is ambiguous, a spec contradicts the code, scope is unclear, or scouts return contradictory findings
+- Max 3 agents active at once (respected across all modes)
+- Stack gate findings that are FLAGGED must be resolved before impl-planner runs
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---|---|
+| Running full mode for a 2-file bug fix | Use light mode — no scouts, inline plan only |
+| Running intake when parent provided scope | Chained mode — inherit scope, skip intake |
+| Dispatching all 3 scouts for a dev task | Dev mode uses stack + product only, no content |
+| Running stack gate before knowing the stack | Stack gate runs in parallel with scouts, after intake |
+| Writing output files before user approval | Always present first, write only after explicit approval |
+| Running impl-scout-content with full 8 sections on an internal repo | Pass `project-type: internal` — only docs + compliance |
+| Producing 4 separate output files | 2 files only: discovery-report + implementation-plan |
+| impl-lead reviewing scout maps separately from impl-planner | impl-planner does the reconciliation — impl-lead presents the result |
 
 ## How to Invoke
 
-Tell impl-lead the project name and any context. Examples:
-- "audit opeidos from scratch" → full audit, impl-lead asks for path + scope
-- "map the stack for the new marketplace" → impl-scout-stack only, impl-lead coordinates
-- "check if our onboarding matches the spec" → impl-scout-product + impl-planner conformance mode
-- "what needs to be built for [project-name]" → full audit → implementation plan
-- "we're starting fresh on [project] — what do we have and what's missing?" → full audit
+Examples:
+- "audit opeidos from scratch" → full mode, standalone, commercial
+- "map the stack for agenthub" → stack-only mode, standalone, internal
+- "build the notification feature" → dev mode, standalone
+- "fix the kanban card color bug" → light mode, standalone
+- (chained by brainstorm-to-sprint with brief) → inherits scope, skips intake

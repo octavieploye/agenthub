@@ -1,5 +1,5 @@
 ---
-description: "Implementation Lead Team Orchestrator — full project audit from scratch: stack, product, content, legal, policies. Produces discovery report, implementation plan, and conformance check."
+description: "Implementation Lead Team Orchestrator — scope-aware project audit with 3 modes (light/dev/full). Scope-aware: inherits from parent or asks user. Light mode for small tasks skips scouts."
 ---
 
 Read and execute the team orchestrator skill definition.

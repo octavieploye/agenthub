@@ -1,22 +1,55 @@
 ---
 name: full-code-review
-description: Full multi-agent codebase audit + fix + verify cycle. Use when the user says "run full code review", "full-code-review", or "/full-code-review"
+description: Full multi-agent codebase review — architect + sr-backend + sr-frontend audit in parallel. Review-only, no fixes. Produces deduplicated master issue list (CRITICAL/HIGH/MEDIUM/LOW) with file:line evidence and issue category. Scope-aware — inherits scope from parent orchestrator or asks user in standalone mode.
 category: dev-skills
 ---
 
-# Full Code Review — 7-Phase Workflow
+# Full Code Review — Review-Only Audit
 
-You are orchestrating a complete audit, fix, and verify cycle across the entire codebase. Follow all 7 phases in order. Never skip a phase. Each phase gates the next.
+You are orchestrating a review-only audit using three named agents: `architect`, `sr-backend`, and `sr-frontend`. You produce a findings report. You do NOT fix anything — that is `team-dev-loop`'s job.
 
-**Rules:**
-- Never touch `_bmad/`, `_bmad-output/`, `.claude/`, `node_modules/`, or IDE config folders
-- All issues must be ranked: CRITICAL → HIGH → MEDIUM → LOW
-- Fix code, never tests — tests define expected behavior
-- Parallel agents must never touch the same file
+## When to Use
+
+- User says "run full code review", "full-code-review", or "/full-code-review"
+- Chained by `team-dev-loop`, `team-frontend`, `team-backend-hardening`, or any parent orchestrator that provides scope
+- Before a production deployment to verify code quality
+- After a major refactor to check for regressions
+- Periodic health check on a module or feature area
+
+## Scope Detection — Two Modes
+
+**Check on entry:** Was a scope provided in the invocation (file paths, directories, module names, brief, or sprint scope)?
+
+### Chained Mode (scope provided)
+
+When spawned by a parent orchestrator (`team-dev-loop`, `team-frontend`, `team-backend-hardening`, or any skill that passes scope):
+
+- Inherit the scope exactly as given — do NOT expand it
+- Do NOT ask for repo confirmation — the parent already confirmed
+- Do NOT ask for scope confirmation — the parent defines the boundary
+- Agents review ONLY the files/directories within the provided scope
+- If scope is a sprint or brief: extract the file paths and modules from it, review only those
+
+### Standalone Mode (no scope provided)
+
+When invoked directly by the user without a parent orchestrator:
+
+- **STOP and ask:** "Which files, directories, or modules should I review? (say 'full repo' to review everything)"
+- **STOP and confirm repo** if not already confirmed this session
+- Do NOT default to full repo — full repo only when user explicitly says "full repo", "everything", or "entire codebase"
+- Once scope is confirmed, proceed to Phase 0
+
+**Scope format examples the user might give:**
+```
+"review src/main/services/"
+"review the kanban widget"
+"review src/renderer/src/widgets/kanban/ and src/main/services/kanban-service.ts"
+"full repo"
+```
 
 ---
 
-## Phase 0 — DEPENDENCY SECURITY SCAN (runs before Phase 1, blocks if findings exist)
+## Phase 0 — DEPENDENCY SECURITY SCAN (blocks if findings exist)
 
 Run before dispatching any audit agents:
 
@@ -60,129 +93,178 @@ If scan is clean:
 DEPENDENCY SCAN — CLEAN
 ```
 
+**In chained mode:** if the parent orchestrator already ran a dependency scan in this session, skip Phase 0 and note `DEPENDENCY SCAN — SKIPPED (parent scan)`.
+
 ---
 
-## Phase 1 — AUDIT
+## Phase 1 — AUDIT (3 agents in parallel)
 
-Dispatch three sub-agents **simultaneously**:
+Dispatch three named agents **simultaneously**, scoped to the files/directories defined in scope detection:
 
-### audit-architect (Architect Reviewer)
-Scope: Architecture, system design, cross-cutting concerns
-Check for:
-- Module boundaries, separation of concerns, circular dependencies
+### `architect`
+Domain: Architecture, system design, cross-cutting concerns
+**Within scope**, check for:
+
+**Conflicts:**
+- Cross-layer type mismatches between shared types and their consumers
+- IPC contract violations (channel names, payload shapes, direction mismatches)
+- Circular dependencies between modules
+- Service registration mismatches (service exists but not wired in orchestrator)
+
+**Mismatches:**
+- API contract inconsistency across layers (types say X, handler sends Y)
+- Migration chain vs model/schema alignment drift
+- Missing or broken wiring (routers not mounted, services not registered, IPC not exposed)
+
+**Long-term debt:**
 - Dead code: unreachable modules, unused exports, zombie features
-- Hardcoded secrets or config values committed to version control
-- Docker / infra / deployment correctness
-- API contract consistency across layers
-- Missing or broken wiring (routers not mounted, services not registered)
-- Migration chain integrity and schema/model alignment
+- Files approaching 1000 lines (extraction candidates per project rule)
+- Module boundary violations, separation of concerns issues
 
-### audit-backend (Senior Backend Engineer)
-Scope: All backend source files (services, repositories, models, routes, migrations, tests)
-Check for:
-- Silent bugs: wrong field used, off-by-one, incorrect status strings
+**Security:**
+- Hardcoded secrets or config values committed to version control
+- Docker / infra / deployment misconfigurations
+
+### `sr-backend`
+Domain: Backend source files (services, repositories, models, routes, migrations, tests)
+**Within scope**, check for:
+
+**Silent failures:**
+- Swallowed exceptions (empty catch blocks, catch-and-continue without logging)
+- Missing error propagation (error occurs but caller never knows)
+- Missing HTTP status codes or wrong status codes
+- Missing null guards on values that can be undefined
+
+**Hidden errors:**
+- Wrong field name used (e.g., `user.name` when schema has `user.displayName`)
+- Off-by-one errors in loops, pagination, or array access
+- Incorrect status strings (not matching UNIVERSAL-STANDARDS vocabulary)
+- Stale references to renamed/removed functions or modules
+
+**Conflicts:**
 - Blocking calls in async contexts
-- DB session lifecycle errors (SSE generators, background tasks)
+- DB session lifecycle errors (connections not released, transactions not committed)
 - Raw DB access bypassing service layer
-- Missing null guards
+
+**Long-term debt:**
 - Soft-delete violations (hard DELETE instead of archive/status update)
 - Test coverage gaps and incorrect assertions
-- Swallowed exceptions, missing HTTP status codes
-- Security: injection risks, missing input validation, auth gaps
+- Nesting deeper than level 2 (extraction candidates)
+- Duplicated logic across services
 
-### audit-frontend (Senior Frontend Engineer)
-Scope: All frontend source files (components, stores, hooks, workers, routing, assets)
-Check for:
+**Security:**
+- SQL/NoSQL injection risks
+- Missing input validation on handler parameters
+- Auth gaps (unprotected routes, missing permission checks)
+
+### `sr-frontend`
+Domain: Frontend source files (components, stores, hooks, workers, routing, assets)
+**Within scope**, check for:
+
+**Silent failures:**
 - API calls that fire at module scope (before framework mounts)
-- React anti-patterns: key={index}, missing useEffect cleanup, stale closures
-- Layout bugs: incorrect height/overflow constraints
+- Missing useEffect cleanup (subscriptions, timers, listeners left dangling)
+- Stale closures capturing outdated state
 - Web Worker: non-idempotent setInterval, missing stop before terminate
+
+**Hidden errors:**
 - DOM/cursor mutations without cleanup
-- Dead UI: components never rendered, hidden features with broken wiring
-- TypeScript errors (strict violations, any casts)
+- Broken asset imports (referencing files that don't exist)
 - Hardcoded env/test flags committed to main
-- Broken asset imports
 
-Collect all three outputs. Merge into a single deduplicated master issue list with severity and file:line. Record counts by severity.
+**Mismatches:**
+- Component props not matching the types they declare
+- Zustand store shape drift from IPC response shapes
+- IPC channel usage not matching constants in `ipc-channels.ts`
 
----
+**Long-term debt:**
+- Dead UI: components never rendered, hidden features with broken wiring
+- TypeScript errors (strict violations, `any` casts, missing return types)
+- React anti-patterns: `key={index}`, prop drilling beyond 2 levels
+- Layout bugs: incorrect height/overflow constraints
+- Components exceeding 300 lines (split candidates)
+- Duplicated UI logic across components
 
-## Phase 2 — PLAN
-
-Group all issues into three non-overlapping workstreams (no two workstreams touch the same file):
-- **Workstream A** — Critical architecture and infrastructure fixes
-- **Workstream B** — Backend services, repositories, migrations
-- **Workstream C** — Frontend components, stores, hooks, workers
-
-Any issue touching files across multiple workstreams → mark as **sequential** (handled by cleanup agent after parallel fix phase).
-
-Write the plan to `_bmad-output/full-code-review-{date}.md`.
-
----
-
-## Phase 3 — FIX
-
-Dispatch three fix agents **simultaneously**, one per workstream:
-
-- **fix-backend-critical** → Workstream A files only
-- **fix-backend-services** → Workstream B files only
-- **fix-frontend** → Workstream C files only
-
-Each agent: fix every issue in their workstream. Minimal, targeted changes only. Do not touch other workstreams' files. If a fix surfaces a new cross-workstream issue, add it to the sequential list — do not fix it unilaterally.
+**Security:**
+- XSS vectors (dangerouslySetInnerHTML, unsanitized user input rendered)
+- Sensitive data exposed in renderer logs or DOM
 
 ---
 
-## Phase 4 — CLEANUP
+## Phase 2 — MERGE & REPORT
 
-Single agent handles all cross-cutting work:
-1. Record pre-fix test baseline (passing / failing counts)
-2. Resolve any cross-agent conflicts (duplicate routes, double imports, conflicting changes)
-3. Fix all sequential issues from the plan
-4. Fix any tests broken by the parallel agents (fix the code, not the assertion)
-5. Record post-fix test baseline — confirm no regression vs pre-fix
+Collect all three agent outputs. Produce a single deduplicated **Master Issue List**.
+
+**Deduplication rules:**
+- If two agents flag the same file:line, keep the higher severity and merge descriptions
+- If the same root cause produces symptoms in multiple layers, consolidate into one cross-layer finding at the highest severity
+
+**Output format — Master Issue List:**
+
+```
+FULL CODE REVIEW — {scope description}
+Date: {timestamp}
+Agents: architect, sr-backend, sr-frontend
+Scope: {files/directories reviewed}
+
+SUMMARY
+  CRITICAL: {N}
+  HIGH:     {N}
+  MEDIUM:   {N}
+  LOW:      {N}
+  Total:    {N}
+
+FINDINGS
+
+| ID | Severity | Category | Description | File:Line | Agent |
+|---|---|---|---|---|---|
+| R-001 | CRITICAL | silent-failure | Swallowed exception in ... | src/main/services/foo.ts:42 | sr-backend |
+| R-002 | HIGH | mismatch | IPC payload shape differs from ... | src/shared/types/bar.ts:15 | architect |
+| R-003 | MEDIUM | long-term-debt | File approaching 1000 lines | src/renderer/src/App.tsx:1 | sr-frontend |
+| ... | ... | ... | ... | ... | ... |
+```
+
+**Issue categories (use exactly these in the Category column):**
+- `conflict` — cross-layer, type, IPC, circular dependency
+- `silent-failure` — swallowed exception, missing error propagation, empty catch
+- `hidden-error` — wrong field, off-by-one, incorrect string, stale reference
+- `mismatch` — API/type/schema drift, contract divergence
+- `long-term-debt` — code smell, oversized file, deep nesting, duplication
+- `security` — injection, missing validation, auth gap, exposed secret
+
+**No action plan. No fix suggestions.** The report is the deliverable. Fixing is `team-dev-loop`'s job. Each agent's review IS the senior assessment — they flag what they find, that's the output.
 
 ---
 
-## Phase 5 — VERIFY
+## Rules
 
-Dispatch three review agents **simultaneously** (same domains as Phase 1):
+- **Review-only** — no code changes, no file writes (except the report if standalone mode)
+- Never touch `.claude/`, `node_modules/`, or IDE config folders
+- Every finding MUST have file:line evidence — no vague warnings
+- Never review files outside the defined scope — even if you notice issues in adjacent files, they are out of scope (note them as "out-of-scope observation" at the bottom of the report, max 3)
+- All three agents must complete before Phase 2 begins
+- If an agent finds 0 issues in its domain: report `{agent}: 0 issues — clean` (do not invent findings to look thorough)
+- **In chained mode:** return the Master Issue List to the parent orchestrator. Do not present it to the user — the parent handles presentation.
+- **In standalone mode:** present the Master Issue List to the user. Ask: "Hand off to `team-dev-loop` for fixes? (yes / no / select specific IDs)"
 
-- **review-architect** — verify all CRITICAL + HIGH architecture issues from Phase 1
-- **review-backend** — verify all CRITICAL + HIGH backend issues from Phase 1
-- **review-frontend** — verify all CRITICAL + HIGH frontend issues from Phase 1; confirm 0 new TypeScript errors
+## Constraints
 
-Each agent reports: RESOLVED / PARTIAL / STILL PRESENT / NEW ISSUE for every item they own.
+- Max 3 agents active at once (Phase 1 dispatches exactly 3 — within limit)
+- Agents use their existing command definitions — do not override their instructions
+- `architect` uses: `Read`, `Glob`, `Grep`
+- `sr-backend` uses: `Read`, `Glob`, `Grep`
+- `sr-frontend` uses: `Read`, `Glob`, `Grep`
+- All three are read-only — if any agent attempts a write, that is a skill violation
 
-Compile all PARTIAL / STILL PRESENT / NEW ISSUE findings into a remaining issues list.
+## Common Mistakes
 
----
-
-## Phase 6 — POST-REVIEW FIXES
-
-If remaining issues exist: fix them all. Run the test suite one final time and confirm no regressions.
-
-If no remaining issues: skip this phase.
-
----
-
-## Phase 7 — LOG
-
-Write the full final report to `_bmad-output/full-code-review-{date}.md`:
-- All issues found (severity, file:line)
-- All fixes applied (what changed and why)
-- Deferred items (intentionally not fixed, with reason)
-- Final test baseline
-- Any new architectural invariants discovered
-
-If a project memory or log file exists, append a one-paragraph summary entry.
-
-Present the final summary table to the user:
-
-| | Count |
+| Mistake | Fix |
 |---|---|
-| Issues found | — |
-| Issues fixed | — |
-| Deferred | — |
-| Tests passing (final) | — |
-| Tests failing (final) | — |
-| Dependency CRITICAL/HIGH | — (acknowledged / resolved) |
+| Reviewing the full repo when scope was provided | STOP — re-read scope. Only review what was specified. |
+| Asking for scope confirmation in chained mode | The parent already confirmed scope. Trust it. |
+| Defaulting to full repo in standalone mode | Never default. Ask the user. |
+| Including fix suggestions in the report | No fixes. Report findings only. Fixing is team-dev-loop's job. |
+| Skipping Phase 0 in standalone mode | Phase 0 is mandatory in standalone. Only skip when parent already ran it. |
+| Inventing findings when a domain is clean | Report 0 issues. Clean is a valid result. |
+| Reviewing adjacent files outside scope | Out of scope. Note max 3 observations at the bottom, never as findings. |
+| Using anonymous sub-agents instead of named agents | Always use `architect`, `sr-backend`, `sr-frontend` — the named, versioned agents. |

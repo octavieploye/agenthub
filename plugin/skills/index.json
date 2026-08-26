@@ -3,6 +3,14 @@
   "_description": "Central registry of all skills, teams, workflows, and commands. Agents read this for quick discovery instead of scanning the filesystem.",
   "skills": [
     {
+      "id": "voice-pipeline-coordinator",
+      "name": "voice-pipeline-coordinator",
+      "description": "Voice Pipeline Coordinator — orchestrates OPTimaeus voice layer build across 6 sprints (S0-S5) with TDD gates, security reviews, and parallel execution",
+      "category": "dev-teams",
+      "path": ".claude/skills/voice-pipeline-coordinator/SKILL.md",
+      "source": "project"
+    },
+    {
       "id": "app-scenario-modeler",
       "name": "app-scenario-modeler",
       "description": "Model all scenarios for a software feature — discovery, classification, cascade analysis, constraints, risk/probability, CORE optimisation and EDGE cost decisions. Outputs structured docs per feature.",
@@ -29,7 +37,7 @@
     {
       "id": "full-code-review",
       "name": "full-code-review",
-      "description": "Full multi-agent codebase audit + fix + verify cycle",
+      "description": "Full multi-agent review-only audit — architect + sr-backend + sr-frontend in parallel. Scope-aware: inherits from parent or asks user.",
       "category": "dev-skills",
       "path": ".claude/skills/full-code-review/SKILL.md",
       "source": "project"
@@ -184,6 +192,14 @@
       "description": "Anamnesis system oracle — DB schemas, memory layers, API contracts, entity connections, build state, competitive positioning, and integration status",
       "category": "business-intelligence",
       "path": "plugin/skills/anamnesis-expert/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "brainstorm-to-sprint",
+      "name": "brainstorm-to-sprint",
+      "description": "Post-brainstorm meta-orchestrator — chains sprint planning → dev loop → senior review gate (architect + sr-frontend + sr-backend). Review gate loops with dev-loop until all conflicts, assumptions, and long-term debt are resolved.",
+      "category": "dev-skills",
+      "path": "plugin/skills/brainstorm-to-sprint/SKILL.md",
       "source": "project"
     }
   ],
@@ -381,7 +397,7 @@
     {
       "id": "team-impl-lead",
       "name": "team-impl-lead",
-      "description": "Implementation Lead Team Orchestrator — full project audit from scratch: stack, product, content, legal, policies. Produces discovery report, implementation plan, and conformance check.",
+      "description": "Implementation Lead Team Orchestrator — scope-aware project audit with 3 modes (light/dev/full). Scope-aware: inherits from parent or asks user. Light mode for small tasks skips scouts.",
       "category": "dev-skills",
       "path": ".claude/skills/team-impl-lead/SKILL.md",
       "team": ".claude/teams/impl-lead/config.json",

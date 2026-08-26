@@ -44,7 +44,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 
 - [skill-creator](skill-creator/SKILL.md) — Create new skills, teams, workflows, commands — reverse-engineer tasks into reusable artifacts
 - [test-integrity-review](test-integrity-review/SKILL.md) — Check code changes for "test changed to pass" patterns during review or before commits
-- [full-code-review](full-code-review/SKILL.md) — Full multi-agent codebase audit + fix + verify cycle
+- [full-code-review](full-code-review/SKILL.md) — Review-only audit: architect + sr-backend + sr-frontend in parallel. Produces master issue list (CRITICAL/HIGH/MEDIUM/LOW). Scope-aware — inherits from parent orchestrator or asks user in standalone mode
 - [token-optimizer](token-optimizer/SKILL.md) — Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline
 - [chaos-modeling](chaos-modeling/SKILL.md) — Chaos engineering for any project type — 8-domain failure scenarios (load, DB, external APIs, memory, network, filesystem, concurrency, security) + real-time outcome logging + resilience hardening plan
 - [workflow-qc](workflow-qc/SKILL.md) — 7-gate dual-mode Opeidos workflow certification: scope block, structure validation, forbidden content scan, prompt injection resistance, LLM compatibility, output quality, certification + DB record
