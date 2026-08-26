@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
-import { readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
@@ -378,10 +378,15 @@ export function initializeServices(db: Database.Database): void {
   const forgejoToken = process.env['FORGEJO_TOKEN'] ?? ''
   forgejoAdapter = createForgejoAdapter(appMode, { baseUrl: forgejoUrl, token: forgejoToken })
 
-  // 16. SprintWatcher — watches sprint-intake dir for new sprint JSON files
+  // 16. SprintWatcher — watches sprint-intake dir + repo docs/sprints/ for new sprint JSON files
   intakeDir = join(app.getPath('userData'), 'sprint-intake')
+  const sprintDirs: string[] = [intakeDir]
+  if (!app.isPackaged) {
+    const repoSprintsDir = join(process.cwd(), 'docs', 'sprints')
+    if (existsSync(repoSprintsDir)) sprintDirs.push(repoSprintsDir)
+  }
   sprintWatcher = new SprintWatcher()
-  sprintWatcher.start(intakeDir, emitToAllRenderers)
+  sprintWatcher.start(sprintDirs, emitToAllRenderers, db)
 
   // 17. TelegramSidecarService — Telegram bot child process
   const scriptPath = app.isPackaged

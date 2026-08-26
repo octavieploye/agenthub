@@ -18,39 +18,45 @@ interface PendingEntry {
   projectId: string
   payload: SprintIntakePayload
   stagedAt: number
+  fromRepo: boolean
 }
 
 export class SprintWatcher {
-  private watcher: FSWatcher | null = null
+  private watchers: FSWatcher[] = []
   private pending = new Map<string, PendingEntry>()
   private processing = new Set<string>()
 
-  start(intakeDir: string, emitFn: EmitFn): void {
-    if (!existsSync(intakeDir)) mkdirSync(intakeDir, { recursive: true })
-    this.startupScan(intakeDir, emitFn)
-    this.watcher = watch(intakeDir, (_eventType, filename) => {
-      if (!filename) return
-      if (filename.match(/^sprint-.+\.draft\.json$/)) {
-        const projectId = filename.replace(/^sprint-/, '').replace(/\.draft\.json$/, '')
-        const payload: SprintDraftReadyPayload = { projectId, draftFilename: filename }
-        emitFn(IPC_EVENTS.KANBAN.DRAFT_READY, payload)
-        return
-      }
-      if (filename.match(/^sprint-.+\.json$/) && !filename.endsWith('.draft.json')) {
-        const filePath = join(intakeDir, filename)
-        if (!existsSync(filePath)) return
-        this.parseAndStage(filename, intakeDir, emitFn)
-      }
-    })
-    log.info('SprintWatcher started', { intakeDir })
+  start(dirs: string | string[], emitFn: EmitFn, db?: Database.Database): void {
+    const dirList = Array.isArray(dirs) ? dirs : [dirs]
+    for (const dir of dirList) {
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      const isRepoDir = dirList.length > 1 && dir !== dirList[0]
+      this.startupScan(dir, emitFn, db, isRepoDir)
+      const w = watch(dir, (_eventType, filename) => {
+        if (!filename) return
+        if (filename.match(/^sprint-.+\.draft\.json$/)) {
+          const projectId = filename.replace(/^sprint-/, '').replace(/\.draft\.json$/, '')
+          const payload: SprintDraftReadyPayload = { projectId, draftFilename: filename }
+          emitFn(IPC_EVENTS.KANBAN.DRAFT_READY, payload)
+          return
+        }
+        if (isIntakeFilename(filename)) {
+          const filePath = join(dir, filename)
+          if (!existsSync(filePath)) return
+          this.parseAndStage(filename, dir, emitFn, isRepoDir)
+        }
+      })
+      this.watchers.push(w)
+    }
+    log.info('SprintWatcher started', { dirs: dirList })
   }
 
   stop(): void {
-    this.watcher?.close()
-    this.watcher = null
+    for (const w of this.watchers) w.close()
+    this.watchers = []
   }
 
-  startupScan(intakeDir: string, emitFn: EmitFn): void {
+  startupScan(intakeDir: string, emitFn: EmitFn, db?: Database.Database, fromRepo = false): void {
     if (!existsSync(intakeDir)) return
     const files = readdirSync(intakeDir)
     for (const filename of files) {
@@ -62,11 +68,24 @@ export class SprintWatcher {
     }
     // Also stage any .json files left over from a previous session (crash recovery)
     for (const f of files) {
-      if (f.match(/^sprint-.+\.json$/) && !f.endsWith('.draft.json')) {
+      if (isIntakeFilename(f)) {
         const filePath = join(intakeDir, f)
-        if (existsSync(filePath)) {
-          this.parseAndStage(f, intakeDir, emitFn)
+        if (!existsSync(filePath)) continue
+
+        // T3: Skip already-imported sprints when db is available
+        if (db) {
+          try {
+            const raw = JSON.parse(readFileSync(filePath, 'utf-8')) as SprintIntakePayload
+            if (raw.sprintName && raw.repoId && getSprintTaskCount(db, raw.sprintName, raw.repoId) > 0) {
+              log.debug('SprintWatcher: skipping already-imported sprint on startup', { filename: f, sprintName: raw.sprintName })
+              continue
+            }
+          } catch {
+            // Parse error — let parseAndStage handle the validation
+          }
         }
+
+        this.parseAndStage(f, intakeDir, emitFn, fromRepo)
       }
     }
   }
@@ -92,7 +111,7 @@ export class SprintWatcher {
     // fs.watch will detect the new .json file and call parseAndStage automatically
   }
 
-  parseAndStage(filename: string, intakeDir: string, emitFn: EmitFn): PendingEntry | null {
+  parseAndStage(filename: string, intakeDir: string, emitFn: EmitFn, fromRepo = false): PendingEntry | null {
     if (filename.endsWith('.draft.json')) return null
 
     const filePath = join(intakeDir, filename)
@@ -115,7 +134,8 @@ export class SprintWatcher {
     try {
       this.evictStalePending()
 
-      const projectId = filename.replace(/^sprint-/, '').replace(/\.json$/, '')
+      // T2: Extract projectId from both patterns
+      const projectId = extractProjectId(filename)
       let payload: SprintIntakePayload
       try {
         payload = JSON.parse(readFileSync(filePath, 'utf-8')) as SprintIntakePayload
@@ -134,7 +154,7 @@ export class SprintWatcher {
       }
 
       const pendingId = randomUUID()
-      const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now() }
+      const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now(), fromRepo }
       this.pending.set(pendingId, entry)
 
       const taskCount = payload.epics.reduce((n, e) => n + e.tasks.length, 0)
@@ -230,7 +250,10 @@ export class SprintWatcher {
       }
     })()
 
-    try { unlinkSync(filePath) } catch { /* file already gone */ }
+    // T4: Do not delete repo files after import
+    if (!entry.fromRepo) {
+      try { unlinkSync(filePath) } catch { /* file already gone */ }
+    }
     this.pending.delete(pendingId)
     emitFn(IPC_EVENTS.TASKS.UPDATED, null)
     log.info('SprintWatcher.confirm: sprint inserted', { pendingId, sprintName: payload.sprintName })
@@ -239,10 +262,29 @@ export class SprintWatcher {
   reject(pendingId: string): void {
     const entry = this.pending.get(pendingId)
     if (!entry) return
-    try { unlinkSync(entry.filePath) } catch { /* already gone */ }
+    // T4: Do not delete repo files on reject
+    if (!entry.fromRepo) {
+      try { unlinkSync(entry.filePath) } catch { /* already gone */ }
+    }
     this.pending.delete(pendingId)
     log.info('SprintWatcher.reject: sprint rejected', { pendingId })
   }
+}
+
+/** Match both sprint-*.json (userData) and *-sprint-intake.json (repo) patterns */
+function isIntakeFilename(filename: string): boolean {
+  if (filename.endsWith('.draft.json')) return false
+  if (/^sprint-.+\.json$/.test(filename)) return true
+  if (/-sprint-intake\.json$/.test(filename)) return true
+  return false
+}
+
+/** Extract projectId from both filename patterns */
+function extractProjectId(filename: string): string {
+  if (/-sprint-intake\.json$/.test(filename)) {
+    return filename.replace(/-sprint-intake\.json$/, '')
+  }
+  return filename.replace(/^sprint-/, '').replace(/\.json$/, '')
 }
 
 function validateSprintPayload(payload: SprintIntakePayload): string | null {

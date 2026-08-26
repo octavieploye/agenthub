@@ -374,3 +374,189 @@ describe('SprintWatcher.parseAndStage — Fix B: payload length caps', () => {
     expect(emitted).toHaveLength(0)
   })
 })
+
+// ── R10: Multi-dir watch + repo intake auto-scan ────────────────────────────
+describe('SprintWatcher.start — multi-dir', () => {
+  let repoSprintsDir: string
+
+  beforeEach(() => {
+    repoSprintsDir = join(tmpdir(), `sprint-watcher-repo-${Date.now()}`)
+    mkdirSync(repoSprintsDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(repoSprintsDir, { recursive: true, force: true })
+  })
+
+  it('accepts an array of directories and scans all on startup', () => {
+    // Place a sprint-*.json in userData dir
+    const payload1: SprintIntakePayload = {
+      sprintName: 'Sprint User',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'u1', title: 'User task', description: '', priority: 1 }] }]
+    }
+    writeFileSync(join(intakeDir, 'sprint-user.json'), JSON.stringify(payload1), 'utf-8')
+
+    // Place a *-sprint-intake.json in repo dir
+    const payload2: SprintIntakePayload = {
+      sprintName: 'Sprint Repo',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'r1t', title: 'Repo task', description: '', priority: 1 }] }]
+    }
+    writeFileSync(join(repoSprintsDir, 'codex-sprint-intake.json'), JSON.stringify(payload2), 'utf-8')
+
+    watcher.start([intakeDir, repoSprintsDir], mockEmit)
+
+    const pendingEmits = emitted.filter((e) => e.channel === 'on-kanban:sprint-pending')
+    expect(pendingEmits).toHaveLength(2)
+    const names = pendingEmits.map((e) => (e.payload as SprintPendingPayload).sprintName)
+    expect(names).toContain('Sprint User')
+    expect(names).toContain('Sprint Repo')
+  })
+
+  it('stop() closes all watchers without error', () => {
+    watcher.start([intakeDir, repoSprintsDir], mockEmit)
+    expect(() => watcher.stop()).not.toThrow()
+  })
+
+  it('still works with a single-dir string (backward compatible)', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Compat',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'c1', title: 'Compat task', description: '', priority: 1 }] }]
+    }
+    writeFileSync(join(intakeDir, 'sprint-compat.json'), JSON.stringify(payload), 'utf-8')
+
+    watcher.start(intakeDir, mockEmit)
+
+    const pendingEmits = emitted.filter((e) => e.channel === 'on-kanban:sprint-pending')
+    expect(pendingEmits).toHaveLength(1)
+  })
+})
+
+describe('SprintWatcher — *-sprint-intake.json pattern', () => {
+  it('parseAndStage handles *-sprint-intake.json filename', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Codex',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'cx1', title: 'Codex task', description: '', priority: 1 }] }]
+    }
+    const filename = 'codex-plugin-bridge-sprint-intake.json'
+    writeFileSync(join(intakeDir, filename), JSON.stringify(payload), 'utf-8')
+
+    const result = watcher.parseAndStage(filename, intakeDir, mockEmit)
+
+    expect(result).not.toBeNull()
+    expect(emitted).toHaveLength(1)
+    const p = emitted[0].payload as SprintPendingPayload
+    expect(p.sprintName).toBe('Sprint Codex')
+  })
+
+  it('extracts projectId from *-sprint-intake.json pattern', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Extract',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'e1', title: 'Extract task', description: '', priority: 1 }] }]
+    }
+    const filename = 'my-feature-sprint-intake.json'
+    writeFileSync(join(intakeDir, filename), JSON.stringify(payload), 'utf-8')
+
+    const result = watcher.parseAndStage(filename, intakeDir, mockEmit)
+
+    expect(result).not.toBeNull()
+    expect(result!.projectId).toBe('my-feature')
+  })
+})
+
+describe('SprintWatcher.startupScan — skip already-imported', () => {
+  it('skips sprint files that are already imported in the DB', () => {
+    // Insert a sprint that already exists
+    db.prepare("INSERT INTO tasks (id, repo_id, title, status, priority, sprint_name, created_at, updated_at) VALUES ('existing', 'r1', 'Old task', 'backlog', 1, 'Sprint Already', datetime('now'), datetime('now'))").run()
+
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Already',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'a1', title: 'Already task', description: '', priority: 1 }] }]
+    }
+    writeFileSync(join(intakeDir, 'sprint-already.json'), JSON.stringify(payload), 'utf-8')
+
+    watcher.startupScan(intakeDir, mockEmit, db)
+
+    const pendingEmits = emitted.filter((e) => e.channel === 'on-kanban:sprint-pending')
+    expect(pendingEmits).toHaveLength(0)
+  })
+
+  it('stages sprint files that are NOT already imported', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint New',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'n1', title: 'New task', description: '', priority: 1 }] }]
+    }
+    writeFileSync(join(intakeDir, 'sprint-new.json'), JSON.stringify(payload), 'utf-8')
+
+    watcher.startupScan(intakeDir, mockEmit, db)
+
+    const pendingEmits = emitted.filter((e) => e.channel === 'on-kanban:sprint-pending')
+    expect(pendingEmits).toHaveLength(1)
+  })
+})
+
+describe('SprintWatcher.confirm — fromRepo flag', () => {
+  it('does NOT delete file when fromRepo is true', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Repo Keep',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'rk1', title: 'Keep task', description: '', priority: 1 }] }]
+    }
+    const filename = 'codex-sprint-intake.json'
+    const filePath = join(intakeDir, filename)
+    writeFileSync(filePath, JSON.stringify(payload), 'utf-8')
+
+    const result = watcher.parseAndStage(filename, intakeDir, mockEmit, true)
+    expect(result).not.toBeNull()
+
+    const pendingId = (emitted[0].payload as SprintPendingPayload).pendingId
+    watcher.confirm(db, pendingId, mockEmit)
+
+    // File should still exist because it came from repo
+    expect(existsSync(filePath)).toBe(true)
+    // But tasks should be inserted
+    const tasks = db.prepare('SELECT * FROM tasks').all()
+    expect(tasks).toHaveLength(1)
+  })
+
+  it('still deletes file when fromRepo is false (default)', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Delete',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'd1', title: 'Delete task', description: '', priority: 1 }] }]
+    }
+    const filename = 'sprint-delete.json'
+    const filePath = join(intakeDir, filename)
+    writeFileSync(filePath, JSON.stringify(payload), 'utf-8')
+
+    watcher.parseAndStage(filename, intakeDir, mockEmit)
+    const pendingId = (emitted[0].payload as SprintPendingPayload).pendingId
+    watcher.confirm(db, pendingId, mockEmit)
+
+    expect(existsSync(filePath)).toBe(false)
+  })
+
+  it('does NOT delete file on reject when fromRepo is true', () => {
+    const payload: SprintIntakePayload = {
+      sprintName: 'Sprint Repo Reject',
+      repoId: 'r1',
+      epics: [{ name: 'E', tasks: [{ localId: 'rr1', title: 'Reject task', description: '', priority: 1 }] }]
+    }
+    const filename = 'reject-sprint-intake.json'
+    const filePath = join(intakeDir, filename)
+    writeFileSync(filePath, JSON.stringify(payload), 'utf-8')
+
+    watcher.parseAndStage(filename, intakeDir, mockEmit, true)
+    const pendingId = (emitted[0].payload as SprintPendingPayload).pendingId
+    watcher.reject(pendingId)
+
+    expect(existsSync(filePath)).toBe(true)
+    expect(db.prepare('SELECT * FROM tasks').all()).toHaveLength(0)
+  })
+})
