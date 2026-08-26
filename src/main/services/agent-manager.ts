@@ -934,6 +934,13 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ? ` --append-system-prompt-file '${agenthubClaudeMdPath}'`
     : ''
 
+  // S47: When CWD differs from agenthub, inject cross-repo context so agents know
+  // where to find skills, team configs, and workflow manifests (they live in agenthub).
+  const crossRepoContextPath = join(pluginDir, 'cross-repo-context.md')
+  const appendCrossRepoFlag = !isWorkingInAgenthub && existsSync(crossRepoContextPath)
+    ? ` --append-system-prompt-file '${crossRepoContextPath}'`
+    : ''
+
   // All Ollama models (local + cloud) MUST use `ollama launch claude` which wires
   // env vars and model routing internally. Claude CLI rejects unknown model names,
   // so the env-var-only approach does NOT work.
@@ -981,17 +988,17 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       // S24: log metadata only — never log full cmd string (reveals plugin paths + task content)
-      log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
+      log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasCrossRepo: !!appendCrossRepoFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}\n`
       ptyProcess.write(cmd)
       // S24: log metadata only
-      log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag })
+      log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasCrossRepo: !!appendCrossRepoFlag })
     }, 500)
   }
 
