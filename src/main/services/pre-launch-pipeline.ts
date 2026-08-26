@@ -11,6 +11,8 @@ export interface PipelineInput {
   quotaLimit: number
   burnRate: number
   ollamaAvailable: boolean
+  codexAvailable?: boolean
+  codexQuotaPercent?: number
 }
 
 export interface PipelineResult {
@@ -47,7 +49,11 @@ export function runPipeline(input: PipelineInput): PipelineResult {
 
   const complexity = assessComplexity(input.taskDescription)
   const triageLevel = assignTriage(complexity, input.quotaPercent)
-  const rec = recommend(input.quotaPercent, input.taskDescription, input.ollamaAvailable)
+  const rec = recommend(input.quotaPercent, input.taskDescription, {
+    ollamaAvailable: input.ollamaAvailable,
+    codexAvailable: input.codexAvailable ?? false,
+    codexQuotaPercent: input.codexQuotaPercent ?? 0
+  })
   const estimatedImpact = IMPACT_MAP[complexity]
 
   const durationMs = performance.now() - start

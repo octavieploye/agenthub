@@ -27,6 +27,7 @@ interface PreLaunchCardProps {
   onLaunch: (task: string) => void
   onChangeModel: () => void
   onCancel: () => void
+  onRefreshQuota?: () => Promise<void>
 }
 
 function PreLaunchCard({
@@ -43,11 +44,26 @@ function PreLaunchCard({
   guardrails,
   onLaunch,
   onChangeModel,
-  onCancel
+  onCancel,
+  onRefreshQuota
 }: PreLaunchCardProps): React.JSX.Element {
   const [task, setTask] = useState(initialTask ?? '')
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshCooldown, setRefreshCooldown] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const taskInputRef = useRef<HTMLInputElement>(null)
+
+  const handleRefreshQuota = useCallback(async () => {
+    if (!onRefreshQuota || refreshing || refreshCooldown) return
+    setRefreshing(true)
+    try {
+      await onRefreshQuota()
+    } finally {
+      setRefreshing(false)
+      setRefreshCooldown(true)
+      setTimeout(() => setRefreshCooldown(false), 60_000)
+    }
+  }, [onRefreshQuota, refreshing, refreshCooldown])
 
   const handleLaunch = useCallback(() => {
     if (task.trim()) onLaunch(task)
@@ -112,11 +128,24 @@ function PreLaunchCard({
         </div>
 
         <div className="flex flex-col gap-1 text-sm">
-          <div>
-            <span className="text-base-content/50">Quota: </span>
-            <span>
-              {quotaUsed}/{quotaLimit} messages ({quotaPercent}%)
-            </span>
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-base-content/50">Quota: </span>
+              <span>
+                {quotaUsed}/{quotaLimit} messages ({quotaPercent}%)
+              </span>
+            </div>
+            {onRefreshQuota && (
+              <button
+                data-testid="pre-launch-btn-refresh-quota"
+                onClick={handleRefreshQuota}
+                disabled={refreshing || refreshCooldown}
+                className="btn btn-xs btn-ghost text-base-content/50"
+                title={refreshCooldown ? 'Cooldown active (60s)' : 'Refresh quota data'}
+              >
+                {refreshing ? '⟳' : '↻'}
+              </button>
+            )}
           </div>
           <div>
             <span className="text-base-content/50">Burn rate: </span>

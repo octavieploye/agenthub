@@ -27,6 +27,7 @@ interface UsageStoreActions {
   resetUsage: () => void
   setPlan: (plan: SubscriptionPlan) => void
   fetchUsage: () => Promise<void>
+  refreshAll: () => Promise<void>
 }
 
 type UsageStore = UsageStoreData & UsageStoreActions
@@ -96,6 +97,16 @@ export const useUsageStore = create<UsageStore>((set) => ({
       }
     } catch {
       // non-critical — usage display stays stale
+    }
+  },
+
+  refreshAll: async () => {
+    try {
+      await window.agentHub.usage.refresh()
+      // After triggering refresh, fetch the latest snapshot
+      await useUsageStore.getState().fetchUsage()
+    } catch {
+      // non-critical — refresh failed silently
     }
   }
 }))

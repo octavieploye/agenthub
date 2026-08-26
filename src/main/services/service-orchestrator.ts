@@ -32,6 +32,9 @@ import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
 import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
+import { OrchestratorMonitorService } from './orchestrator-monitor'
+import { isOrchestratorEnabled } from './orchestrator-settings'
+import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput } from './agent-manager'
@@ -67,6 +70,8 @@ let telegramSocketServer: TelegramSocketServer | null = null
 let telegramQueueProcessor: TelegramQueueProcessor | null = null
 let kanbanOrchestrator: KanbanOrchestratorService | null = null
 let dateWatcher: DateWatcherService | null = null
+let orchestratorMonitor: OrchestratorMonitorService | null = null
+let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -309,6 +314,14 @@ export function initializeServices(db: Database.Database): void {
     }
   })
 
+  // 10b. QuotaScrapeScheduler — periodic quota scraping (1st + 15th of month)
+  quotaScrapeScheduler = new QuotaScrapeScheduler(
+    settingsService,
+    async () => {
+      log.info('[quota-scheduler] Scrape callback triggered — scrapers not yet wired')
+    }
+  )
+
   // 11. VoiceService — speech-to-text sidecar manager, no deps
   voiceService = new VoiceService({
     logInfo: (message: string, meta?: Record<string, unknown>) => {
@@ -491,6 +504,15 @@ export function initializeServices(db: Database.Database): void {
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 
+  // S6: OrchestratorMonitorService — rules-based safety net (no LLM)
+  orchestratorMonitor = new OrchestratorMonitorService(db, {
+    pause: (runId) => kanbanOrchestrator!.pause(runId),
+    sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
+    // Per-run token attribution is deferred (claude-monitor is global, not per-run).
+    // The token cap is inert until a per-run counter is built (S5 follow-up).
+    getRunTokenUsage: () => 0,
+  })
+
   // Task 4.19: DateWatcherService — polls for date-triggered tasks
   const dateWatcherDeps: DateWatcherDeps = {
     startOrchestratorRun: (input) => kanbanOrchestrator!.start(input),
@@ -498,8 +520,10 @@ export function initializeServices(db: Database.Database): void {
     onEventInserted: orchestratorDeps.onEventInserted,
     getOllamaBaseUrl: () => 'http://localhost:11434',
   }
-  // NEUTRALISED: DateWatcher disabled until orchestrator safeguards are implemented
-  // dateWatcher = new DateWatcherService(db, dateWatcherDeps)
+  // S3: DateWatcher is flag-gated — only constructed when the orchestrator kill-switch is on
+  if (isOrchestratorEnabled(db)) {
+    dateWatcher = new DateWatcherService(db, dateWatcherDeps)
+  }
 
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
@@ -512,6 +536,8 @@ export function startServices(): void {
   healthMonitor?.startWatchdog()
   autoPauseService?.startReminderTimer()
   dateWatcher?.start()
+  orchestratorMonitor?.start()
+  quotaScrapeScheduler?.start()
   log.info('All periodic services started')
 }
 
@@ -528,6 +554,10 @@ export function stopServices(): void {
   sprintWatcher?.stop()
   dateWatcher?.stop()
   dateWatcher = null
+  orchestratorMonitor?.stop()
+  orchestratorMonitor = null
+  quotaScrapeScheduler?.stop()
+  quotaScrapeScheduler = null
   telegramQueueProcessor?.stop()
   telegramQueueProcessor = null
   telegramSocketServer?.stop()

@@ -145,6 +145,56 @@ describe('Pre-Launch Pipeline', () => {
     })
   })
 
+  // ─── multi-provider (Codex fallback) ─────────────────────────────
+
+  describe('multi-provider input', () => {
+    it('hot zone + Codex available → recommends Codex for simple task', () => {
+      const input = createInput({
+        quotaPercent: 90,
+        taskDescription: 'Fix a typo',
+        ollamaAvailable: false,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      const result = runPipeline(input)
+      expect(result.recommendation.provider).toBe('openai-codex')
+    })
+
+    it('healthy zone + Codex available → still prefers Claude', () => {
+      const input = createInput({
+        quotaPercent: 30,
+        taskDescription: 'Fix a typo',
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      const result = runPipeline(input)
+      expect(result.recommendation.provider).toBe('anthropic')
+    })
+
+    it('hot zone + Codex hot → falls through to Ollama', () => {
+      const input = createInput({
+        quotaPercent: 90,
+        taskDescription: 'Fix a typo',
+        ollamaAvailable: true,
+        codexAvailable: true,
+        codexQuotaPercent: 85
+      })
+      const result = runPipeline(input)
+      expect(result.recommendation.provider).toBe('ollama-local')
+    })
+
+    it('backward compatible — omitted codex fields default to false/0', () => {
+      const input = createInput({
+        quotaPercent: 90,
+        taskDescription: 'Fix a typo',
+        ollamaAvailable: true
+      })
+      const result = runPipeline(input)
+      // Without codexAvailable, should fall through to Ollama (not Codex)
+      expect(result.recommendation.provider).toBe('ollama-local')
+    })
+  })
+
   // ─── performance ──────────────────────────────────────────────────
 
   describe('performance', () => {

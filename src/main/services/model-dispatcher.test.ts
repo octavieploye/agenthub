@@ -7,10 +7,12 @@ import {
   CLOUD_MODEL_CATALOG,
   recommendForPhase,
   checkOllamaCloudHealth,
+  getUnifiedQuota,
   type TaskComplexity,
   type QuotaZone,
   type ModelRecommendation,
-  type SpawnEnv
+  type SpawnEnv,
+  type ProviderQuotaState
 } from './model-dispatcher'
 
 vi.mock('electron-log/main', () => ({
@@ -253,6 +255,33 @@ describe('Model Dispatcher', () => {
       const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-6', 'anthropic')
       expect(result.ANTHROPIC_API_KEY).toBeUndefined()
     })
+
+    // ── openai-codex provider ──
+
+    it('returns empty modelFlag for openai-codex with no model', () => {
+      const result: SpawnEnv = buildSpawnEnv('', 'openai-codex')
+      expect(result.modelFlag).toBe('')
+    })
+
+    it('returns model as modelFlag for openai-codex with a model', () => {
+      const result: SpawnEnv = buildSpawnEnv('o3-mini', 'openai-codex')
+      expect(result.modelFlag).toBe('o3-mini')
+    })
+
+    it('does not set ANTHROPIC_BASE_URL for openai-codex', () => {
+      const result: SpawnEnv = buildSpawnEnv('', 'openai-codex')
+      expect(result.ANTHROPIC_BASE_URL).toBeUndefined()
+    })
+
+    it('does not set ANTHROPIC_AUTH_TOKEN for openai-codex', () => {
+      const result: SpawnEnv = buildSpawnEnv('', 'openai-codex')
+      expect(result.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    })
+
+    it('does not set ANTHROPIC_API_KEY for openai-codex', () => {
+      const result: SpawnEnv = buildSpawnEnv('', 'openai-codex')
+      expect(result.ANTHROPIC_API_KEY).toBeUndefined()
+    })
   })
 
   // ─── CLOUD_MODEL_CATALOG ───────────────────────────────────────────
@@ -330,6 +359,185 @@ describe('Model Dispatcher', () => {
       const result: ModelRecommendation = recommendForPhase('push', 'push to remote', true)
       expect(result.model).toBe('')
       expect(result.rationale).toContain('GitService directly')
+    })
+  })
+
+  // ─── recommend with RecommendOptions (Codex fallback) ────────────
+
+  describe('recommend with RecommendOptions', () => {
+    it('Claude hot + Codex healthy → suggests Codex', () => {
+      const result = recommend(90, 'fix a typo', {
+        ollamaAvailable: false,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      expect(result.provider).toBe('openai-codex')
+      expect(result.model).toBe('o3-mini')
+    })
+
+    it('Claude hot + Codex hot → falls through to Ollama for simple task', () => {
+      const result = recommend(90, 'fix a typo', {
+        ollamaAvailable: true,
+        codexAvailable: true,
+        codexQuotaPercent: 85
+      })
+      expect(result.provider).toBe('ollama-local')
+    })
+
+    it('Claude hot + Codex hot + no Ollama → falls back to Claude', () => {
+      const result = recommend(90, 'fix a typo', {
+        ollamaAvailable: false,
+        codexAvailable: true,
+        codexQuotaPercent: 85
+      })
+      expect(result.provider).toBe('anthropic')
+      expect(result.warnings.length).toBeGreaterThan(0)
+    })
+
+    it('all healthy → prefers Claude', () => {
+      const result = recommend(30, 'implement a feature', {
+        ollamaAvailable: true,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      expect(result.provider).toBe('anthropic')
+    })
+
+    it('moderate zone + Codex healthy → lists Codex as alternative', () => {
+      const result = recommend(70, 'implement a feature', {
+        ollamaAvailable: false,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      expect(result.provider).toBe('anthropic')
+      expect(result.alternatives).toContain('o3-mini')
+    })
+
+    it('moderate zone + Codex hot → does not list Codex as alternative', () => {
+      const result = recommend(70, 'implement a feature', {
+        ollamaAvailable: false,
+        codexAvailable: true,
+        codexQuotaPercent: 85
+      })
+      expect(result.provider).toBe('anthropic')
+      expect(result.alternatives).not.toContain('o3-mini')
+    })
+
+    it('backward compatible — boolean true still works', () => {
+      const result = recommend(90, 'fix a typo', true)
+      expect(result.provider).toBe('ollama-local')
+    })
+
+    it('backward compatible — boolean false still works', () => {
+      const result = recommend(90, 'fix a typo', false)
+      expect(result.provider).toBe('anthropic')
+    })
+
+    it('hot zone + Codex available → Codex alternatives include Ollama when available', () => {
+      const result = recommend(90, 'fix a typo', {
+        ollamaAvailable: true,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      expect(result.provider).toBe('openai-codex')
+      expect(result.alternatives).toContain('llama3')
+    })
+
+    it('complex task in hot zone + Codex healthy → uses Codex (preserves Claude quota)', () => {
+      const result = recommend(90, 'refactor the auth system', {
+        ollamaAvailable: true,
+        codexAvailable: true,
+        codexQuotaPercent: 20
+      })
+      expect(result.provider).toBe('openai-codex')
+      expect(result.model).toBe('o3-mini')
+    })
+
+    it('complex task in hot zone + no Codex + Ollama → falls to Claude (Ollama skips complex)', () => {
+      const result = recommend(90, 'refactor the auth system', {
+        ollamaAvailable: true,
+        codexAvailable: false,
+        codexQuotaPercent: 0
+      })
+      expect(result.provider).toBe('anthropic')
+      expect(result.model).toContain('opus')
+    })
+  })
+
+  // ─── getUnifiedQuota ──────────────────────────────────────────────
+
+  describe('getUnifiedQuota', () => {
+    it('always includes anthropic provider', () => {
+      const states: ProviderQuotaState[] = getUnifiedQuota({})
+      expect(states.length).toBe(1)
+      expect(states[0].provider).toBe('anthropic')
+      expect(states[0].quotaPercent).toBe(0)
+      expect(states[0].zone).toBe('healthy')
+      expect(states[0].available).toBe(true)
+    })
+
+    it('includes claude quota when provided', () => {
+      const states = getUnifiedQuota({
+        claude: { quotaPercent: 75, lastUpdated: '2026-08-26T12:00:00Z' }
+      })
+      expect(states[0].quotaPercent).toBe(75)
+      expect(states[0].zone).toBe('moderate')
+      expect(states[0].lastUpdated).toBe('2026-08-26T12:00:00Z')
+    })
+
+    it('includes codex when provided', () => {
+      const states = getUnifiedQuota({
+        codex: { quotaPercent: 40, available: true, lastUpdated: '2026-08-26T10:00:00Z' }
+      })
+      const codex = states.find(s => s.provider === 'openai-codex')
+      expect(codex).toBeDefined()
+      expect(codex!.quotaPercent).toBe(40)
+      expect(codex!.zone).toBe('healthy')
+      expect(codex!.available).toBe(true)
+    })
+
+    it('includes ollama-cloud when provided', () => {
+      const states = getUnifiedQuota({
+        ollamaCloud: { quotaPercent: 85, available: true }
+      })
+      const cloud = states.find(s => s.provider === 'ollama-cloud')
+      expect(cloud).toBeDefined()
+      expect(cloud!.zone).toBe('hot')
+    })
+
+    it('includes ollama-local with zero quota and healthy zone', () => {
+      const states = getUnifiedQuota({
+        ollamaLocal: { available: true }
+      })
+      const local = states.find(s => s.provider === 'ollama-local')
+      expect(local).toBeDefined()
+      expect(local!.quotaPercent).toBe(0)
+      expect(local!.zone).toBe('healthy')
+      expect(local!.available).toBe(true)
+      expect(local!.lastUpdated).toBeNull()
+    })
+
+    it('merges all four providers', () => {
+      const states = getUnifiedQuota({
+        claude: { quotaPercent: 50 },
+        codex: { quotaPercent: 30, available: true },
+        ollamaCloud: { quotaPercent: 60, available: true },
+        ollamaLocal: { available: false }
+      })
+      expect(states).toHaveLength(4)
+      const providers = states.map(s => s.provider)
+      expect(providers).toContain('anthropic')
+      expect(providers).toContain('openai-codex')
+      expect(providers).toContain('ollama-cloud')
+      expect(providers).toContain('ollama-local')
+    })
+
+    it('unavailable codex is tracked', () => {
+      const states = getUnifiedQuota({
+        codex: { quotaPercent: 0, available: false }
+      })
+      const codex = states.find(s => s.provider === 'openai-codex')
+      expect(codex!.available).toBe(false)
     })
   })
 

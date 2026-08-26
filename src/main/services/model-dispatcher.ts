@@ -4,6 +4,14 @@ import type { ModelProvider } from '@shared/types/agent.types'
 export type TaskComplexity = 'simple' | 'moderate' | 'complex'
 export type QuotaZone = 'healthy' | 'moderate' | 'hot'
 
+export interface ProviderQuotaState {
+  provider: ModelProvider
+  zone: QuotaZone
+  quotaPercent: number
+  available: boolean
+  lastUpdated: string | null
+}
+
 export interface ModelRecommendation {
   model: string
   provider: ModelProvider
@@ -47,15 +55,36 @@ export function assessComplexity(taskDescription: string): TaskComplexity {
   return 'moderate'
 }
 
+export interface RecommendOptions {
+  ollamaAvailable?: boolean
+  codexAvailable?: boolean
+  codexQuotaPercent?: number
+}
+
+const CODEX_DEFAULT = 'o3-mini'
+
 export function recommend(
   quotaPercent: number,
   taskDescription: string,
-  ollamaAvailable?: boolean
+  ollamaAvailableOrOpts?: boolean | RecommendOptions
 ): ModelRecommendation {
+  // Backward-compatible: accept boolean or options object
+  let ollamaAvailable = false
+  let codexAvailable = false
+  let codexQuotaPercent = 0
+  if (typeof ollamaAvailableOrOpts === 'boolean') {
+    ollamaAvailable = ollamaAvailableOrOpts
+  } else if (ollamaAvailableOrOpts) {
+    ollamaAvailable = ollamaAvailableOrOpts.ollamaAvailable ?? false
+    codexAvailable = ollamaAvailableOrOpts.codexAvailable ?? false
+    codexQuotaPercent = ollamaAvailableOrOpts.codexQuotaPercent ?? 0
+  }
+
   const zone = getQuotaZone(quotaPercent)
+  const codexZone = getQuotaZone(codexQuotaPercent)
   const complexity = assessComplexity(taskDescription)
 
-  log.debug(`Model dispatch: zone=${zone}, complexity=${complexity}, ollama=${ollamaAvailable}`)
+  log.debug(`Model dispatch: zone=${zone}, complexity=${complexity}, ollama=${ollamaAvailable}, codex=${codexAvailable}`)
 
   if (zone === 'healthy') {
     return {
@@ -71,17 +100,29 @@ export function recommend(
   }
 
   if (zone === 'moderate') {
-    const alternatives = ollamaAvailable ? [OLLAMA_DEFAULT] : []
+    const alternatives: string[] = []
+    if (codexAvailable && codexZone !== 'hot') alternatives.push(CODEX_DEFAULT)
+    if (ollamaAvailable) alternatives.push(OLLAMA_DEFAULT)
     return {
       model: complexity === 'complex' ? CLAUDE_OPUS : CLAUDE_SONNET,
       provider: 'anthropic',
-      rationale: 'Claude recommended — consider Ollama for simpler follow-up tasks',
+      rationale: 'Claude recommended — consider alternatives for simpler follow-up tasks',
       alternatives,
       warnings: []
     }
   }
 
-  // Hot zone
+  // Hot zone — cascade: try Codex first, then Ollama, then Claude
+  if (codexAvailable && codexZone !== 'hot') {
+    return {
+      model: CODEX_DEFAULT,
+      provider: 'openai-codex',
+      rationale: 'Claude quota is hot — using Codex CLI as fallback',
+      alternatives: ollamaAvailable ? [OLLAMA_DEFAULT, CLAUDE_SONNET] : [CLAUDE_SONNET],
+      warnings: []
+    }
+  }
+
   if (complexity !== 'complex' && ollamaAvailable) {
     return {
       model: OLLAMA_DEFAULT,
@@ -103,10 +144,64 @@ export function recommend(
     rationale:
       complexity === 'complex'
         ? 'Complex task requires Claude despite high quota'
-        : 'Ollama unavailable — using Claude',
+        : 'No fallback providers available — using Claude',
     alternatives: ollamaAvailable ? [OLLAMA_DEFAULT] : [],
     warnings
   }
+}
+
+/**
+ * Builds unified quota state across all providers.
+ * Merges Layer 1 (parser events), Layer 2 (session files), Layer 3 (dashboard scrapes).
+ */
+export function getUnifiedQuota(sources: {
+  claude?: { quotaPercent: number; lastUpdated?: string }
+  codex?: { quotaPercent: number; available: boolean; lastUpdated?: string }
+  ollamaCloud?: { quotaPercent: number; available: boolean; lastUpdated?: string }
+  ollamaLocal?: { available: boolean }
+}): ProviderQuotaState[] {
+  const states: ProviderQuotaState[] = []
+
+  const claudePercent = sources.claude?.quotaPercent ?? 0
+  states.push({
+    provider: 'anthropic',
+    zone: getQuotaZone(claudePercent),
+    quotaPercent: claudePercent,
+    available: true,
+    lastUpdated: sources.claude?.lastUpdated ?? null
+  })
+
+  if (sources.codex) {
+    states.push({
+      provider: 'openai-codex',
+      zone: getQuotaZone(sources.codex.quotaPercent),
+      quotaPercent: sources.codex.quotaPercent,
+      available: sources.codex.available,
+      lastUpdated: sources.codex.lastUpdated ?? null
+    })
+  }
+
+  if (sources.ollamaCloud) {
+    states.push({
+      provider: 'ollama-cloud',
+      zone: getQuotaZone(sources.ollamaCloud.quotaPercent),
+      quotaPercent: sources.ollamaCloud.quotaPercent,
+      available: sources.ollamaCloud.available,
+      lastUpdated: sources.ollamaCloud.lastUpdated ?? null
+    })
+  }
+
+  if (sources.ollamaLocal) {
+    states.push({
+      provider: 'ollama-local',
+      zone: 'healthy' as QuotaZone,
+      quotaPercent: 0,
+      available: sources.ollamaLocal.available,
+      lastUpdated: null
+    })
+  }
+
+  return states
 }
 
 export function buildSpawnEnv(

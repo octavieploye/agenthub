@@ -232,6 +232,37 @@ describe('PreLaunchCard', () => {
     })
   })
 
+  describe('refresh quota button', () => {
+    it('renders refresh button when onRefreshQuota provided', () => {
+      const onRefreshQuota = vi.fn().mockResolvedValue(undefined)
+      render(<PreLaunchCard {...defaultProps} onRefreshQuota={onRefreshQuota} />)
+      expect(screen.getByTestId('pre-launch-btn-refresh-quota')).toBeInTheDocument()
+    })
+
+    it('does NOT render refresh button when onRefreshQuota omitted', () => {
+      render(<PreLaunchCard {...defaultProps} />)
+      expect(screen.queryByTestId('pre-launch-btn-refresh-quota')).not.toBeInTheDocument()
+    })
+
+    it('calls onRefreshQuota when clicked', async () => {
+      const onRefreshQuota = vi.fn().mockResolvedValue(undefined)
+      render(<PreLaunchCard {...defaultProps} onRefreshQuota={onRefreshQuota} />)
+      fireEvent.click(screen.getByTestId('pre-launch-btn-refresh-quota'))
+      expect(onRefreshQuota).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables button during refresh (cooldown)', async () => {
+      let resolve: () => void
+      const onRefreshQuota = vi.fn(() => new Promise<void>((r) => { resolve = r }))
+      render(<PreLaunchCard {...defaultProps} onRefreshQuota={onRefreshQuota} />)
+      const btn = screen.getByTestId('pre-launch-btn-refresh-quota')
+      fireEvent.click(btn)
+      // While refreshing, button should be disabled
+      expect(btn).toBeDisabled()
+      resolve!()
+    })
+  })
+
   describe('styling', () => {
     it('Launch button has btn-lcars btn-primary classes', () => {
       render(<PreLaunchCard {...defaultProps} />)
