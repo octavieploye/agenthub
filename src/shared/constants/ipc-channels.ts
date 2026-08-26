@@ -17,7 +17,8 @@ export const IPC_CHANNELS = {
     GET_PROXY_PATH: 'agents:get-proxy-path',
     RESPAWN: 'agents:respawn',
     UPDATE_VOICE_MODE: 'agents:update-voice-mode',
-    UPDATE_TELEGRAM_NOTIFY: 'agents:update-telegram-notify'
+    UPDATE_TELEGRAM_NOTIFY: 'agents:update-telegram-notify',
+    FALLBACK_RESPAWN: 'agents:fallback-respawn'
   },
   MODELS: {
     LIST_ALL: 'models:list-all',
@@ -247,7 +248,8 @@ export const IPC_EVENTS = {
     EXIT: 'on-agents:exit',
     SPAWNED: 'on-agents:spawned',
     ERROR_DETAIL: 'on-agents:error-detail',
-    SKILL_INJECT_SKIPPED: 'on-agents:skill-inject-skipped'
+    SKILL_INJECT_SKIPPED: 'on-agents:skill-inject-skipped',
+    RATE_LIMITED: 'on-agents:rate-limited'
   },
   NOTIFICATIONS: {
     TRIAGED: 'on-agents:triaged'

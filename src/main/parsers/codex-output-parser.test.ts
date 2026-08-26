@@ -121,6 +121,38 @@ describe('CodexCliOutputParser', () => {
     })
   })
 
+  describe('rate_limited detection', () => {
+    it('detects "Usage limit exceeded" as rate_limited', () => {
+      const result = parser.parse('Usage limit exceeded for this model')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "Pro plan limit" as rate_limited', () => {
+      const result = parser.parse('Pro plan limit reached. Try again later.')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "too many requests" as rate_limited', () => {
+      const result = parser.parse('Error: too many requests')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "rate limit" as rate_limited', () => {
+      const result = parser.parse('rate limit hit, please wait')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects HTTP 429 as rate_limited', () => {
+      const result = parser.parse('HTTP 429')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('does NOT false-positive on normal code output', () => {
+      const result = parser.parse('console.log("processing items")')
+      expect(result).toBeNull()
+    })
+  })
+
   describe('parser interface', () => {
     it('returns correct parser name', () => {
       expect(parser.getParserName()).toBe('codex-cli-v1')

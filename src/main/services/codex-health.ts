@@ -3,14 +3,11 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import type { CodexHealthStatus } from '../../shared/types/codex-health.types'
 
 const execFileAsync = promisify(execFile)
 
-export interface CodexHealthStatus {
-  installed: boolean
-  authenticated: boolean
-  version?: string
-}
+export type { CodexHealthStatus }
 
 export async function checkCodexHealth(): Promise<CodexHealthStatus> {
   // Check 1: is `codex` binary on PATH?

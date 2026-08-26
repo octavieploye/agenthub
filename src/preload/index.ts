@@ -11,6 +11,7 @@ const agentHubBridge = {
     resume: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESUME, agentId),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.LIST),
     respawn: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.RESPAWN, agentId),
+    fallbackRespawn: (agentId: string, provider: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.FALLBACK_RESPAWN, agentId, provider),
     getState: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS.GET_STATE, agentId),
     sendInput: (agentId: string, data: string) => {
       ipcRenderer.send(IPC_CHANNELS.AGENTS.SEND_INPUT, agentId, data)
@@ -444,6 +445,15 @@ const agentHubBridge = {
       ): void => callback(agentId)
       ipcRenderer.on(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, handler)
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, handler) }
+    },
+    agentRateLimited: (callback: (agentId: string, detail: { provider: string; codexAvailable: boolean }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        agentId: string,
+        detail: { provider: string; codexAvailable: boolean }
+      ): void => callback(agentId, detail)
+      ipcRenderer.on(IPC_EVENTS.AGENTS.RATE_LIMITED, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.AGENTS.RATE_LIMITED, handler) }
     }
   }
 }

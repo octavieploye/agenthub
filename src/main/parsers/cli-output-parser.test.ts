@@ -386,6 +386,44 @@ describe('ClaudeCliOutputParser', () => {
     })
   })
 
+  describe('rate_limited detection', () => {
+    it('detects "You\'ve hit your rate limit" as rate_limited', () => {
+      const result = parser.parse("You've hit your rate limit")
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "You\'ve hit your limit · resets 7:40pm" as rate_limited', () => {
+      const result = parser.parse("You've hit your limit · resets 7:40pm (Europe/Paris)")
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "HTTP 429" as rate_limited', () => {
+      const result = parser.parse('Error: HTTP 429 Too Many Requests')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "too many requests" as rate_limited', () => {
+      const result = parser.parse('too many requests, please slow down')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('detects "rate limit exceeded" as rate_limited', () => {
+      const result = parser.parse('rate limit exceeded for this model')
+      expect(result).toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+    })
+
+    it('does NOT false-positive on code containing "429" in non-HTTP context', () => {
+      // "429" alone in code output without surrounding HTTP context
+      const result = parser.parse('const port = 4290')
+      expect(result).toBeNull()
+    })
+
+    it('does NOT false-positive on "limited" in normal prose', () => {
+      const result = parser.parse('The feature set is limited to premium users')
+      expect(result).toBeNull()
+    })
+  })
+
   describe('parser interface', () => {
     it('returns parser name', () => {
       expect(parser.getParserName()).toBe('claude-cli-v1')

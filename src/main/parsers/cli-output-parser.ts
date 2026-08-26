@@ -50,6 +50,15 @@ const PATTERNS = {
     /session ended/i,
     /Done!/                                // Claude CLI v2.x completion message
   ],
+  rate_limited: [
+    /rate.?limit/i,                          // "rate limit", "rate-limit", "rate_limit"
+    /too many requests/i,
+    /\b429\b/,                               // HTTP 429
+    /capacity/i,
+    /usage.*limit.*exceeded/i,
+    /You['']ve hit your (?:rate )?limit/i,
+    /resets?\s+\d/i,                         // "resets 7:40pm" — Claude rate-limit reset message
+  ],
   busy: [
     /⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏/,          // Braille spinners (older CLIs)
     /[✻✳✢✺✶✽⏺]/,                         // Claude CLI v2.x decorative spinners (not · alone)
@@ -101,6 +110,14 @@ export class ClaudeCliOutputParser implements CliOutputParser {
         this.buffer = ''
         this.statusTransitions = [] // Approval flow is not looping
         return { status: 'awaiting_approval', confidence: 'inferred' }
+      }
+    }
+
+    // Check for rate-limit — second priority after approval
+    for (const pattern of PATTERNS.rate_limited) {
+      if (pattern.test(recentOutput)) {
+        this.buffer = ''
+        return { status: 'rate_limited', confidence: 'confirmed' }
       }
     }
 

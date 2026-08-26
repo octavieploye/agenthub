@@ -115,6 +115,24 @@ export function registerAgentHandlers(): void {
   )
 
   ipcMain.handle(
+    IPC_CHANNELS.AGENTS.FALLBACK_RESPAWN,
+    async (_event, agentId: unknown, provider: unknown): Promise<IpcResponse<AgentState>> => {
+      try {
+        const idValidation = validateInput(z.string(), agentId)
+        if (!idValidation.valid) return idValidation.response
+        const providerValidation = validateInput(
+          z.enum(['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex']),
+          provider
+        )
+        if (!providerValidation.valid) return providerValidation.response
+        return success(respawnAgent(idValidation.data, { providerOverride: providerValidation.data }))
+      } catch (err) {
+        return error('FALLBACK_RESPAWN_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
     IPC_CHANNELS.AGENTS.GET_STATE,
     async (_event, agentId: unknown): Promise<IpcResponse<AgentState | null>> => {
       try {

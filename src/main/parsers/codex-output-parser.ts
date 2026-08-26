@@ -23,6 +23,14 @@ const CODEX_PATTERNS = {
     /all done/i,
     /session ended/i,
   ],
+  rate_limited: [
+    /rate.?limit/i,
+    /too many requests/i,
+    /\b429\b/,
+    /usage.*limit.*exceeded/i,
+    /Pro plan limit/i,
+    /You['']ve hit your (?:rate )?limit/i,
+  ],
   busy: [
     /\u28CB|\u28D9|\u28F9|\u28F8|\u28FC|\u28F4|\u28E6|\u28E7|\u28C7|\u28CF/,  // braille spinners
     /Thinking\.\.\./i,
@@ -65,6 +73,14 @@ export class CodexCliOutputParser implements CliOutputParser {
         this.buffer = ''
         this.statusTransitions = []
         return { status: 'awaiting_approval', confidence: 'inferred' }
+      }
+    }
+
+    // Check for rate-limit — second priority after approval
+    for (const pattern of CODEX_PATTERNS.rate_limited) {
+      if (pattern.test(recentOutput)) {
+        this.buffer = ''
+        return { status: 'rate_limited', confidence: 'confirmed' }
       }
     }
 

@@ -51,6 +51,7 @@ import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
+import { RateLimitPrompt } from './widgets/rate-limit-prompt/RateLimitPrompt'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { VoiceInputProvider } from './contexts/VoiceInputContext'
 
@@ -998,6 +999,7 @@ function AppMain(): React.JSX.Element {
     <VoiceInputProvider>
     <div className="flex flex-col h-full" data-theme={theme}>
       <RetryFailureToast showRecovery={showRecovery} />
+      <RateLimitPrompt />
       {/* CLI version mismatch banner */}
       {cliVersionBanner && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-warning/20 border-b border-warning/40 text-warning-content text-xs shrink-0">

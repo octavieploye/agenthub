@@ -1,6 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 
+export interface ProviderStatus {
+  name: string
+  available: boolean | null // null = loading/unknown
+  label: string
+}
+
 interface PreLaunchCardProps {
   repoId: string
   repoName: string
@@ -12,6 +18,7 @@ interface PreLaunchCardProps {
   quotaPercent: number
   burnRate: number
   estimatedImpact: number
+  providerStatuses?: ProviderStatus[]
   guardrails?: {
     maxDuration?: number
     maxFiles?: number
@@ -32,6 +39,7 @@ function PreLaunchCard({
   quotaPercent,
   burnRate,
   estimatedImpact,
+  providerStatuses,
   guardrails,
   onLaunch,
   onChangeModel,
@@ -119,6 +127,31 @@ function PreLaunchCard({
             <span>~{estimatedImpact} messages</span>
           </div>
         </div>
+
+        {providerStatuses && providerStatuses.length > 0 && (
+          <div data-testid="pre-launch-provider-status" className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-bold tracking-wide text-base-content/60">
+              PROVIDER STATUS
+            </span>
+            <div className="flex gap-3">
+              {providerStatuses.map((ps) => (
+                <div key={ps.name} className="flex items-center gap-1.5">
+                  <span
+                    data-testid={`provider-dot-${ps.name}`}
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      ps.available === null
+                        ? 'bg-base-content/30'
+                        : ps.available
+                          ? 'bg-success'
+                          : 'bg-error'
+                    }`}
+                  />
+                  <span className="text-base-content/70">{ps.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {guardrails && (
           <div data-testid="pre-launch-guardrails" className="panel-glass p-3 rounded-lg text-xs">

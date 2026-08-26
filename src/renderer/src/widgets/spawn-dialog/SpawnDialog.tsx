@@ -9,6 +9,7 @@ import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
+import type { ProviderStatus } from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
 import RepoSelectDropdown from './RepoSelectDropdown'
@@ -76,6 +77,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
     [...OLLAMA_CLOUD_MODELS, ...CODEX_MODELS, ...CLAUDE_MODELS].map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
+  const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([])
 
   const plan = useUsageStore((s) => s.plan)
   const totalMessages = useUsageStore((s) => s.totalMessages)
@@ -105,10 +107,32 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
     }
   }, [])
 
+  const loadProviderStatuses = useCallback(async () => {
+    const statuses: ProviderStatus[] = [
+      { name: 'anthropic', available: true, label: 'Claude' }
+    ]
+    try {
+      const res = await window.agentHub.models.codexHealth()
+      if (res.success) {
+        statuses.push({
+          name: 'openai-codex',
+          available: res.data.installed && res.data.authenticated,
+          label: 'Codex'
+        })
+      } else {
+        statuses.push({ name: 'openai-codex', available: false, label: 'Codex' })
+      }
+    } catch {
+      statuses.push({ name: 'openai-codex', available: false, label: 'Codex' })
+    }
+    setProviderStatuses(statuses)
+  }, [])
+
   useEffect(() => {
     if (open) {
       loadRepos()
       loadModels()
+      loadProviderStatuses()
       setAgentName('')
       setCustomCwd('')
       setSelectedRepoId(prefilledRepoId ?? '')
@@ -127,7 +151,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
       setSelectedColor(nextColor)
       setTaskHint(prefilledTask ?? '')
     }
-  }, [open, loadRepos, loadModels, prefilledRepoId, prefilledTask])
+  }, [open, loadRepos, loadModels, loadProviderStatuses, prefilledRepoId, prefilledTask])
 
   useEffect(() => {
     if (!skipPermissions) { setDockerStatus(null); return }
@@ -295,6 +319,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
                       ? 'Fast and efficient for routine tasks'
                       : 'Local/cloud model — no Anthropic quota usage'
             }
+            providerStatuses={providerStatuses}
             quotaUsed={totalMessages}
             quotaLimit={limits?.messageLimit ?? 250}
             quotaPercent={quotaPercent}

@@ -1,7 +1,7 @@
 import * as pty from 'node-pty'
 import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
 import log from 'electron-log/main'
-import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus } from '../../shared/types/agent.types'
+import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus, ModelProvider } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb, isDbShuttingDown } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, updateAgentTelegramNotify as dbUpdateAgentTelegramNotify, getAgentById, getAllAgents } from '../db/queries/agents.queries'
@@ -9,6 +9,7 @@ import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../d
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
 import { buildCodexCommand } from './codex-command-builder'
+import { checkCodexHealth } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
 import { writeCodexMcpConfig, cleanupCodexMcpConfig } from './codex-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
@@ -642,7 +643,21 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }
 
-        if (newStatus === 'awaiting_approval') {
+        if (newStatus === 'rate_limited') {
+          applyStatusChange()
+          checkCodexHealth().then((health) => {
+            emitToAllRenderers(IPC_EVENTS.AGENTS.RATE_LIMITED, agentState.id, {
+              provider: agentState.provider,
+              codexAvailable: health.installed && health.authenticated,
+            })
+          }).catch(() => {
+            emitToAllRenderers(IPC_EVENTS.AGENTS.RATE_LIMITED, agentState.id, {
+              provider: agentState.provider,
+              codexAvailable: false,
+            })
+          })
+          log.info('Agent rate-limited', { id: agentState.id, provider: agentState.provider })
+        } else if (newStatus === 'awaiting_approval') {
           approvalEntryTimes.set(agentState.id, Date.now())
           const existing = approvalHoldTimers.get(agentState.id)
           if (existing) {
@@ -1274,7 +1289,11 @@ export function listAgents(): AgentState[] {
   return getAllAgents(getDb())
 }
 
-export function respawnAgent(agentId: string): AgentState {
+export interface RespawnOptions {
+  providerOverride?: ModelProvider
+}
+
+export function respawnAgent(agentId: string, options?: RespawnOptions): AgentState {
   const db = getDb()
   const oldAgent = getAgentById(db, agentId)
   if (!oldAgent) throw new Error(`Agent ${agentId} not found in DB`)
@@ -1295,25 +1314,32 @@ export function respawnAgent(agentId: string): AgentState {
   // Fetch handoff before spawning so we can log it
   const handoff = getSBARByAgentId(db, agentId)
 
-  // Respawn with same config
+  const effectiveProvider = options?.providerOverride ?? oldAgent.provider
+  const isFallback = options?.providerOverride && options.providerOverride !== oldAgent.provider
+
+  // Respawn with same config (optionally with provider override for fallback cascade)
   const newAgent = spawnAgent({
     repoId: oldAgent.repoId,
-    name: oldAgent.name + '-resumed',
+    name: isFallback ? oldAgent.name + '-fallback' : oldAgent.name + '-resumed',
     cwd: oldAgent.cwd,
     model: oldAgent.model,
-    provider: oldAgent.provider,
+    provider: effectiveProvider,
     effortLevel: oldAgent.effortLevel,
     taskDescription: oldAgent.taskDescription,
     color: oldAgent.color
   })
 
   insertActivityEvent(db, {
-    eventType: 'agent_respawned',
+    eventType: isFallback ? 'agent_fallback_respawned' : 'agent_respawned',
     entityType: 'agent',
     entityId: newAgent.id,
     repoId: newAgent.repoId,
     agentId: newAgent.id,
-    details: { oldAgentId: agentId, hasSbar: !!handoff }
+    details: {
+      oldAgentId: agentId,
+      hasSbar: !!handoff,
+      ...(isFallback ? { fromProvider: oldAgent.provider, toProvider: effectiveProvider } : {}),
+    }
   })
 
   return newAgent

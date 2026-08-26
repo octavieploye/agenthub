@@ -189,6 +189,49 @@ describe('PreLaunchCard', () => {
     })
   })
 
+  describe('provider status indicators', () => {
+    const providerStatuses = [
+      { name: 'anthropic', available: true, label: 'Claude' },
+      { name: 'openai-codex', available: false, label: 'Codex' }
+    ]
+
+    it('renders provider status section when providerStatuses provided', () => {
+      render(<PreLaunchCard {...defaultProps} providerStatuses={providerStatuses} />)
+      expect(screen.getByTestId('pre-launch-provider-status')).toBeInTheDocument()
+      expect(screen.getByText('PROVIDER STATUS')).toBeInTheDocument()
+    })
+
+    it('does NOT render provider status section when providerStatuses omitted', () => {
+      render(<PreLaunchCard {...defaultProps} />)
+      expect(screen.queryByTestId('pre-launch-provider-status')).not.toBeInTheDocument()
+    })
+
+    it('shows green dot for available provider', () => {
+      render(<PreLaunchCard {...defaultProps} providerStatuses={providerStatuses} />)
+      const dot = screen.getByTestId('provider-dot-anthropic')
+      expect(dot.className).toMatch(/bg-success/)
+    })
+
+    it('shows red dot for unavailable provider', () => {
+      render(<PreLaunchCard {...defaultProps} providerStatuses={providerStatuses} />)
+      const dot = screen.getByTestId('provider-dot-openai-codex')
+      expect(dot.className).toMatch(/bg-error/)
+    })
+
+    it('shows grey dot for null (unknown) availability', () => {
+      const withNull = [{ name: 'codex', available: null, label: 'Codex' }]
+      render(<PreLaunchCard {...defaultProps} providerStatuses={withNull} />)
+      const dot = screen.getByTestId('provider-dot-codex')
+      expect(dot.className).toMatch(/bg-base-content/)
+    })
+
+    it('renders provider labels', () => {
+      render(<PreLaunchCard {...defaultProps} providerStatuses={providerStatuses} />)
+      expect(screen.getByText('Claude')).toBeInTheDocument()
+      expect(screen.getByText('Codex')).toBeInTheDocument()
+    })
+  })
+
   describe('styling', () => {
     it('Launch button has btn-lcars btn-primary classes', () => {
       render(<PreLaunchCard {...defaultProps} />)

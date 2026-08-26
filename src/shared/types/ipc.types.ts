@@ -31,12 +31,14 @@ export interface AgentHubBridge {
     detachTerminal: (agentId: string) => Promise<IpcResponse<void>>
     getProxyPath: (agentId: string) => Promise<IpcResponse<string | null>>
     respawn: (agentId: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
+    fallbackRespawn: (agentId: string, provider: string) => Promise<IpcResponse<import('./agent.types').AgentState>>
     updateVoiceMode: (agentId: string, mode: string) => Promise<IpcResponse<void>>
     updateTelegramNotify: (agentId: string, enabled: boolean) => Promise<IpcResponse<void>>
   }
   models: {
     listAll: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>
     fetchOllama: () => Promise<IpcResponse<import('./model.types').ModelCatalogEntry[]>>
+    codexHealth: () => Promise<IpcResponse<import('./codex-health.types').CodexHealthStatus>>
   }
   db: {
     getRepos: () => Promise<IpcResponse<import('./config.types').RepoConfig[]>>
@@ -277,6 +279,9 @@ export interface AgentHubBridge {
     ) => () => void
     draftReady: (
       cb: (payload: import('./task.types').SprintDraftReadyPayload) => void
+    ) => () => void
+    agentRateLimited: (
+      callback: (agentId: string, detail: { provider: string; codexAvailable: boolean }) => void
     ) => () => void
   }
 }

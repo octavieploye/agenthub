@@ -12,6 +12,7 @@ export type AgentLifecycleStatus =
   | 'tray_running'
   | 'error'
   | 'awaiting_approval'
+  | 'rate_limited'
 
 export type StatusConfidence = 'confirmed' | 'inferred' | 'unknown'
 
