@@ -47,7 +47,7 @@ Every sprint must have:
 - **Owner** — the agent or role accountable for the sprint outcome
 - **Lead Orchestrator** — the team/skill that orchestrates
 - **Executor** — the team/skill that does the work
-- **Code Reviewer** — architect + relevant senior engineer (cannot be the executor)
+- **Code Reviewer** — architect + `/full-code-review` (runs sr-backend + sr-frontend in parallel — a skill, not dev-stack members) (cannot be the executor)
 - **Test Reviewer** — tester-backend or tester-frontend (cannot be the executor)
 - **Security Review** — team-threat-defense (auth/fraud/payments) or sec-devops (pre-commit) or N/A (pure UI with no API changes)
 - **git-ops commits after** — commit message format
