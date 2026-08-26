@@ -28,14 +28,9 @@ function getOrchestrator() {
 }
 
 export function registerOrchestratorHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, (_event, input: unknown) => {
-    const v = validateInput(startSchema, input)
-    if (!v.valid) return v.response
-    try {
-      return success(getOrchestrator().start(v.data))
-    } catch (err) {
-      return error('ORCHESTRATOR_START_FAILED', err instanceof Error ? err.message : String(err))
-    }
+  // NEUTRALISED: Orchestrator disabled until safeguards are implemented
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, () => {
+    return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled until safeguards are implemented. Use brainstorm-to-sprint workflow instead.')
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PAUSE, (_event, input: unknown) => {

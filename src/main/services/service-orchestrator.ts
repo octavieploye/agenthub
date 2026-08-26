@@ -498,7 +498,8 @@ export function initializeServices(db: Database.Database): void {
     onEventInserted: orchestratorDeps.onEventInserted,
     getOllamaBaseUrl: () => 'http://localhost:11434',
   }
-  dateWatcher = new DateWatcherService(db, dateWatcherDeps)
+  // NEUTRALISED: DateWatcher disabled until orchestrator safeguards are implemented
+  // dateWatcher = new DateWatcherService(db, dateWatcherDeps)
 
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
