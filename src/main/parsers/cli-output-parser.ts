@@ -1,4 +1,5 @@
-import type { AgentLifecycleStatus, StatusConfidence } from '../../shared/types/agent.types'
+import type { AgentLifecycleStatus, ModelProvider, StatusConfidence } from '../../shared/types/agent.types'
+import { CodexCliOutputParser } from './codex-output-parser'
 
 export interface ParsedStatus {
   status: AgentLifecycleStatus
@@ -154,6 +155,9 @@ export class ClaudeCliOutputParser implements CliOutputParser {
   }
 }
 
-export function createParser(): CliOutputParser {
+export function createParser(provider?: ModelProvider): CliOutputParser {
+  if (provider === 'openai-codex') {
+    return new CodexCliOutputParser()
+  }
   return new ClaudeCliOutputParser()
 }

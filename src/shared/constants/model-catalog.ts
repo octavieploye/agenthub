@@ -71,6 +71,23 @@ export const OLLAMA_CLOUD_MODELS: ModelCatalogEntry[] = [
   { id: 'deepseek-v3.2:cloud',        name: 'DeepSeek V3.2',         provider: 'ollama-cloud', category: 'coding',   contextWindow: 128000, available: true, supportsEffort: false, capabilityTier: 'expert', description: 'Strong coding and reasoning model.', strengths: ['code generation', 'reasoning', 'debugging'], speedProfile: 'balanced', claudeComparison: 'Comparable to Sonnet' },
 ]
 
+export const CODEX_MODELS: ModelCatalogEntry[] = [
+  {
+    id: 'codex-default',
+    name: 'Codex (Default)',
+    provider: 'openai-codex',
+    category: 'coding',
+    family: 'OpenAI Codex',
+    contextWindow: 192000,
+    available: true,
+    supportsEffort: false,
+    capabilityTier: 'frontier',
+    description: 'OpenAI Codex CLI — fallback coding engine via Pro subscription',
+    strengths: ['coding', 'file editing', 'debugging'],
+    speedProfile: 'balanced',
+    claudeComparison: 'OpenAI engine — different strengths, comparable to Sonnet for coding',
+  },
+]
 
 export const EFFORT_LEVELS = ['high', 'medium', 'low'] as const
 

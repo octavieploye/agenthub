@@ -2,7 +2,7 @@ export type ModelCategory = 'thinking' | 'coding' | 'mixed'
 
 export type EffortLevel = 'high' | 'medium' | 'low'
 
-export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud'
+export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud' | 'openai-codex'
 
 export type CapabilityTier = 'frontier' | 'expert' | 'capable' | 'efficient'
 

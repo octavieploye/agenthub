@@ -21,7 +21,8 @@ export const IPC_CHANNELS = {
   },
   MODELS: {
     LIST_ALL: 'models:list-all',
-    FETCH_OLLAMA: 'models:fetch-ollama'
+    FETCH_OLLAMA: 'models:fetch-ollama',
+    CODEX_HEALTH: 'models:codex-health'
   },
   DB: {
     GET_REPOS: 'db:get-repos',
@@ -218,6 +219,7 @@ export const IPC_CHANNELS = {
   },
   ORCHESTRATOR: {
     START:    'orchestrator:start',
+    PREVIEW:  'orchestrator:preview',
     PAUSE:    'orchestrator:pause',
     RESUME:   'orchestrator:resume',
     STATUS:   'orchestrator:status',

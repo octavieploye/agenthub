@@ -117,6 +117,11 @@ export function buildSpawnEnv(
     return { modelFlag: model }
   }
 
+  // Codex CLI reads auth from macOS Keychain — no ANTHROPIC_* env vars needed.
+  if (provider === 'openai-codex') {
+    return { modelFlag: model || '' }
+  }
+
   // Both ollama-local and ollama-cloud route through the local Ollama instance.
   // Cloud models are proxied by the local Ollama server — Claude CLI always talks to localhost.
   // ANTHROPIC_AUTH_TOKEN is the auth token for the Ollama proxy.

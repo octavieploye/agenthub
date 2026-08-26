@@ -15,7 +15,7 @@ export type AgentLifecycleStatus =
 
 export type StatusConfidence = 'confirmed' | 'inferred' | 'unknown'
 
-export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud'
+export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud' | 'openai-codex'
 
 export type EffortLevel = 'high' | 'medium' | 'low'
 

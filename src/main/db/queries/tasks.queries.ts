@@ -5,6 +5,14 @@ import type { TaskItem, TaskPriority, TaskStatus, TaskCategory, CreateTaskInput,
 import { insertActivityEvent } from './activity.queries'
 import { getDependencyMap } from './task-dependencies.queries'
 
+const VALID_PROVIDERS = ['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'] as const
+
+function validateProviderOverride(value: string | null | undefined): void {
+  if (value != null && !VALID_PROVIDERS.includes(value as typeof VALID_PROVIDERS[number])) {
+    throw new Error(`Invalid provider_override: "${value}". Must be one of: ${VALID_PROVIDERS.join(', ')}`)
+  }
+}
+
 function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): TaskItem {
   const id = row.id as string
   return {
@@ -47,6 +55,14 @@ export function getTasksByRepo(db: Database.Database, repoId: string): TaskItem[
   return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
 
+export function getTasksBySprint(db: Database.Database, repoId: string, sprintName: string): TaskItem[] {
+  const rows = db
+    .prepare('SELECT * FROM tasks WHERE repo_id = ? AND sprint_name = ? ORDER BY priority ASC, created_at DESC')
+    .all(repoId, sprintName)
+  const depMap = getDependencyMap(db)
+  return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
+}
+
 export function getTasksByStatus(db: Database.Database, status: TaskStatus): TaskItem[] {
   const rows = db
     .prepare('SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at DESC')
@@ -83,6 +99,7 @@ export function getTaskByAgentId(db: Database.Database, agentId: string): TaskIt
 }
 
 export function insertTask(db: Database.Database, input: CreateTaskInput): TaskItem {
+  validateProviderOverride(input.providerOverride)
   const id = randomUUID()
   const now = new Date().toISOString()
 
@@ -144,6 +161,9 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
 }
 
 export function updateTask(db: Database.Database, id: string, input: UpdateTaskInput): void {
+  if (input.providerOverride !== undefined) {
+    validateProviderOverride(input.providerOverride)
+  }
   const now = new Date().toISOString()
   const sets: string[] = ['updated_at = ?']
   const values: unknown[] = [now]

@@ -7,7 +7,7 @@ import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
-import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
@@ -73,7 +73,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
   const [_dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>(
-    [...OLLAMA_CLOUD_MODELS, ...CLAUDE_MODELS].map(catalogToModelInfo)
+    [...OLLAMA_CLOUD_MODELS, ...CODEX_MODELS, ...CLAUDE_MODELS].map(catalogToModelInfo)
   )
   const [loadingModels, setLoadingModels] = useState(false)
 

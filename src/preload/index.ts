@@ -39,7 +39,8 @@ const agentHubBridge = {
   },
   models: {
     listAll: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.LIST_ALL),
-    fetchOllama: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.FETCH_OLLAMA)
+    fetchOllama: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.FETCH_OLLAMA),
+    codexHealth: () => ipcRenderer.invoke(IPC_CHANNELS.MODELS.CODEX_HEALTH)
   },
   db: {
     getRepos: () => ipcRenderer.invoke(IPC_CHANNELS.DB.GET_REPOS),
@@ -326,6 +327,7 @@ const agentHubBridge = {
   },
   orchestrator: {
     start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
+    preview: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PREVIEW, input),
     pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),
     resume: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME, input),
     cancel: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.CANCEL, input),

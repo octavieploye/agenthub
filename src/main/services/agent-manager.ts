@@ -7,7 +7,8 @@ import { getDb, isDbShuttingDown } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, updateAgentTelegramNotify as dbUpdateAgentTelegramNotify, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
-import { createParser, type ClaudeCliOutputParser } from '../parsers/cli-output-parser'
+import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
+import { buildCodexCommand } from './codex-command-builder'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
@@ -53,7 +54,7 @@ const AGENT_TO_EVENT_TYPE: Partial<Record<string, TaskEventType>> = {
 interface ManagedAgent {
   state: AgentState
   ptyProcess: pty.IPty
-  parser: ClaudeCliOutputParser
+  parser: CliOutputParser
   outputBuffer: string
   flushTimer: ReturnType<typeof setTimeout> | null
   ipcBatchBuffer: string
@@ -503,7 +504,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
   }
 
-  const parser = createParser() as ClaudeCliOutputParser
+  const parser = createParser(agentState.provider)
 
   ptyProcess.onData((data: string) => {
     // Adaptive IPC batching — base 16ms (60fps), throttles to 64ms under sustained high throughput
@@ -860,6 +861,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // model-service.ts stores them as "ollama-cloud:devstral-2:123b-cloud" or "ollama-local:devstral-2"
   // but Claude CLI / ollama launch only accepts the bare Ollama tag, e.g. "devstral-2:123b-cloud".
   // Static catalog entries (e.g. "glm-5:cloud") have no prefix and pass through unchanged.
+  const isCodex = agentState.provider === 'openai-codex'
   const isOllama = agentState.provider === 'ollama-local' || agentState.provider === 'ollama-cloud'
   const rawModel = agentState.model ?? ''
   let modelName = isOllama
@@ -947,10 +949,26 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // The Ollama tag must be exact — cloud models need the :cloud suffix (e.g. devstral-2:123b-cloud).
   const ollamaBin = '/Applications/Ollama.app/Contents/Resources/ollama'
 
+  // Codex CLI: uses its own binary, no Claude-specific flags (plugin, model, effort, etc.)
+  if (isCodex) {
+    setTimeout(() => {
+      const mCodex = agents.get(agentState.id)
+      if (mCodex && task) {
+        mCodex.cleanTextBuffer = ''
+        mCodex.hasSentInput = true
+      }
+      const cmd = buildCodexCommand({
+        task: task || undefined,
+        skipPermissions: options.skipPermissions,
+        telegramNotify: agentState.telegramNotify,
+      })
+      ptyProcess.write(cmd)
+      log.info('Sent Codex command to PTY', { id: agentState.id, provider: agentState.provider, taskLength: task?.length ?? 0, skipPermissions: options.skipPermissions })
+    }, 500)
   // For Ollama models: launch claude interactively via `ollama launch claude`,
   // then send the task as user input once the session is ready.
   // `-p` flag causes print-mode (non-interactive) which exits after one response.
-  if (isOllama) {
+  } else if (isOllama) {
     const extraArgs = permFlag.trim()
     const cmd = extraArgs
       ? `clear; ${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs}\n`

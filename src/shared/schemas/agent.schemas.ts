@@ -16,7 +16,7 @@ export const AgentLifecycleStatusSchema = z.enum([
 
 export const StatusConfidenceSchema = z.enum(['confirmed', 'inferred', 'unknown'])
 
-export const ModelProviderSchema = z.enum(['anthropic', 'ollama-local', 'ollama-cloud'])
+export const ModelProviderSchema = z.enum(['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'])
 
 export const EffortLevelSchema = z.enum(['high', 'medium', 'low'])
 
