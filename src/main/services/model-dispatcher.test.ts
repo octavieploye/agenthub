@@ -196,18 +196,18 @@ describe('Model Dispatcher', () => {
     // ── anthropic provider ──
 
     it('returns no ANTHROPIC_BASE_URL for anthropic provider', () => {
-      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
+      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-6', 'anthropic')
       expect(result.ANTHROPIC_BASE_URL).toBeUndefined()
     })
 
     it('returns no ANTHROPIC_AUTH_TOKEN for anthropic provider', () => {
-      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
+      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-6', 'anthropic')
       expect(result.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
     })
 
     it('sets modelFlag to model name for anthropic', () => {
-      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
-      expect(result.modelFlag).toBe('claude-sonnet-4-20250514')
+      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-6', 'anthropic')
+      expect(result.modelFlag).toBe('claude-sonnet-4-6')
     })
 
     // ── ollama-local provider ──
@@ -250,7 +250,7 @@ describe('Model Dispatcher', () => {
     })
 
     it('does not set ANTHROPIC_API_KEY for anthropic provider', () => {
-      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-20250514', 'anthropic')
+      const result: SpawnEnv = buildSpawnEnv('claude-sonnet-4-6', 'anthropic')
       expect(result.ANTHROPIC_API_KEY).toBeUndefined()
     })
   })
@@ -297,7 +297,7 @@ describe('Model Dispatcher', () => {
       const result: ModelRecommendation = recommendForPhase('review', 'review code changes', true)
       expect(result.provider).toBe('ollama-cloud')
       expect(result.model).toBe(CLOUD_MODEL_CATALOG[0].id)
-      expect(result.alternatives).toContain('claude-sonnet-4-20250514')
+      expect(result.alternatives).toContain('claude-sonnet-4-6')
     })
 
     it('returns cloud model for security phase when cloud available', () => {

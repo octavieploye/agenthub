@@ -1,6 +1,6 @@
 import { CLOUD_MODEL_CATALOG } from '../model-dispatcher'
 
-const ANTHROPIC_MODELS = ['claude-sonnet-4-20250514', 'claude-opus-4-20250514'] as const
+const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6'] as const
 
 /**
  * Validates that a model override is a known model for the given provider.

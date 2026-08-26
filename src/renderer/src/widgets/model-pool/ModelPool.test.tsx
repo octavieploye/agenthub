@@ -5,7 +5,7 @@ import type { ModelInfo, ModelPoolProps } from './ModelPool'
 
 function createModel(overrides: Partial<ModelInfo> = {}): ModelInfo {
   return {
-    id: 'claude-sonnet-4-20250514',
+    id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4',
     provider: 'anthropic',
     available: true,

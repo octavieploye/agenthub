@@ -218,12 +218,12 @@ describe('orchestrator.queries', () => {
         runId: run.id,
         taskId,
         phase: 'review',
-        modelUsed: 'claude-sonnet-4-20250514',
+        modelUsed: 'claude-sonnet-4-6',
         providerUsed: 'anthropic'
       })
 
       expect(log.phase).toBe('review')
-      expect(log.modelUsed).toBe('claude-sonnet-4-20250514')
+      expect(log.modelUsed).toBe('claude-sonnet-4-6')
       expect(log.providerUsed).toBe('anthropic')
     })
   })

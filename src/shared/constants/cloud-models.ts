@@ -19,8 +19,8 @@ export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
 ]
 
 export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = [
-  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet', provider: 'anthropic' },
-  { id: 'claude-opus-4-20250514', name: 'Claude Opus', provider: 'anthropic' },
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet', provider: 'anthropic' },
+  { id: 'claude-opus-4-6', name: 'Claude Opus', provider: 'anthropic' },
 ]
 
 export const PROVIDER_BADGE_LABEL: Record<string, string> = {

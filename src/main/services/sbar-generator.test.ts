@@ -24,7 +24,7 @@ function createAgent(overrides?: Partial<AgentState>): AgentState {
     name: 'OAuth Agent',
     status: 'interrupted',
     confidence: 'confirmed',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     provider: 'anthropic',
     taskDescription: 'Fix OAuth refresh token handling',
     pid: 1234,
@@ -88,7 +88,7 @@ describe('sbar-generator', () => {
         const result = generateSBAR(createContext())
         expect(result.background).toContain('repo-1')
         expect(result.background).toContain('/tmp/test/payment-service')
-        expect(result.background).toContain('claude-sonnet-4-20250514')
+        expect(result.background).toContain('claude-sonnet-4-6')
         expect(result.background).toContain('65%')
       })
 

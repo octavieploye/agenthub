@@ -57,7 +57,7 @@ function createMockAgent(overrides: Partial<AgentState> = {}): AgentState {
     statusConfidence: 'confirmed',
     cwd: '/test/repo',
     repoId: 'repo-1',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     effortLevel: 'medium',
     taskDescription: 'Test task',
     createdAt: new Date().toISOString(),

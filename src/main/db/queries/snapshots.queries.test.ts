@@ -77,7 +77,7 @@ describe('snapshots.queries', () => {
             name: 'Test Agent',
             status: 'busy',
             confidence: 'confirmed',
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             provider: 'anthropic',
             taskDescription: 'Fix a bug',
             pid: 1234,

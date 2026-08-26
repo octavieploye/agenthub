@@ -22,8 +22,8 @@ export interface SpawnEnv {
 const COMPLEX_KEYWORDS = ['refactor', 'architecture', 'migrate', 'redesign']
 const SIMPLE_KEYWORDS = ['fix', 'bug', 'typo', 'update', 'lint']
 
-const CLAUDE_SONNET = 'claude-sonnet-4-20250514'
-const CLAUDE_OPUS = 'claude-opus-4-20250514'
+const CLAUDE_SONNET = 'claude-sonnet-4-6'
+const CLAUDE_OPUS = 'claude-opus-4-6'
 const OLLAMA_DEFAULT = 'llama3'
 const OLLAMA_LOCAL_URL = 'http://localhost:11434'
 

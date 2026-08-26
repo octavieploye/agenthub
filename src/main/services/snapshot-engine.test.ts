@@ -45,7 +45,7 @@ function createAgent(id: string, status: AgentState['status'] = 'busy'): AgentSt
     name: `Agent ${id}`,
     status,
     confidence: 'confirmed',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     provider: 'anthropic',
     taskDescription: 'Test task',
     pid: 1234,

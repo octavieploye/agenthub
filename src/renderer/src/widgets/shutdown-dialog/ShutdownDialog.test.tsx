@@ -10,7 +10,7 @@ function createAgent(id: string, overrides?: Partial<AgentState>): AgentState {
     name: `Agent ${id}`,
     status: 'busy',
     confidence: 'confirmed',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     provider: 'anthropic',
     taskDescription: 'Fix OAuth',
     pid: 1234,

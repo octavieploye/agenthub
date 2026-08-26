@@ -7,7 +7,7 @@ describe('PreLaunchCard', () => {
     repoId: 'repo-1',
     repoName: 'my-project',
     initialTask: 'Refactor authentication module',
-    recommendedModel: 'claude-sonnet-4-20250514',
+    recommendedModel: 'claude-sonnet-4-6',
     modelRationale: 'Complex refactor, needs 64k+ context',
     quotaUsed: 147,
     quotaLimit: 250,
@@ -72,7 +72,7 @@ describe('PreLaunchCard', () => {
 
     it('renders recommended model name', () => {
       render(<PreLaunchCard {...defaultProps} />)
-      expect(screen.getByTestId('pre-launch-card')).toHaveTextContent('claude-sonnet-4-20250514')
+      expect(screen.getByTestId('pre-launch-card')).toHaveTextContent('claude-sonnet-4-6')
     })
 
     it('renders model rationale text', () => {

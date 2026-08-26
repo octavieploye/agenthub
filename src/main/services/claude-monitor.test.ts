@@ -38,7 +38,7 @@ function makeEntry(overrides: Partial<SessionEntry> = {}): SessionEntry {
     sessionId: 'session-1',
     message: {
       role: 'assistant',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       usage: {
         input_tokens: 100,
         output_tokens: 50,
@@ -161,8 +161,8 @@ describe('calculateBurnRate', () => {
 describe('aggregateUsage', () => {
   it('sums input tokens across all entries', () => {
     const entries: SessionEntry[] = [
-      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 0 } } }),
-      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 200, output_tokens: 0 } } })
+      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 0 } } }),
+      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 200, output_tokens: 0 } } })
     ]
     const result = aggregateUsage(entries)
     expect(result.totalInputTokens).toBe(300)
@@ -170,8 +170,8 @@ describe('aggregateUsage', () => {
 
   it('sums output tokens across all entries', () => {
     const entries: SessionEntry[] = [
-      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 0, output_tokens: 50 } } }),
-      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 0, output_tokens: 75 } } })
+      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 0, output_tokens: 50 } } }),
+      makeEntry({ message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 0, output_tokens: 75 } } })
     ]
     const result = aggregateUsage(entries)
     expect(result.totalOutputTokens).toBe(125)
@@ -182,14 +182,14 @@ describe('aggregateUsage', () => {
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 30 }
         }
       }),
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 0, output_tokens: 0 }
           // no cache_creation_input_tokens => should default to 0
         }
@@ -204,14 +204,14 @@ describe('aggregateUsage', () => {
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 20 }
         }
       }),
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 0, output_tokens: 0 }
         }
       })
@@ -236,14 +236,14 @@ describe('aggregateUsage', () => {
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 100, output_tokens: 50 }
         }
       }),
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-opus-4-20250514',
+          model: 'claude-opus-4-6',
           usage: { input_tokens: 200, output_tokens: 80 }
         }
       })
@@ -251,8 +251,8 @@ describe('aggregateUsage', () => {
     const result = aggregateUsage(entries)
     expect(result.byModel).toBeInstanceOf(Map)
     expect(result.byModel.size).toBe(2)
-    expect(result.byModel.has('claude-sonnet-4-20250514')).toBe(true)
-    expect(result.byModel.has('claude-opus-4-20250514')).toBe(true)
+    expect(result.byModel.has('claude-sonnet-4-6')).toBe(true)
+    expect(result.byModel.has('claude-opus-4-6')).toBe(true)
   })
 
   it('returns zeros for empty entries array', () => {
@@ -270,20 +270,20 @@ describe('aggregateUsage', () => {
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 100, output_tokens: 50 }
         }
       }),
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 150, output_tokens: 70 }
         }
       })
     ]
     const result = aggregateUsage(entries)
-    const sonnet = result.byModel.get('claude-sonnet-4-20250514')
+    const sonnet = result.byModel.get('claude-sonnet-4-6')
     expect(sonnet).toBeDefined()
     expect(sonnet!.inputTokens).toBe(250)
     expect(sonnet!.outputTokens).toBe(120)
@@ -295,21 +295,21 @@ describe('aggregateUsage', () => {
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 100, output_tokens: 50 }
         }
       }),
       makeEntry({
         message: {
           role: 'assistant',
-          model: 'claude-opus-4-20250514',
+          model: 'claude-opus-4-6',
           usage: { input_tokens: 300, output_tokens: 200 }
         }
       })
     ]
     const result = aggregateUsage(entries)
-    const sonnet = result.byModel.get('claude-sonnet-4-20250514')
-    const opus = result.byModel.get('claude-opus-4-20250514')
+    const sonnet = result.byModel.get('claude-sonnet-4-6')
+    const opus = result.byModel.get('claude-opus-4-6')
     expect(sonnet!.inputTokens).toBe(100)
     expect(opus!.inputTokens).toBe(300)
     expect(sonnet!.messageCount).toBe(1)
@@ -344,7 +344,7 @@ describe('ClaudeMonitor', () => {
       sessionId: 'sess-abc',
       message: {
         role: 'assistant',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         usage: {
           input_tokens: 500,
           output_tokens: 200,
@@ -418,14 +418,14 @@ describe('ClaudeMonitor', () => {
         sampleJsonlLine({
           message: {
             role: 'assistant',
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 10, cache_read_input_tokens: 5 }
           }
         }),
         sampleJsonlLine({
           message: {
             role: 'assistant',
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             usage: { input_tokens: 200, output_tokens: 80, cache_creation_input_tokens: 20, cache_read_input_tokens: 15 }
           }
         })
@@ -465,7 +465,7 @@ describe('ClaudeMonitor', () => {
       const line = sampleJsonlLine({
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           usage: { input_tokens: 999, output_tokens: 444 }
         }
       })
