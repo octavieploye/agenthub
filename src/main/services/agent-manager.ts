@@ -9,11 +9,13 @@ import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../d
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
 import { buildCodexCommand } from './codex-command-builder'
+import { generateAgentsMd } from './agents-md-generator'
+import { writeCodexMcpConfig, cleanupCodexMcpConfig } from './codex-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
 import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath } from './service-orchestrator'
-import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir, homedir } from 'os'
 import { createHash } from 'crypto'
@@ -93,6 +95,10 @@ interface ManagedAgent {
   telegramNotifyAtSpawn: boolean
   /** True once a completion notification has been sent for the current exchange (mid-session toggle path). Reset on next user submit. */
   hasNotifiedCompletion: boolean
+  /** Path to the generated .codex/AGENTS.md file — cleaned up on exit. */
+  codexAgentsMdPath: string | null
+  /** Path to the generated Codex MCP config JSON — cleaned up on exit. */
+  codexMcpConfigPath: string | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -396,6 +402,18 @@ function cleanupMcpConfig(agentId: string): void {
   try {
     unlinkSync(join(tmpdir(), `agenthub-mcp-${agentId}.json`))
   } catch {}
+}
+
+function cleanupCodexFiles(managed: ManagedAgent | undefined): void {
+  if (!managed) return
+  if (managed.codexAgentsMdPath) {
+    try { unlinkSync(managed.codexAgentsMdPath) } catch {}
+    managed.codexAgentsMdPath = null
+  }
+  if (managed.codexMcpConfigPath) {
+    cleanupCodexMcpConfig(tmpdir(), managed.state.id)
+    managed.codexMcpConfigPath = null
+  }
 }
 
 export function spawnAgent(options: AgentSpawnOptions): AgentState {
@@ -723,6 +741,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     if (isDbShuttingDown()) {
       log.info('Agent exit during shutdown, skipping DB writes', { id: agentState.id, exitCode })
       cleanupMcpConfig(agentState.id)
+      cleanupCodexFiles(managed)
       managed?.headlessTerminal.dispose()
       agents.delete(agentState.id)
       return
@@ -752,6 +771,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
 
     cleanupMcpConfig(agentState.id)
+    cleanupCodexFiles(managed)
     managed?.headlessTerminal.dispose()
     agents.delete(agentState.id)
   })
@@ -814,7 +834,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     silentLockTimer: null,
     lastMcpTelegramAt: 0,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
-    telegramNotifyAtSpawn: agentState.telegramNotify
+    telegramNotifyAtSpawn: agentState.telegramNotify,
+    codexAgentsMdPath: null,
+    codexMcpConfigPath: null
   })
 
   // S3: per-agent adaptive IPC rate monitor — throttle to 64ms flush when sustained >100 msg/s
@@ -950,7 +972,42 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const ollamaBin = '/Applications/Ollama.app/Contents/Resources/ollama'
 
   // Codex CLI: uses its own binary, no Claude-specific flags (plugin, model, effort, etc.)
+  // Codex reads .codex/AGENTS.md automatically — generate and write it before spawn.
   if (isCodex) {
+    const codexManaged = agents.get(agentState.id)
+    try {
+      const agentsMdContent = generateAgentsMd({
+        guardPath,
+        skillsIndexPath,
+        claudeMdPath: existsSync(agenthubClaudeMdPath) ? agenthubClaudeMdPath : undefined,
+        taskDescription: task || undefined,
+      })
+      const codexDir = join(options.cwd, '.codex')
+      mkdirSync(codexDir, { recursive: true })
+      const agentsMdPath = join(codexDir, 'AGENTS.md')
+      writeFileSync(agentsMdPath, agentsMdContent, 'utf-8')
+      if (codexManaged) codexManaged.codexAgentsMdPath = agentsMdPath
+      log.info('Wrote Codex AGENTS.md for skill injection', { id: agentState.id, path: agentsMdPath })
+    } catch (err) {
+      log.warn('Failed to generate AGENTS.md for Codex agent — spawning without skill injection', {
+        id: agentState.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    const scriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
+      : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
+    const codexMcpPath = writeCodexMcpConfig({
+      targetDir: tmpdir(),
+      agentId: agentState.id,
+      agentName: agentState.name,
+      repoName,
+      telegramSocketPath: getTelegramSocketPath(),
+      telegramScriptPath: scriptPath,
+    })
+    if (codexManaged && codexMcpPath) codexManaged.codexMcpConfigPath = codexMcpPath
+
     setTimeout(() => {
       const mCodex = agents.get(agentState.id)
       if (mCodex && task) {
@@ -1138,6 +1195,7 @@ export function killAgent(agentId: string): void {
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
       cleanupMcpConfig(agentId)
+      cleanupCodexFiles(mgd)
       mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
@@ -1162,6 +1220,7 @@ export function killAgent(agentId: string): void {
       approvalEntryTimes.delete(agentId)
       ptyOwners.delete(agentId)
       cleanupMcpConfig(agentId)
+      cleanupCodexFiles(mgd)
       mgd.headlessTerminal.dispose()
       agents.delete(agentId)
     }
@@ -1355,6 +1414,7 @@ export function cleanupAllAgents(): void {
       if (managed.silentLockTimer) clearTimeout(managed.silentLockTimer)
       flushOutputBuffer(id)
       cleanupMcpConfig(id)
+      cleanupCodexFiles(managed)
       managed.headlessTerminal.dispose()
       managed.ptyProcess.kill()
     } catch {
