@@ -12,6 +12,7 @@ import { buildCodexCommand } from './codex-command-builder'
 import { checkCodexHealth } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
 import { writeCodexMcpConfig, cleanupCodexMcpConfig } from './codex-mcp-config'
+import { readSettingsMcpServers } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
@@ -379,8 +380,15 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string): strin
     ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
     : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
 
+  const settingsPath = app.isPackaged
+    ? join(process.resourcesPath, '.claude', 'settings.json')
+    : join(process.cwd(), '.claude', 'settings.json')
+
+  const settingsMcpServers = readSettingsMcpServers(settingsPath)
+
   const config = {
     mcpServers: {
+      ...settingsMcpServers,
       'agenthub-telegram': {
         command: 'node',
         args: [scriptPath],
