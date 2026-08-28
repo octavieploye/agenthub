@@ -59,6 +59,14 @@
       "source": "project"
     },
     {
+      "id": "prompt-ready",
+      "name": "prompt-ready",
+      "description": "Generate a ready-to-paste execution prompt with repo path, skill, scope, constraints, and model recommendation — for dispatching work to a new session",
+      "category": "dev-skills",
+      "path": "plugin/skills/prompt-ready/SKILL.md",
+      "source": "plugin"
+    },
+    {
       "id": "sec-insider-threat",
       "name": "sec-insider-threat",
       "description": "Insider threat & IP protection audit — unauthorized access vectors, IP exfiltration, AI prompt injection, reverse-engineering vulnerabilities. Produces prevention report + agent hardening policy fragment.",

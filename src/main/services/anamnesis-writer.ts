@@ -14,6 +14,7 @@ const ENDPOINT_MAP: Record<TaskEventType, string> = {
   ORCHESTRATOR_TASK_SECURED: '/memory/procedural',
   ORCHESTRATOR_TASK_COMMITTED: '/memory/procedural',
   ORCHESTRATOR_SPRINT_COMPLETED: '/memory/episodic',
+  DATE_TRIGGER_FIRED: '/memory/episodic',
 }
 
 interface AnamnesisWriterDeps {

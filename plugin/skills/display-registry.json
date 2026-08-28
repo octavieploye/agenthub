@@ -75,6 +75,7 @@
     "test-integrity-review":       { "displayName": "Check Test Integrity",             "category": "build" },
     "full-code-review":            { "displayName": "Full Code Review",                 "category": "build" },
     "token-optimizer":             { "displayName": "Optimize AI Instructions",         "category": "build" },
+    "prompt-ready":                { "displayName": "Prompt Ready — Dispatch to Session", "category": "build" },
     "team-dev-loop":               { "displayName": "Dev Loop — Iterate Until Done",    "category": "build" },
     "brainstorm-to-sprint":        { "displayName": "Brainstorm to Sprint — Plan + Build + Review", "category": "build" },
     "app-scenario-modeler":        { "displayName": "App Scenario Modeler",             "category": "build" },
