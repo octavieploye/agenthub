@@ -372,38 +372,41 @@ function flushOutputBuffer(agentId: string): void {
   managed.flushTimer = null
 }
 
-function writeMcpConfig(agentId: string, agentName: string, repo: string): string | null {
-  const sockPath = getTelegramSocketPath()
-  if (!sockPath) return null
-
-  const scriptPath = app.isPackaged
-    ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
-    : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
-
-  const settingsPath = app.isPackaged
+function writeMcpConfig(agentId: string, agentName: string, repo: string, targetCwd: string): string | null {
+  // B2: Always read agenthub's own settings.json as the system-level base (contains anamnesis
+  // and other ecosystem MCPs). Then merge target repo's settings on top — target wins on conflicts.
+  // readSettingsMcpServers() returns {} gracefully when the file is missing or malformed.
+  const agenthubSettingsPath = app.isPackaged
     ? join(process.resourcesPath, '.claude', 'settings.json')
-    : join(process.cwd(), '.claude', 'settings.json')
+    : join(app.getAppPath(), '.claude', 'settings.json')
+  const baseServers = readSettingsMcpServers(agenthubSettingsPath)
+  const targetServers = readSettingsMcpServers(join(targetCwd, '.claude', 'settings.json'))
 
-  const settingsMcpServers = readSettingsMcpServers(settingsPath)
+  const mcpServers: Record<string, unknown> = { ...baseServers, ...targetServers }
 
-  const config = {
-    mcpServers: {
-      ...settingsMcpServers,
-      'agenthub-telegram': {
-        command: 'node',
-        args: [scriptPath],
-        env: {
-          AGENTHUB_TELEGRAM_SOCK: sockPath,
-          AGENTHUB_AGENT_ID: agentId,
-          AGENTHUB_AGENT_NAME: agentName,
-          AGENTHUB_AGENT_REPO: repo,
-        }
+  // B1: Telegram is optional — add it only when the socket is available.
+  // Never gate the entire MCP config on telegram availability.
+  const sockPath = getTelegramSocketPath()
+  if (sockPath) {
+    const scriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
+      : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
+    mcpServers['agenthub-telegram'] = {
+      command: 'node',
+      args: [scriptPath],
+      env: {
+        AGENTHUB_TELEGRAM_SOCK: sockPath,
+        AGENTHUB_AGENT_ID: agentId,
+        AGENTHUB_AGENT_NAME: agentName,
+        AGENTHUB_AGENT_REPO: repo,
       }
     }
   }
 
+  if (Object.keys(mcpServers).length === 0) return null
+
   const configPath = join(tmpdir(), `agenthub-mcp-${agentId}.json`)
-  writeFileSync(configPath, JSON.stringify(config), 'utf-8')
+  writeFileSync(configPath, JSON.stringify({ mcpServers }), 'utf-8')
   return configPath
 }
 
@@ -929,7 +932,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const telegramToolFlag = agentState.telegramNotify ? " --allowedTools 'mcp__agenthub-telegram__send_telegram'" : ''
 
   const repoName = options.cwd.split('/').pop() ?? options.cwd
-  const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName)
+  const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName, options.cwd)
   const mcpFlag = mcpConfigPath ? ` --mcp-config '${mcpConfigPath}'` : ''
 
   // Inject agenthub plugin and skills index into every spawned agent session.
@@ -1041,6 +1044,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         task: task || undefined,
         skipPermissions: options.skipPermissions,
         telegramNotify: agentState.telegramNotify,
+        model: agentState.model && agentState.model !== 'codex-default' ? agentState.model : undefined,
+        effort: agentState.effortLevel || undefined,
       })
       ptyProcess.write(cmd)
       log.info('Sent Codex command to PTY', { id: agentState.id, provider: agentState.provider, taskLength: task?.length ?? 0, skipPermissions: options.skipPermissions })
