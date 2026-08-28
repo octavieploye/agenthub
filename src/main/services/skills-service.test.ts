@@ -444,6 +444,72 @@ describe('SkillsService', () => {
     })
   })
 
+  describe('executeSkill — command override', () => {
+    it('uses command skill content when workflow has command override', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/.claude/workflow-team-library' ||
+        path === '/project/.claude/workflow-team-library/market-modeling/manifest.md' ||
+        path === '/project/.claude/commands'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/.claude/workflow-team-library') return ['market-modeling']
+        if (dir === '/project/.claude/commands') return ['modelise.md']
+        return []
+      })
+      mockStatSync.mockReturnValue({ isDirectory: () => false })
+      mockReadFileSync.mockImplementation((path: string) => {
+        if ((path as string).includes('manifest.md'))
+          return '---\ncommand: modelise\n---\n\n# Market Modeling\nFour phases'
+        if ((path as string).includes('modelise.md'))
+          return '# Modelise\nRun the full four-phase market modeling workflow'
+        return ''
+      })
+      mockExecFile.mockImplementation(
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'workflow output', '')
+        }
+      )
+
+      const result = await service.executeSkill('market-modeling', '/project')
+      expect(result.exitCode).toBe(0)
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'claude',
+        ['--print', '-p', '# Modelise\nRun the full four-phase market modeling workflow'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+
+    it('falls back to slash command string when command skill not found', async () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/.claude/workflow-team-library' ||
+        path === '/project/.claude/workflow-team-library/market-modeling/manifest.md'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/.claude/workflow-team-library') return ['market-modeling']
+        return []
+      })
+      mockReadFileSync.mockImplementation((path: string) => {
+        if ((path as string).includes('manifest.md'))
+          return '---\ncommand: modelise\n---\n\n# Market Modeling\nFour phases'
+        return ''
+      })
+      mockExecFile.mockImplementation(
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, 'output', '')
+        }
+      )
+
+      await service.executeSkill('market-modeling', '/project')
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'claude',
+        ['--print', '-p', '/modelise'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+  })
+
   describe('executeSkill — multi-format execution', () => {
     it('executes .sh skill with bash', async () => {
       mockExistsSync.mockImplementation((path: string) =>
@@ -589,6 +655,44 @@ describe('SkillsService', () => {
       mockExistsSync.mockReturnValue(false)
       const skills = service.listSkills('/project')
       expect(skills.filter((s) => s.source === 'team')).toHaveLength(0)
+    })
+  })
+
+  describe('listSkills — workflows with command override', () => {
+    it('extracts command from manifest frontmatter', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/.claude/workflow-team-library' ||
+        path === '/project/.claude/workflow-team-library/market-modeling/manifest.md'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/.claude/workflow-team-library') return ['market-modeling']
+        return []
+      })
+      mockReadFileSync.mockReturnValue(
+        '---\ncommand: modelise\n---\n\n# Market Modeling\nFour phases of market analysis'
+      )
+
+      const skills = service.listSkills('/project')
+      const workflow = skills.find((s) => s.source === 'workflow')
+      expect(workflow).toBeTruthy()
+      expect(workflow!.command).toBe('modelise')
+    })
+
+    it('leaves command undefined when manifest has no command frontmatter', () => {
+      mockExistsSync.mockImplementation((path: string) =>
+        path === '/project/.claude/workflow-team-library' ||
+        path === '/project/.claude/workflow-team-library/market-modeling/manifest.md'
+      )
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === '/project/.claude/workflow-team-library') return ['market-modeling']
+        return []
+      })
+      mockReadFileSync.mockReturnValue('# Market Modeling\nFour phases of market analysis')
+
+      const skills = service.listSkills('/project')
+      const workflow = skills.find((s) => s.source === 'workflow')
+      expect(workflow).toBeTruthy()
+      expect(workflow!.command).toBeUndefined()
     })
   })
 

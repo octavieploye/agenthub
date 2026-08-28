@@ -8,6 +8,7 @@ export interface SkillItem {
   source: 'project' | 'team' | 'workflow' | 'command'
   origin: 'project' | 'agenthub'
   format?: string
+  command?: string
 }
 
 export interface SkillExecutionResult {
