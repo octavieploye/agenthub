@@ -1042,11 +1042,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     const mcpJsonPath = app.isPackaged
       ? join(process.resourcesPath, '.mcp.json')
       : join(app.getAppPath(), '.mcp.json')
-    try {
-      await ensureCodexMcpServers(mcpJsonPath, scriptPath)
-    } catch {
+    ensureCodexMcpServers(mcpJsonPath, scriptPath).catch(() => {
       // ensureCodexMcpServers is non-throwing by design — safety catch
-    }
+    })
 
     const codexMcpPath = writeCodexMcpConfig({
       targetDir: tmpdir(),
