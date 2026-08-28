@@ -14,6 +14,9 @@ function configPath(targetDir: string, agentId: string): string {
   return join(targetDir, `codex-mcp-${agentId}.json`)
 }
 
+// @deprecated — Codex has no --mcp-config flag. This file is written but never consumed.
+// MCP registration is now handled by ensureCodexMcpServers() in codex-health.ts.
+// Remove once ensureCodexMcpServers is confirmed working in production.
 export function writeCodexMcpConfig(options: CodexMcpConfigOptions): string | null {
   const { targetDir, agentId, agentName, repoName, telegramSocketPath, telegramScriptPath } =
     options

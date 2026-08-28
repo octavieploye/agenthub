@@ -9,7 +9,7 @@ import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../d
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
 import { buildCodexCommand } from './codex-command-builder'
-import { checkCodexHealth } from './codex-health'
+import { checkCodexHealth, ensureCodexMcpServers } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
 import { writeCodexMcpConfig, cleanupCodexMcpConfig } from './codex-mcp-config'
 import { readSettingsMcpServers } from './agent-mcp-config'
@@ -511,6 +511,19 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // S45: strip Ollama Cloud key — not needed by agent PTY (only used by model-service.ts internally)
   delete env.OLLAMA_CLOUD_KEY
   delete env.OLLAMA_API_KEY
+
+  // Inject Telegram identity for Codex agents so send_telegram MCP tool works.
+  // The agenthub-telegram server is registered process-wide via ensureCodexMcpServers;
+  // per-agent identity must arrive via PTY env at spawn time (no --env at mcp add time).
+  if (agentState.provider === 'openai-codex') {
+    const telegramSock = getTelegramSocketPath()
+    if (telegramSock) {
+      env.AGENTHUB_TELEGRAM_SOCK = telegramSock
+      env.AGENTHUB_AGENT_ID = agentState.id
+      env.AGENTHUB_AGENT_NAME = agentState.name
+      env.AGENTHUB_AGENT_REPO = options.cwd.split('/').pop() ?? options.cwd
+    }
+  }
 
   const shell = process.platform === 'win32' ? 'powershell.exe' : 'zsh'
   const args = process.platform === 'win32' ? [] : ['-l']
@@ -1024,6 +1037,16 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
       : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
+
+    const mcpJsonPath = app.isPackaged
+      ? join(process.resourcesPath, '.mcp.json')
+      : join(app.getAppPath(), '.mcp.json')
+    try {
+      await ensureCodexMcpServers(mcpJsonPath, scriptPath)
+    } catch {
+      // ensureCodexMcpServers is non-throwing by design — safety catch
+    }
+
     const codexMcpPath = writeCodexMcpConfig({
       targetDir: tmpdir(),
       agentId: agentState.id,
