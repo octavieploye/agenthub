@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useThemeStore } from '../../stores/theme-store'
 import FullTerminal from '../full-terminal/FullTerminal'
-import { startIpcListener } from '../full-terminal/terminal-manager'
+import { startIpcListener, injectHistory } from '../full-terminal/terminal-manager'
 import type { AgentState } from '@shared/types/agent.types'
 import { VoiceInputButton } from '../voice-input-button/VoiceInputButton'
 import { isLightColor } from '../agent-detail/color-utils'
@@ -21,6 +21,17 @@ function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React
   useEffect(() => {
     startIpcListener()
   }, [])
+
+  // Replay DB history into the terminal — breakout windows have a fresh terminal-manager
+  // with no historical content, so we fetch from DB and inject before live output arrives.
+  useEffect(() => {
+    window.agentHub.history.get(agentId).then((res) => {
+      if (res.success && res.data && res.data.length > 0) {
+        const content = res.data.map((e) => e.content).join('')
+        injectHistory(agentId, content)
+      }
+    })
+  }, [agentId])
 
   // Fetch agent state on mount
   useEffect(() => {
@@ -137,7 +148,7 @@ function BreakoutLayout({ agentId, renderTerminal }: BreakoutLayoutProps): React
       <div className="flex-1 min-h-0">
         {renderTerminal
           ? renderTerminal(agentId, agent?.color)
-          : <FullTerminal agentId={agentId} agentColor={agent?.color} visible={true} />}
+          : <FullTerminal agentId={agentId} agentColor={agent?.color} visible={true} skipBootOverlay />}
       </div>
 
       {/* Inline input */}
