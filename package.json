@@ -63,7 +63,7 @@
     "marked": "^18.0.5",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",
-    "optimaeus-llm": "file:../../optimaeus/optimaeus-architecture/shared/optimaeus-llm-ts",
+    "optimaeus-llm": "file:../../optimaeus-projects/optimaeus-llm/optimaeus-llm-ts",
     "yaml": "^2.8.2",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
