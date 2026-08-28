@@ -1,5 +1,5 @@
 import log from 'electron-log/main'
-import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS } from '../../shared/constants/model-catalog'
+import { CLAUDE_MODELS, CODEX_MODELS, OLLAMA_CLOUD_MODELS } from '../../shared/constants/model-catalog'
 import type { CapabilityTier, ModelCatalogEntry, ModelCategory, SpeedProfile } from '../../shared/types/model.types'
 
 const OLLAMA_CATEGORY_HINTS: Record<string, ModelCategory> = {
@@ -158,5 +158,5 @@ export async function listAllModels(): Promise<ModelCatalogEntry[]> {
   // Fall back to hardcoded catalog if live fetch returned nothing
   const ollamaCloud = cloudModels.length > 0 ? cloudModels : OLLAMA_CLOUD_MODELS
 
-  return [...ollamaCloud, ...localModels, ...CLAUDE_MODELS]
+  return [...ollamaCloud, ...localModels, ...CODEX_MODELS, ...CLAUDE_MODELS]
 }
