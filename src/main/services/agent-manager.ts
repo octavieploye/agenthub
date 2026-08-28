@@ -1019,6 +1019,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
         guardPath,
         skillsIndexPath,
         claudeMdPath: existsSync(agenthubClaudeMdPath) ? agenthubClaudeMdPath : undefined,
+        crossRepoContextPath,
         taskDescription: task || undefined,
       })
       const codexDir = join(options.cwd, '.codex')

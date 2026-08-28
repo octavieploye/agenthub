@@ -146,4 +146,22 @@ describe('generateAgentsMd', () => {
     expect(result).toContain('Codex CLI')
     expect(result).toContain('AgentHub')
   })
+
+  it('includes cross-repo context content when crossRepoContextPath is provided', () => {
+    const guardPath = join(tempDir, 'guard.md')
+    writeFileSync(guardPath, 'Guard. I cannot assist with that request.\n')
+    const skillsPath = join(tempDir, 'skills-index.md')
+    writeFileSync(skillsPath, '# Skills\n')
+    const crossRepoPath = join(tempDir, 'cross-repo-context.md')
+    writeFileSync(crossRepoPath, '# Cross-Repo Skill Resolution\n\nUse AGENTHUB_HOME to locate skills.\n')
+
+    const result = generateAgentsMd({
+      guardPath,
+      skillsIndexPath: skillsPath,
+      crossRepoContextPath: crossRepoPath,
+    })
+
+    expect(result).toContain('Cross-Repo Skill Resolution')
+    expect(result).toContain('AGENTHUB_HOME')
+  })
 })

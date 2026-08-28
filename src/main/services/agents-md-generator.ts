@@ -4,13 +4,14 @@ export interface GenerateAgentsMdOptions {
   guardPath: string
   skillsIndexPath: string
   claudeMdPath?: string
+  crossRepoContextPath?: string
   taskDescription?: string
 }
 
 const REFUSAL_PHRASE = 'I cannot assist with that request'
 
 export function generateAgentsMd(options: GenerateAgentsMdOptions): string {
-  const { guardPath, skillsIndexPath, claudeMdPath, taskDescription } = options
+  const { guardPath, skillsIndexPath, claudeMdPath, crossRepoContextPath, taskDescription } = options
 
   // Guard integrity — mandatory, must exist and contain refusal phrase
   if (!existsSync(guardPath)) {
@@ -28,6 +29,12 @@ export function generateAgentsMd(options: GenerateAgentsMdOptions): string {
   let skillsContent = ''
   if (existsSync(skillsIndexPath)) {
     skillsContent = readFileSync(skillsIndexPath, 'utf-8')
+  }
+
+  // Cross-repo context — optional, teaches agent how to resolve skills from agenthub
+  let crossRepoContent = ''
+  if (crossRepoContextPath && existsSync(crossRepoContextPath)) {
+    crossRepoContent = readFileSync(crossRepoContextPath, 'utf-8')
   }
 
   // CLAUDE.md — optional project rules
@@ -65,6 +72,16 @@ ${guardContent}
 ## Available Skills
 
 ${skillsContent}
+`)
+  }
+
+  // Cross-repo context — between skills index and CLAUDE.md
+  if (crossRepoContent) {
+    sections.push(`---
+
+## Skill Resolution
+
+${crossRepoContent}
 `)
   }
 
