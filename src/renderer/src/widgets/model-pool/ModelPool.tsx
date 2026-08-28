@@ -102,6 +102,7 @@ function ModelPool({
 }: ModelPoolProps): React.JSX.Element {
   const ollamaModels = models.filter((m) => m.provider === 'ollama-cloud' || m.provider === 'ollama-local')
   const claudeModels = models.filter((m) => m.provider === 'anthropic')
+  const codexModels = models.filter((m) => m.provider === 'openai-codex')
 
   // Group by family helper
   function groupByFamily(list: ModelInfo[]): { families: Record<string, ModelInfo[]>; sorted: string[] } {
@@ -144,6 +145,25 @@ function ModelPool({
               </div>
               <div className="flex flex-col gap-1">
                 {claudeModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    isSelected={model.id === selectedModelId}
+                    onSelect={() => onSelectModel(model.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CODEX section */}
+          {codexModels.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-emerald-400">
+                CODEX
+              </div>
+              <div className="flex flex-col gap-1">
+                {codexModels.map((model) => (
                   <ModelRow
                     key={model.id}
                     model={model}
