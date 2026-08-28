@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { SnapshotEngine } from './snapshot-engine'
@@ -41,7 +42,8 @@ import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clear
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
-import { cleanupOldRetryFailures } from '../db/queries/orchestrator.queries'
+import { cleanupOldRetryFailures, getRun } from '../db/queries/orchestrator.queries'
+import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
@@ -143,6 +145,44 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       }
       break
   }
+}
+
+/**
+ * Counts tokens consumed during a specific orchestrator run by scanning
+ * Claude CLI's JSONL session files and summing entries whose timestamp
+ * falls at or after the run's startedAt. Runs synchronously — called
+ * from the 30s monitor poll, acceptable latency.
+ */
+function computeRunTokenUsage(db: Database.Database, runId: string): number {
+  const run = getRun(db, runId)
+  if (!run?.startedAt) return 0
+
+  const projectsDir = join(homedir(), '.claude', 'projects')
+  if (!existsSync(projectsDir)) return 0
+
+  const startMs = new Date(run.startedAt).getTime()
+  let total = 0
+
+  try {
+    for (const name of readdirSync(projectsDir)) {
+      if (!name.endsWith('.jsonl')) continue
+      try {
+        const content = readFileSync(join(projectsDir, name), 'utf-8')
+        for (const entry of extractUsageEntries(parseJsonlContent(content))) {
+          const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
+          if (isNaN(t) || t < startMs) continue
+          const u = entry.message.usage
+          if (u) total += u.input_tokens + u.output_tokens
+        }
+      } catch {
+        // Skip unreadable file — non-fatal
+      }
+    }
+  } catch {
+    return 0
+  }
+
+  return total
 }
 
 export function initializeServices(db: Database.Database): void {
@@ -508,9 +548,7 @@ export function initializeServices(db: Database.Database): void {
   orchestratorMonitor = new OrchestratorMonitorService(db, {
     pause: (runId) => kanbanOrchestrator!.pause(runId),
     sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
-    // Per-run token attribution is deferred (claude-monitor is global, not per-run).
-    // The token cap is inert until a per-run counter is built (S5 follow-up).
-    getRunTokenUsage: () => 0,
+    getRunTokenUsage: (runId) => computeRunTokenUsage(db, runId),
   })
 
   // Task 4.19: DateWatcherService — polls for date-triggered tasks
