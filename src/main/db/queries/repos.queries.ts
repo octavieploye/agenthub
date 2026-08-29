@@ -54,7 +54,7 @@ export function insertRepo(
 }
 
 export function getRepoByPath(db: Database.Database, path: string): RepoConfig | null {
-  const row = db.prepare('SELECT * FROM repos WHERE path = ?').get(path) as
+  const row = db.prepare('SELECT * FROM repos WHERE path = ? AND hidden = 0').get(path) as
     | Record<string, unknown>
     | undefined
   return row ? mapRow(row) : null

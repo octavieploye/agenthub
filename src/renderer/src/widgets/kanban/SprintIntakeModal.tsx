@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { buildSprintDecompositionPrompt } from '../../helpers/sprint-decomposition-prompt'
-import type { RepoConfig } from '@shared/types/config.types'
 import type { Project } from '@shared/types/project.types'
+import { useReposStore } from '../../stores/repos-store'
 
 interface SprintIntakeModalProps {
   isOpen: boolean
@@ -10,8 +10,8 @@ interface SprintIntakeModalProps {
 }
 
 export function SprintIntakeModal({ isOpen, onClose, intakeDir }: SprintIntakeModalProps) {
+  const { repos, fetchRepos } = useReposStore()
   const [docPath, setDocPath] = useState('')
-  const [repos, setRepos] = useState<RepoConfig[]>([])
   const [selectedRepoId, setSelectedRepoId] = useState('')
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -25,16 +25,15 @@ export function SprintIntakeModal({ isOpen, onClose, intakeDir }: SprintIntakeMo
       setSelectedRepoId('')
       return
     }
-    window.agentHub.db.getRepos().then((res) => {
-      if (res.success) {
-        setRepos(res.data)
-        if (res.data.length > 0 && !selectedRepoId) setSelectedRepoId(res.data[0].id)
-      }
-    })
+    fetchRepos()
     window.agentHub.projects.list().then((res) => {
       if (res.success) setProjects(res.data)
     })
-  }, [isOpen, selectedRepoId])
+  }, [isOpen, fetchRepos])
+
+  useEffect(() => {
+    if (repos.length > 0 && !selectedRepoId) setSelectedRepoId(repos[0].id)
+  }, [repos, selectedRepoId])
 
   function handleProjectChange(projectId: string): void {
     setSelectedProjectId(projectId)

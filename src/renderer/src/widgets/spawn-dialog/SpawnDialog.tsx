@@ -14,6 +14,7 @@ import ModelPool from '@renderer/widgets/model-pool/ModelPool'
 import type { ModelInfo } from '@renderer/widgets/model-pool/ModelPool'
 import RepoSelectDropdown from './RepoSelectDropdown'
 import { useNotificationStore } from '@renderer/stores/notification-store'
+import { useReposStore } from '../../stores/repos-store'
 
 function catalogToModelInfo(entry: ModelCatalogEntry): ModelInfo {
   return {
@@ -173,6 +174,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
         setNewRepoPath('')
         setShowAddRepo(false)
         loadRepos()
+        useReposStore.getState().fetchRepos()
       }
     } catch {
       // ignore
@@ -235,6 +237,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
     try {
       await window.agentHub.db.removeRepo(repoId)
     } catch { /* best effort */ }
+    useReposStore.getState().fetchRepos()
 
     const { addToast, dismissToast } = useNotificationStore.getState()
     const toastId = `undo-remove-${repoId}`
@@ -252,6 +255,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
           try {
             await window.agentHub.db.unhideRepo(repoId)
             setRepos((prev) => [...prev, repo].sort((a, b) => a.name.localeCompare(b.name)))
+            useReposStore.getState().fetchRepos()
           } catch { /* best effort */ }
         }
       }]
@@ -262,6 +266,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
     setRepos((prev) => prev.map((r) => r.id === repoId ? { ...r, glowColor: color } : r))
     try {
       await window.agentHub.db.updateRepoColor(repoId, color)
+      useReposStore.getState().fetchRepos()
     } catch { /* UI already updated */ }
   }, [])
 

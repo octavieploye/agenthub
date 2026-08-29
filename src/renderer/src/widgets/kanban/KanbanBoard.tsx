@@ -11,10 +11,10 @@ import { SprintIntakeModal } from './SprintIntakeModal'
 import { SprintPreviewModal } from './SprintPreviewModal'
 import { OrchestratorControls } from './OrchestratorControls'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority, SprintDraftReadyPayload } from '@shared/types/task.types'
-import type { RepoConfig } from '@shared/types/config.types'
 import type { AgentLifecycleStatus } from '@shared/types/agent.types'
 import { useViewStore } from '../../stores/view-store'
 import { useOrchestratorStore } from '../../stores/orchestrator-store'
+import { useReposStore } from '../../stores/repos-store'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'backlog', label: 'Backlog' },
@@ -33,9 +33,9 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const { tasks, fetchTasks, fetchTasksOnce, updateTaskRemote, createTask, deleteTask } = useTaskStore()
   const agents = useAgentStore((s) => s.agents)
   const { projects, selectedProjectId, selectProject, fetchProjects } = useProjectStore()
+  const { repos, fetchRepos } = useReposStore()
   const [collapsed, setCollapsed] = useState<Set<TaskStatus>>(new Set())
   const [agentFilter, setAgentFilter] = useState<string | null>(defaultAgentFilter ?? null)
-  const [repos, setRepos] = useState<RepoConfig[]>([])
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [dispatchModalTask, setDispatchModalTask] = useState<TaskItem | null>(null)
   const [sprintIntakeOpen, setSprintIntakeOpen] = useState(false)
@@ -59,7 +59,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   useEffect(() => {
     fetchTasksOnce()
     fetchProjects()
-    window.agentHub.db.getRepos().then((res) => { if (res.success) setRepos(res.data) }).catch((err) => console.error('Failed to fetch repos:', err))
+    fetchRepos()
     window.agentHub.system.getIntakeDir()
       .then((res) => { if (res.success) setIntakeDir(res.data) })
       .catch((err) => console.error('Failed to get intake dir:', err))
@@ -77,7 +77,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
         })
         .catch((err) => console.error('Failed to get existing drafts:', err))
     }
-  }, [fetchTasksOnce, fetchProjects, selectProject])
+  }, [fetchTasksOnce, fetchProjects, fetchRepos, selectProject])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const debouncedFetchTasks = useCallback(() => {
@@ -92,6 +92,11 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [debouncedFetchTasks])
+
+  useEffect(() => {
+    const unsub = window.agentHub.on.reposChanged(() => { fetchRepos() })
+    return () => { unsub() }
+  }, [fetchRepos])
 
   useEffect(() => {
     return window.agentHub.on.draftReady((raw) => {

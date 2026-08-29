@@ -274,6 +274,7 @@ export interface AgentHubBridge {
     agentTriaged: (callback: (result: import('./notification.types').RoutingResult) => void) => () => void
     dockerStatusChange: (callback: () => void) => () => void
     tasksUpdated: (callback: () => void) => () => void
+    reposChanged: (callback: () => void) => () => void
     sprintPending: (
       cb: (payload: import('./task.types').SprintPendingPayload) => void
     ) => () => void

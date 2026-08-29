@@ -420,6 +420,11 @@ const agentHubBridge = {
       ipcRenderer.on(IPC_EVENTS.TASKS.UPDATED, handler)
       return () => ipcRenderer.removeListener(IPC_EVENTS.TASKS.UPDATED, handler)
     },
+    reposChanged: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(IPC_EVENTS.REPOS.CHANGED, handler)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.REPOS.CHANGED, handler)
+    },
     sprintPending: (callback: (payload: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.KANBAN.SPRINT_PENDING, handler)

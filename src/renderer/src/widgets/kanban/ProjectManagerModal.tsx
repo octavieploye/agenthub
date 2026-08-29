@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useProjectStore } from '../../stores/project-store'
+import { useReposStore } from '../../stores/repos-store'
 import type { Project } from '@shared/types/project.types'
 import type { RepoConfig } from '@shared/types/config.types'
 import { ProjectMemoryPanel } from './ProjectMemoryPanel'
@@ -18,11 +19,6 @@ interface EditState {
 
 // projectId -> Set of linked repoIds
 type LinkedReposMap = Record<string, Set<string>>
-
-async function fetchAllRepos(): Promise<RepoConfig[]> {
-  const response = await window.agentHub.db.getRepos()
-  return response.success ? response.data : []
-}
 
 async function buildLinkedReposMap(
   repos: RepoConfig[],
@@ -54,7 +50,7 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
     unlinkRepo
   } = useProjectStore()
 
-  const [repos, setRepos] = useState<RepoConfig[]>([])
+  const { repos, fetchRepos } = useReposStore()
   const [linkedReposMap, setLinkedReposMap] = useState<LinkedReposMap>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editState, setEditState] = useState<EditState>({ name: '', description: '', path: '', contextDoc: '' })
@@ -74,9 +70,8 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
 
   const loadData = useCallback(async () => {
     await fetchProjects()
-    const allRepos = await fetchAllRepos()
-    setRepos(allRepos)
-  }, [fetchProjects])
+    fetchRepos()
+  }, [fetchProjects, fetchRepos])
 
   useEffect(() => {
     if (!isOpen) return
@@ -157,8 +152,8 @@ export function ProjectManagerModal({ isOpen, onClose }: ProjectManagerModalProp
     } else {
       await linkRepo(projectId, repoId)
     }
-    const updatedRepos = await fetchAllRepos()
-    await refreshLinkedMap(updatedRepos, projects)
+    fetchRepos()
+    await refreshLinkedMap(useReposStore.getState().repos, projects)
     setBusy(false)
   }
 

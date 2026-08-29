@@ -267,6 +267,9 @@ export const IPC_EVENTS = {
   TASKS: {
     UPDATED: 'on-tasks:updated'
   },
+  REPOS: {
+    CHANGED: 'repos:changed'
+  },
   KANBAN: {
     SPRINT_PENDING: 'on-kanban:sprint-pending',
     DRAFT_READY: 'on-kanban:draft-ready',
