@@ -1,6 +1,7 @@
 import { CLOUD_MODEL_CATALOG } from '../model-dispatcher'
+import { CODEX_MODELS } from '../../shared/constants/model-catalog'
 
-const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6'] as const
+const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'] as const
 
 /**
  * Validates that a model override is a known model for the given provider.
@@ -24,6 +25,14 @@ export function validateModelOverride(
     const known = CLOUD_MODEL_CATALOG.some(m => m.id === model)
     if (!known) {
       return `Unknown Ollama Cloud model: "${model}". Valid: ${CLOUD_MODEL_CATALOG.map(m => m.id).join(', ')}`
+    }
+    return null
+  }
+
+  if (provider === 'openai-codex') {
+    const known = CODEX_MODELS.some(m => m.id === model)
+    if (!known) {
+      return `Unknown Codex model: "${model}". Valid: ${CODEX_MODELS.map(m => m.id).join(', ')}`
     }
     return null
   }

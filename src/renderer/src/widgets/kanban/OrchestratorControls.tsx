@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Play, Pause, RotateCcw, X } from 'lucide-react'
 import { useOrchestratorStore } from '../../stores/orchestrator-store'
 import type { OrchestratorRunStatus } from '@shared/types/orchestrator.types'
@@ -41,11 +41,26 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
   const [showStartForm, setShowStartForm] = useState(false)
   const [formSprintName, setFormSprintName] = useState('')
   const [formRepoId, setFormRepoId] = useState('')
+  const [sprintNames, setSprintNames] = useState<string[]>([])
+  const [showCustomSprint, setShowCustomSprint] = useState(false)
+
+  const loadSprintNames = useCallback(async () => {
+    try {
+      const res = await window.agentHub.tasks.list()
+      if (res.success) {
+        const names = [...new Set(res.data.flatMap((t) => t.sprintName ? [t.sprintName] : []))].sort()
+        setSprintNames(names)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
 
   // Fetch status on mount
   useEffect(() => {
     fetchStatus()
-  }, [fetchStatus])
+    loadSprintNames()
+  }, [fetchStatus, loadSprintNames])
 
   // Subscribe to push events
   useEffect(() => {
@@ -86,6 +101,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     })
     if (ok) {
       setShowStartForm(false)
+      setShowCustomSprint(false)
       setFormSprintName('')
       setFormRepoId('')
     }
@@ -123,7 +139,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
       {isIdle && !showStartForm && (
         <button
           className="btn btn-sm btn-ghost"
-          onClick={() => setShowStartForm(true)}
+          onClick={() => { setShowStartForm(true); setShowCustomSprint(false); setFormSprintName('') }}
           title="Start orchestrator run"
           disabled={loading}
         >
@@ -133,14 +149,36 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
 
       {isIdle && showStartForm && (
         <div className="flex items-center gap-1.5">
-          <input
-            type="text"
-            className="input input-sm input-bordered w-28"
-            placeholder="Sprint name"
-            value={formSprintName}
-            onChange={(e) => setFormSprintName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') setShowStartForm(false) }}
-          />
+          {showCustomSprint ? (
+            <input
+              type="text"
+              className="input input-sm input-bordered w-28"
+              placeholder="Sprint name"
+              value={formSprintName}
+              onChange={(e) => setFormSprintName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setShowCustomSprint(false); setFormSprintName('') } }}
+              autoFocus
+            />
+          ) : (
+            <select
+              className="select select-sm select-bordered w-28"
+              value={formSprintName}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setShowCustomSprint(true)
+                  setFormSprintName('')
+                } else {
+                  setFormSprintName(e.target.value)
+                }
+              }}
+            >
+              <option value="">Sprint</option>
+              {sprintNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+              <option value="__custom__">Other…</option>
+            </select>
+          )}
           <select
             className="select select-sm select-bordered w-28"
             value={formRepoId}
@@ -161,7 +199,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
           </button>
           <button
             className="btn btn-sm btn-ghost"
-            onClick={() => setShowStartForm(false)}
+            onClick={() => { setShowStartForm(false); setShowCustomSprint(false); setFormSprintName('') }}
             title="Cancel"
           >
             <RotateCcw size={12} />

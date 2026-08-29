@@ -5,7 +5,7 @@ import type { TaskItem, TaskPriority, TaskStatus, UpdateTaskInput } from '@share
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState } from '@shared/types/agent.types'
 import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
-import { CLOUD_MODEL_OPTIONS, ANTHROPIC_MODEL_OPTIONS, PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
+import { CLOUD_MODEL_OPTIONS, ANTHROPIC_MODEL_OPTIONS, CODEX_MODEL_OPTIONS, PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
 import type { ValidProvider } from '@shared/constants/cloud-models'
 import { useProjectStore } from '../../stores/project-store'
 import { useOrchestratorStore } from '../../stores/orchestrator-store'
@@ -356,6 +356,11 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
               </optgroup>
               <optgroup label="Anthropic">
                 {ANTHROPIC_MODEL_OPTIONS.map((m) => (
+                  <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Codex">
+                {CODEX_MODEL_OPTIONS.map((m) => (
                   <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
                 ))}
               </optgroup>

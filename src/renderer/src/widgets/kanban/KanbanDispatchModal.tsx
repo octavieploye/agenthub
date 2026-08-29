@@ -1,18 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
-import type { ModelProvider } from '@shared/types/agent.types'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
+import { ANTHROPIC_MODEL_OPTIONS, CLOUD_MODEL_OPTIONS, CODEX_MODEL_OPTIONS } from '@shared/constants/cloud-models'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
-
-const CLAUDE_MODEL_OPTIONS: { id: string; name: string; provider: ModelProvider }[] = [
-  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic' },
-  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'anthropic' },
-  { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'anthropic' },
-]
 
 const ROLES = ['dev-backend', 'dev-frontend', 'dev-integration']
 
@@ -88,8 +82,17 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
   const [prompt, setPrompt] = useState(() => buildPrompt(task, project?.name))
   const [isDispatching, setIsDispatching] = useState(false)
 
-  const [selectedModel, setSelectedModel] = useState(CLAUDE_MODEL_OPTIONS[0].id)
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
+  const [selectedProvider, setSelectedProvider] = useState('anthropic')
+  const [codexAvailable, setCodexAvailable] = useState(false)
   const [skipPermissions, setSkipPermissions] = useState(false)
+
+  useEffect(() => {
+    if (!window.agentHub?.models?.codexHealth) return
+    window.agentHub.models.codexHealth()
+      .then((res) => { if (res.success) setCodexAvailable(res.data.installed && res.data.authenticated) })
+      .catch(() => {})
+  }, [])
 
   const [recsOpen, setRecsOpen] = useState(true)
   const [teamOpen, setTeamOpen] = useState(false)
@@ -112,7 +115,6 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
 
     if (mode === 'spawn') {
       const cwd = resolveCwd(task, projects, repos)
-      const modelEntry = CLAUDE_MODEL_OPTIONS.find((m) => m.id === selectedModel)
       const result = await window.agentHub.agents.spawn({
         repoId: task.repoId,
         name: spawnName.trim() || generateAgentName(task.title),
@@ -121,7 +123,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         projectId: task.projectId ?? undefined,
         taskDescription: prompt.trim(),
         model: selectedModel,
-        provider: modelEntry?.provider ?? 'anthropic',
+        provider: selectedProvider,
         skipPermissions,
       })
       if (result.success && result.data) {
@@ -257,12 +259,30 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
                 id="dispatch-model"
                 aria-label="Model"
                 className="select select-sm select-bordered w-full"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                value={`${selectedProvider}::${selectedModel}`}
+                onChange={(e) => {
+                  const [prov, ...parts] = e.target.value.split('::')
+                  setSelectedProvider(prov)
+                  setSelectedModel(parts.join('::'))
+                }}
               >
-                {CLAUDE_MODEL_OPTIONS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
+                <optgroup label="Anthropic">
+                  {ANTHROPIC_MODEL_OPTIONS.map((m) => (
+                    <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Ollama Cloud">
+                  {CLOUD_MODEL_OPTIONS.map((m) => (
+                    <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                  ))}
+                </optgroup>
+                {codexAvailable && (
+                  <optgroup label="Codex">
+                    {CODEX_MODEL_OPTIONS.map((m) => (
+                      <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 

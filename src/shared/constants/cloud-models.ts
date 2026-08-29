@@ -7,7 +7,7 @@
 export interface CloudModelEntry {
   id: string
   name: string
-  provider: 'ollama-cloud' | 'ollama-local' | 'anthropic'
+  provider: 'ollama-cloud' | 'ollama-local' | 'anthropic' | 'openai-codex'
 }
 
 export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
@@ -21,13 +21,24 @@ export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
 export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = [
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet', provider: 'anthropic' },
   { id: 'claude-opus-4-6', name: 'Claude Opus', provider: 'anthropic' },
+  { id: 'claude-haiku-4-5', name: 'Claude Haiku', provider: 'anthropic' },
+]
+
+export const CODEX_MODEL_OPTIONS: CloudModelEntry[] = [
+  { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai-codex' },
+  { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', provider: 'openai-codex' },
+  { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', provider: 'openai-codex' },
+  { id: 'gpt-5.5', name: 'GPT-5.5', provider: 'openai-codex' },
+  { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'openai-codex' },
+  { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'openai-codex' },
 ]
 
 export const PROVIDER_BADGE_LABEL: Record<string, string> = {
   'ollama-cloud': 'OC',
   'ollama-local': 'OL',
   'anthropic': 'AN',
+  'openai-codex': 'CX',
 }
 
-export const VALID_PROVIDERS = ['anthropic', 'ollama-local', 'ollama-cloud'] as const
+export const VALID_PROVIDERS = ['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'] as const
 export type ValidProvider = typeof VALID_PROVIDERS[number]
