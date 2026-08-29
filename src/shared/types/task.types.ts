@@ -62,6 +62,10 @@ export interface TaskItem {
   riskScore: number | null
   riskFactorsJson: string | null
   createdBy: string | null
+  targetFiles: string[] | null
+  skills: string[] | null
+  guardrailOverrides: Record<string, unknown> | null
+  riskFactors: string[] | null
   createdAt: string
   updatedAt: string
 }
@@ -91,6 +95,10 @@ export interface CreateTaskInput {
   riskScore?: number
   riskFactorsJson?: string
   createdBy?: string
+  targetFiles?: string[]
+  skills?: string[]
+  guardrailOverrides?: Record<string, unknown>
+  riskFactors?: string[]
 }
 
 export interface UpdateTaskInput {
@@ -119,6 +127,10 @@ export interface UpdateTaskInput {
   riskScore?: number | null
   riskFactorsJson?: string | null
   createdBy?: string | null
+  targetFiles?: string[] | null
+  skills?: string[] | null
+  guardrailOverrides?: Record<string, unknown> | null
+  riskFactors?: string[] | null
 }
 
 export type TaskEventType =
