@@ -34,6 +34,9 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   private flushing = false
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** Cache: repo name → Anamnesis project UUID */
+  private projectUuidCache = new Map<string, string>()
+
   private static readonly MAX_FAILURES = 3
   private static readonly BACKOFF_MS = 60_000
   private static readonly FETCH_TIMEOUT_MS = 5_000
@@ -80,8 +83,50 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     }
   }
 
+  /** Resolve repo name from a task event via: task_id → tasks.repo_id → repos.name */
+  private resolveRepoName(taskId: string): string | null {
+    const row = this.db.prepare(
+      'SELECT r.name FROM repos r JOIN tasks t ON t.repo_id = r.id WHERE t.id = ?'
+    ).get(taskId) as { name: string } | undefined
+    return row?.name ?? null
+  }
+
+  /** Register or look up a project in Anamnesis, returning the UUID. Caches results. */
+  private async resolveProjectUuid(repoName: string): Promise<string | null> {
+    const cached = this.projectUuidCache.get(repoName)
+    if (cached) return cached
+
+    try {
+      const res = await this.fetch(`${this.anamnesisUrl}/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Optimaeus-Caller': 'hephaestus',
+          ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
+        },
+        body: JSON.stringify({ name: repoName }),
+        signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
+      })
+      if (res.ok) {
+        const data = await res.json() as { id: string }
+        this.projectUuidCache.set(repoName, data.id)
+        log.info(`AnamnesisWriter: resolved project '${repoName}' → ${data.id}`)
+        return data.id
+      }
+      log.warn(`AnamnesisWriter: failed to resolve project '${repoName}'`, { status: res.status })
+      return null
+    } catch {
+      log.warn(`AnamnesisWriter: could not reach Anamnesis to resolve project '${repoName}'`)
+      return null
+    }
+  }
+
   /** Transform a task event into the Anamnesis write model format. */
-  private buildAnamnesisPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
+  private buildAnamnesisPayload(
+    event: TaskEvent,
+    rawPayload: Record<string, unknown>,
+    projectId: string | null,
+  ): Record<string, unknown> {
     const isEpisodic = event.eventType === 'CARD_TRANSITION'
       || event.eventType === 'SPRINT_INTAKE'
       || event.eventType === 'ORCHESTRATOR_TASK_STARTED'
@@ -90,6 +135,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     if (isEpisodic) {
       return {
         source_entity: 'hephaestus',
+        ...(projectId ? { project_id: projectId } : {}),
         content: {
           event_type: event.eventType.toLowerCase(),
           task_id: event.taskId,
@@ -113,6 +159,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
 
     return {
       source_entity: 'hephaestus',
+      ...(projectId ? { project_id: projectId } : {}),
       pattern_type: orchMeta?.pattern_type ?? 'build_sequence',
       domain: orchMeta?.domain ?? (event.eventType === 'CARD_COMPLETED' ? 'task_completion' : 'task_interruption'),
       content: {
@@ -139,7 +186,14 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       return false
     }
 
-    const body = this.buildAnamnesisPayload(event, rawPayload)
+    // Resolve project UUID from task → repo → Anamnesis project registry
+    let projectId: string | null = null
+    const repoName = this.resolveRepoName(event.taskId)
+    if (repoName) {
+      projectId = await this.resolveProjectUuid(repoName)
+    }
+
+    const body = this.buildAnamnesisPayload(event, rawPayload, projectId)
 
     try {
       const res = await this.fetch(url, {

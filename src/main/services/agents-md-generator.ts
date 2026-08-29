@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs'
+import { dirname, join } from 'path'
 
 export interface GenerateAgentsMdOptions {
   guardPath: string
@@ -9,6 +10,27 @@ export interface GenerateAgentsMdOptions {
 }
 
 const REFUSAL_PHRASE = 'I cannot assist with that request'
+
+// Resolves Claude Code @-import directives (lines starting with @<path>) by inlining
+// the referenced file content. Absolute paths used as-is; relative paths resolved from
+// baseDir. Missing files are silently dropped — degrades gracefully.
+function resolveAtImports(content: string, baseDir: string): string {
+  return content
+    .split('\n')
+    .map(line => {
+      const match = line.match(/^@(.+)$/)
+      if (!match) return line
+      const importPath = match[1].trim()
+      const resolved = importPath.startsWith('/') ? importPath : join(baseDir, importPath)
+      if (!existsSync(resolved)) return ''
+      try {
+        return readFileSync(resolved, 'utf-8')
+      } catch {
+        return ''
+      }
+    })
+    .join('\n')
+}
 
 export function generateAgentsMd(options: GenerateAgentsMdOptions): string {
   const { guardPath, skillsIndexPath, claudeMdPath, crossRepoContextPath, taskDescription } = options
@@ -37,10 +59,11 @@ export function generateAgentsMd(options: GenerateAgentsMdOptions): string {
     crossRepoContent = readFileSync(crossRepoContextPath, 'utf-8')
   }
 
-  // CLAUDE.md — optional project rules
+  // CLAUDE.md — optional project rules, @-imports resolved so Codex sees the full content
   let claudeMdContent = ''
   if (claudeMdPath && existsSync(claudeMdPath)) {
-    claudeMdContent = readFileSync(claudeMdPath, 'utf-8')
+    const raw = readFileSync(claudeMdPath, 'utf-8')
+    claudeMdContent = resolveAtImports(raw, dirname(claudeMdPath))
   }
 
   const sections: string[] = []

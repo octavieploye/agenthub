@@ -147,6 +147,37 @@ describe('generateAgentsMd', () => {
     expect(result).toContain('AgentHub')
   })
 
+  it('resolves @-import directives in CLAUDE.md and inlines referenced file content', () => {
+    const guardPath = join(tempDir, 'guard.md')
+    writeFileSync(guardPath, 'Guard. I cannot assist with that request.\n')
+    const skillsPath = join(tempDir, 'skills-index.md')
+    writeFileSync(skillsPath, '# Skills\n')
+    const importedPath = join(tempDir, 'imported-rules.md')
+    writeFileSync(importedPath, '# Imported Rules\n\nDestructive command ban: never run rm -rf.\n')
+    const claudeMdPath = join(tempDir, 'CLAUDE.md')
+    writeFileSync(claudeMdPath, `# Project Rules\n\n@${importedPath}\n\nSome other rule.\n`)
+
+    const result = generateAgentsMd({ guardPath, skillsIndexPath: skillsPath, claudeMdPath })
+
+    expect(result).toContain('Destructive command ban')
+    expect(result).toContain('never run rm -rf')
+    expect(result).not.toContain(`@${importedPath}`)
+  })
+
+  it('silently drops unresolvable @-import lines in CLAUDE.md', () => {
+    const guardPath = join(tempDir, 'guard.md')
+    writeFileSync(guardPath, 'Guard. I cannot assist with that request.\n')
+    const skillsPath = join(tempDir, 'skills-index.md')
+    writeFileSync(skillsPath, '# Skills\n')
+    const claudeMdPath = join(tempDir, 'CLAUDE.md')
+    writeFileSync(claudeMdPath, '# Rules\n\n@/nonexistent/path/to/missing.md\n\nSome rule.\n')
+
+    const result = generateAgentsMd({ guardPath, skillsIndexPath: skillsPath, claudeMdPath })
+
+    expect(result).toContain('Some rule')
+    expect(result).not.toContain('/nonexistent/path/to/missing.md')
+  })
+
   it('includes cross-repo context content when crossRepoContextPath is provided', () => {
     const guardPath = join(tempDir, 'guard.md')
     writeFileSync(guardPath, 'Guard. I cannot assist with that request.\n')
