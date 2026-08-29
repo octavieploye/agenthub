@@ -60,6 +60,18 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               ...(input.epicName !== undefined && { epicName: input.epicName }),
               ...(input.sectionTargetDate !== undefined && { sectionTargetDate: input.sectionTargetDate }),
               ...(input.note !== undefined && { note: input.note }),
+              ...(input.modelOverride !== undefined && { modelOverride: input.modelOverride }),
+              ...(input.providerOverride !== undefined && { providerOverride: input.providerOverride }),
+              ...(input.requiresApproval !== undefined && { requiresApproval: input.requiresApproval }),
+              ...(input.dateTriggerFiredAt !== undefined && { dateTriggerFiredAt: input.dateTriggerFiredAt }),
+              ...(input.targetFilesJson !== undefined && { targetFilesJson: input.targetFilesJson }),
+              ...(input.skillsJson !== undefined && { skillsJson: input.skillsJson }),
+              ...(input.guardrailJson !== undefined && { guardrailJson: input.guardrailJson }),
+              ...(input.estimatedTokens !== undefined && { estimatedTokens: input.estimatedTokens }),
+              ...(input.recommendedModel !== undefined && { recommendedModel: input.recommendedModel }),
+              ...(input.riskScore !== undefined && { riskScore: input.riskScore }),
+              ...(input.riskFactorsJson !== undefined && { riskFactorsJson: input.riskFactorsJson }),
+              ...(input.createdBy !== undefined && { createdBy: input.createdBy }),
               updatedAt: new Date().toISOString()
             }
           : t

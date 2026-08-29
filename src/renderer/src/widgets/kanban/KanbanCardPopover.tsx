@@ -68,6 +68,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [epicName, setEpicName] = useState(task.epicName ?? '')
   const [sprintName, setSprintName] = useState(task.sprintName ?? '')
   const [sectionTargetDate, setSectionTargetDate] = useState(task.sectionTargetDate ?? '')
+  const [dateTriggerFiredAt, setDateTriggerFiredAt] = useState(task.dateTriggerFiredAt ?? null)
   const [modelOverride, setModelOverride] = useState(task.modelOverride ?? '')
   const [providerOverride, setProviderOverride] = useState(task.providerOverride ?? '')
   const [requiresApproval, setRequiresApproval] = useState(task.requiresApproval ?? false)
@@ -107,6 +108,7 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
       epicName: epicName.trim() || null,
       sprintName: sprintName.trim() || null,
       sectionTargetDate: sectionTargetDate || null,
+      dateTriggerFiredAt: dateTriggerFiredAt || null,
       agentId: selectedAgentId,
       projectId: selectedProjectId,
       modelOverride: modelOverride || null,
@@ -371,6 +373,16 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
             />
             <span className="text-xs text-base-content/70">Requires approval</span>
           </label>
+
+          {/* Date Trigger Fired At */}
+          {dateTriggerFiredAt && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-base-content/50">Trigger Fired</label>
+              <div className="text-xs text-base-content/70 px-2 py-1 bg-base-200/50 rounded">
+                {new Date(dateTriggerFiredAt).toLocaleString()}
+              </div>
+            </div>
+          )}
         </div>
       </details>
 

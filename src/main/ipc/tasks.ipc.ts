@@ -40,7 +40,15 @@ const createTaskSchema = z.object({
   note: z.string().nullable().optional(),
   requiresApproval: z.boolean().optional(),
   modelOverride: z.string().optional(),
-  providerOverride: z.enum(['anthropic', 'ollama-local', 'ollama-cloud']).optional()
+  providerOverride: z.enum(['anthropic', 'ollama-local', 'ollama-cloud']).optional(),
+  targetFilesJson: z.string().nullable().optional(),
+  skillsJson: z.string().nullable().optional(),
+  guardrailJson: z.string().nullable().optional(),
+  estimatedTokens: z.number().nullable().optional(),
+  recommendedModel: z.string().nullable().optional(),
+  riskScore: z.number().nullable().optional(),
+  riskFactorsJson: z.string().nullable().optional(),
+  createdBy: z.string().nullable().optional()
 })
 
 const updateTaskSchema = z.object({
@@ -62,7 +70,15 @@ const updateTaskSchema = z.object({
   requiresApproval: z.boolean().optional(),
   modelOverride: z.string().nullable().optional(),
   providerOverride: z.enum(['anthropic', 'ollama-local', 'ollama-cloud']).nullable().optional(),
-  dateTriggerFiredAt: isoDateSchema
+  dateTriggerFiredAt: isoDateSchema,
+  targetFilesJson: z.string().nullable().optional(),
+  skillsJson: z.string().nullable().optional(),
+  guardrailJson: z.string().nullable().optional(),
+  estimatedTokens: z.number().nullable().optional(),
+  recommendedModel: z.string().nullable().optional(),
+  riskScore: z.number().nullable().optional(),
+  riskFactorsJson: z.string().nullable().optional(),
+  createdBy: z.string().nullable().optional()
 })
 
 export function registerTasksHandlers(): void {

@@ -36,6 +36,14 @@ function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): T
     providerOverride: (row.provider_override as string) ?? null,
     dateTriggerFiredAt: (row.date_trigger_fired_at as string) ?? null,
     blockedBy: depMap?.get(id) ?? [],
+    targetFilesJson: (row.target_files_json as string) ?? null,
+    skillsJson: (row.skills_json as string) ?? null,
+    guardrailJson: (row.guardrail_json as string) ?? null,
+    estimatedTokens: (row.estimated_tokens as number) ?? null,
+    recommendedModel: (row.recommended_model as string) ?? null,
+    riskScore: (row.risk_score as number) ?? null,
+    riskFactorsJson: (row.risk_factors_json as string) ?? null,
+    createdBy: (row.created_by as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -104,8 +112,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const now = new Date().toISOString()
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, model_override, provider_override, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, model_override, provider_override, target_files_json, skills_json, guardrail_json, estimated_tokens, recommended_model, risk_score, risk_factors_json, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -122,6 +130,14 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.requiresApproval ? 1 : 0,
     input.modelOverride ?? null,
     input.providerOverride ?? null,
+    input.targetFilesJson ?? null,
+    input.skillsJson ?? null,
+    input.guardrailJson ?? null,
+    input.estimatedTokens ?? null,
+    input.recommendedModel ?? null,
+    input.riskScore ?? null,
+    input.riskFactorsJson ?? null,
+    input.createdBy ?? null,
     now,
     now
   )
@@ -155,6 +171,14 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     providerOverride: input.providerOverride ?? null,
     dateTriggerFiredAt: null,
     blockedBy: [],
+    targetFilesJson: input.targetFilesJson ?? null,
+    skillsJson: input.skillsJson ?? null,
+    guardrailJson: input.guardrailJson ?? null,
+    estimatedTokens: input.estimatedTokens ?? null,
+    recommendedModel: input.recommendedModel ?? null,
+    riskScore: input.riskScore ?? null,
+    riskFactorsJson: input.riskFactorsJson ?? null,
+    createdBy: input.createdBy ?? null,
     createdAt: now,
     updatedAt: now
   }
@@ -235,6 +259,38 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   if (input.dateTriggerFiredAt !== undefined) {
     sets.push('date_trigger_fired_at = ?')
     values.push(input.dateTriggerFiredAt)
+  }
+  if (input.targetFilesJson !== undefined) {
+    sets.push('target_files_json = ?')
+    values.push(input.targetFilesJson)
+  }
+  if (input.skillsJson !== undefined) {
+    sets.push('skills_json = ?')
+    values.push(input.skillsJson)
+  }
+  if (input.guardrailJson !== undefined) {
+    sets.push('guardrail_json = ?')
+    values.push(input.guardrailJson)
+  }
+  if (input.estimatedTokens !== undefined) {
+    sets.push('estimated_tokens = ?')
+    values.push(input.estimatedTokens)
+  }
+  if (input.recommendedModel !== undefined) {
+    sets.push('recommended_model = ?')
+    values.push(input.recommendedModel)
+  }
+  if (input.riskScore !== undefined) {
+    sets.push('risk_score = ?')
+    values.push(input.riskScore)
+  }
+  if (input.riskFactorsJson !== undefined) {
+    sets.push('risk_factors_json = ?')
+    values.push(input.riskFactorsJson)
+  }
+  if (input.createdBy !== undefined) {
+    sets.push('created_by = ?')
+    values.push(input.createdBy)
   }
 
   values.push(id)

@@ -54,6 +54,14 @@ export interface TaskItem {
   providerOverride: string | null
   dateTriggerFiredAt: string | null
   blockedBy: string[]
+  targetFilesJson: string | null
+  skillsJson: string | null
+  guardrailJson: string | null
+  estimatedTokens: number | null
+  recommendedModel: string | null
+  riskScore: number | null
+  riskFactorsJson: string | null
+  createdBy: string | null
   createdAt: string
   updatedAt: string
 }
@@ -75,6 +83,14 @@ export interface CreateTaskInput {
   providerOverride?: string
   localId?: string
   dependsOn?: string[]
+  targetFilesJson?: string
+  skillsJson?: string
+  guardrailJson?: string
+  estimatedTokens?: number
+  recommendedModel?: string
+  riskScore?: number
+  riskFactorsJson?: string
+  createdBy?: string
 }
 
 export interface UpdateTaskInput {
@@ -95,6 +111,14 @@ export interface UpdateTaskInput {
   modelOverride?: string | null
   providerOverride?: string | null
   dateTriggerFiredAt?: string | null
+  targetFilesJson?: string | null
+  skillsJson?: string | null
+  guardrailJson?: string | null
+  estimatedTokens?: number | null
+  recommendedModel?: string | null
+  riskScore?: number | null
+  riskFactorsJson?: string | null
+  createdBy?: string | null
 }
 
 export type TaskEventType =
