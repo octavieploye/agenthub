@@ -269,7 +269,8 @@ export const IPC_EVENTS = {
   },
   KANBAN: {
     SPRINT_PENDING: 'on-kanban:sprint-pending',
-    DRAFT_READY: 'on-kanban:draft-ready'
+    DRAFT_READY: 'on-kanban:draft-ready',
+    SPRINT_AUTO_START: 'on-kanban:sprint-auto-start',
   },
   TTS: {
     RESPONSE_READY: 'on-tts:response-ready',

@@ -5,6 +5,11 @@ export function getRepoExistsById(db: Database.Database, repoId: string): boolea
   return row !== undefined
 }
 
+export function getRepoByPath(db: Database.Database, path: string): string | null {
+  const row = db.prepare('SELECT id FROM repos WHERE path = ? AND hidden = 0').get(path) as { id: string } | undefined
+  return row?.id ?? null
+}
+
 export function getSprintTaskCount(db: Database.Database, sprintName: string, repoId: string): number {
   const row = db
     .prepare('SELECT COUNT(*) as c FROM tasks WHERE sprint_name = ? AND repo_id = ?')

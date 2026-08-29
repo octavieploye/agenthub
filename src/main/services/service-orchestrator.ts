@@ -431,11 +431,11 @@ export function initializeServices(db: Database.Database): void {
   const forgejoToken = process.env['FORGEJO_TOKEN'] ?? ''
   forgejoAdapter = createForgejoAdapter(appMode, { baseUrl: forgejoUrl, token: forgejoToken })
 
-  // 16. SprintWatcher — watches sprint-intake dir + repo docs/sprints/ for new sprint JSON files
+  // 16. SprintWatcher — watches sprint-intake dir + repo docs/sprints/json/ for new sprint JSON files
   intakeDir = join(app.getPath('userData'), 'sprint-intake')
   const sprintDirs: string[] = [intakeDir]
   if (!app.isPackaged) {
-    const repoSprintsDir = join(process.cwd(), 'docs', 'sprints')
+    const repoSprintsDir = join(process.cwd(), 'docs', 'sprints', 'json')
     if (existsSync(repoSprintsDir)) sprintDirs.push(repoSprintsDir)
   }
   sprintWatcher = new SprintWatcher()

@@ -156,7 +156,11 @@ export interface SprintEpicInput {
 export interface SprintIntakePayload {
   sprintName: string
   projectName?: string   // human-readable name — resolved to UUID by SprintWatcher.confirm()
-  repoId: string
+  repoId?: string        // optional when repoPath is provided — resolved by SprintWatcher
+  repoPath?: string      // filesystem path — auto-resolved to repoId on import
+  autoConfirm?: boolean  // skip the import modal and insert tasks immediately
+  autoStart?: boolean    // start orchestrator after import (requires autoConfirm)
+  preApproveAll?: boolean // override all requiresApproval to false on import
   epics: SprintEpicInput[]
 }
 

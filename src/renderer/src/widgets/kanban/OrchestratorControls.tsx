@@ -57,6 +57,18 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     }
   }, [handleStatusChange, handleTaskPhaseChange])
 
+  // Auto-start: triggered when a sprint JSON with autoConfirm + autoStart is imported
+  useEffect(() => {
+    return window.agentHub.on.sprintAutoStart(async (payload) => {
+      await start({
+        sprintName: payload.sprintName,
+        repoId: payload.repoId,
+        projectId: selectedProjectId ?? undefined,
+        confirmed: true,
+      })
+    })
+  }, [start, selectedProjectId])
+
   // Re-fetch counts when status changes to keep progress in sync (including terminal states)
   useEffect(() => {
     if (runStatus === 'running' || runStatus === 'paused' || runStatus === 'completed' || runStatus === 'failed') {

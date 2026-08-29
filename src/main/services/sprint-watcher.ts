@@ -1,12 +1,12 @@
 import { watch, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, readdirSync, renameSync } from 'fs'
 import type { FSWatcher } from 'fs'
-import { join } from 'path'
+import { join, dirname, basename } from 'path'
 import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { insertTask } from '../db/queries/tasks.queries'
 import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
-import { getRepoExistsById, getSprintTaskCount } from '../db/queries/sprint-watcher.queries'
+import { getRepoExistsById, getSprintTaskCount, getRepoByPath } from '../db/queries/sprint-watcher.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { SprintIntakePayload, SprintPendingPayload, SprintDraftReadyPayload } from '../../shared/types/task.types'
 
@@ -25,8 +25,10 @@ export class SprintWatcher {
   private watchers: FSWatcher[] = []
   private pending = new Map<string, PendingEntry>()
   private processing = new Set<string>()
+  private db: Database.Database | null = null
 
   start(dirs: string | string[], emitFn: EmitFn, db?: Database.Database): void {
+    this.db = db ?? null
     const dirList = Array.isArray(dirs) ? dirs : [dirs]
     for (const dir of dirList) {
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -143,6 +145,20 @@ export class SprintWatcher {
         log.warn('SprintWatcher: failed to parse sprint JSON', { filePath, err })
         return null
       }
+      // Resolve repoPath → repoId when repoId is absent
+      if (!payload.repoId && payload.repoPath) {
+        if (!this.db) {
+          log.warn('SprintWatcher: repoPath provided but db not available', { filePath })
+          return null
+        }
+        const resolved = getRepoByPath(this.db, payload.repoPath)
+        if (!resolved) {
+          log.warn('SprintWatcher: repoPath not found in repos', { repoPath: payload.repoPath, filePath })
+          return null
+        }
+        payload = { ...payload, repoId: resolved }
+      }
+
       if (!payload.sprintName || !payload.repoId || !Array.isArray(payload.epics)) {
         log.warn('SprintWatcher: invalid sprint JSON structure', { filePath })
         return null
@@ -156,6 +172,20 @@ export class SprintWatcher {
       const pendingId = randomUUID()
       const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now(), fromRepo }
       this.pending.set(pendingId, entry)
+
+      // Auto-confirm: skip the import modal and insert tasks immediately
+      if (payload.autoConfirm && this.db) {
+        try {
+          this.confirm(this.db, pendingId, emitFn)
+          if (payload.autoStart) {
+            emitFn(IPC_EVENTS.KANBAN.SPRINT_AUTO_START, { sprintName: payload.sprintName, repoId: payload.repoId })
+          }
+        } catch (err) {
+          log.warn('SprintWatcher: auto-confirm failed', { filePath, err: String(err) })
+          this.pending.delete(pendingId)
+        }
+        return entry
+      }
 
       const taskCount = payload.epics.reduce((n, e) => n + e.tasks.length, 0)
       const dependencyCount = payload.epics.reduce(
@@ -198,6 +228,10 @@ export class SprintWatcher {
     }
     const { filePath, projectId, payload } = entry
 
+    if (!payload.repoId) {
+      throw new Error('Sprint import failed: repoId could not be resolved')
+    }
+
     if (!getRepoExistsById(db, payload.repoId)) {
       throw new Error(
         `Sprint import failed: repoId "${payload.repoId}" does not exist. Re-run the decomposition agent with a valid repo selected.`
@@ -229,7 +263,7 @@ export class SprintWatcher {
             epicName: epic.name,
             projectId: resolvedProjectId,
             sectionTargetDate: epic.targetDate ?? null,
-            requiresApproval: story.requiresApproval ?? false,
+            requiresApproval: payload.preApproveAll ? false : (story.requiresApproval ?? false),
             modelOverride: story.modelOverride,
             providerOverride: story.providerOverride,
           })
@@ -250,8 +284,16 @@ export class SprintWatcher {
       }
     })()
 
-    // T4: Do not delete repo files after import
-    if (!entry.fromRepo) {
+    if (entry.fromRepo) {
+      // Archive repo sprint files to json-archive/ — prevents re-detection on next app start
+      const archiveDir = join(dirname(filePath), '..', 'json-archive')
+      try {
+        if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true })
+        renameSync(filePath, join(archiveDir, basename(filePath)))
+      } catch (err) {
+        log.warn('SprintWatcher: failed to archive sprint file', { filePath, err: String(err) })
+      }
+    } else {
       try { unlinkSync(filePath) } catch { /* file already gone */ }
     }
     this.pending.delete(pendingId)

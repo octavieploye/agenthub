@@ -430,6 +430,11 @@ const agentHubBridge = {
       ipcRenderer.on(IPC_EVENTS.KANBAN.DRAFT_READY, handler)
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.KANBAN.DRAFT_READY, handler) }
     },
+    sprintAutoStart: (callback: (payload: { sprintName: string; repoId: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: { sprintName: string; repoId: string }): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.KANBAN.SPRINT_AUTO_START, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.KANBAN.SPRINT_AUTO_START, handler) }
+    },
     agentErrorDetail: (callback: (payload: { agentId: string; errorType: string }) => void) => {
       const handler = (
         _event: Electron.IpcRendererEvent,
