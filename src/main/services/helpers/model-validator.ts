@@ -1,5 +1,5 @@
 import { CLOUD_MODEL_CATALOG } from '../model-dispatcher'
-import { CODEX_MODELS } from '../../shared/constants/model-catalog'
+import { CODEX_MODELS } from '../../../shared/constants/model-catalog'
 
 const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'] as const
 

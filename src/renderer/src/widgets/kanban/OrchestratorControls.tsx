@@ -199,7 +199,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
           </button>
           <button
             className="btn btn-sm btn-ghost"
-            onClick={() => { setShowStartForm(false); setShowCustomSprint(false); setFormSprintName('') }}
+            onClick={() => { setShowStartForm(false); setShowCustomSprint(false); setFormSprintName(''); setFormRepoId('') }}
             title="Cancel"
           >
             <RotateCcw size={12} />

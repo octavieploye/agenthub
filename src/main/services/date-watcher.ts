@@ -138,8 +138,9 @@ export class DateWatcherService {
             continue
           }
 
-          // Task 4.12: Enforce ollama-cloud/local for unsupervised auto-dispatch
-          // Override anthropic/null to ollama-cloud — never burn Anthropic quota unsupervised
+          // Task 4.12: Enforce non-anthropic provider for unsupervised auto-dispatch.
+          // Override null/anthropic to ollama-cloud — never burn Anthropic quota unsupervised.
+          // openai-codex is approved for unattended runs (user explicitly set it).
           if (!task.providerOverride || task.providerOverride === 'anthropic') {
             updateTask(this.db, task.id, { providerOverride: 'ollama-cloud' })
           }

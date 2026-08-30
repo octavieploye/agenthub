@@ -11,6 +11,7 @@ import type {
   RetryFailure,
 } from '../../shared/types/orchestrator.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
+import { CODEX_MODELS } from '../../shared/constants/model-catalog'
 import type { AgentSpawnOptions, AgentState } from '../../shared/types/agent.types'
 import {
   insertRun,
@@ -1155,6 +1156,10 @@ export class KanbanOrchestratorService {
     // If only provider is set, use recommendForPhase but with the overridden provider
     // (recommendForPhase picks the default model for the phase)
     if (providerOverride && !modelOverride) {
+      // openai-codex has no recommendForPhase support — default to first Codex model
+      if (providerOverride === 'openai-codex') {
+        return { model: CODEX_MODELS[0].id, provider: 'openai-codex' }
+      }
       const rec = recommendForPhase(phase, taskDescription, providerOverride === 'ollama-cloud')
       return { model: rec.model, provider: providerOverride }
     }

@@ -72,6 +72,14 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
   const [modelOverride, setModelOverride] = useState(task.modelOverride ?? '')
   const [providerOverride, setProviderOverride] = useState(task.providerOverride ?? '')
   const [requiresApproval, setRequiresApproval] = useState(task.requiresApproval ?? false)
+  const [codexAvailable, setCodexAvailable] = useState(false)
+
+  useEffect(() => {
+    if (!window.agentHub?.models?.codexHealth) return
+    window.agentHub.models.codexHealth()
+      .then((res) => { if (res.success) setCodexAvailable(res.data.installed && res.data.authenticated) })
+      .catch(() => {})
+  }, [])
 
   const agentList = agents
   const { projects, createProject, linkRepo } = useProjectStore()
@@ -359,11 +367,13 @@ export function KanbanCardPopover({ task, position, onSave, onClose, onMouseEnte
                   <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
                 ))}
               </optgroup>
-              <optgroup label="Codex">
-                {CODEX_MODEL_OPTIONS.map((m) => (
-                  <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
-                ))}
-              </optgroup>
+              {codexAvailable && (
+                <optgroup label="Codex">
+                  {CODEX_MODEL_OPTIONS.map((m) => (
+                    <option key={m.id} value={`${m.provider}::${m.id}`}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
               <option value="ollama-local::">Ollama Local (auto-detect)</option>
             </select>
           </div>
