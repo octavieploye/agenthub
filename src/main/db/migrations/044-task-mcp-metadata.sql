@@ -10,4 +10,4 @@ ALTER TABLE tasks ADD COLUMN risk_factors_json TEXT;
 ALTER TABLE tasks ADD COLUMN estimated_tokens INTEGER;
 ALTER TABLE tasks ADD COLUMN recommended_model TEXT;
 ALTER TABLE tasks ADD COLUMN risk_score REAL;
-ALTER TABLE tasks ADD COLUMN created_by TEXT;
+ALTER TABLE tasks ADD COLUMN created_by TEXT DEFAULT 'user';

@@ -289,4 +289,371 @@ describe('tasks.queries', () => {
       expect(results).toEqual([])
     })
   })
+
+  describe('MCP metadata columns (8 new fields)', () => {
+    describe('insertTask() accepts all 8 new MCP fields', () => {
+      it('accepts targetFilesJson field on insert', () => {
+        const repoId = seedRepo()
+        const targetFiles = JSON.stringify([{ path: 'src/main.ts', type: 'source' }])
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with target files',
+          targetFilesJson: targetFiles
+        })
+        expect(task.targetFilesJson).toBe(targetFiles)
+      })
+
+      it('accepts skillsJson field on insert', () => {
+        const repoId = seedRepo()
+        const skills = JSON.stringify(['dev-backend', 'tester-backend'])
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with skills',
+          skillsJson: skills
+        })
+        expect(task.skillsJson).toBe(skills)
+      })
+
+      it('accepts guardrailJson field on insert', () => {
+        const repoId = seedRepo()
+        const guardrails = JSON.stringify({ maxRetries: 3, timeout: 30000 })
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with guardrails',
+          guardrailJson: guardrails
+        })
+        expect(task.guardrailJson).toBe(guardrails)
+      })
+
+      it('accepts riskFactorsJson field on insert', () => {
+        const repoId = seedRepo()
+        const riskFactors = JSON.stringify({ complexity: 'high', breaking: true })
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with risk factors',
+          riskFactorsJson: riskFactors
+        })
+        expect(task.riskFactorsJson).toBe(riskFactors)
+      })
+
+      it('accepts estimatedTokens field on insert', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with estimated tokens',
+          estimatedTokens: 15000
+        })
+        expect(task.estimatedTokens).toBe(15000)
+      })
+
+      it('accepts recommendedModel field on insert', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with recommended model',
+          recommendedModel: 'gpt-4-turbo'
+        })
+        expect(task.recommendedModel).toBe('gpt-4-turbo')
+      })
+
+      it('accepts riskScore field on insert', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task with risk score',
+          riskScore: 0.75
+        })
+        expect(task.riskScore).toBe(0.75)
+      })
+
+      it('accepts createdBy field on insert', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Task created by agent',
+          createdBy: 'dev-backend'
+        })
+        expect(task.createdBy).toBe('dev-backend')
+      })
+
+      it('accepts all 8 MCP fields together on insert', () => {
+        const repoId = seedRepo()
+        const targetFiles = JSON.stringify([{ path: 'src/main.ts' }])
+        const skills = JSON.stringify(['dev-backend'])
+        const guardrails = JSON.stringify({ maxRetries: 3 })
+        const riskFactors = JSON.stringify({ complexity: 'high' })
+
+        const task = insertTask(db, {
+          repoId,
+          title: 'Full MCP task',
+          targetFilesJson: targetFiles,
+          skillsJson: skills,
+          guardrailJson: guardrails,
+          riskFactorsJson: riskFactors,
+          estimatedTokens: 25000,
+          recommendedModel: 'claude-opus-4-6',
+          riskScore: 0.85,
+          createdBy: 'orchestrator'
+        })
+
+        expect(task.targetFilesJson).toBe(targetFiles)
+        expect(task.skillsJson).toBe(skills)
+        expect(task.guardrailJson).toBe(guardrails)
+        expect(task.riskFactorsJson).toBe(riskFactors)
+        expect(task.estimatedTokens).toBe(25000)
+        expect(task.recommendedModel).toBe('claude-opus-4-6')
+        expect(task.riskScore).toBe(0.85)
+        expect(task.createdBy).toBe('orchestrator')
+      })
+
+      it('defaults all MCP fields to null when not provided', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Task without MCP fields' })
+
+        expect(task.targetFilesJson).toBeNull()
+        expect(task.skillsJson).toBeNull()
+        expect(task.guardrailJson).toBeNull()
+        expect(task.riskFactorsJson).toBeNull()
+        expect(task.estimatedTokens).toBeNull()
+        expect(task.recommendedModel).toBeNull()
+        expect(task.riskScore).toBeNull()
+        expect(task.createdBy).toBeNull()
+      })
+    })
+
+    describe('mapRow() correctly parses MCP metadata from database', () => {
+      it('mapRow parses targetFilesJson as string', () => {
+        const repoId = seedRepo()
+        const targetFiles = JSON.stringify([{ path: 'src/main.ts' }])
+        const task = insertTask(db, { repoId, title: 'Test', targetFilesJson: targetFiles })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFilesJson).toBe(targetFiles)
+      })
+
+      it('mapRow parses skillsJson as string', () => {
+        const repoId = seedRepo()
+        const skills = JSON.stringify(['dev-backend', 'tester-backend'])
+        const task = insertTask(db, { repoId, title: 'Test', skillsJson: skills })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.skillsJson).toBe(skills)
+      })
+
+      it('mapRow parses guardrailJson as string', () => {
+        const repoId = seedRepo()
+        const guardrails = JSON.stringify({ maxRetries: 3, timeout: 30000 })
+        const task = insertTask(db, { repoId, title: 'Test', guardrailJson: guardrails })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.guardrailJson).toBe(guardrails)
+      })
+
+      it('mapRow parses riskFactorsJson as string', () => {
+        const repoId = seedRepo()
+        const riskFactors = JSON.stringify({ complexity: 'high', breaking: true })
+        const task = insertTask(db, { repoId, title: 'Test', riskFactorsJson: riskFactors })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.riskFactorsJson).toBe(riskFactors)
+      })
+
+      it('mapRow parses estimatedTokens as number', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test', estimatedTokens: 15000 })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.estimatedTokens).toBe(15000)
+        expect(typeof fetched?.estimatedTokens).toBe('number')
+      })
+
+      it('mapRow parses recommendedModel as string', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test', recommendedModel: 'gpt-4-turbo' })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.recommendedModel).toBe('gpt-4-turbo')
+      })
+
+      it('mapRow parses riskScore as number', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test', riskScore: 0.75 })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.riskScore).toBe(0.75)
+        expect(typeof fetched?.riskScore).toBe('number')
+      })
+
+      it('mapRow parses createdBy as string', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test', createdBy: 'orchestrator' })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.createdBy).toBe('orchestrator')
+      })
+
+      it('mapRow returns null for unpopulated MCP fields', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFilesJson).toBeNull()
+        expect(fetched?.skillsJson).toBeNull()
+        expect(fetched?.guardrailJson).toBeNull()
+        expect(fetched?.riskFactorsJson).toBeNull()
+        expect(fetched?.estimatedTokens).toBeNull()
+        expect(fetched?.recommendedModel).toBeNull()
+        expect(fetched?.riskScore).toBeNull()
+        expect(fetched?.createdBy).toBeNull()
+      })
+    })
+
+    describe('updateTask() can update MCP metadata fields', () => {
+      it('updateTask can set targetFilesJson', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        const targetFiles = JSON.stringify([{ path: 'src/new.ts' }])
+        updateTask(db, task.id, { targetFilesJson: targetFiles })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFilesJson).toBe(targetFiles)
+      })
+
+      it('updateTask can set skillsJson', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        const skills = JSON.stringify(['dev-backend', 'orchestrator'])
+        updateTask(db, task.id, { skillsJson: skills })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.skillsJson).toBe(skills)
+      })
+
+      it('updateTask can set estimatedTokens', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        updateTask(db, task.id, { estimatedTokens: 50000 })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.estimatedTokens).toBe(50000)
+      })
+
+      it('updateTask can set riskScore', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        updateTask(db, task.id, { riskScore: 0.95 })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.riskScore).toBe(0.95)
+      })
+
+      it('updateTask can update multiple MCP fields at once', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Test' })
+        const targetFiles = JSON.stringify([{ path: 'src/main.ts' }])
+        const guardrails = JSON.stringify({ maxRetries: 5 })
+
+        updateTask(db, task.id, {
+          targetFilesJson: targetFiles,
+          guardrailJson: guardrails,
+          estimatedTokens: 20000,
+          recommendedModel: 'claude-sonnet-4-6',
+          riskScore: 0.65,
+          createdBy: 'agent-manager'
+        })
+
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFilesJson).toBe(targetFiles)
+        expect(fetched?.guardrailJson).toBe(guardrails)
+        expect(fetched?.estimatedTokens).toBe(20000)
+        expect(fetched?.recommendedModel).toBe('claude-sonnet-4-6')
+        expect(fetched?.riskScore).toBe(0.65)
+        expect(fetched?.createdBy).toBe('agent-manager')
+      })
+    })
+
+    describe('mapRow() deserializes JSON columns into typed fields', () => {
+      it('parses target_files_json into targetFiles array', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Deserialization test',
+          targetFilesJson: '["src/foo.ts","src/bar.ts"]',
+          skillsJson: '["sec-devops"]'
+        })
+        const fetched = getTaskById(db, task.id)
+        expect(Array.isArray(fetched?.targetFiles)).toBe(true)
+        expect(fetched?.targetFiles).toEqual(['src/foo.ts', 'src/bar.ts'])
+        expect(typeof fetched?.targetFilesJson).toBe('string')
+      })
+
+      it('parses skills_json into skills array', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Skills deserialization',
+          skillsJson: '["sec-devops"]'
+        })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.skills).toEqual(['sec-devops'])
+        expect(typeof fetched?.skillsJson).toBe('string')
+      })
+
+      it('parses guardrail_json into guardrailOverrides record', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Guardrail deserialization',
+          guardrailJson: '{"maxRetries":3,"timeout":30000}'
+        })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.guardrailOverrides).toEqual({ maxRetries: 3, timeout: 30000 })
+      })
+
+      it('parses risk_factors_json into riskFactors array', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, {
+          repoId,
+          title: 'Risk factors deserialization',
+          riskFactorsJson: '["db-migration","breaking-change"]'
+        })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.riskFactors).toEqual(['db-migration', 'breaking-change'])
+      })
+
+      it('returns null typed fields when JSON columns are null', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'No JSON fields' })
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFiles).toBeNull()
+        expect(fetched?.skills).toBeNull()
+        expect(fetched?.guardrailOverrides).toBeNull()
+        expect(fetched?.riskFactors).toBeNull()
+      })
+
+      it('returns null typed fields when JSON columns contain malformed JSON', () => {
+        const repoId = seedRepo()
+        const task = insertTask(db, { repoId, title: 'Malformed JSON' })
+        // Bypass insertTask validation by directly writing malformed JSON via updateTask
+        db.prepare("UPDATE tasks SET target_files_json = ?, skills_json = ? WHERE id = ?")
+          .run('not-valid-json', '{broken', task.id)
+        const fetched = getTaskById(db, task.id)
+        expect(fetched?.targetFiles).toBeNull()
+        expect(fetched?.skills).toBeNull()
+        // raw strings are preserved
+        expect(fetched?.targetFilesJson).toBe('not-valid-json')
+        expect(fetched?.skillsJson).toBe('{broken')
+      })
+    })
+
+    describe('getAllTasks() retrieves MCP metadata fields', () => {
+      it('getAllTasks includes MCP metadata for all tasks', () => {
+        const repoId = seedRepo()
+        const targetFiles = JSON.stringify([{ path: 'src/main.ts' }])
+        const skills = JSON.stringify(['dev-backend'])
+        insertTask(db, {
+          repoId,
+          title: 'Task 1',
+          targetFilesJson: targetFiles,
+          skillsJson: skills,
+          estimatedTokens: 10000,
+          riskScore: 0.5
+        })
+
+        const tasks = getAllTasks(db)
+        const found = tasks.find((t) => t.title === 'Task 1')
+        expect(found?.targetFilesJson).toBe(targetFiles)
+        expect(found?.skillsJson).toBe(skills)
+        expect(found?.estimatedTokens).toBe(10000)
+        expect(found?.riskScore).toBe(0.5)
+      })
+    })
+  })
 })

@@ -7,6 +7,11 @@ import { getDependencyMap } from './task-dependencies.queries'
 
 const VALID_PROVIDERS = ['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'] as const
 
+function safeJsonParse<T>(value: string | null | undefined): T | null {
+  if (!value) return null
+  try { return JSON.parse(value) as T } catch { return null }
+}
+
 function validateProviderOverride(value: string | null | undefined): void {
   if (value != null && !VALID_PROVIDERS.includes(value as typeof VALID_PROVIDERS[number])) {
     throw new Error(`Invalid provider_override: "${value}". Must be one of: ${VALID_PROVIDERS.join(', ')}`)
@@ -44,6 +49,10 @@ function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): T
     riskScore: (row.risk_score as number) ?? null,
     riskFactorsJson: (row.risk_factors_json as string) ?? null,
     createdBy: (row.created_by as string) ?? null,
+    targetFiles: safeJsonParse<string[]>(row.target_files_json as string),
+    skills: safeJsonParse<string[]>(row.skills_json as string),
+    guardrailOverrides: safeJsonParse<Record<string, unknown>>(row.guardrail_json as string),
+    riskFactors: safeJsonParse<string[]>(row.risk_factors_json as string),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -179,6 +188,10 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     riskScore: input.riskScore ?? null,
     riskFactorsJson: input.riskFactorsJson ?? null,
     createdBy: input.createdBy ?? null,
+    targetFiles: safeJsonParse<string[]>(input.targetFilesJson ?? null),
+    skills: safeJsonParse<string[]>(input.skillsJson ?? null),
+    guardrailOverrides: safeJsonParse<Record<string, unknown>>(input.guardrailJson ?? null),
+    riskFactors: safeJsonParse<string[]>(input.riskFactorsJson ?? null),
     createdAt: now,
     updatedAt: now
   }
