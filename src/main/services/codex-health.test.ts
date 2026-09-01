@@ -63,6 +63,9 @@ describe('ensureCodexMcpServers', () => {
   let ensureCodexMcpServers: (
     m: string,
     t: string,
+    k: string,
+    d: string,
+    s: string,
     execFn?: (cmd: string, args: string[], opts: { timeout: number }) => Promise<{ stdout: string; stderr: string }>
   ) => Promise<void>
 
@@ -88,9 +91,9 @@ describe('ensureCodexMcpServers', () => {
     vi.resetModules()
   })
 
-  it('skips registration when both servers already in list output', async () => {
-    const execFn = vi.fn().mockResolvedValue({ stdout: 'anamnesis\nagenthub-telegram', stderr: '' })
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
+  it('skips registration when all three servers already in list output', async () => {
+    const execFn = vi.fn().mockResolvedValue({ stdout: 'anamnesis\nagenthub-telegram\nagenthub-kanban', stderr: '' })
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
     // Only the mcp list call — no add calls
     expect(execFn).toHaveBeenCalledTimes(1)
     expect(execFn).toHaveBeenCalledWith('codex', ['mcp', 'list'], expect.any(Object))
@@ -100,10 +103,10 @@ describe('ensureCodexMcpServers', () => {
     const execFn = vi.fn().mockImplementation(
       (_cmd: string, args: string[]) =>
         args[1] === 'list'
-          ? Promise.resolve({ stdout: 'agenthub-telegram', stderr: '' })
+          ? Promise.resolve({ stdout: 'agenthub-telegram\nagenthub-kanban', stderr: '' })
           : Promise.resolve({ stdout: '', stderr: '' })
     )
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
 
     const addCalls = execFn.mock.calls.filter(
       (c: unknown[]) => (c[1] as string[])[1] === 'add' && (c[1] as string[])[2] === 'anamnesis'
@@ -120,10 +123,10 @@ describe('ensureCodexMcpServers', () => {
     const execFn = vi.fn().mockImplementation(
       (_cmd: string, args: string[]) =>
         args[1] === 'list'
-          ? Promise.resolve({ stdout: 'anamnesis', stderr: '' })
+          ? Promise.resolve({ stdout: 'anamnesis\nagenthub-kanban', stderr: '' })
           : Promise.resolve({ stdout: '', stderr: '' })
     )
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
 
     const addCalls = execFn.mock.calls.filter(
       (c: unknown[]) =>
@@ -139,19 +142,41 @@ describe('ensureCodexMcpServers', () => {
     const execFn = vi.fn().mockImplementation(
       (_cmd: string, args: string[]) =>
         args[1] === 'list'
-          ? Promise.resolve({ stdout: '', stderr: '' }) // both absent
+          ? Promise.resolve({ stdout: '', stderr: '' }) // all absent
           : Promise.reject(new Error('codex mcp add failed'))
     )
     await expect(
-      ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
+      ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
     ).resolves.toBeUndefined()
   })
 
+  it('registers agenthub-kanban when absent from list', async () => {
+    const execFn = vi.fn().mockImplementation(
+      (_cmd: string, args: string[]) =>
+        args[1] === 'list'
+          ? Promise.resolve({ stdout: 'anamnesis\nagenthub-telegram', stderr: '' })
+          : Promise.resolve({ stdout: '', stderr: '' })
+    )
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
+
+    const addCalls = execFn.mock.calls.filter(
+      (c: unknown[]) =>
+        (c[1] as string[])[1] === 'add' && (c[1] as string[])[2] === 'agenthub-kanban'
+    )
+    expect(addCalls).toHaveLength(1)
+    const addArgs = addCalls[0][1] as string[]
+    expect(addArgs).toContain('--env')
+    expect(addArgs).toContain('AGENTHUB_DB_PATH=/fake/db.db')
+    expect(addArgs).toContain('AGENTHUB_SOCKET_PATH=/fake/socket.sock')
+    expect(addArgs).toContain('node')
+    expect(addArgs).toContain('/fake/kanban.js')
+  })
+
   it('only runs once per module instance (flag respected)', async () => {
-    const execFn = vi.fn().mockResolvedValue({ stdout: 'anamnesis\nagenthub-telegram', stderr: '' })
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
-    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', execFn)
+    const execFn = vi.fn().mockResolvedValue({ stdout: 'anamnesis\nagenthub-telegram\nagenthub-kanban', stderr: '' })
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
+    await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
     // Module flag is set after first call — subsequent calls return immediately
     expect(execFn).toHaveBeenCalledTimes(1)
   })

@@ -1039,10 +1039,19 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
       : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
 
+    const kanbanScriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'mcp-server', 'server.js')
+      : join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
+
     const mcpJsonPath = app.isPackaged
       ? join(process.resourcesPath, '.mcp.json')
       : join(app.getAppPath(), '.mcp.json')
-    ensureCodexMcpServers(mcpJsonPath, scriptPath).catch(() => {
+
+    const kanbanDb = getDb()
+    const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
+    const kanbanSocketPath = join(tmpdir(), `agenthub-mcp-${process.pid}.sock`)
+
+    ensureCodexMcpServers(mcpJsonPath, scriptPath, kanbanScriptPath, kanbanDbPath, kanbanSocketPath).catch(() => {
       // ensureCodexMcpServers is non-throwing by design — safety catch
     })
 

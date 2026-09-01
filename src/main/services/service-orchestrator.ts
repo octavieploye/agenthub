@@ -35,6 +35,7 @@ import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
 import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
 import { OrchestratorMonitorService } from './orchestrator-monitor'
+import { McpServerManager } from './mcp-server-manager'
 import { isOrchestratorEnabled } from './orchestrator-settings'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
@@ -75,6 +76,7 @@ let kanbanOrchestrator: KanbanOrchestratorService | null = null
 let dateWatcher: DateWatcherService | null = null
 let orchestratorMonitor: OrchestratorMonitorService | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
+let mcpServerManager: McpServerManager | null = null
 let intakeDir = ''
 
 function getMainWindow(): BrowserWindow | null {
@@ -580,6 +582,22 @@ export function initializeServices(db: Database.Database): void {
 
   // Kanban + Projects IPC handlers now registered in register-all.ts
 
+  // 19. McpServerManager — AgentHub Kanban MCP child-process bridge
+  mcpServerManager = new McpServerManager()
+  mcpServerManager.start(db, {
+    db,
+    orchestrator: {
+      startSingleTask: (input) => kanbanOrchestrator!.startSingleTask(input),
+      getStatus: () => kanbanOrchestrator!.getStatus(),
+    },
+    healthMonitor: {
+      getSnapshot: (agentId) => healthMonitor?.getSnapshot(agentId) ?? null,
+    },
+    emitToRenderer: emitToAllRenderers,
+    listAgents,
+    spawnAgent,
+  })
+
   log.info('All services initialized')
 }
 
@@ -618,6 +636,8 @@ export function stopServices(): void {
   telegramSidecarService?.stop()
   kanbanOrchestrator?.stop()
   kanbanOrchestrator = null
+  mcpServerManager?.stop()
+  mcpServerManager = null
   setTelegramNotifier(null)
   setTelegramAgentSync(null)
   log.info('All services stopped')

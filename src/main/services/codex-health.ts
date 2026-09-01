@@ -49,6 +49,9 @@ export async function checkCodexHealth(): Promise<CodexHealthStatus> {
 export async function ensureCodexMcpServers(
   mcpJsonPath: string,
   telegramScriptPath: string,
+  kanbanScriptPath: string,
+  dbPath: string,
+  socketPath: string,
   _exec: CodexExecFn = execFileAsync as CodexExecFn
 ): Promise<void> {
   if (codexMcpEnsured) return
@@ -102,6 +105,25 @@ export async function ensureCodexMcpServers(
         )
       } catch (err) {
         log.warn('ensureCodexMcpServers: failed to register agenthub-telegram MCP server', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    if (!listOutput.includes('agenthub-kanban')) {
+      try {
+        await _exec(
+          'codex',
+          [
+            'mcp', 'add', 'agenthub-kanban',
+            '--env', `AGENTHUB_DB_PATH=${dbPath}`,
+            '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
+            '--', 'node', kanbanScriptPath,
+          ],
+          { timeout: 10000 }
+        )
+      } catch (err) {
+        log.warn('ensureCodexMcpServers: failed to register agenthub-kanban MCP server', {
           error: err instanceof Error ? err.message : String(err),
         })
       }
