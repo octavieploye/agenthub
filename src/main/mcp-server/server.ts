@@ -52,6 +52,11 @@ if (!socketPath) {
 
 // Derive agenthub root from the DB path: <root>/agenthub.db → <root>
 const agenthubPath = dirname(dbPath)
+if (!existsSync(join(agenthubPath, 'package.json'))) {
+  process.stderr.write(
+    `[mcp-server] WARN: agenthubPath "${agenthubPath}" has no package.json — skill/plugin resolution may fail\n`
+  )
+}
 
 // App version from package.json
 function readAppVersion(): string {
@@ -304,6 +309,7 @@ async function main(): Promise<void> {
   // 6. Graceful shutdown
   const shutdown = (): void => {
     parentIpc.close()
+    void server.close().catch(() => {})
     db.close()
     process.exit(0)
   }
