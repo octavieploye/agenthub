@@ -140,9 +140,12 @@ export class McpServerManager {
       correlationId = frame.correlationId
       response = { type: 'success', data: this.routeRequest(frame.request, db, deps) }
     } catch (error) {
+      const code =
+        error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
       response = {
         type: 'error',
-        message: error instanceof Error ? error.message : String(error)
+        message: error instanceof Error ? error.message : String(error),
+        ...(code !== undefined ? { code } : {})
       }
     }
 
