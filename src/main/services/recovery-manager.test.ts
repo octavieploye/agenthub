@@ -58,7 +58,6 @@ describe('recovery-manager', () => {
 
     it('returns no interruption when all agents are completed', () => {
       insertTestAgent(db, 'a1', 'completed')
-      insertTestAgent(db, 'a2', 'interrupted')
 
       const info = recoveryManager.buildRecoveryInfo(db)
       expect(info.hadInterruption).toBe(false)
