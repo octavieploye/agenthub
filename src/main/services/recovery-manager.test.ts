@@ -157,5 +157,33 @@ describe('recovery-manager', () => {
       const row = db.prepare('SELECT status FROM agents WHERE id = ?').get('a1') as { status: string }
       expect(row.status).toBe('interrupted')
     })
+
+    it('returns agents already marked interrupted in interruptedAgents', () => {
+      insertTestAgent(db, 'a1', 'interrupted')
+
+      const info = recoveryManager.buildRecoveryInfo(db)
+      expect(info.hadInterruption).toBe(true)
+      expect(info.interruptedAgents).toHaveLength(1)
+      expect(info.interruptedAgents[0].id).toBe('a1')
+      expect(info.interruptedAgents[0].status).toBe('interrupted')
+    })
+
+    it('includes SBAR handoff for already-interrupted agents', () => {
+      insertTestAgent(db, 'a1', 'interrupted')
+
+      insertSBAR(db, {
+        agentId: 'a1',
+        agentName: 'Agent a1',
+        repoId: 'repo-1',
+        situation: 'Working on OAuth',
+        background: 'payment-service',
+        assessment: '70% done',
+        recommendation: 'Resume'
+      })
+
+      const info = recoveryManager.buildRecoveryInfo(db)
+      expect(info.interruptedAgents[0].handoff).toBeDefined()
+      expect(info.interruptedAgents[0].handoff!.situation).toBe('Working on OAuth')
+    })
   })
 })

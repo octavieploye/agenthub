@@ -7,7 +7,7 @@ import type { RecoveryInfo, SBARHandoff } from '../../shared/types/recovery.type
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getLatestSnapshot } from '../db/queries/snapshots.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
-import { getAllAgents, updateAgentStatus } from '../db/queries/agents.queries'
+import { getAllAgents, getAllAgentsIncludingDead, updateAgentStatus } from '../db/queries/agents.queries'
 import { SOCKET_DIR } from './pty-proxy'
 
 export function isProcessAlive(pid: number): boolean {
@@ -24,14 +24,15 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
   cleanupStaleSockets(db)
 
   const lastSnapshot = getLatestSnapshot(db)
-  const allAgents = getAllAgents(db)
+  const allAgents = getAllAgentsIncludingDead(db)
 
   const activeStatuses = ['spawning', 'busy', 'idle', 'locked', 'looping', 'paused', 'tray_running']
   const previouslyActiveAgents = allAgents.filter((a) =>
     activeStatuses.includes(a.status)
   )
+  const alreadyInterruptedAgents = allAgents.filter((a) => a.status === 'interrupted')
 
-  if (previouslyActiveAgents.length === 0) {
+  if (previouslyActiveAgents.length === 0 && alreadyInterruptedAgents.length === 0) {
     log.info('No agents to recover')
     return {
       hadInterruption: false,
@@ -67,6 +68,17 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
       })
       log.info('Agent process not found', { id: agent.id, pid: agent.pid })
     }
+  }
+
+  // Agents already marked 'interrupted' at startup (resetStaleAgentsOnStartup)
+  // are not returned by getAllAgents, so surface them here with their SBAR handoff.
+  for (const agent of alreadyInterruptedAgents) {
+    const handoff = getSBARByAgentId(db, agent.id)
+    interruptedAgents.push({
+      ...agent,
+      handoff: handoff || undefined
+    })
+    log.info('Agent already interrupted at startup', { id: agent.id })
   }
 
   const hadInterruption = interruptedAgents.length > 0 || recoveredAgents.length > 0
