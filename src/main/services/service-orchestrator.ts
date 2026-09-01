@@ -37,7 +37,7 @@ import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
 import { OrchestratorMonitorService } from './orchestrator-monitor'
 import { isOrchestratorEnabled } from './orchestrator-settings'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
-import type { TelegramFromSidecarMsg } from '../../shared/types/telegram.types'
+import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
@@ -492,7 +492,12 @@ export function initializeServices(db: Database.Database): void {
         })
       }
       const sockPath = join(app.getPath('userData'), 'telegram.sock')
-      telegramSocketServer.start(sockPath)
+      void telegramSocketServer.start(sockPath).catch((err) => {
+        log.error('Telegram socket unavailable after sidecar startup', {
+          error: String(err),
+          ...telegramSocketServer?.getStatus(),
+        })
+      })
     },
   })
 
@@ -700,6 +705,14 @@ export function getDateWatcher(): DateWatcherService | null {
 
 export function getTelegramSocketPath(): string | null {
   return telegramSocketServer?.getSocketPath() ?? null
+}
+
+export function getTelegramSocketStatus(): TelegramSocketStatus {
+  return telegramSocketServer?.getStatus() ?? {
+    socketPath: null,
+    state: 'stopped',
+    errorCode: null,
+  }
 }
 
 export function getIntakeDir(): string {

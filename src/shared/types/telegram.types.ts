@@ -40,11 +40,20 @@ export interface TelegramNotificationPrefs {
   notify_needs_input: boolean
 }
 
+export type TelegramSocketState = 'stopped' | 'starting' | 'listening' | 'error'
+
+export interface TelegramSocketStatus {
+  socketPath: string | null
+  state: TelegramSocketState
+  errorCode: string | null
+}
+
 export interface TelegramStatus {
   connected: boolean
   botUsername?: string
   maskedUserId?: string   // e.g. "···7842"
   prefs?: TelegramNotificationPrefs
+  socket?: TelegramSocketStatus
 }
 
 // JSON-RPC: AgentHub main → sidecar (via stdin)

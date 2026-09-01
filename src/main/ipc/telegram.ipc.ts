@@ -3,11 +3,18 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import type { TelegramNotificationPrefs } from '../../shared/types/telegram.types'
 import { getDb } from '../db/connection'
 import { getTelegramPrefs, setTelegramPref } from '../db/queries/telegram.queries'
-import { getTelegramSidecarService, getTelegramQueueProcessor } from '../services/service-orchestrator'
+import {
+  getTelegramSidecarService,
+  getTelegramQueueProcessor,
+  getTelegramSocketStatus,
+} from '../services/service-orchestrator'
 
 export function registerTelegramIpc(): void {
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.GET_STATUS, () => {
-    return getTelegramSidecarService()?.getStatus() ?? { connected: false }
+    return {
+      ...(getTelegramSidecarService()?.getStatus() ?? { connected: false }),
+      socket: getTelegramSocketStatus(),
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.TELEGRAM.SAVE_TOKEN, async (_event, token: string) => {
