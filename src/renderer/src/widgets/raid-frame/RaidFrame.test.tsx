@@ -43,25 +43,20 @@ describe('RaidFrame', () => {
   describe('agent information display', () => {
     it('renders agent name', () => {
       const agent = createMockAgent({ name: 'my-coding-agent' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       expect(screen.getByText('my-coding-agent')).toBeInTheDocument()
     })
 
-    it('renders model badge text', () => {
+    it('shows a compact model name and exposes the raw model ID accessibly', () => {
       const agent = createMockAgent({ model: 'claude-sonnet-4-6' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
-      expect(screen.getByTestId('model-badge')).toHaveTextContent('claude-sonnet-4-6')
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
+      expect(screen.getByTestId('model-badge')).toHaveTextContent('Sonnet 4.6')
+      expect(screen.getByLabelText('Model: Sonnet 4.6 (claude-sonnet-4-6)')).toBeInTheDocument()
     })
 
     it('renders repo label from cwd (last path segment)', () => {
       const agent = createMockAgent({ cwd: '/Users/dev/workspace/my-repo' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       expect(screen.getByTestId('repo-label')).toHaveTextContent('my-repo')
     })
 
@@ -69,9 +64,7 @@ describe('RaidFrame', () => {
       const longTask =
         'This is a very long task description that should be truncated when displayed in the raid frame widget'
       const agent = createMockAgent({ taskDescription: longTask })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       const taskEl = screen.getByTestId('task-description')
       expect(taskEl).toBeInTheDocument()
       expect(taskEl.className).toMatch(/truncate|line-clamp/)
@@ -79,41 +72,27 @@ describe('RaidFrame', () => {
   })
 
   describe('status dot', () => {
-    it('renders status dot with correct color for busy agent', () => {
-      const agent = createMockAgent({ status: 'busy' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
-      const dot = screen.getByTestId('status-dot')
-      expect(dot.className).toMatch(/bg-success|bg-green/)
-    })
-
-    it('renders status dot with warning color and breathe animation for locked agent', () => {
+    it('announces that a locked agent needs user input', () => {
       const agent = createMockAgent({ status: 'locked' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
+      expect(screen.getByRole('status', { name: 'Status: Needs your input' })).toHaveAttribute(
+        'title',
+        'Needs your input'
       )
-      const dot = screen.getByTestId('status-dot')
-      expect(dot.className).toMatch(/bg-warning|bg-amber|bg-yellow/)
-      expect(dot.className).toMatch(/animate-breathe/)
     })
   })
 
   describe('confidence indicator', () => {
     it('renders pulsing confidence indicator for inferred', () => {
       const agent = createMockAgent({ confidence: 'inferred' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       const indicator = screen.getByTestId('confidence-indicator')
       expect(indicator.className).toMatch(/animate-pulse|pulsing/)
     })
 
     it('renders solid confidence indicator for confirmed', () => {
       const agent = createMockAgent({ confidence: 'confirmed' })
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       const indicator = screen.getByTestId('confidence-indicator')
       expect(indicator.className).not.toMatch(/animate-pulse|pulsing/)
     })
@@ -122,9 +101,7 @@ describe('RaidFrame', () => {
   describe('interactions', () => {
     it('fires onSelect callback when clicked', () => {
       const agent = createMockAgent()
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       const frame = screen.getByTestId('raid-frame')
       fireEvent.click(frame)
       expect(mockOnSelect).toHaveBeenCalledWith(agent.id)
@@ -132,9 +109,7 @@ describe('RaidFrame', () => {
 
     it('fires onContextMenu callback on right-click with agent id and position', () => {
       const agent = createMockAgent()
-      render(
-        <RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />
-      )
+      render(<RaidFrame agent={agent} onSelect={mockOnSelect} onContextMenu={mockOnContextMenu} />)
       const frame = screen.getByTestId('raid-frame')
       fireEvent.contextMenu(frame, { clientX: 200, clientY: 300 })
       expect(mockOnContextMenu).toHaveBeenCalledWith(agent.id, { x: 200, y: 300 })

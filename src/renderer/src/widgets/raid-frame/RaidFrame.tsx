@@ -13,12 +13,12 @@ const VOICE_MODE_CYCLE: VoiceMode[] = ['off', 'speak_up', 'always_on']
 const VOICE_MODE_ICON: Record<VoiceMode, string> = {
   off: '🔇',
   speak_up: '🔈',
-  always_on: '🔊',
+  always_on: '🔊'
 }
 const VOICE_MODE_LABEL: Record<VoiceMode, string> = {
   off: 'Voice off',
   speak_up: 'Speak up',
-  always_on: 'Always on',
+  always_on: 'Always on'
 }
 
 interface RaidFrameProps {
@@ -43,6 +43,19 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   tray_running: 'bg-success/50'
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  spawning: 'Starting',
+  busy: 'Working',
+  idle: 'Ready',
+  locked: 'Needs your input',
+  completed: 'Completed',
+  awaiting_approval: 'Awaiting approval',
+  looping: 'Needs help',
+  paused: 'Paused',
+  interrupted: 'Interrupted',
+  tray_running: 'Running remotely'
+}
+
 function getRaidGlowClass(status: string): string {
   switch (status) {
     case 'locked':
@@ -61,8 +74,18 @@ function getRaidGlowColor(status: string, agentColor: string): string {
   return agentColor
 }
 
-function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggleTelegramNotify, skillInjectSkipped }: RaidFrameProps): React.JSX.Element {
+function RaidFrame({
+  agent,
+  onSelect,
+  onContextMenu,
+  onToggleVoiceMode,
+  onToggleTelegramNotify,
+  skillInjectSkipped
+}: RaidFrameProps): React.JSX.Element {
   const repoLabel = agent.cwd.split('/').pop() ?? 'unknown'
+  // Keep dense cards readable while preserving the provider ID for assistive tech and hover inspection.
+  const shortModelName = getShortModelName(agent.model)
+  const statusLabel = STATUS_LABELS[agent.status] ?? agent.status
   const isTicking = agent.status === 'busy' || agent.status === 'locked'
   const now = useNow(isTicking ? 1000 : 0)
   const elapsed = now - new Date(agent.createdAt).getTime()
@@ -73,9 +96,12 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
   useEffect(() => {
     if (!agent.telegramNotify) return
     const check = (): void => {
-      window.agentHub.telegram.getNotificationStats(agent.id).then(stats => {
-        setNotifQueued(stats.queued)
-      }).catch(() => {})
+      window.agentHub.telegram
+        .getNotificationStats(agent.id)
+        .then((stats) => {
+          setNotifQueued(stats.queued)
+        })
+        .catch(() => {})
     }
     check()
     const interval = setInterval(check, 10_000)
@@ -93,7 +119,9 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
       style={{
         borderLeftColor: agent.color,
         // Static ambient shadow when idle/busy; keyframe animation owns box-shadow when glowing
-        ...(glowClass ? { '--glow-color': glowColor } as React.CSSProperties : { boxShadow: `0 0 12px ${agent.color}20` }),
+        ...(glowClass
+          ? ({ '--glow-color': glowColor } as React.CSSProperties)
+          : { boxShadow: `0 0 12px ${agent.color}20` })
       }}
       role="button"
       tabIndex={0}
@@ -109,6 +137,9 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
       <div className="flex items-center gap-1.5">
         <span
           data-testid="status-dot"
+          role="status"
+          aria-label={`Status: ${statusLabel}`}
+          title={statusLabel}
           className={`inline-block w-2 h-2 rounded-full shrink-0 ${
             STATUS_DOT_CLASSES[agent.status] ?? 'bg-base-content/30'
           }`}
@@ -165,11 +196,17 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
       <div className="flex items-center gap-1 min-w-0">
         <span
           data-testid="model-badge"
+          aria-label={`Model: ${shortModelName} (${agent.model})`}
+          title={`Model: ${shortModelName} (${agent.model})`}
           className="text-[11px] px-1 py-0.5 rounded bg-base-content/15 text-base-content/60 truncate max-w-[80px]"
         >
-          {getShortModelName(agent.model)}
+          {shortModelName}
         </span>
-        <Folder size={12} className="shrink-0 text-base-content/50 opacity-50 group-hover:opacity-100 transition-opacity duration-150" aria-hidden="true" title="Project folder" />
+        <Folder
+          size={12}
+          className="shrink-0 text-base-content/50 opacity-50 group-hover:opacity-100 transition-opacity duration-150"
+          aria-hidden="true"
+        />
         <span
           data-testid="repo-label"
           className="text-[11px] text-base-content/60 truncate max-w-[100px] min-w-0"
@@ -177,7 +214,10 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
           {repoLabel}
         </span>
         {skillInjectSkipped?.has(agent.id) && (
-          <span className="badge badge-warning badge-xs shrink-0" title="Skill injection was skipped for this agent">
+          <span
+            className="badge badge-warning badge-xs shrink-0"
+            title="Skill injection was skipped for this agent"
+          >
             Skill not injected
           </span>
         )}
@@ -197,10 +237,7 @@ function RaidFrame({ agent, onSelect, onContextMenu, onToggleVoiceMode, onToggle
         )}
       </div>
 
-      <p
-        data-testid="task-description"
-        className="text-[11px] text-base-content/60 truncate"
-      >
+      <p data-testid="task-description" className="text-[11px] text-base-content/60 truncate">
         {agent.taskDescription}
       </p>
     </div>
