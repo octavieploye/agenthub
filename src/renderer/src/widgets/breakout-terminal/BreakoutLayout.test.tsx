@@ -1,9 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type React from 'react'
 import BreakoutLayout from './BreakoutLayout'
 import type { AgentState, ModelProvider } from '@shared/types/agent.types'
+import type { HistoryEntry } from '@shared/types/history.types'
+import type { AgentHubBridge } from '@shared/types/ipc.types'
 
-function stubTerminal(agentId: string, color?: string) {
+const mockStartIpcListener = vi.fn()
+const mockInjectHistory = vi.fn()
+
+vi.mock(
+  '../full-terminal/terminal-manager',
+  (): Record<string, (...args: unknown[]) => void> => ({
+    startIpcListener: (...args: unknown[]) => mockStartIpcListener(...args),
+    injectHistory: (...args: unknown[]) => mockInjectHistory(...args)
+  })
+)
+
+function stubTerminal(agentId: string, color?: string): React.JSX.Element {
   return (
     <div
       data-testid="full-terminal"
@@ -51,18 +65,45 @@ describe('BreakoutLayout', () => {
         list: vi.fn(),
         resize: vi.fn()
       },
+      history: {
+        get: vi.fn().mockResolvedValue({ success: true, data: [] })
+      },
       on: {
         agentStatusChange: vi.fn(() => vi.fn()),
         agentOutput: vi.fn(() => vi.fn()),
         agentExit: vi.fn(() => vi.fn())
       }
-    } as any
+    } as unknown as AgentHubBridge
   })
 
   it('renders loading state then agent info', async () => {
     render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
     await waitFor(() => {
       expect(screen.getByText('test-agent')).toBeInTheDocument()
+    })
+  })
+
+  it('does not inject history when the bridge returns an empty history response', async () => {
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
+
+    await waitFor(() => {
+      expect(window.agentHub.history.get).toHaveBeenCalledWith('agent-1')
+    })
+
+    expect(mockInjectHistory).not.toHaveBeenCalled()
+  })
+
+  it('injects restored history returned by the bridge', async () => {
+    const entries: HistoryEntry[] = [
+      { id: 1, agentId: 'agent-1', content: 'first output\\n', createdAt: '2026-03-06T00:00:00Z' },
+      { id: 2, agentId: 'agent-1', content: 'second output\\n', createdAt: '2026-03-06T00:01:00Z' }
+    ]
+    window.agentHub.history.get = vi.fn().mockResolvedValue({ success: true, data: entries })
+
+    render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
+
+    await waitFor(() => {
+      expect(mockInjectHistory).toHaveBeenCalledWith('agent-1', 'first output\\nsecond output\\n')
     })
   })
 
@@ -178,8 +219,11 @@ describe('BreakoutLayout', () => {
     })
   })
 
-  it('subscribes to status changes', () => {
+  it('subscribes to status changes', async () => {
     render(<BreakoutLayout agentId="agent-1" renderTerminal={stubTerminal} />)
-    expect(window.agentHub.on.agentStatusChange).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(window.agentHub.on.agentStatusChange).toHaveBeenCalled()
+      expect(screen.getByText('test-agent')).toBeInTheDocument()
+    })
   })
 })

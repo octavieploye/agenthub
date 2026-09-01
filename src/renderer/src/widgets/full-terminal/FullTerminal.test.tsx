@@ -39,6 +39,9 @@ const mockDestroyTerminal = vi.fn()
 const mockGetTerminal = vi.fn(() => mockTerm)
 const mockGetSearchAddon = vi.fn(() => mockManagedTerminal.searchAddon)
 const mockGetSerializeAddon = vi.fn(() => mockManagedTerminal.serializeAddon)
+const mockHasReceivedData = vi.fn(() => false)
+const mockOnClaudeReady = vi.fn(() => vi.fn())
+const mockRefreshTerminal = vi.fn()
 
 vi.mock('./terminal-manager', () => ({
   getOrCreateTerminal: (...args: unknown[]) => mockGetOrCreateTerminal(...args),
@@ -51,6 +54,9 @@ vi.mock('./terminal-manager', () => ({
   getTerminal: (...args: unknown[]) => mockGetTerminal(...args),
   getSearchAddon: (...args: unknown[]) => mockGetSearchAddon(...args),
   getSerializeAddon: (...args: unknown[]) => mockGetSerializeAddon(...args),
+  hasReceivedData: (...args: unknown[]) => mockHasReceivedData(...args),
+  onClaudeReady: (...args: unknown[]) => mockOnClaudeReady(...args),
+  refreshTerminal: (...args: unknown[]) => mockRefreshTerminal(...args),
   searchAllTerminals: vi.fn(() => []),
   startIpcListener: vi.fn(),
 }))
