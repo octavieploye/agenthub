@@ -51,6 +51,7 @@ import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
+import { useAgentHydration } from './hooks/useAgentHydration'
 import { RateLimitPrompt } from './widgets/rate-limit-prompt/RateLimitPrompt'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { VoiceInputProvider } from './contexts/VoiceInputContext'
@@ -383,6 +384,9 @@ function AppMain(): React.JSX.Element {
       unsubTriaged?.()
     }
   }, [updateStatus])
+
+  // Re-hydrate the agent list on mount (renderer reload / Cmd+R leaves the store empty)
+  useAgentHydration()
 
   // Register agents spawned from other windows (e.g. Kanban dispatch) without stealing focus
   useEffect(() => {
