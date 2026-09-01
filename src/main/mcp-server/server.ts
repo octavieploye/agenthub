@@ -40,6 +40,7 @@ import type { ModelCatalogEntry } from '@shared/types/model.types'
 
 const dbPath = process.env['AGENTHUB_DB_PATH']
 const socketPath = process.env['AGENTHUB_SOCKET_PATH']
+const socketToken = process.env['AGENTHUB_SOCKET_TOKEN']
 
 if (!dbPath) {
   process.stderr.write('[mcp-server] FATAL: AGENTHUB_DB_PATH is not set\n')
@@ -47,6 +48,10 @@ if (!dbPath) {
 }
 if (!socketPath) {
   process.stderr.write('[mcp-server] FATAL: AGENTHUB_SOCKET_PATH is not set\n')
+  process.exit(1)
+}
+if (!socketToken) {
+  process.stderr.write('[mcp-server] FATAL: AGENTHUB_SOCKET_TOKEN is not set\n')
   process.exit(1)
 }
 
@@ -79,7 +84,7 @@ async function main(): Promise<void> {
   const db = openReadOnly(dbPath!)
 
   // 2. Connect parent IPC socket
-  const parentIpc = new ParentIpc(socketPath!)
+  const parentIpc = new ParentIpc(socketPath!, socketToken!)
   await parentIpc.connect()
 
   // 3. Shared deps

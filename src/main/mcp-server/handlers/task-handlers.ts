@@ -9,7 +9,7 @@ import type {
   McpIpcResponse,
   TokenEstimation,
   RiskAssessment,
-  ModelRecommendation,
+  ModelRecommendation
 } from '@shared/types/mcp-server.types'
 import type { TaskItem, CreateTaskInput } from '@shared/types/task.types'
 import type { GuardrailConfig } from '@shared/types/config.types'
@@ -27,6 +27,73 @@ export interface TaskHandlerDeps {
   activeGuardrails?: Partial<GuardrailConfig>
 }
 
+const VALID_PRIORITIES = new Set([1, 2, 3])
+const VALID_PROVIDERS = new Set(['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'])
+const MAX_LIST_TASKS = 50
+
+function assertNonEmptyString(value: unknown, fieldName: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${fieldName} must be a non-empty string`)
+  }
+}
+
+function assertOptionalString(value: unknown, fieldName: string): void {
+  if (value !== undefined && typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`)
+  }
+}
+
+function assertOptionalStringArray(value: unknown, fieldName: string): void {
+  if (
+    value !== undefined &&
+    (!Array.isArray(value) || value.some((item) => typeof item !== 'string'))
+  ) {
+    throw new Error(`${fieldName} must be an array of strings`)
+  }
+}
+
+function assertOptionalBoolean(value: unknown, fieldName: string): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new Error(`${fieldName} must be a boolean`)
+  }
+}
+
+function validateCreateTaskInput(input: CreateTaskToolInput): void {
+  assertNonEmptyString(input.repoId, 'repoId')
+  assertNonEmptyString(input.title, 'title')
+
+  for (const fieldName of [
+    'description',
+    'sprintName',
+    'epicName',
+    'category',
+    'modelOverride',
+    'createdBy'
+  ]) {
+    assertOptionalString(input[fieldName as keyof CreateTaskToolInput], fieldName)
+  }
+  assertOptionalStringArray(input.targetFiles, 'targetFiles')
+  assertOptionalStringArray(input.skills, 'skills')
+  assertOptionalBoolean(input.requiresApproval, 'requiresApproval')
+  assertOptionalBoolean(input.autoEstimate, 'autoEstimate')
+  assertOptionalBoolean(input.autoRecommendModel, 'autoRecommendModel')
+
+  if (input.priority !== undefined && !VALID_PRIORITIES.has(input.priority)) {
+    throw new Error('priority must be 1, 2, or 3')
+  }
+  if (input.providerOverride !== undefined && !VALID_PROVIDERS.has(input.providerOverride)) {
+    throw new Error(`providerOverride must be one of: ${[...VALID_PROVIDERS].join(', ')}`)
+  }
+  if (
+    input.guardrailOverrides !== undefined &&
+    (typeof input.guardrailOverrides !== 'object' ||
+      input.guardrailOverrides === null ||
+      Array.isArray(input.guardrailOverrides))
+  ) {
+    throw new Error('guardrailOverrides must be an object')
+  }
+}
+
 // ─── S7 guardrail injection ───────────────────────────────────────────────────
 
 const S7_PROTECTED_PATHS = [
@@ -35,7 +102,7 @@ const S7_PROTECTED_PATHS = [
   '*.test.js',
   '*.spec.js',
   'package-lock.json',
-  '.gitignore',
+  '.gitignore'
 ]
 
 function injectS7Guardrails(
@@ -53,6 +120,7 @@ export async function handleCreateTask(
   input: CreateTaskToolInput,
   deps: TaskHandlerDeps
 ): Promise<CreateTaskToolOutput> {
+  validateCreateTaskInput(input)
   const warnings: string[] = []
 
   // --- S7: inject standard guardrails ---
@@ -64,7 +132,7 @@ export async function handleCreateTask(
     tokenEstimation = estimateTokens({
       description: input.description,
       targetFiles: input.targetFiles,
-      skills: input.skills,
+      skills: input.skills
     })
     warnings.push(...tokenEstimation.warnings)
   }
@@ -79,7 +147,7 @@ export async function handleCreateTask(
       category: input.category,
       requiresApproval: input.requiresApproval,
       estimatedTokens: tokenEstimation?.estimatedTokens,
-      protectedPaths: deps.activeGuardrails?.protectedPaths,
+      protectedPaths: guardrailOverrides.protectedPaths
     })
   }
 
@@ -100,7 +168,7 @@ export async function handleCreateTask(
       targetFiles: input.targetFiles,
       skills: input.skills,
       estimatedTokens: tokenEstimation?.estimatedTokens,
-      riskScore: riskAssessment?.riskScore,
+      riskScore: riskAssessment?.riskScore
     })
     modelRecommendation = {
       modelId: rec.modelId,
@@ -109,7 +177,7 @@ export async function handleCreateTask(
       rationale: rec.rationale,
       estimatedTokens: rec.estimatedTokens,
       contextWindowFit: rec.contextWindowFit,
-      riskAdjusted: rec.riskAdjusted,
+      riskAdjusted: rec.riskAdjusted
     }
   }
 
@@ -133,7 +201,7 @@ export async function handleCreateTask(
     recommendedModel: modelRecommendation?.modelId ?? undefined,
     riskScore: riskAssessment?.riskScore,
     riskFactors: riskAssessment?.riskFactors,
-    createdBy: input.createdBy ?? 'mcp-agent',
+    createdBy: input.createdBy ?? 'mcp-agent'
   }
 
   // --- Send to main process via IPC ---
@@ -153,7 +221,7 @@ export async function handleCreateTask(
     riskAssessment,
     modelRecommendation,
     requiresApproval,
-    warnings,
+    warnings
   }
 }
 
@@ -163,12 +231,16 @@ export function handleListTasks(
   input: ListTasksToolInput,
   db: Database.Database
 ): ListTasksToolOutput {
+  const limit =
+    input.limit === undefined
+      ? MAX_LIST_TASKS
+      : Math.min(MAX_LIST_TASKS, Math.max(1, Math.floor(input.limit)))
   const tasks = listTasksReadOnly(db, {
     repoId: input.repoId,
     sprintName: input.sprintName,
     status: input.status,
     category: input.category,
-    limit: input.limit ?? 50,
+    limit
   })
 
   return { tasks, total: tasks.length }
@@ -180,6 +252,12 @@ export async function handleDispatchTask(
   input: DispatchTaskToolInput,
   deps: TaskHandlerDeps
 ): Promise<DispatchTaskToolOutput> {
+  assertNonEmptyString(input.taskId, 'taskId')
+  if (typeof input.confirmed !== 'boolean') {
+    throw new Error('confirmed must be a boolean')
+  }
+  assertOptionalBoolean(input.telegramNotify, 'telegramNotify')
+
   // S1: kill-switch check — read from DB
   const orchestratorEnabled = isOrchestratorEnabledReadOnly(deps.db)
   if (!orchestratorEnabled) {
@@ -187,7 +265,7 @@ export async function handleDispatchTask(
       result: 'blocked',
       runId: null,
       message:
-        'Orchestrator is disabled (kill-switch active). Enable it in AgentHub settings to dispatch tasks.',
+        'Orchestrator is disabled (kill-switch active). Enable it in AgentHub settings to dispatch tasks.'
     }
   }
 
@@ -197,7 +275,7 @@ export async function handleDispatchTask(
       result: 'requires_confirmation',
       runId: null,
       message:
-        'dispatch_task requires confirmed: true. Review the task, then re-call with confirmed: true to proceed.',
+        'dispatch_task requires confirmed: true. Review the task, then re-call with confirmed: true to proceed.'
     }
   }
 
@@ -207,8 +285,8 @@ export async function handleDispatchTask(
     payload: {
       taskId: input.taskId,
       telegramNotify: input.telegramNotify ?? false,
-      confirmed: input.confirmed,
-    },
+      confirmed: input.confirmed
+    }
   })
 
   if (resp.type === 'error') {
@@ -216,16 +294,16 @@ export async function handleDispatchTask(
       return {
         result: 'budget_cap_reached',
         runId: null,
-        message: resp.message,
+        message: resp.message
       }
     }
     throw new Error(`dispatch_task IPC error: ${resp.message}`)
   }
 
-  const data = resp.data as { runId: string }
+  const data = resp.data as { runId?: string; id?: string }
   return {
     result: 'dispatched',
-    runId: data.runId ?? null,
-    message: `Task ${input.taskId} dispatched successfully.`,
+    runId: data.runId ?? data.id ?? null,
+    message: `Task ${input.taskId} dispatched successfully.`
   }
 }

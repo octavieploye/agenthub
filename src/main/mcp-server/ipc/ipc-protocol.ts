@@ -5,6 +5,7 @@ export type { McpIpcRequest, McpIpcResponse }
 /** Wire-level request frame — wraps an IPC request with a correlation ID */
 export interface McpIpcFrame {
   correlationId: string
+  token: string
   request: McpIpcRequest
 }
 

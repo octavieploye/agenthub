@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'fs'
 import type {
   AuditDepsToolInput,
   AuditDepsToolOutput,
-  DependencyAuditEntry,
+  DependencyAuditEntry
 } from '@shared/types/mcp-server.types'
 
 const FETCH_TIMEOUT_MS = 5_000
@@ -22,7 +22,7 @@ async function fetchPackageInfo(
   try {
     const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg)}/latest`, {
       signal: controller.signal,
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json' }
     })
 
     clearTimeout(timer)
@@ -35,7 +35,7 @@ async function fetchPackageInfo(
     return {
       latest: data.version ?? null,
       deprecated: Boolean(data.deprecated),
-      error: null,
+      error: null
     }
   } catch (err) {
     clearTimeout(timer)
@@ -45,16 +45,77 @@ async function fetchPackageInfo(
 }
 
 const NON_SEMVER_PREFIXES = ['workspace:', 'file:', 'link:', 'git+', 'github:', 'bitbucket:']
+const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
-function parseVersion(raw: string): string {
-  return raw.replace(/^[^0-9]*/, '')
+interface Semver {
+  major: number
+  minor: number
+  patch: number
+}
+
+function parseVersion(raw: string): Semver | null {
+  const match = VERSION_PATTERN.exec(raw.trim().replace(/^v/, ''))
+  if (!match) return null
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) }
+}
+
+function compareVersions(left: Semver, right: Semver): number {
+  return left.major - right.major || left.minor - right.minor || left.patch - right.patch
+}
+
+function nextCaretBoundary(version: Semver): Semver {
+  if (version.major > 0) return { major: version.major + 1, minor: 0, patch: 0 }
+  if (version.minor > 0) return { major: 0, minor: version.minor + 1, patch: 0 }
+  return { major: 0, minor: 0, patch: version.patch + 1 }
+}
+
+function nextTildeBoundary(version: Semver): Semver {
+  return { major: version.major, minor: version.minor + 1, patch: 0 }
+}
+
+/** Whether the registry's latest version is accepted by the declared range. */
+function satisfiesRange(range: string, latest: Semver): boolean {
+  const normalized = range.trim()
+  if (!normalized || normalized === '*' || normalized === 'latest') return true
+
+  return normalized.split('||').some((alternative) => {
+    const expression = alternative.trim()
+    const prefix = expression[0]
+    const versionText = expression.replace(/^(\^|~|>=|<=|>|<|=)\s*/, '')
+    const version = parseVersion(versionText)
+    if (!version) return false
+
+    if (prefix === '^') {
+      return (
+        compareVersions(latest, version) >= 0 &&
+        compareVersions(latest, nextCaretBoundary(version)) < 0
+      )
+    }
+    if (prefix === '~') {
+      return (
+        compareVersions(latest, version) >= 0 &&
+        compareVersions(latest, nextTildeBoundary(version)) < 0
+      )
+    }
+
+    const comparator = expression.match(/^(>=|<=|>|<|=)/)?.[1] ?? '='
+    const comparison = compareVersions(latest, version)
+    return comparator === '>='
+      ? comparison >= 0
+      : comparator === '<='
+        ? comparison <= 0
+        : comparator === '>'
+          ? comparison > 0
+          : comparator === '<'
+            ? comparison < 0
+            : comparison === 0
+  })
 }
 
 function isOutdated(current: string, latest: string | null): boolean {
-  if (!latest) return false
-  if (NON_SEMVER_PREFIXES.some((p) => current.startsWith(p))) return false
-  const cur = parseVersion(current)
-  return cur !== latest
+  if (!latest || NON_SEMVER_PREFIXES.some((prefix) => current.startsWith(prefix))) return false
+  const latestVersion = parseVersion(latest)
+  return latestVersion ? !satisfiesRange(current, latestVersion) : false
 }
 
 export async function handleAuditDeps(input: AuditDepsToolInput): Promise<AuditDepsToolOutput> {
@@ -70,7 +131,7 @@ export async function handleAuditDeps(input: AuditDepsToolInput): Promise<AuditD
 
   const allDeps: [string, string][] = [
     ...Object.entries(pkg.dependencies ?? {}),
-    ...Object.entries(pkg.devDependencies ?? {}),
+    ...Object.entries(pkg.devDependencies ?? {})
   ]
 
   const checked = allDeps.slice(0, MAX_DEPS_CHECKED)
@@ -84,7 +145,7 @@ export async function handleAuditDeps(input: AuditDepsToolInput): Promise<AuditD
         latestVersion: info.latest,
         isOutdated: isOutdated(versionRange, info.latest),
         isDeprecated: info.deprecated,
-        error: info.error,
+        error: info.error
       }
     })
   )
@@ -109,6 +170,6 @@ export async function handleAuditDeps(input: AuditDepsToolInput): Promise<AuditD
     upToDate,
     deprecated,
     errors,
-    checkedAt: new Date().toISOString(),
+    checkedAt: new Date().toISOString()
   }
 }

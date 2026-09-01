@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3'
 import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from '@shared/types/task.types'
+import type { RepoConfig } from '@shared/types/config.types'
+import type { OrchestratorRun, OrchestratorRunStatus, OrchestratorTriggerSource } from '@shared/types/orchestrator.types'
 import type { SelfAwarenessManifestRepo, SelfAwarenessManifestQuota, SelfAwarenessManifestSafeguards } from '@shared/types/mcp-server.types'
 
 // ─── Connection ───────────────────────────────────────────────────────────────
@@ -8,22 +10,37 @@ import type { SelfAwarenessManifestRepo, SelfAwarenessManifestQuota, SelfAwarene
  * Open agenthub.db in strict read-only mode.
  * Throws if the file does not exist at dbPath.
  */
-export function openReadOnly(dbPath: string): Database.Database {
+export function openReadOnly(dbPath = process.env['AGENTHUB_DB_PATH']): Database.Database {
+  if (!dbPath) {
+    throw new Error('AGENTHUB_DB_PATH is not set')
+  }
   return new Database(dbPath, { readonly: true, fileMustExist: true })
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-function safeJsonParse<T>(value: string | null | undefined): T | null {
+function safeJsonParse(value: string | null | undefined): unknown | null {
   if (!value) return null
   try {
-    return JSON.parse(value) as T
+    return JSON.parse(value) as unknown
   } catch {
     return null
   }
 }
 
-function taskRowToItem(row: Record<string, unknown>): TaskItem {
+function parseStringArray(value: string | null | undefined): string[] | null {
+  const parsed = safeJsonParse(value)
+  return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string') ? parsed : null
+}
+
+function parseRecord(value: string | null | undefined): Record<string, unknown> | null {
+  const parsed = safeJsonParse(value)
+  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : null
+}
+
+function taskRowToItem(row: Record<string, unknown>, blockedBy: string[] = []): TaskItem {
   const id = row.id as string
   return {
     id,
@@ -45,7 +62,7 @@ function taskRowToItem(row: Record<string, unknown>): TaskItem {
     modelOverride: (row.model_override as string) ?? null,
     providerOverride: (row.provider_override as string) ?? null,
     dateTriggerFiredAt: (row.date_trigger_fired_at as string) ?? null,
-    blockedBy: [],
+    blockedBy,
     targetFilesJson: (row.target_files_json as string) ?? null,
     skillsJson: (row.skills_json as string) ?? null,
     guardrailJson: (row.guardrail_json as string) ?? null,
@@ -54,10 +71,10 @@ function taskRowToItem(row: Record<string, unknown>): TaskItem {
     riskScore: (row.risk_score as number) ?? null,
     riskFactorsJson: (row.risk_factors_json as string) ?? null,
     createdBy: (row.created_by as string) ?? null,
-    targetFiles: safeJsonParse<string[]>(row.target_files_json as string),
-    skills: safeJsonParse<string[]>(row.skills_json as string),
-    guardrailOverrides: safeJsonParse<Record<string, unknown>>(row.guardrail_json as string),
-    riskFactors: safeJsonParse<string[]>(row.risk_factors_json as string),
+    targetFiles: parseStringArray(row.target_files_json as string),
+    skills: parseStringArray(row.skills_json as string),
+    guardrailOverrides: parseRecord(row.guardrail_json as string),
+    riskFactors: parseStringArray(row.risk_factors_json as string),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
@@ -71,6 +88,32 @@ export interface ListTasksFilter {
   status?: TaskStatus
   category?: TaskCategory
   limit?: number
+}
+
+const DEFAULT_TASK_LIMIT = 50
+const MAX_TASK_LIMIT = 100
+
+function normalizeTaskLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_TASK_LIMIT
+  return Math.min(MAX_TASK_LIMIT, Math.max(1, Math.floor(limit)))
+}
+
+function getDependencyMap(db: Database.Database, taskIds?: string[]): Map<string, string[]> {
+  if (taskIds?.length === 0) return new Map()
+
+  const sql = taskIds
+    ? `SELECT task_id, depends_on_id FROM task_dependencies WHERE task_id IN (${taskIds.map(() => '?').join(', ')})`
+    : 'SELECT task_id, depends_on_id FROM task_dependencies'
+  const rows = db.prepare(sql).all(...(taskIds ?? [])) as { task_id: string; depends_on_id: string }[]
+  const dependencies = new Map<string, string[]>()
+
+  for (const row of rows) {
+    const current = dependencies.get(row.task_id) ?? []
+    current.push(row.depends_on_id)
+    dependencies.set(row.task_id, current)
+  }
+
+  return dependencies
 }
 
 export function listTasksReadOnly(db: Database.Database, filter: ListTasksFilter): TaskItem[] {
@@ -95,17 +138,20 @@ export function listTasksReadOnly(db: Database.Database, filter: ListTasksFilter
   }
 
   sql += ' ORDER BY priority ASC, created_at DESC'
-  sql += ` LIMIT ${Math.max(1, Math.floor(Number(filter.limit ?? 50)))}`
+  sql += ' LIMIT ?'
+  params.push(normalizeTaskLimit(filter.limit))
 
   const rows = db.prepare(sql).all(...params) as Record<string, unknown>[]
-  return rows.map(taskRowToItem)
+  const dependencyMap = getDependencyMap(db, rows.map((row) => row.id as string))
+  return rows.map((row) => taskRowToItem(row, dependencyMap.get(row.id as string) ?? []))
 }
 
 export function getTaskByIdReadOnly(db: Database.Database, taskId: string): TaskItem | null {
   const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as
     | Record<string, unknown>
     | undefined
-  return row ? taskRowToItem(row) : null
+  if (!row) return null
+  return taskRowToItem(row, getDependencyMap(db, [taskId]).get(taskId) ?? [])
 }
 
 // ─── Repo queries ─────────────────────────────────────────────────────────────
@@ -129,6 +175,62 @@ export function listReposReadOnly(db: Database.Database): SelfAwarenessManifestR
   }))
 }
 
+export function getRepoByIdReadOnly(db: Database.Database, repoId: string): RepoConfig | null {
+  const row = db
+    .prepare('SELECT * FROM repos WHERE id = ? AND hidden = 0')
+    .get(repoId) as Record<string, unknown> | undefined
+
+  if (!row) return null
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    path: row.path as string,
+    glowColor: (row.glow_color as string) ?? undefined,
+    createdAt: row.created_at as string,
+    lastUsedAt: (row.last_used_at as string) ?? undefined,
+  }
+}
+
+// ─── Orchestrator run queries ────────────────────────────────────────────────
+
+function parseTaskIds(value: string | null | undefined): string[] | null {
+  return parseStringArray(value)
+}
+
+function orchestratorRunRowToItem(row: Record<string, unknown>): OrchestratorRun {
+  return {
+    id: row.id as string,
+    sprintName: row.sprint_name as string,
+    projectId: (row.project_id as string) ?? null,
+    repoId: row.repo_id as string,
+    status: row.status as OrchestratorRunStatus,
+    concurrencyCap: row.concurrency_cap as number,
+    telegramNotify: Boolean(row.telegram_notify),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    startedAt: (row.started_at as string) ?? null,
+    completedAt: (row.completed_at as string) ?? null,
+    singleTaskId: (row.single_task_id as string) ?? null,
+    startedBy: (row.started_by as string) ?? null,
+    triggerSource: (row.trigger_source as OrchestratorTriggerSource) ?? null,
+    taskIds: parseTaskIds((row.task_ids_json as string) ?? null),
+  }
+}
+
+export function getOrchestratorRunReadOnly(db: Database.Database, runId: string): OrchestratorRun | null {
+  const row = db.prepare('SELECT * FROM orchestrator_runs WHERE id = ?').get(runId) as
+    | Record<string, unknown>
+    | undefined
+  return row ? orchestratorRunRowToItem(row) : null
+}
+
+export function getActiveOrchestratorRunReadOnly(db: Database.Database): OrchestratorRun | null {
+  const row = db
+    .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') ORDER BY updated_at DESC LIMIT 1")
+    .get() as Record<string, unknown> | undefined
+  return row ? orchestratorRunRowToItem(row) : null
+}
+
 // ─── Settings queries ─────────────────────────────────────────────────────────
 
 export function getSettingReadOnly(db: Database.Database, key: string): string | null {
@@ -146,9 +248,10 @@ export function isOrchestratorEnabledReadOnly(db: Database.Database): boolean {
 
 export function getQuotaReadOnly(db: Database.Database): SelfAwarenessManifestQuota {
   const capRaw = getSettingReadOnly(db, 'quota.sessionCap')
+  const sessionCap = capRaw ? Number(capRaw) : NaN
   return {
     tokensThisSession: 0,
-    sessionCap: capRaw ? Number(capRaw) : 100_000,
+    sessionCap: Number.isFinite(sessionCap) && sessionCap > 0 ? sessionCap : 100_000,
   }
 }
 
@@ -156,11 +259,11 @@ export function getSafeguardsReadOnly(db: Database.Database): SelfAwarenessManif
   const enabled = isOrchestratorEnabledReadOnly(db)
   const protectedPathsRaw = getSettingReadOnly(db, 'guardrails.protectedPaths')
   const protectedPaths = protectedPathsRaw
-    ? (safeJsonParse<string[]>(protectedPathsRaw) ?? [])
+    ? (parseStringArray(protectedPathsRaw) ?? [])
     : []
   const supervisedRaw = getSettingReadOnly(db, 'guardrails.supervisedCategories')
   const supervisedCategories = supervisedRaw
-    ? (safeJsonParse<string[]>(supervisedRaw) ?? [])
+    ? (parseStringArray(supervisedRaw) ?? [])
     : []
 
   return {
