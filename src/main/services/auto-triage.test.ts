@@ -76,6 +76,12 @@ describe('Auto-Triage Engine', () => {
       const result: TriageEvent = triageAgentEvent(input)
       expect(result.triageLevel).toBe('low')
     })
+
+    it('assigns high for rate_limited status', () => {
+      const input = makeInput({ currentStatus: 'rate_limited' })
+      const result: TriageEvent = triageAgentEvent(input)
+      expect(result.triageLevel).toBe('high')
+    })
   })
 
   // ─── Reason Strings ────────────────────────────────────────────────────
