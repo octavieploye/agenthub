@@ -57,8 +57,8 @@ describe('model handlers', () => {
       [0.9, 'frontier'],
       [0.4, 'expert'],
       [0.69, 'expert'],
-      [0.39, 'standard'],
-      [0, 'standard']
+      [0.39, 'capable'],
+      [0, 'capable']
     ])('selects the %s capability tier for risk score %s', (riskScore, expectedTier) => {
       const result = handleRecommendModel({
         description: 'implement a feature',
