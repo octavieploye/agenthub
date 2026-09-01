@@ -181,6 +181,11 @@ export interface SprintStoryInput {
   requiresApproval?: boolean
   modelOverride?: string
   providerOverride?: string
+  skills?: string[]
+  targetFiles?: string[]
+  estimatedTokens?: number
+  recommendedModel?: string
+  riskScore?: number
 }
 
 export interface SprintEpicInput {

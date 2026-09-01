@@ -292,6 +292,122 @@ export function recommendForPhase(
   }
 }
 
+// ─── Skill-Aware Model Recommendation ────────────────────────────────────────
+
+import type { SkillManifest } from '../../shared/types/skills.types'
+
+export interface SkillModelRecommendation extends ModelRecommendation {
+  downgraded: boolean
+}
+
+// Minimum context windows per model (tokens).
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  [CLAUDE_SONNET]: 200_000,
+  [CLAUDE_OPUS]: 200_000,
+  [OLLAMA_DEFAULT]: 8_000,
+}
+
+// Tier → ordered candidate list (first entry is preferred).
+const TIER_MODELS: Record<string, Array<{ model: string; provider: ModelProvider }>> = {
+  frontier: [
+    { model: CLAUDE_OPUS, provider: 'anthropic' },
+    { model: CLAUDE_SONNET, provider: 'anthropic' },
+  ],
+  expert: [
+    { model: CLAUDE_SONNET, provider: 'anthropic' },
+  ],
+  capable: [
+    { model: CLAUDE_SONNET, provider: 'anthropic' },
+    { model: OLLAMA_DEFAULT, provider: 'ollama-local' },
+  ],
+  efficient: [
+    { model: OLLAMA_DEFAULT, provider: 'ollama-local' },
+    { model: CLAUDE_SONNET, provider: 'anthropic' },
+  ],
+}
+
+// Down-tier mapping: frontier → expert → capable → efficient.
+const DOWNGRADE_MAP: Record<string, string> = {
+  frontier: 'expert',
+  expert: 'capable',
+  capable: 'efficient',
+  efficient: 'efficient',
+}
+
+function pickFromTier(
+  tier: string,
+  minContext: number,
+  availability: Record<string, boolean>
+): { model: string; provider: ModelProvider } | null {
+  const candidates = TIER_MODELS[tier] ?? TIER_MODELS['capable']
+  for (const candidate of candidates) {
+    const contextOk = (MODEL_CONTEXT_WINDOWS[candidate.model] ?? 0) >= minContext
+    const providerAvail = availability[candidate.provider] !== false
+    if (contextOk && providerAvail) return candidate
+  }
+  return null
+}
+
+export function recommendForSkill(
+  manifest: SkillManifest,
+  budgetState: { warningLevel: string },
+  availability: Record<string, boolean>
+): SkillModelRecommendation {
+  if (budgetState.warningLevel === 'blocked') {
+    return {
+      model: '',
+      provider: 'anthropic',
+      rationale: 'Daily token budget exhausted — no model can be dispatched',
+      alternatives: [],
+      warnings: ['Token budget blocked: usage has reached 100% of daily limit'],
+      downgraded: false,
+    }
+  }
+
+  const requestedTier = manifest.resources.preferredTier
+  const minContext = manifest.resources.minContextWindow
+
+  // Downgrade one tier when budget is critical.
+  const effectiveTier =
+    budgetState.warningLevel === 'critical'
+      ? DOWNGRADE_MAP[requestedTier] ?? requestedTier
+      : requestedTier
+  const downgraded = effectiveTier !== requestedTier
+
+  const chosen = pickFromTier(effectiveTier, minContext, availability)
+  if (chosen) {
+    const warnings: string[] = []
+    if (downgraded) {
+      warnings.push(
+        `Budget critical: downgraded from ${requestedTier} to ${effectiveTier} tier`
+      )
+    }
+    if (budgetState.warningLevel === 'warn') {
+      warnings.push('Token budget at 70%+ — consider lighter tasks')
+    }
+    return {
+      model: chosen.model,
+      provider: chosen.provider,
+      rationale: downgraded
+        ? `Tier downgraded (${requestedTier} → ${effectiveTier}) to conserve token budget`
+        : `Skill prefers ${requestedTier} tier; context ≥${minContext} satisfied`,
+      alternatives: [],
+      warnings,
+      downgraded,
+    }
+  }
+
+  // No model in effective tier satisfies constraints — fall back to Sonnet.
+  return {
+    model: CLAUDE_SONNET,
+    provider: 'anthropic',
+    rationale: `No model in ${effectiveTier} tier satisfies minContextWindow=${minContext}; falling back to Sonnet`,
+    alternatives: [],
+    warnings: [`Fallback: no suitable model found in ${effectiveTier} tier`],
+    downgraded,
+  }
+}
+
 // ─── Ollama Cloud Health Check ────────────────────────────────────────────────
 
 export async function checkOllamaCloudHealth(model: string): Promise<boolean> {

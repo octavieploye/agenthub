@@ -9,6 +9,9 @@ import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
 import { getRepoExistsById, getSprintTaskCount, getRepoByPath } from '../db/queries/sprint-watcher.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { SprintIntakePayload, SprintPendingPayload, SprintDraftReadyPayload } from '../../shared/types/task.types'
+import { SprintCardEnricher } from './sprint-card-enricher'
+import type { SkillsService } from './skills-service'
+import type { TokenBudgetTracker } from './token-budget'
 
 type EmitFn = (channel: string, payload: unknown) => void
 
@@ -26,6 +29,15 @@ export class SprintWatcher {
   private pending = new Map<string, PendingEntry>()
   private processing = new Set<string>()
   private db: Database.Database | null = null
+  private enricher: SprintCardEnricher | null = null
+
+  setEnricher(enricher: SprintCardEnricher): void {
+    this.enricher = enricher
+  }
+
+  static createEnricher(skillsService: SkillsService, budgetTracker: TokenBudgetTracker): SprintCardEnricher {
+    return new SprintCardEnricher(skillsService, budgetTracker)
+  }
 
   start(dirs: string | string[], emitFn: EmitFn, db?: Database.Database): void {
     this.db = db ?? null
@@ -252,6 +264,41 @@ export class SprintWatcher {
     db.transaction(() => {
       for (const epic of payload.epics) {
         for (const story of epic.tasks) {
+          // Enrich only when the story lacks explicit skills/estimatedTokens (don't overwrite user values)
+          const needsEnrichment =
+            this.enricher !== null &&
+            (!story.skills || story.skills.length === 0) &&
+            story.estimatedTokens == null
+
+          let enrichedSkillsJson: string | undefined = story.skills ? JSON.stringify(story.skills) : undefined
+          let enrichedEstimatedTokens: number | undefined = story.estimatedTokens
+          let enrichedRecommendedModel: string | undefined = story.recommendedModel
+          let enrichedRiskScore: number | undefined = story.riskScore
+
+          if (needsEnrichment) {
+            try {
+              const enriched = this.enricher!.enrich(
+                story.title,
+                story.description ?? '',
+                story.targetFiles ?? [],
+                payload.repoId!
+              )
+              if (enriched.skills.length > 0) {
+                enrichedSkillsJson = JSON.stringify(enriched.skills)
+              }
+              enrichedEstimatedTokens = enriched.estimatedTokens
+              if (enriched.recommendedModel) {
+                enrichedRecommendedModel = enriched.recommendedModel
+              }
+              enrichedRiskScore = enriched.riskScore
+            } catch (err) {
+              log.warn('SprintWatcher.confirm: enrichment failed, inserting without enrichment', {
+                title: story.title,
+                err: String(err),
+              })
+            }
+          }
+
           const task = insertTask(db, {
             repoId: payload.repoId,
             title: story.title,
@@ -266,6 +313,11 @@ export class SprintWatcher {
             requiresApproval: payload.preApproveAll ? false : (story.requiresApproval ?? false),
             modelOverride: story.modelOverride,
             providerOverride: story.providerOverride,
+            skillsJson: enrichedSkillsJson,
+            targetFilesJson: story.targetFiles ? JSON.stringify(story.targetFiles) : undefined,
+            estimatedTokens: enrichedEstimatedTokens,
+            recommendedModel: enrichedRecommendedModel,
+            riskScore: enrichedRiskScore,
           })
           if (story.localId) localIdToRealId.set(story.localId, task.id)
         }

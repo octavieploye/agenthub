@@ -14,19 +14,19 @@ describe('buildCodexCommand', () => {
     expect(cmd).toMatch(/^clear; codex -- '.*'\n$/)
   })
 
-  it('adds --full-auto when skipPermissions is true', () => {
+  it('adds --dangerously-bypass-approvals-and-sandbox when skipPermissions is true', () => {
     const cmd = buildCodexCommand({ skipPermissions: true })
-    expect(cmd).toContain('--full-auto')
+    expect(cmd).toContain('--dangerously-bypass-approvals-and-sandbox')
   })
 
-  it('does not add --full-auto when skipPermissions is false', () => {
+  it('does not add --dangerously-bypass-approvals-and-sandbox when skipPermissions is false', () => {
     const cmd = buildCodexCommand({ skipPermissions: false })
-    expect(cmd).not.toContain('--full-auto')
+    expect(cmd).not.toContain('--dangerously-bypass-approvals-and-sandbox')
   })
 
-  it('does not add --full-auto by default', () => {
+  it('does not add --dangerously-bypass-approvals-and-sandbox by default', () => {
     const cmd = buildCodexCommand({ task: 'Do something' })
-    expect(cmd).not.toContain('--full-auto')
+    expect(cmd).not.toContain('--dangerously-bypass-approvals-and-sandbox')
   })
 
   it('does NOT include --plugin-dir (Claude-specific)', () => {
@@ -50,9 +50,9 @@ describe('buildCodexCommand', () => {
     expect(cmd).toContain("user'\\''s")
   })
 
-  it('combines --full-auto with task', () => {
+  it('combines --dangerously-bypass-approvals-and-sandbox with task', () => {
     const cmd = buildCodexCommand({ task: 'Fix bug', skipPermissions: true })
-    expect(cmd).toContain('--full-auto')
+    expect(cmd).toContain('--dangerously-bypass-approvals-and-sandbox')
     expect(cmd).toContain('Fix bug')
   })
 

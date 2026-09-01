@@ -10,7 +10,7 @@ export function buildCodexCommand(options: CodexCommandOptions): string {
   const { task, skipPermissions, telegramNotify, model, effort } = options
   const modelFlag = model ? ` -m ${model}` : ''
   const effortFlag = effort ? ` -c model_reasoning_effort=${effort}` : ''
-  const fullAutoFlag = skipPermissions ? ' --full-auto' : ''
+  const fullAutoFlag = skipPermissions ? ' --dangerously-bypass-approvals-and-sandbox' : ''
 
   if (task) {
     const telegramSuffix = telegramNotify
