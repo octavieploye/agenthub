@@ -226,7 +226,7 @@ export interface AgentHubBridge {
   brain: {
     query: (params: { repoId?: string }) => Promise<any>
     updateStatus: (id: string, status: string) => Promise<{ success: boolean }>
-    register: (input: unknown) => Promise<{ entryId: string; success: boolean }>
+    register: (input: import('./brain.types').RegisterBrainEntryInput) => Promise<{ entryId: string; success: boolean }>
     timeline: (repoId: string) => Promise<import('./brain.types').BrainTimelineEntry[]>
     createTask: (input: unknown) => Promise<{ taskId: string; success: boolean }>
   }

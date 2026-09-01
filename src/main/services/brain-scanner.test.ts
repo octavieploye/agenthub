@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import {
@@ -203,6 +203,39 @@ describe('discoverRepoArtifacts', () => {
       path: tmpDir,
     } as any)
     expect(result).toBe(0)
+  })
+
+  test('registers an artifact by writing a pointer file and upserting its database row', () => {
+    const artifactPath = join(tmpDir, 'docs', 'spec.md')
+    mkdirSync(join(tmpDir, 'docs'), { recursive: true })
+    writeFileSync(artifactPath, '# Spec\n')
+
+    const entryId = scanner.registerBrainEntry({
+      repoId: 'repo-test',
+      subject: 'Safe Registration',
+      type: 'spec',
+      artifactPath,
+      project: 'Reliability',
+      note: 'Registered manually'
+    })
+
+    const db = getDb()
+    const entry = db.prepare('SELECT * FROM brain_entries WHERE id = ?').get(entryId) as {
+      pointer_path: string
+      artifact_path: string
+      subject: string
+      type: string
+      note: string
+    }
+
+    expect(entry).toMatchObject({
+      artifact_path: artifactPath,
+      subject: 'Safe Registration',
+      type: 'spec',
+      note: 'Registered manually'
+    })
+    expect(existsSync(entry.pointer_path)).toBe(true)
+    expect(readFileSync(entry.pointer_path, 'utf-8')).toContain('project: "Reliability"')
   })
 
   test('discovers .md files in a known scan directory', () => {

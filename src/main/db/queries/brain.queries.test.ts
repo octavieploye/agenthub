@@ -67,7 +67,8 @@ function createTestDb(): Database.Database {
   db.exec(`
     CREATE TABLE tasks (
       id TEXT PRIMARY KEY,
-      subject TEXT NOT NULL,
+      repo_id TEXT NOT NULL REFERENCES repos(id),
+      title TEXT NOT NULL,
       description TEXT,
       status TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -122,14 +123,14 @@ describe('Brain Queries', () => {
         '2023-01-01T00:00:00Z', '2023-01-02T00:00:00Z', 'Test note'
       )
 
-      db.prepare('INSERT INTO tasks (id, subject, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?)').run(
-        'task1', 'Task 1', 'completed', '2023-01-01T00:00:00Z', 'entry1'
+      db.prepare('INSERT INTO tasks (id, repo_id, title, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?, ?)').run(
+        'task1', 'repo1', 'Task 1', 'completed', '2023-01-01T00:00:00Z', 'entry1'
       )
-      db.prepare('INSERT INTO tasks (id, subject, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?)').run(
-        'task2', 'Task 2', 'in_progress', '2023-01-01T00:00:00Z', 'entry1'
+      db.prepare('INSERT INTO tasks (id, repo_id, title, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?, ?)').run(
+        'task2', 'repo1', 'Task 2', 'in_progress', '2023-01-01T00:00:00Z', 'entry1'
       )
-      db.prepare('INSERT INTO tasks (id, subject, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?)').run(
-        'task3', 'Task 3', 'pending', '2023-01-01T00:00:00Z', 'entry1'
+      db.prepare('INSERT INTO tasks (id, repo_id, title, status, created_at, brain_entry_id) VALUES (?, ?, ?, ?, ?, ?)').run(
+        'task3', 'repo1', 'Task 3', 'pending', '2023-01-01T00:00:00Z', 'entry1'
       )
 
       const result = getBrainEntries(db)
@@ -362,13 +363,25 @@ describe('Brain Queries', () => {
         createdAt: '2023-01-01T00:00:00Z'
       })
 
-      const taskId = createTaskFromBrainEntry(db, 'entry1', 'Test Task', 'Task description')
+      const taskId = createTaskFromBrainEntry(
+        db,
+        'entry1',
+        'repo1',
+        'Test Task',
+        'Task description'
+      )
       expect(taskId).toBeDefined()
 
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as any
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as {
+        brain_entry_id: string
+        repo_id: string
+        title: string
+        description: string
+      }
       expect(task).toBeDefined()
       expect(task.brain_entry_id).toBe('entry1')
-      expect(task.subject).toBe('Test Task')
+      expect(task.repo_id).toBe('repo1')
+      expect(task.title).toBe('Test Task')
       expect(task.description).toBe('Task description')
     })
   })

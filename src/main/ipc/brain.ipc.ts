@@ -1,7 +1,29 @@
 import { ipcMain } from 'electron'
+import { z } from 'zod/v4'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
+import type { RegisterBrainEntryInput } from '../../shared/types/brain.types'
 import { getBrainScanner } from '../services/brain-scanner'
+import { validateInput } from './ipc-helpers'
 import log from 'electron-log/main'
+
+const registerBrainEntrySchema = z.object({
+  repoId: z.string().trim().min(1),
+  subject: z.string().trim().min(1),
+  type: z.enum([
+    'brainstorm',
+    'spec',
+    'plan',
+    'sprint',
+    'strategy',
+    'marketing',
+    'how-to',
+    'reference',
+    'learning'
+  ]),
+  artifactPath: z.string().trim().min(1),
+  project: z.string().trim().min(1).optional(),
+  note: z.string().trim().min(1).optional()
+}) satisfies z.ZodType<RegisterBrainEntryInput>
 
 export function registerBrainIpcHandlers(): void {
   // Query: auto-discover first, then return grouped results
@@ -49,6 +71,21 @@ export function registerBrainIpcHandlers(): void {
       return { success: true }
     } catch (error) {
       log.error('Error in brain:update-status:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BRAIN.REGISTER, async (_event, input: unknown) => {
+    try {
+      const parsed = validateInput(registerBrainEntrySchema, input)
+      if (!parsed.valid) {
+        throw new Error(`Invalid brain registration: ${parsed.response.error.message}`)
+      }
+
+      const entryId = getBrainScanner().registerBrainEntry(parsed.data)
+      return { entryId, success: true }
+    } catch (error) {
+      log.error('Error in brain:register:', error)
       throw error
     }
   })

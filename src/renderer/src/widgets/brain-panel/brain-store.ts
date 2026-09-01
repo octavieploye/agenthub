@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import { BrainEntry, BrainEntryStatus, BrainQueryResult, BrainTimelineEntry } from '../../../../shared/types/brain.types'
+import type {
+  BrainEntryStatus,
+  BrainQueryResult,
+  BrainTimelineEntry,
+  RegisterBrainEntryInput
+} from '../../../../shared/types/brain.types'
 
 interface BrainStoreState {
   brainData: BrainQueryResult[]
@@ -7,14 +12,7 @@ interface BrainStoreState {
   loading: boolean
   error: string | null
   refreshBrainData: () => Promise<void>
-  registerBrainEntry: (input: {
-    repoId: string
-    subject: string
-    type: string
-    artifactPath: string
-    project?: string
-    note?: string
-  }) => Promise<string>
+  registerBrainEntry: (input: RegisterBrainEntryInput) => Promise<string>
   updateBrainEntryStatus: (entryId: string, status: string) => Promise<void>
   createTaskFromBrainEntry: (brainEntryId: string, subject?: string, description?: string) => Promise<string>
   getTimeline: (repoId: string) => Promise<void>

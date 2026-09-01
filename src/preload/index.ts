@@ -281,7 +281,7 @@ const agentHubBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.BRAIN.QUERY, params),
     updateStatus: (id: string, status: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.BRAIN.UPDATE_STATUS, { id, status }),
-    register: (input: unknown) =>
+    register: (input: import('../shared/types/brain.types').RegisterBrainEntryInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.BRAIN.REGISTER, input),
     timeline: (repoId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.BRAIN.TIMELINE, { repoId }),

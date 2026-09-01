@@ -1,8 +1,7 @@
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs'
+import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, writeFileSync } from 'fs'
 import { join, relative, basename, extname } from 'path'
 import log from 'electron-log/main'
 import { getDb } from '../db/connection'
-import type Database from 'better-sqlite3'
 import {
   getBrainEntries,
   getBrainEntryById,
@@ -11,7 +10,12 @@ import {
   getBrainTimeline,
   createTaskFromBrainEntry
 } from '../db/queries/brain.queries'
-import { BrainEntry, BrainEntryType, BrainTimelineEntry } from '../../shared/types/brain.types'
+import {
+  BrainEntry,
+  BrainEntryType,
+  BrainTimelineEntry,
+  RegisterBrainEntryInput
+} from '../../shared/types/brain.types'
 import { RepoConfig } from '../../shared/types/config.types'
 import { getRepoById, getAllRepos } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
@@ -253,6 +257,60 @@ export class BrainScannerService {
   getBrainEntries(repoId?: string): BrainEntry[] {
     const db = getDb()
     return getBrainEntries(db, repoId)
+  }
+
+  /**
+   * Register an artifact manually by creating its pointer file and database row.
+   */
+  registerBrainEntry(input: RegisterBrainEntryInput): string {
+    const db = getDb()
+    const repo = getRepoById(db, input.repoId)
+    if (!repo?.path) {
+      throw new Error(`Repo not found or has no path: ${input.repoId}`)
+    }
+
+    const date = new Date().toISOString().split('T')[0]
+    const slug =
+      input.subject
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'artifact'
+    const brainDir = join(repo.path, 'docs', 'brain')
+    const pointerPath = join(brainDir, `${date}-${slug}-${input.type}.md`)
+    const entryId = `brain_${input.repoId}_${date}_${slug}`
+
+    const frontmatter: Record<string, string> = {
+      type: input.type,
+      subject: input.subject,
+      ...(input.project ? { project: input.project } : {}),
+      path: relative(repo.path, input.artifactPath),
+      status: 'draft',
+      created_at: date,
+      ...(input.note ? { note: input.note } : {})
+    }
+    const pointerContent = `---\n${Object.entries(frontmatter)
+      .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+      .join('\n')}\n---\n`
+
+    mkdirSync(brainDir, { recursive: true })
+    writeFileSync(pointerPath, pointerContent, 'utf-8')
+
+    upsertBrainEntry(db, {
+      id: entryId,
+      repoId: input.repoId,
+      projectId: null,
+      pointerPath,
+      artifactPath: input.artifactPath,
+      type: input.type,
+      subject: input.subject,
+      status: 'draft',
+      createdAt: date,
+      note: input.note ?? null
+    })
+
+    log.info('Brain artifact registered', { entryId, repoId: input.repoId, pointerPath })
+    return entryId
   }
 
   /**
