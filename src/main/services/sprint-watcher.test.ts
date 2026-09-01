@@ -518,9 +518,12 @@ describe('SprintWatcher.confirm — fromRepo flag', () => {
     const pendingId = (emitted[0].payload as SprintPendingPayload).pendingId
     watcher.confirm(db, pendingId, mockEmit)
 
-    // File should still exist because it came from repo
-    expect(existsSync(filePath)).toBe(true)
-    // But tasks should be inserted
+    // File should NOT be at original path — it was moved to json-archive/
+    expect(existsSync(filePath)).toBe(false)
+    // File should exist in json-archive/ (archived, not deleted)
+    const archivePath = join(intakeDir, '..', 'json-archive', filename)
+    expect(existsSync(archivePath)).toBe(true)
+    // Tasks should be inserted
     const tasks = db.prepare('SELECT * FROM tasks').all()
     expect(tasks).toHaveLength(1)
   })

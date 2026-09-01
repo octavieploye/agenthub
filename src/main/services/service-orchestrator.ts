@@ -28,6 +28,7 @@ import type { IForgejoAdapter } from './adapters/forgejo-adapter'
 import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapters/adapter-factory'
 import { initAnamnesisReader } from './anamnesis-reader'
 import { SprintWatcher } from './sprint-watcher'
+import { TokenBudgetTracker } from './token-budget'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
@@ -118,11 +119,17 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       sendInput(msg.requestId, 'n\r', { isSystemAction: true })
       break
     case 'spawn_agent': {
+      const allRepos = getAllRepos(db)
+      const repo = allRepos.find((r) => r.path === msg.repo)
+      if (!repo) {
+        log.warn('Telegram spawn_agent: unregistered repo rejected', { repo: msg.repo })
+        break
+      }
       try {
         spawnAgent({
-          repoId: '',
+          repoId: repo.id,
           name: msg.name,
-          cwd: msg.repo,
+          cwd: repo.path,
           taskDescription: msg.task,
         })
       } catch (err) {
@@ -439,6 +446,11 @@ export function initializeServices(db: Database.Database): void {
     if (existsSync(repoSprintsDir)) sprintDirs.push(repoSprintsDir)
   }
   sprintWatcher = new SprintWatcher()
+  // Wire sprint-card enricher if skillsService is available
+  if (skillsService) {
+    const budgetTracker = new TokenBudgetTracker(db)
+    sprintWatcher.setEnricher(SprintWatcher.createEnricher(skillsService, budgetTracker))
+  }
   sprintWatcher.start(sprintDirs, emitToAllRenderers, db)
 
   // 17. TelegramSidecarService — Telegram bot child process
@@ -556,7 +568,7 @@ export function initializeServices(db: Database.Database): void {
     startOrchestratorRun: (input) => kanbanOrchestrator!.start(input),
     sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
     onEventInserted: orchestratorDeps.onEventInserted,
-    getOllamaBaseUrl: () => 'http://localhost:11434',
+    getOllamaBaseUrl: () => process.env['OLLAMA_URL'] ?? 'http://localhost:11434',
   }
   // R-011: Always construct DateWatcher — poll() already gates on isOrchestratorEnabled (S74)
   dateWatcher = new DateWatcherService(db, dateWatcherDeps)

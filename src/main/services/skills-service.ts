@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'fs'
 import { execFile } from 'child_process'
 import { join, basename, dirname, relative, extname } from 'path'
 import { homedir } from 'os'
-import type { SkillItem, SkillExecutionResult } from '../../shared/types/skills.types'
+import { parse as yamlParse } from 'yaml'
+import type { SkillItem, SkillExecutionResult, SkillManifest } from '../../shared/types/skills.types'
 
 export const SUPPORTED_SKILL_EXTENSIONS = ['.md', '.sh', '.py', '.js']
 
@@ -530,6 +531,27 @@ export class SkillsService {
       // File read error — use defaults
     }
 
-    return { id, name, description, category, path: filePath, source, format, origin: 'project' }
+    const manifest = this.loadManifest(dirname(filePath))
+    const item: SkillItem = { id, name, description, category, path: filePath, source, format, origin: 'project' }
+    if (manifest !== undefined) item.manifest = manifest
+    return item
+  }
+
+  private loadManifest(skillDir: string): SkillManifest | undefined {
+    const manifestPath = join(skillDir, 'manifest.yaml')
+    try {
+      if (!existsSync(manifestPath)) return undefined
+      const raw = readFileSync(manifestPath, 'utf-8')
+      const parsed = yamlParse(raw) as Record<string, unknown>
+      if (!parsed || typeof parsed !== 'object') return undefined
+      // Basic validation: required fields with type checks
+      if (!parsed.version || !parsed.type) return undefined
+      if (!Array.isArray(parsed.triggers)) return undefined
+      if (typeof parsed.resources !== 'object' || parsed.resources === null) return undefined
+      if (typeof parsed.securitySensitive !== 'boolean') return undefined
+      return parsed as unknown as SkillManifest
+    } catch {
+      return undefined
+    }
   }
 }
