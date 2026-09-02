@@ -52,7 +52,8 @@ export async function ensureCodexMcpServers(
   kanbanScriptPath: string,
   dbPath: string,
   socketPath: string,
-  _exec: CodexExecFn = execFileAsync as CodexExecFn
+  _exec: CodexExecFn = execFileAsync as CodexExecFn,
+  socketToken = ''
 ): Promise<void> {
   if (codexMcpEnsured) return
   codexMcpEnsured = true
@@ -69,7 +70,7 @@ export async function ensureCodexMcpServers(
       return
     }
 
-    if (!listOutput.includes('anamnesis')) {
+    if (!/\banamnesis\b/.test(listOutput)) {
       try {
         const rawConfig = readFileSync(mcpJsonPath, 'utf-8')
         const mcpJson = JSON.parse(rawConfig) as {
@@ -96,7 +97,7 @@ export async function ensureCodexMcpServers(
       }
     }
 
-    if (!listOutput.includes('agenthub-telegram')) {
+    if (!/\bagenthub-telegram\b/.test(listOutput)) {
       try {
         await _exec(
           'codex',
@@ -110,7 +111,7 @@ export async function ensureCodexMcpServers(
       }
     }
 
-    if (!listOutput.includes('agenthub-kanban')) {
+    if (!/\bagenthub-kanban\b/.test(listOutput)) {
       try {
         await _exec(
           'codex',
@@ -118,6 +119,7 @@ export async function ensureCodexMcpServers(
             'mcp', 'add', 'agenthub-kanban',
             '--env', `AGENTHUB_DB_PATH=${dbPath}`,
             '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
+            '--env', `AGENTHUB_SOCKET_TOKEN=${socketToken}`,
             '--', 'node', kanbanScriptPath,
           ],
           { timeout: 10000 }

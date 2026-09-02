@@ -100,12 +100,15 @@ async function main(): Promise<void> {
     sendIpc,
     agenthubPath,
     appVersion: APP_VERSION,
+    // Fresh call each time — repo list may change while the server is running.
     getRepos: () => listReposReadOnly(db),
     getQuota: () => getQuotaReadOnly(db),
     getSafeguards: () => getSafeguardsReadOnly(db),
     getModelCatalog: (): ModelCatalogEntry[] => []
   }
-  const auditDependencyRoots = [agenthubPath, ...listReposReadOnly(db).map((repo) => repo.path)]
+  // One read at startup — used only to seed the dependency-audit roots list.
+  const initialRepos = listReposReadOnly(db)
+  const auditDependencyRoots = [agenthubPath, ...initialRepos.map((repo) => repo.path)]
 
   // 4. MCP Server
   const server = new Server(
@@ -324,42 +327,39 @@ async function main(): Promise<void> {
 
       switch (name) {
         case 'create_task':
-          result = await handleCreateTask(safeArgs as unknown as CreateTaskToolInput, taskDeps)
+          result = await handleCreateTask(safeArgs as CreateTaskToolInput, taskDeps)
           break
 
         case 'list_tasks':
-          result = handleListTasks(safeArgs as unknown as ListTasksToolInput, db)
+          result = handleListTasks(safeArgs as ListTasksToolInput, db)
           break
 
         case 'dispatch_task':
-          result = await handleDispatchTask(safeArgs as unknown as DispatchTaskToolInput, taskDeps)
+          result = await handleDispatchTask(safeArgs as DispatchTaskToolInput, taskDeps)
           break
 
         case 'estimate_tokens':
-          result = handleEstimateTokens(safeArgs as unknown as EstimateTokensToolInput)
+          result = handleEstimateTokens(safeArgs as EstimateTokensToolInput)
           break
 
         case 'recommend_model':
-          result = handleRecommendModel(safeArgs as unknown as RecommendModelToolInput)
+          result = handleRecommendModel(safeArgs as RecommendModelToolInput)
           break
 
         case 'get_guardrails':
-          result = handleGetGuardrails(safeArgs as unknown as GetGuardrailsToolInput)
+          result = handleGetGuardrails(safeArgs as GetGuardrailsToolInput)
           break
 
         case 'get_skills':
-          result = handleGetSkills(safeArgs as unknown as GetSkillsToolInput, agenthubPath)
+          result = handleGetSkills(safeArgs as GetSkillsToolInput, agenthubPath)
           break
 
         case 'get_context':
-          result = await handleGetContext(safeArgs as unknown as GetContextToolInput, contextDeps)
+          result = await handleGetContext(safeArgs as GetContextToolInput, contextDeps)
           break
 
         case 'audit_deps':
-          result = await handleAuditDeps(
-            safeArgs as unknown as AuditDepsToolInput,
-            auditDependencyRoots
-          )
+          result = await handleAuditDeps(safeArgs as AuditDepsToolInput, auditDependencyRoots)
           break
 
         default:

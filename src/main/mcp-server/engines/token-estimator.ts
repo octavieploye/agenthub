@@ -2,6 +2,10 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TokenEstimation, TokenEstimationBreakdown } from '@shared/types/mcp-server.types'
 
+// ─── File-level mtime cache ───────────────────────────────────────────────────
+// Keyed by absolute file path. Cleared on process exit naturally.
+const fileCache = new Map<string, { mtime: number; tokens: number }>()
+
 const BYTES_PER_TOKEN = 4
 const LARGE_FILE_BYTES = 1_000_000
 const MISSING_FILE_FALLBACK = 500
@@ -22,15 +26,23 @@ function charsToTokens(chars: number): number {
 
 function estimateFile(filePath: string, warnings: string[]): { tokens: number; resolved: boolean } {
   try {
-    const size = statSync(filePath).size
+    const stat = statSync(filePath)
+    const mtime = stat.mtimeMs
+
+    const cached = fileCache.get(filePath)
+    if (cached && cached.mtime === mtime) {
+      return { tokens: cached.tokens, resolved: true }
+    }
 
     // Avoid loading potentially very large files into memory. The byte size is
     // the closest available stat-only approximation of character count.
-    if (size > LARGE_FILE_BYTES) {
-      return { tokens: charsToTokens(size), resolved: true }
-    }
+    const tokens =
+      stat.size > LARGE_FILE_BYTES
+        ? charsToTokens(stat.size)
+        : charsToTokens(readFileSync(filePath, 'utf8').length)
 
-    return { tokens: charsToTokens(readFileSync(filePath, 'utf8').length), resolved: true }
+    fileCache.set(filePath, { mtime, tokens })
+    return { tokens, resolved: true }
   } catch {
     warnings.push(
       `Target file not found or unreadable: ${filePath} (using ${MISSING_FILE_FALLBACK} token fallback)`

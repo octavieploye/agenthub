@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as net from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
-import type { McpIpcRequest, McpIpcResponse } from '../../shared/types/mcp-server.types'
+import type { McpIpcRequest, McpIpcResponse, McpIpcRouteResult } from '../../shared/types/mcp-server.types'
 import type { McpIpcFrame, McpIpcResponseFrame } from '../mcp-server/ipc/ipc-protocol'
 import { getTaskById, insertTask, updateTask } from '../db/queries/tasks.queries'
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types/task.types'
@@ -37,7 +37,7 @@ export interface McpManagerDeps {
   }
   emitToRenderer: (channel: string, data: unknown) => void
   listAgents: () => Array<{ id: string }>
-  spawnAgent: (...args: never[]) => unknown
+  spawnAgent: (...args: unknown[]) => unknown
 }
 
 /**
@@ -48,15 +48,18 @@ export class McpServerManager {
   private child: ChildProcess | null = null
   private socketServer: net.Server | null = null
   private readonly socketPath = join(tmpdir(), `agenthub-mcp-${process.pid}.sock`)
+  private readonly liveConfigPath = join(tmpdir(), 'agenthub-mcp-live.json')
   private readonly socketToken = randomUUID()
   private readonly connections = new Set<net.Socket>()
   private readonly unauthenticatedConnections = new Set<net.Socket>()
   private readonly authenticationTimers = new WeakMap<net.Socket, ReturnType<typeof setTimeout>>()
   private cleanupHooksInstalled = false
+  private dbPath = ''
 
-  start(db: Database.Database, deps: McpManagerDeps): void {
+  start(db: Database.Database, deps: McpManagerDeps, onReady?: () => void): void {
     if (this.socketServer) return
 
+    this.dbPath = this.getDatabasePath(db)
     this.unlinkSocket()
     const server = net.createServer((socket) => this.handleConnection(socket, db, deps))
     server.on('error', () => {
@@ -72,6 +75,9 @@ export class McpServerManager {
         this.stop()
         return
       }
+
+      this.writeLiveConfig()
+      onReady?.()
 
       if (this.socketServer !== server) return
       const child = spawn(process.execPath, [this.getServerScriptPath()], {
@@ -110,6 +116,7 @@ export class McpServerManager {
     this.socketServer?.close()
     this.socketServer = null
     this.unlinkSocket()
+    this.unlinkLiveConfig()
     this.removeCleanupHooks()
   }
 
@@ -119,6 +126,42 @@ export class McpServerManager {
 
   getSocketToken(): string {
     return this.socketToken
+  }
+
+  getLiveConfigPath(): string {
+    return this.liveConfigPath
+  }
+
+  private writeLiveConfig(): void {
+    try {
+      const config = {
+        mcpServers: {
+          'agenthub-kanban': {
+            type: 'stdio',
+            command: 'node',
+            args: [this.getServerScriptPath()],
+            env: {
+              AGENTHUB_DB_PATH: this.dbPath,
+              AGENTHUB_SOCKET_PATH: this.socketPath,
+              AGENTHUB_SOCKET_TOKEN: this.socketToken,
+              ELECTRON_RUN_AS_NODE: '1',
+            },
+          },
+        },
+      }
+      fs.writeFileSync(this.liveConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+      fs.chmodSync(this.liveConfigPath, 0o600)
+    } catch {
+      // non-fatal — live config is best-effort for CLI sessions
+    }
+  }
+
+  private unlinkLiveConfig(): void {
+    try {
+      fs.unlinkSync(this.liveConfigPath)
+    } catch {
+      // ignore ENOENT and other errors — file may not exist
+    }
   }
 
   getServerScriptPath(): string {
@@ -141,11 +184,11 @@ export class McpServerManager {
     let buffer = ''
     socket.setEncoding('utf8')
     socket.on('data', (chunk: string) => {
-      buffer += chunk
-      if (Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {
+      if (Buffer.byteLength(chunk, 'utf8') + Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {
         socket.destroy()
         return
       }
+      buffer += chunk
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const line of lines) {
@@ -173,10 +216,22 @@ export class McpServerManager {
     let response: McpIpcResponse
     let closeAfterResponse = false
     try {
+      // Best-effort extraction of correlationId before full validation so that
+      // error responses always carry the original correlationId.
+      try {
+        const quick = JSON.parse(line) as Partial<McpIpcFrame>
+        if (typeof quick.correlationId === 'string') correlationId = quick.correlationId
+      } catch {
+        // best-effort — if parse fails here too, correlationId stays ''
+      }
       const frame = JSON.parse(line) as Partial<McpIpcFrame>
+      const frameToken = String(frame.token ?? '')
+      const tokenMatch =
+        frameToken.length === this.socketToken.length &&
+        timingSafeEqual(Buffer.from(frameToken), Buffer.from(this.socketToken))
       if (
         typeof frame.correlationId !== 'string' ||
-        frame.token !== this.socketToken ||
+        !tokenMatch ||
         !frame.request
       ) {
         throw new Error('Invalid MCP IPC frame')
@@ -211,7 +266,7 @@ export class McpServerManager {
     request: McpIpcRequest,
     db: Database.Database,
     deps: McpManagerDeps
-  ): unknown {
+  ): McpIpcRouteResult {
     switch (request.type) {
       case 'create_task': {
         const task = insertTask(db, request.payload as CreateTaskInput)
@@ -256,6 +311,15 @@ export class McpServerManager {
           (agentId) => deps.healthMonitor.getSnapshot(agentId)?.anomalies ?? []
         )
       }
+      default: {
+        // Exhaustiveness check: if McpIpcRequest union is fully covered above,
+        // TypeScript narrows `request` to `never` here.
+        const _exhaustive: never = request
+        throw Object.assign(
+          new Error(`Unknown MCP request type: ${(_exhaustive as { type: string }).type}`),
+          { code: 'UNKNOWN_REQUEST_TYPE' }
+        )
+      }
     }
   }
 
@@ -286,7 +350,10 @@ export class McpServerManager {
     this.cleanupHooksInstalled = false
   }
 
-  private cleanupOnExit = (): void => this.unlinkSocket()
+  private cleanupOnExit = (): void => {
+    this.unlinkSocket()
+    this.unlinkLiveConfig()
+  }
 
   private cleanupOnSigterm = (): void => {
     this.stop()

@@ -201,6 +201,7 @@ export async function handleCreateTask(
     recommendedModel: modelRecommendation?.modelId ?? undefined,
     riskScore: riskAssessment?.riskScore,
     riskFactors: riskAssessment?.riskFactors,
+    riskFactorsJson: riskAssessment ? JSON.stringify(riskAssessment.riskFactors) : undefined,
     createdBy: input.createdBy ?? 'mcp-agent'
   }
 
@@ -211,6 +212,7 @@ export async function handleCreateTask(
     throw new Error(`create_task IPC error: ${resp.message}`)
   }
 
+  if (!resp.data) throw new Error('create_task: empty response from main process')
   const task = resp.data as TaskItem
 
   return {
@@ -232,7 +234,7 @@ export function handleListTasks(
   db: Database.Database
 ): ListTasksToolOutput {
   const limit =
-    input.limit === undefined
+    input.limit === undefined || !Number.isFinite(input.limit)
       ? MAX_LIST_TASKS
       : Math.min(MAX_LIST_TASKS, Math.max(1, Math.floor(input.limit)))
   const tasks = listTasksReadOnly(db, {
@@ -300,10 +302,13 @@ export async function handleDispatchTask(
     throw new Error(`dispatch_task IPC error: ${resp.message}`)
   }
 
-  const data = resp.data as { runId?: string; id?: string }
+  if (!resp.data || typeof (resp.data as { id?: unknown }).id !== 'string') {
+    throw new Error('dispatch_task: invalid response shape from main process')
+  }
+  const data = resp.data as { id: string }
   return {
     result: 'dispatched',
-    runId: data.runId ?? data.id ?? null,
+    runId: data.id ?? null,
     message: `Task ${input.taskId} dispatched successfully.`
   }
 }

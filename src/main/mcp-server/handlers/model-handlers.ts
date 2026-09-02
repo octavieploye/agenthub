@@ -4,7 +4,7 @@ import type {
   EstimateTokensToolOutput,
   RecommendModelToolInput
 } from '@shared/types/mcp-server.types'
-import type { ModelProvider } from '@shared/types/model.types'
+import type { ModelProvider, CapabilityTier } from '@shared/types/model.types'
 
 // ─── Pure quota / complexity helpers ─────────────────────────────────────────
 //
@@ -112,7 +112,9 @@ export function handleRecommendModel(input: RecommendModelToolInput): HandlerMod
   return {
     modelId,
     provider: 'anthropic',
-    capabilityTier: tier,
+    // RiskCapabilityTier ('frontier'|'expert'|'capable') is a strict subset of
+    // CapabilityTier — the cast is safe; 'efficient' is never produced by selectTier().
+    capabilityTier: tier as CapabilityTier,
     rationale,
     estimatedTokens,
     contextWindowFit,

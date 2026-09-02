@@ -243,6 +243,12 @@ export type McpIpcRequest =
   | { type: 'get_orchestrator_status'; payload: Record<string, never> }
   | { type: 'get_health_anomalies'; payload: { agentId?: string } }
 
-export type McpIpcResponse =
-  | { type: 'success'; data: unknown }
-  | { type: 'error'; message: string; code?: string }
+// FCR-007: typed generic variants — backward compatible (T defaults to unknown)
+export type McpIpcSuccessResponse<T = unknown> = { type: 'success'; data: T }
+export type McpIpcErrorResponse = { type: 'error'; message: string; code?: string }
+
+export type McpIpcResponse = McpIpcSuccessResponse | McpIpcErrorResponse
+
+// FCR-004: loosely typed return alias for routeRequest() — callers must narrow before use
+/** Loosely typed return for routeRequest — callers must narrow before use */
+export type McpIpcRouteResult = Record<string, unknown> | Array<unknown> | null

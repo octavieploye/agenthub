@@ -596,9 +596,11 @@ export function initializeServices(db: Database.Database): void {
     emitToRenderer: emitToAllRenderers,
     listAgents,
     spawnAgent,
+  }, () => {
+    // onReady: socket is bound and chmod'd — safe to publish path and token
+    setMcpServerInfo(mcpServerManager!.getSocketPath(), mcpServerManager!.getSocketToken())
+    log.info('AgentHub MCP live config written', { path: mcpServerManager!.getLiveConfigPath() })
   })
-  // Inject socket info so Claude agents get agenthub-kanban in their MCP config
-  setMcpServerInfo(mcpServerManager.getSocketPath(), mcpServerManager.getSocketToken())
 
   log.info('All services initialized')
 }

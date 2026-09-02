@@ -29,6 +29,19 @@ const NOOP_LOGGER = {
   logWarning: (_msg: string, _meta?: Record<string, unknown>): void => {}
 }
 
+// ─── SkillsService singleton ──────────────────────────────────────────────────
+// SkillsService is safe to cache at module level: agenthubPath is stable across
+// the lifetime of the child process, and the service maintains its own internal
+// per-scan-path cache (Map<string, SkillItem[]>) — singleton avoids redundant
+// instantiation on every handleGetSkills / handleGetContext call.
+
+let _skillsService: SkillsService | null = null
+
+function getSkillsService(agenthubPath: string): SkillsService {
+  if (!_skillsService) _skillsService = new SkillsService({ ...NOOP_LOGGER, agenthubPath })
+  return _skillsService
+}
+
 // ─── handleGetGuardrails ──────────────────────────────────────────────────────
 
 export function handleGetGuardrails(input: GetGuardrailsToolInput): GetGuardrailsToolOutput {
@@ -73,7 +86,7 @@ export function handleGetGuardrails(input: GetGuardrailsToolInput): GetGuardrail
 // ─── handleGetSkills ──────────────────────────────────────────────────────────
 
 export function handleGetSkills(input: GetSkillsToolInput, agenthubPath: string): GetSkillsToolOutput {
-  const service = new SkillsService({ ...NOOP_LOGGER, agenthubPath })
+  const service = getSkillsService(agenthubPath)
   // When repoPath is provided, scan that repo's skills alongside agenthub's.
   // When absent, pass agenthubPath so the agenthub scan runs as the primary repo.
   const scanPath = input.repoPath ?? agenthubPath
@@ -81,7 +94,7 @@ export function handleGetSkills(input: GetSkillsToolInput, agenthubPath: string)
 
   const skills = input.query
     ? (() => {
-        const q = input.query!.toLowerCase()
+        const q = input.query.toLowerCase()
         return all.filter(
           (s) =>
             s.id.toLowerCase().includes(q) ||
@@ -101,6 +114,14 @@ export interface ContextHandlerDeps {
   sendIpc: (req: McpIpcRequest) => Promise<McpIpcResponse>
   /** Path to agenthub repo root — used for skill scanning */
   agenthubPath: string
+  /**
+   * Optional path to the target repo being worked on.
+   * When provided and different from agenthubPath, skills from both repos are included.
+   * SkillsService.listSkills already performs the dual scan internally when repoPath differs.
+   * TODO (FUTURE): wire this from server.ts once the MCP server receives the active repo path
+   * from the parent process at startup. The parent already knows it; it just isn't passed yet.
+   */
+  repoPath?: string
   /** App version string (from package.json or env) */
   appVersion: string
   /** Repos from the read-only DB */
@@ -127,7 +148,10 @@ export async function handleGetContext(
   ])
 
   // Agents — map AgentState → SelfAwarenessManifestAgent
-  const rawAgents = agentsResp.type === 'success' ? (agentsResp.data as AgentState[]) : []
+  const rawAgents =
+    agentsResp.type === 'success' && Array.isArray(agentsResp.data)
+      ? (agentsResp.data as AgentState[])
+      : []
   const agents = rawAgents.map((a) => ({
     id: a.id,
     name: a.name,
@@ -139,11 +163,15 @@ export async function handleGetContext(
 
   // Orchestrator — map OrchestratorStatusResponse → SelfAwarenessManifestOrchestrator
   const orchData =
-    orchResp.type === 'success' ? (orchResp.data as OrchestratorStatusResponse) : null
+    orchResp.type === 'success' &&
+    orchResp.data !== null &&
+    typeof orchResp.data === 'object'
+      ? (orchResp.data as OrchestratorStatusResponse)
+      : null
   const isRunning =
     orchData?.run?.status === 'running' || orchData?.run?.status === 'paused'
   const orchestrator = {
-    enabled: isRunning ?? false,
+    enabled: isRunning,
     status: orchData?.run?.status ?? null,
     activeTaskCount: orchData?.activeTasks?.length ?? 0,
     agentsSpawnedByRun: orchData?.activeTasks?.length ?? 0,
@@ -152,11 +180,15 @@ export async function handleGetContext(
 
   // Health anomalies — flat array from parent monitor
   const healthAnomalies =
-    healthResp.type === 'success' ? (healthResp.data as HealthAnomaly[]) : []
+    healthResp.type === 'success' && Array.isArray(healthResp.data)
+      ? (healthResp.data as HealthAnomaly[])
+      : []
 
-  // Skills — scanned from agenthub repo (file-based, no Electron dep)
-  const skillsService = new SkillsService({ ...NOOP_LOGGER, agenthubPath: deps.agenthubPath })
-  const skills = skillsService.listSkills(deps.agenthubPath)
+  // Skills — scan agenthub always; when repoPath is provided and differs from agenthubPath,
+  // SkillsService.listSkills performs both scans internally and merges the results.
+  const skillsService = getSkillsService(deps.agenthubPath)
+  const skillScanPath = deps.repoPath ?? deps.agenthubPath
+  const skills = skillsService.listSkills(skillScanPath)
 
   return {
     timestamp: new Date().toISOString(),

@@ -11,7 +11,6 @@ import { createParser, type CliOutputParser } from '../parsers/cli-output-parser
 import { buildCodexCommand } from './codex-command-builder'
 import { checkCodexHealth, ensureCodexMcpServers } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
-import { writeCodexMcpConfig, cleanupCodexMcpConfig } from './codex-mcp-config'
 import { readSettingsMcpServers } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
@@ -99,8 +98,6 @@ interface ManagedAgent {
   hasNotifiedCompletion: boolean
   /** Path to the generated .codex/AGENTS.md file — cleaned up on exit. */
   codexAgentsMdPath: string | null
-  /** Path to the generated Codex MCP config JSON — cleaned up on exit. */
-  codexMcpConfigPath: string | null
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -449,10 +446,6 @@ function cleanupCodexFiles(managed: ManagedAgent | undefined): void {
   if (managed.codexAgentsMdPath) {
     try { unlinkSync(managed.codexAgentsMdPath) } catch {}
     managed.codexAgentsMdPath = null
-  }
-  if (managed.codexMcpConfigPath) {
-    cleanupCodexMcpConfig(tmpdir(), managed.state.id)
-    managed.codexMcpConfigPath = null
   }
 }
 
@@ -903,7 +896,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify,
     codexAgentsMdPath: null,
-    codexMcpConfigPath: null
   })
 
   // S3: per-agent adaptive IPC rate monitor — throttle to 64ms flush when sustained >100 msg/s
@@ -1077,21 +1069,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
     const kanbanDb = getDb()
     const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
-    const kanbanSocketPath = join(tmpdir(), `agenthub-mcp-${process.pid}.sock`)
 
-    ensureCodexMcpServers(mcpJsonPath, scriptPath, kanbanScriptPath, kanbanDbPath, kanbanSocketPath).catch(() => {
-      // ensureCodexMcpServers is non-throwing by design — safety catch
-    })
-
-    const codexMcpPath = writeCodexMcpConfig({
-      targetDir: tmpdir(),
-      agentId: agentState.id,
-      agentName: agentState.name,
-      repoName,
-      telegramSocketPath: getTelegramSocketPath(),
-      telegramScriptPath: scriptPath,
-    })
-    if (codexManaged && codexMcpPath) codexManaged.codexMcpConfigPath = codexMcpPath
+    if (_mcpServerSocketPath && _mcpServerSocketToken) {
+      ensureCodexMcpServers(mcpJsonPath, scriptPath, kanbanScriptPath, kanbanDbPath, _mcpServerSocketPath, undefined, _mcpServerSocketToken).catch(() => {
+        // ensureCodexMcpServers is non-throwing by design — safety catch
+      })
+    }
 
     setTimeout(() => {
       const mCodex = agents.get(agentState.id)
