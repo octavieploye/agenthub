@@ -851,12 +851,13 @@ export class KanbanOrchestratorService {
     if (next === 'done') {
       log.info('Orchestrator: task fully completed', { taskId })
 
-      // Task 2.6: Auto-complete for single-task mode
+      // Task 2.6: Auto-complete for single-task mode — chain to dependents first
       if (run.singleTaskId) {
         // Verify push phase actually completed (not just that we reached 'done' state)
         const taskLogs = getTaskLogsByTask(this.db, taskId)
         const pushLog = taskLogs.find(l => l.phase === 'push')
         if (pushLog?.status === 'done') {
+          if (this.promoteToChainedBatch(run)) return
           updateRunStatus(this.db, run.id, 'completed')
           this.emitStatusChange(run.id, 'completed', run.sprintName)
           log.info('Orchestrator: single-task pipeline completed', { runId: run.id, taskId })
@@ -942,7 +943,8 @@ export class KanbanOrchestratorService {
       // Check if push phase is done (task fully completed)
       const pushLog = taskLogs.find(l => l.phase === 'push')
       if (pushLog?.status === 'done') {
-        // Task 2.6: Auto-complete single-task run
+        // Task 2.6: Auto-complete single-task run — chain to dependents first
+        if (this.promoteToChainedBatch(run)) return
         updateRunStatus(this.db, run.id, 'completed')
         this.emitStatusChange(run.id, 'completed', run.sprintName)
         log.info('Orchestrator: single-task pipeline completed (via dispatchNextTasks)', { runId: run.id, taskId: run.singleTaskId })
@@ -1178,6 +1180,42 @@ export class KanbanOrchestratorService {
 
   acknowledgeRetryFailures(): void {
     dbAcknowledgeRetryFailures(this.db)
+  }
+
+  /**
+   * After a single-task push completes, check whether dependent tasks are now
+   * unblocked. If so, promote the run to batch mode and dispatch them.
+   * Returns true if chaining happened (caller must return without stopping).
+   * Returns false if no dependents are ready (caller should complete and stop).
+   */
+  private promoteToChainedBatch(run: OrchestratorRun): boolean {
+    if (!run.singleTaskId) return false
+
+    // Promote to batch mode in DB so the dependency solver sees all sprint tasks
+    this.db.prepare('UPDATE orchestrator_runs SET single_task_id = NULL WHERE id = ?').run(run.id)
+
+    const dispatchable = this.getNextDispatchableTasks(run.id)
+
+    if (dispatchable.length === 0) {
+      // No unblocked dependents — restore and signal caller to complete
+      this.db.prepare('UPDATE orchestrator_runs SET single_task_id = ? WHERE id = ?').run(run.singleTaskId, run.id)
+      return false
+    }
+
+    // Start tick timer — single-task runs don't have one
+    if (!this.tickTimer) {
+      this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
+    }
+
+    log.info('Orchestrator: single-task complete — chaining to dependent tasks', {
+      runId: run.id,
+      completedTaskId: run.singleTaskId,
+      nextCount: dispatchable.length,
+    })
+
+    const freshRun = getRun(this.db, run.id)!
+    this.dispatchNextTasks(freshRun)
+    return true
   }
 
   stop(): void {

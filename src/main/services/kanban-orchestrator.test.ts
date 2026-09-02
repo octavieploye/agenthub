@@ -1821,4 +1821,121 @@ describe('KanbanOrchestratorService', () => {
       expect(() => service.tick()).not.toThrow()
     })
   })
+
+  // ---------------------------------------------------------------------------
+  // Task 2.6: promoteToChainedBatch — single-task completion chains to dependents
+  // ---------------------------------------------------------------------------
+
+  describe('promoteToChainedBatch: single-task chains to dependents', () => {
+    it('chains to dependent task after single-task pipeline completes', () => {
+      const t1DevAgent = createMockAgent({ id: 't1-dev' })
+      const t1ReviewAgent = createMockAgent({ id: 't1-review' })
+      const t1SecAgent = createMockAgent({ id: 't1-sec' })
+      const t2DevAgent = createMockAgent({ id: 't2-dev' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return t1DevAgent
+          if (callCount === 2) return t1ReviewAgent
+          if (callCount === 3) return t1SecAgent
+          return t2DevAgent
+        })
+      })
+
+      const t1 = insertTask(db, {
+        repoId: 'repo-1',
+        title: 'Chain source',
+        priority: 1,
+        status: 'backlog'
+      })
+      const t2 = insertTask(db, {
+        repoId: 'repo-1',
+        title: 'Chain dependent',
+        priority: 2,
+        status: 'backlog'
+      })
+      insertTaskDependency(db, t2.id, t1.id)
+
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.startSingleTask({
+        sprintName: 'chain-test',
+        repoId: 'repo-1',
+        singleTaskId: t1.id,
+        confirmed: true
+      })
+
+      // startSingleTask dispatches t1 dev agent automatically (call 1)
+      // Drive t1 through dev → review → security → commit → push
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: t1DevAgent.id } as any
+      })
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: t1ReviewAgent.id } as any
+      })
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: t1SecAgent.id } as any
+      })
+
+      // promoteToChainedBatch should have fired: single_task_id cleared, t2 dispatched (call 4)
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(4)
+
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.singleTaskId).toBeNull()
+
+      const t2SpawnCall = (deps.spawnAgent as any).mock.calls[3][0]
+      expect(t2SpawnCall.name).toContain('Chain dependent')
+    })
+
+    it('completes normally without chaining when single task has no dependents', () => {
+      const devAgent = createMockAgent({ id: 'no-dep-dev' })
+      const reviewAgent = createMockAgent({ id: 'no-dep-review' })
+      const secAgent = createMockAgent({ id: 'no-dep-sec' })
+      let callCount = 0
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => {
+          callCount++
+          if (callCount === 1) return devAgent
+          if (callCount === 2) return reviewAgent
+          return secAgent
+        })
+      })
+
+      const task = insertTask(db, {
+        repoId: 'repo-1',
+        title: 'Standalone task',
+        priority: 1,
+        status: 'backlog'
+      })
+
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.startSingleTask({
+        sprintName: 'no-dep-test',
+        repoId: 'repo-1',
+        singleTaskId: task.id,
+        confirmed: true
+      })
+
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: devAgent.id } as any
+      })
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: reviewAgent.id } as any
+      })
+      service['onAgentCompleted']({
+        type: 'agent:completed',
+        triageEvent: { agentId: secAgent.id } as any
+      })
+
+      // Run should be completed — no chaining, only 3 agents spawned
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('completed')
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(3)
+    })
+  })
 })
