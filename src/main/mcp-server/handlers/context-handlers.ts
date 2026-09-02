@@ -44,7 +44,15 @@ function getSkillsService(agenthubPath: string): SkillsService {
 
 // ─── handleGetGuardrails ──────────────────────────────────────────────────────
 
-export function handleGetGuardrails(input: GetGuardrailsToolInput): GetGuardrailsToolOutput {
+export function handleGetGuardrails(
+  input: GetGuardrailsToolInput,
+  registeredRepoPaths: string[],
+  agenthubPath: string
+): GetGuardrailsToolOutput {
+  if (input.repoPath !== agenthubPath && !registeredRepoPaths.includes(input.repoPath)) {
+    return { guardrails: { ...DEFAULT_GUARDRAILS }, source: 'default' }
+  }
+
   const yamlPath = join(input.repoPath, '.agenthub.yaml')
 
   if (!existsSync(yamlPath)) {
@@ -85,7 +93,19 @@ export function handleGetGuardrails(input: GetGuardrailsToolInput): GetGuardrail
 
 // ─── handleGetSkills ──────────────────────────────────────────────────────────
 
-export function handleGetSkills(input: GetSkillsToolInput, agenthubPath: string): GetSkillsToolOutput {
+export function handleGetSkills(
+  input: GetSkillsToolInput,
+  agenthubPath: string,
+  registeredRepoPaths: string[]
+): GetSkillsToolOutput {
+  if (
+    input.repoPath !== undefined &&
+    input.repoPath !== agenthubPath &&
+    !registeredRepoPaths.includes(input.repoPath)
+  ) {
+    return { skills: [], total: 0 }
+  }
+
   const service = getSkillsService(agenthubPath)
   // When repoPath is provided, scan that repo's skills alongside agenthub's.
   // When absent, pass agenthubPath so the agenthub scan runs as the primary repo.
@@ -99,7 +119,7 @@ export function handleGetSkills(input: GetSkillsToolInput, agenthubPath: string)
           (s) =>
             s.id.toLowerCase().includes(q) ||
             s.name.toLowerCase().includes(q) ||
-            s.description.toLowerCase().includes(q)
+            (s.description?.toLowerCase().includes(q) ?? false)
         )
       })()
     : all

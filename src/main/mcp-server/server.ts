@@ -347,11 +347,19 @@ async function main(): Promise<void> {
           break
 
         case 'get_guardrails':
-          result = handleGetGuardrails(safeArgs as GetGuardrailsToolInput)
+          result = handleGetGuardrails(
+            safeArgs as GetGuardrailsToolInput,
+            contextDeps.getRepos().map((r) => r.path),
+            agenthubPath
+          )
           break
 
         case 'get_skills':
-          result = handleGetSkills(safeArgs as GetSkillsToolInput, agenthubPath)
+          result = handleGetSkills(
+            safeArgs as GetSkillsToolInput,
+            agenthubPath,
+            contextDeps.getRepos().map((r) => r.path)
+          )
           break
 
         case 'get_context':
