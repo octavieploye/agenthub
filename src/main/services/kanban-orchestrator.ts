@@ -46,6 +46,7 @@ import {
   type OrchestratorAgentEvent,
 } from './orchestrator-events'
 import { isOrchestratorEnabled } from './orchestrator-settings'
+import { getAnamnesisReader } from './anamnesis-reader'
 import { GUARDRAIL_PROMPTS, OPERATING_RULES } from './orchestrator-rules'
 
 const TICK_INTERVAL_MS = 30_000
@@ -136,6 +137,11 @@ export class KanbanOrchestratorService {
 
     // M1: Validate all dependency IDs exist before starting (scoped to the run's task set)
     this.validateDependencies(this.resolveRunTasks(updated))
+
+    // M4: Pre-flight — check Anamnesis sprint inventory for duplicate work (non-blocking)
+    this.checkSprintInventory(updated.sprintName, updated.repoId).catch((err) => {
+      log.warn('Orchestrator: sprint inventory pre-flight check failed (non-blocking)', { error: String(err) })
+    })
 
     // Event subscriptions and tick timer happen OUTSIDE transaction
     this.completedHandler = (event) => this.onAgentCompleted(event)
@@ -314,6 +320,61 @@ export class KanbanOrchestratorService {
   private notifyTelegram(run: OrchestratorRun, summary: string, type: 'completed' | 'failed'): void {
     if (!run.telegramNotify) return
     this.deps?.sendTelegramNotification?.(summary, type)
+  }
+
+  /**
+   * M4: Non-blocking Anamnesis sprint_inventory pre-flight check.
+   * Queries Anamnesis procedural memory for existing sprint work.
+   * If the sprint is already done or in_progress, logs a warning and notifies via Telegram.
+   * Never blocks dispatch — all errors are caught silently.
+   */
+  private async checkSprintInventory(sprintName: string, repoId: string): Promise<void> {
+    const reader = getAnamnesisReader()
+    if (!reader) return
+
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 3000)
+      const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
+      const authSecret = process.env['ANAMNESIS_AUTH_SECRET'] ?? process.env['AUTH_SECRET'] ?? ''
+
+      const resp = await fetch(
+        `${anamnesisUrl}/api/v1/memory/procedural?domain=sprint_inventory&query=${encodeURIComponent(sprintName)}`,
+        {
+          headers: {
+            'X-Optimaeus-Caller': 'hephaestus',
+            'Authorization': `Bearer ${authSecret}`,
+          },
+          signal: controller.signal,
+        }
+      )
+      clearTimeout(timeout)
+
+      if (!resp.ok) return
+
+      const data = (await resp.json()) as {
+        memories?: Array<{ content?: { status?: string } }>
+      }
+      const doneMatch = data.memories?.find(
+        (m) => m.content?.status === 'done' || m.content?.status === 'in_progress'
+      )
+
+      if (doneMatch) {
+        const status = doneMatch.content?.status ?? 'unknown'
+        log.warn('Orchestrator: sprint inventory pre-flight found existing work', {
+          sprintName,
+          repoId,
+          existingStatus: status,
+        })
+        // Non-blocking warning — does not prevent dispatch
+        this.deps?.sendTelegramNotification?.(
+          `Sprint "${sprintName}" may already exist in Anamnesis (status: ${status}). Proceeding anyway.`,
+          'failed'
+        )
+      }
+    } catch {
+      // Circuit breaker: never block dispatch if Anamnesis is down
+    }
   }
 
   /** S5: Gate a spawn on the run's agent + wall-clock budget. Returns false (and pauses) on breach. */

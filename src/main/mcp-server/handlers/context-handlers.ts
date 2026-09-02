@@ -137,9 +137,8 @@ export interface ContextHandlerDeps {
   /**
    * Optional path to the target repo being worked on.
    * When provided and different from agenthubPath, skills from both repos are included.
-   * SkillsService.listSkills already performs the dual scan internally when repoPath differs.
-   * TODO (FUTURE): wire this from server.ts once the MCP server receives the active repo path
-   * from the parent process at startup. The parent already knows it; it just isn't passed yet.
+   * SkillsService.listSkills performs the dual scan internally when repoPath differs.
+   * Injected from AGENTHUB_ACTIVE_REPO_PATH env var set by parent process at spawn.
    */
   repoPath?: string
   /** App version string (from package.json or env) */
@@ -170,7 +169,10 @@ export async function handleGetContext(
   // Agents — map AgentState → SelfAwarenessManifestAgent
   const rawAgents =
     agentsResp.type === 'success' && Array.isArray(agentsResp.data)
-      ? (agentsResp.data as AgentState[])
+      ? (agentsResp.data as AgentState[]).filter(
+          (a): a is AgentState =>
+            a !== null && typeof a === 'object' && typeof a.id === 'string' && typeof a.status === 'string'
+        )
       : []
   const agents = rawAgents.map((a) => ({
     id: a.id,
@@ -201,7 +203,10 @@ export async function handleGetContext(
   // Health anomalies — flat array from parent monitor
   const healthAnomalies =
     healthResp.type === 'success' && Array.isArray(healthResp.data)
-      ? (healthResp.data as HealthAnomaly[])
+      ? (healthResp.data as HealthAnomaly[]).filter(
+          (h): h is HealthAnomaly =>
+            h !== null && typeof h === 'object' && typeof (h as Record<string, unknown>).type === 'string'
+        )
       : []
 
   // Skills — scan agenthub always; when repoPath is provided and differs from agenthubPath,

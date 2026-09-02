@@ -439,6 +439,10 @@ export function initializeServices(db: Database.Database): void {
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
 
   // 15a. AnamnesisReader — lifecycle data reader (system mode only)
+  // NOTE: This reader is INTERNAL to the main process. It is NOT exposed to agents
+  // via MCP tools. Agents access Anamnesis through the separate anamnesis MCP server
+  // (registered in .claude/settings.json). This reader serves orchestrator-level queries
+  // such as sprint_inventory pre-flight checks (M4) and lifecycle dashboard data.
   if (appMode === 'system') {
     const authSecret = process.env['ANAMNESIS_AUTH_SECRET'] ?? process.env['AUTH_SECRET'] ?? ''
     initAnamnesisReader({ baseUrl: anamnesisUrl, authSecret, caller: 'hephaestus' })

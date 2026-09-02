@@ -13,6 +13,13 @@ export type { CodexHealthStatus }
 type CodexExecFn = (cmd: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string; stderr: string }>
 
 let codexMcpEnsured = false
+let codexMcpLastSocketPath = ''
+
+/** Reset the MCP registration gate — exposed for testing. */
+export function resetCodexMcpEnsured(): void {
+  codexMcpEnsured = false
+  codexMcpLastSocketPath = ''
+}
 
 export async function checkCodexHealth(): Promise<CodexHealthStatus> {
   // Check 1: is `codex` binary on PATH?
@@ -55,8 +62,9 @@ export async function ensureCodexMcpServers(
   _exec: CodexExecFn = execFileAsync as CodexExecFn,
   socketToken = ''
 ): Promise<void> {
-  if (codexMcpEnsured) return
+  if (codexMcpEnsured && socketPath === codexMcpLastSocketPath) return
   codexMcpEnsured = true
+  codexMcpLastSocketPath = socketPath
 
   try {
     let listOutput = ''

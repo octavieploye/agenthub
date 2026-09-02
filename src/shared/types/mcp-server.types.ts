@@ -125,6 +125,7 @@ export interface RecommendModelToolInput {
   skills?: string[]
   estimatedTokens?: number
   riskScore?: number
+  quotaPercent?: number
 }
 
 export type RecommendModelToolOutput = ModelRecommendation

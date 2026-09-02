@@ -55,6 +55,9 @@ export class McpServerManager {
   private readonly authenticationTimers = new WeakMap<net.Socket, ReturnType<typeof setTimeout>>()
   private cleanupHooksInstalled = false
   private dbPath = ''
+  /** TTL cache for health snapshots to avoid redundant queries in burst scenarios */
+  private healthSnapshotCache = new Map<string, { anomalies: unknown[]; cachedAt: number }>()
+  private static readonly HEALTH_CACHE_TTL_MS = 3000
 
   start(db: Database.Database, deps: McpManagerDeps, onReady?: () => void): void {
     if (this.socketServer) return
@@ -307,9 +310,17 @@ export class McpServerManager {
         const agentIds = request.payload.agentId
           ? [request.payload.agentId]
           : deps.listAgents().map((agent) => agent.id)
-        return agentIds.flatMap(
-          (agentId) => deps.healthMonitor.getSnapshot(agentId)?.anomalies ?? []
-        )
+        const now = Date.now()
+        return agentIds.flatMap((agentId) => {
+          const cached = this.healthSnapshotCache.get(agentId)
+          if (cached && now - cached.cachedAt < McpServerManager.HEALTH_CACHE_TTL_MS) {
+            return cached.anomalies
+          }
+          const snapshot = deps.healthMonitor.getSnapshot(agentId)
+          const anomalies = snapshot?.anomalies ?? []
+          this.healthSnapshotCache.set(agentId, { anomalies, cachedAt: now })
+          return anomalies
+        })
       }
       default: {
         // Exhaustiveness check: if McpIpcRequest union is fully covered above,

@@ -4,7 +4,7 @@ import type {
   EstimateTokensToolOutput,
   RecommendModelToolInput
 } from '@shared/types/mcp-server.types'
-import type { ModelProvider, CapabilityTier } from '@shared/types/model.types'
+import type { ModelProvider, CapabilityTier, ModelCatalogEntry } from '@shared/types/model.types'
 
 // ─── Pure quota / complexity helpers ─────────────────────────────────────────
 //
@@ -78,23 +78,60 @@ function selectTier(riskScore: number): RiskCapabilityTier {
   return 'capable'
 }
 
-export function handleRecommendModel(input: RecommendModelToolInput): HandlerModelRecommendation {
+export function handleRecommendModel(
+  input: RecommendModelToolInput,
+  modelCatalog: ModelCatalogEntry[] = []
+): HandlerModelRecommendation {
   const riskScore = input.riskScore ?? 0
   const complexity = assessComplexity(input.description)
   const tier = selectTier(riskScore)
+  const quotaZone = getQuotaZone(input.quotaPercent ?? 0)
 
   let modelId: string
+  let provider: ModelProvider
   let rationale: string
 
-  if (tier === 'frontier') {
-    modelId = CLAUDE_OPUS
-    rationale = `High-risk task — Opus selected for maximum reliability (risk score: ${riskScore})`
-  } else if (tier === 'expert') {
-    modelId = complexity === 'complex' ? CLAUDE_OPUS : CLAUDE_SONNET
-    rationale = `Medium-risk ${complexity} task — ${complexity === 'complex' ? 'Opus' : 'Sonnet'} selected`
+  if (quotaZone === 'hot') {
+    // Hot zone: prefer non-Anthropic providers to conserve quota
+    const ollamaMatch = modelCatalog.find(
+      (m) => m.provider === 'ollama-cloud' && m.available !== false &&
+        (tier === 'frontier' ? m.capabilityTier === 'frontier' || m.capabilityTier === 'expert' : true)
+    )
+    const codexMatch = modelCatalog.find(
+      (m) => m.provider === 'openai-codex' && m.available !== false
+    )
+
+    if (ollamaMatch) {
+      modelId = ollamaMatch.id
+      provider = 'ollama-cloud'
+      rationale = `Quota hot (${input.quotaPercent}%) — using Ollama Cloud "${ollamaMatch.name}" to conserve Anthropic quota`
+    } else if (codexMatch) {
+      modelId = codexMatch.id
+      provider = 'openai-codex'
+      rationale = `Quota hot (${input.quotaPercent}%) — using Codex "${codexMatch.name}" to conserve Anthropic quota`
+    } else {
+      // Fallback to Anthropic as last resort
+      modelId = complexity === 'complex' ? CLAUDE_SONNET : CLAUDE_HAIKU
+      provider = 'anthropic'
+      rationale = `Quota hot (${input.quotaPercent}%) but no alternatives available — using ${modelId} as last resort`
+    }
   } else {
-    modelId = complexity === 'complex' ? CLAUDE_SONNET : CLAUDE_HAIKU
-    rationale = `Low-risk ${complexity} task — ${complexity === 'complex' ? 'Sonnet' : 'Haiku'} sufficient`
+    // Healthy or moderate zone: use Anthropic
+    provider = 'anthropic'
+    if (tier === 'frontier') {
+      modelId = CLAUDE_OPUS
+      rationale = `High-risk task — Opus selected for maximum reliability (risk score: ${riskScore})`
+    } else if (tier === 'expert') {
+      modelId = complexity === 'complex' ? CLAUDE_OPUS : CLAUDE_SONNET
+      rationale = `Medium-risk ${complexity} task — ${complexity === 'complex' ? 'Opus' : 'Sonnet'} selected`
+    } else {
+      modelId = complexity === 'complex' ? CLAUDE_SONNET : CLAUDE_HAIKU
+      rationale = `Low-risk ${complexity} task — ${complexity === 'complex' ? 'Sonnet' : 'Haiku'} sufficient`
+    }
+
+    if (quotaZone === 'moderate') {
+      rationale += ` (quota at ${input.quotaPercent}% — consider alternatives if usage increases)`
+    }
   }
 
   const estimatedTokens = input.estimatedTokens ?? null
@@ -111,9 +148,7 @@ export function handleRecommendModel(input: RecommendModelToolInput): HandlerMod
 
   return {
     modelId,
-    provider: 'anthropic',
-    // RiskCapabilityTier ('frontier'|'expert'|'capable') is a strict subset of
-    // CapabilityTier — the cast is safe; 'efficient' is never produced by selectTier().
+    provider,
     capabilityTier: tier as CapabilityTier,
     rationale,
     estimatedTokens,

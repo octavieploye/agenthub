@@ -213,6 +213,10 @@ export async function handleCreateTask(
   }
 
   if (!resp.data) throw new Error('create_task: empty response from main process')
+  const raw = resp.data as Record<string, unknown>
+  if (typeof raw.id !== 'string' || typeof raw.title !== 'string' || typeof raw.status !== 'string') {
+    throw new Error('create_task: malformed response — missing id, title, or status')
+  }
   const task = resp.data as TaskItem
 
   return {

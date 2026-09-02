@@ -40,12 +40,14 @@ import type {
   AuditDepsToolInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '@shared/constants/model-catalog'
 
 // ─── Environment ──────────────────────────────────────────────────────────────
 
 const dbPath = process.env['AGENTHUB_DB_PATH']
 const socketPath = process.env['AGENTHUB_SOCKET_PATH']
 const socketToken = process.env['AGENTHUB_SOCKET_TOKEN']
+const activeRepoPath = process.env['AGENTHUB_ACTIVE_REPO_PATH'] ?? null
 
 if (!dbPath) {
   process.stderr.write('[mcp-server] FATAL: AGENTHUB_DB_PATH is not set\n')
@@ -99,12 +101,13 @@ async function main(): Promise<void> {
   const contextDeps = {
     sendIpc,
     agenthubPath,
+    repoPath: activeRepoPath ?? undefined,
     appVersion: APP_VERSION,
     // Fresh call each time — repo list may change while the server is running.
     getRepos: () => listReposReadOnly(db),
     getQuota: () => getQuotaReadOnly(db),
     getSafeguards: () => getSafeguardsReadOnly(db),
-    getModelCatalog: (): ModelCatalogEntry[] => []
+    getModelCatalog: (): ModelCatalogEntry[] => [...CLAUDE_MODELS, ...OLLAMA_CLOUD_MODELS, ...CODEX_MODELS]
   }
   // One read at startup — used only to seed the dependency-audit roots list.
   const initialRepos = listReposReadOnly(db)
@@ -252,7 +255,8 @@ async function main(): Promise<void> {
               type: 'number',
               description: 'Pre-computed token estimate (skips re-estimation)'
             },
-            riskScore: { type: 'number', description: 'Risk score 0–1 from risk calculator' }
+            riskScore: { type: 'number', description: 'Risk score 0–1 from risk calculator' },
+            quotaPercent: { type: 'number', description: 'Current Anthropic quota usage percentage (0–100)' }
           },
           required: ['description']
         }
@@ -343,7 +347,7 @@ async function main(): Promise<void> {
           break
 
         case 'recommend_model':
-          result = handleRecommendModel(safeArgs as RecommendModelToolInput)
+          result = handleRecommendModel(safeArgs as RecommendModelToolInput, contextDeps.getModelCatalog())
           break
 
         case 'get_guardrails':
