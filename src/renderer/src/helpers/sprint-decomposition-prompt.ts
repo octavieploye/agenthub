@@ -48,6 +48,9 @@ Write ONLY valid JSON matching this exact structure. No markdown fences, no extr
           "title": "<short imperative title>",
           "description": "<1-2 sentences explaining the implementation>",
           "priority": 1,
+          "category": "<backend|frontend|design|refactor|infra|security — pick one>",
+          "skills": ["<skill-name>"],
+          "modelOverride": "<claude-sonnet-4-6|claude-opus-4-6 — omit if default>",
           "dependsOn": []
         },
         {
@@ -55,12 +58,35 @@ Write ONLY valid JSON matching this exact structure. No markdown fences, no extr
           "title": "<short imperative title>",
           "description": "<1-2 sentences>",
           "priority": 2,
+          "category": "<backend|frontend|design|refactor|infra|security>",
+          "skills": ["<skill-name>"],
           "dependsOn": ["t1"]
         }
       ]
     }
   ]
 }
+
+## Field guidance for category, skills, modelOverride
+
+**category** — required on every task. Pick exactly one:
+- \`backend\` — API, services, DB queries, migrations
+- \`frontend\` — UI components, state, routing
+- \`design\` — visual, UX, layout (skips security phase in orchestrator)
+- \`refactor\` — code cleanup, restructuring (no loop-back on security findings)
+- \`infra\` — DevOps, CI, Docker, infrastructure
+- \`security\` — dedicated security hardening tasks
+
+**skills** — one or more skill names that the agent should invoke. Common values:
+- \`team-dev-loop\` — standard implementation loop (scout → impl → test → review)
+- \`team-impl-lead\` — multi-file scoping before implementation
+- \`sr-backend\` / \`sr-frontend\` — senior validator review pass
+- \`dev-backend\` / \`dev-frontend\` — direct implementation agent
+- \`sec-devops\` — security scan (use for tasks touching auth, external APIs, data writes)
+- \`git-commit\` — commit-only tasks (git-ops agent)
+- Omit the array (or use \`[]\`) only when the task is purely exploratory or the document is silent on agents.
+
+**modelOverride** — omit for standard tasks. Set to \`claude-opus-4-6\` only for tasks the document explicitly marks as high-complexity, architectural decisions, or security-critical.
 
 ## localId rules
 

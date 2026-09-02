@@ -81,10 +81,24 @@
       "mode": "auto"
     }
   },
+  "mcpServers": {
+    "anamnesis": {
+      "command": "/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/anamnesis-mcp/.venv/bin/anamnesis-mcp",
+      "env": {
+        "ANAMNESIS_URL": "http://localhost:9300",
+        "AUTH_SECRET": "f8751b2ec895015bae7e1989f5424c71e6108c18dc6024fc3ac168294cef9743",
+        "OPTIMAEUS_CALLER": "hephaestus"
+      }
+    }
+  },
   "skills": {
     "universal": {
       "description": "Refresh and display the Optimaeus universal standards for this entity (hephaestus).",
       "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md and summarize the standards that apply to the hephaestus entity right now: DB naming, LLM provider setup, port, shared packages, learning and skill table names, and inter-entity communication. Confirm which provider is currently reachable."
+    },
+    "pkg-docs-check": {
+      "description": "Check official docs URL and current version for a package/library/framework before writing code. Use before any new import or install.",
+      "prompt": "Read .claude/skills/pkg-docs-check/SKILL.md for the full workflow, then .claude/skills/pkg-docs-check/url-registry.md for official URLs. Execute the pkg-docs-check workflow for: "
     }
   },
   "hooks": {
@@ -95,6 +109,37 @@
           {
             "type": "command",
             "command": "bash -c 'path=\"${TOOL_INPUT_PATH:-}\"; [[ \"$path\" == */human/* ]] && [[ -z \"${HUMAN_OVERRIDE:-}\" ]] && echo \"BLOCKED: human/ is protected. Export HUMAN_OVERRIDE=1 to proceed.\" && exit 1 || exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '\nset -e\ncmd=\"${CLAUDE_TOOL_INPUT_COMMAND:-}\"\nif [ -z \"$cmd\" ]; then exit 0; fi\n# Match destructive git commands from the CRITICAL BAN list in CLAUDE.md\nif echo \"$cmd\" | grep -qE \"(^|[^A-Za-z0-9_/-])(git[[:space:]]+(reset[[:space:]]+--hard|reset[[:space:]]+--hard[[:space:]]+HEAD|push[[:space:]]+(--force|--force-with-lease|-f)|rebase|checkout[[:space:]]+\\.|restore[[:space:]]+\\.|branch[[:space:]]+-D|clean[[:space:]]+-[fF]+[dD]?)([[:space:]]|$))\"; then\n  if [ -n \"${DESTRUCTIVE_GIT_CONFIRMED:-}\" ]; then\n    exit 0\n  fi\n  repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo \"unknown\")\n  echo \"BLOCKED: destructive git command detected.\"\n  echo \"  command: $cmd\"\n  echo \"  repo:    $repo_root\"\n  echo \"  reason:  Per CLAUDE.md, these commands require 3-step human confirmation.\"\n  echo \"\"\n  echo \"If you have explicit user approval, export DESTRUCTIVE_GIT_CONFIRMED=1 and retry.\"\n  echo \"Otherwise, use a safer alternative (git stash, git revert, git reset --mixed, etc.).\"\n  exit 1\nfi\n# ABSOLUTE BAN: rm -rf, git clean, DROP TABLE, DELETE FROM no WHERE — always block\nif echo \"$cmd\" | grep -qE \"(^|[^A-Za-z0-9_/-])(rm[[:space:]]+-[rR][fF]|git[[:space:]]+clean|shred|dd[[:space:]]+if=/dev/zero|DROP[[:space:]]+TABLE|DELETE[[:space:]]+FROM[[:space:]]+[a-zA-Z_]+[[:space:]]*;|docker[[:space:]]+system[[:space:]]+prune)([[:space:]]|$)\"; then\n  echo \"BLOCKED: absolute-ban command. Never run, no exceptions. See CLAUDE.md.\"\n  echo \"  command: $cmd\"\n  exit 1\nfi\nexit 0\n'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pkg-docs-check.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/sync-memory-hash.sh",
+            "timeout": 5
           }
         ]
       }
@@ -118,6 +163,11 @@
             "type": "command",
             "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"REPO GATE: Before reading any file or dispatching any agent, confirm the target repo with the user. Ask: Which repo is this task for? (full path) — CWD is not confirmation. Wait for explicit user confirmation before proceeding.\"}}'",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/repo-memory-check.sh",
+            "timeout": 10
           }
         ]
       }
