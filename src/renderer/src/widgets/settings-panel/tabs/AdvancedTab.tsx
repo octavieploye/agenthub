@@ -1,12 +1,25 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useThemeStore } from '../../../stores/theme-store'
 import { useViewStore } from '../../../stores/view-store'
 import type { SettingsExport } from '@shared/types/settings.types'
+
+const ORCHESTRATOR_KEY = 'orchestrator.enabled'
 
 export function AdvancedTab(): React.JSX.Element {
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [uiScale, setUiScale] = useState<'12px' | '14px' | '16px'>('14px')
+  const [orchestratorEnabled, setOrchestratorEnabled] = useState(false)
+  const [orchestratorLoading, setOrchestratorLoading] = useState(true)
+
+  useEffect(() => {
+    window.agentHub.settings.getAll().then((res) => {
+      if (res.success && res.data) {
+        setOrchestratorEnabled((res.data as Record<string, string>)[ORCHESTRATOR_KEY] === 'true')
+      }
+      setOrchestratorLoading(false)
+    })
+  }, [])
 
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
@@ -162,6 +175,30 @@ export function AdvancedTab(): React.JSX.Element {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Orchestrator Kill-Switch */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-base-content/70">Orchestrator</p>
+        <label className="flex items-center justify-between cursor-pointer">
+          <div>
+            <p className="text-xs font-medium">Enable Kanban Orchestrator</p>
+            <p className="text-xs text-base-content/40">
+              Allow automated task dispatch via DateWatcher, MCP, and manual start.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            className="toggle toggle-sm toggle-primary"
+            checked={orchestratorEnabled}
+            disabled={orchestratorLoading}
+            onChange={async (e) => {
+              const next = e.target.checked
+              setOrchestratorEnabled(next)
+              await window.agentHub.settings.set(ORCHESTRATOR_KEY, String(next))
+            }}
+          />
+        </label>
       </div>
 
       {/* Danger Zone */}
