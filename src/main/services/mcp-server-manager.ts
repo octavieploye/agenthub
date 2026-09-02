@@ -117,6 +117,10 @@ export class McpServerManager {
     return this.socketPath
   }
 
+  getSocketToken(): string {
+    return this.socketToken
+  }
+
   getServerScriptPath(): string {
     return join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
   }

@@ -40,7 +40,7 @@ import { isOrchestratorEnabled } from './orchestrator-settings'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -597,6 +597,8 @@ export function initializeServices(db: Database.Database): void {
     listAgents,
     spawnAgent,
   })
+  // Inject socket info so Claude agents get agenthub-kanban in their MCP config
+  setMcpServerInfo(mcpServerManager.getSocketPath(), mcpServerManager.getSocketToken())
 
   log.info('All services initialized')
 }
@@ -638,6 +640,7 @@ export function stopServices(): void {
   kanbanOrchestrator = null
   mcpServerManager?.stop()
   mcpServerManager = null
+  setMcpServerInfo('', '')
   setTelegramNotifier(null)
   setTelegramAgentSync(null)
   log.info('All services stopped')

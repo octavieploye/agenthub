@@ -152,6 +152,15 @@ export function setTelegramAgentSync(fn: TelegramAgentSync | null): void {
   _telegramAgentSync = fn
 }
 
+// Kanban MCP server info — set by service-orchestrator after McpServerManager.start()
+let _mcpServerSocketPath: string | null = null
+let _mcpServerSocketToken: string | null = null
+
+export function setMcpServerInfo(socketPath: string, socketToken: string): void {
+  _mcpServerSocketPath = socketPath
+  _mcpServerSocketToken = socketToken
+}
+
 export function setLastMcpTelegramAt(agentId: string): void {
   const managed = agents.get(agentId)
   if (managed) managed.lastMcpTelegramAt = Date.now()
@@ -399,6 +408,25 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
         AGENTHUB_AGENT_ID: agentId,
         AGENTHUB_AGENT_NAME: agentName,
         AGENTHUB_AGENT_REPO: repo,
+      }
+    }
+  }
+
+  // Add agenthub-kanban when McpServerManager is running (socket + token available)
+  if (_mcpServerSocketPath && _mcpServerSocketToken) {
+    const kanbanScriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'mcp-server', 'server.js')
+      : join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
+    const kanbanDb = getDb()
+    const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
+    mcpServers['agenthub-kanban'] = {
+      command: 'node',
+      args: [kanbanScriptPath],
+      env: {
+        AGENTHUB_DB_PATH: kanbanDbPath,
+        AGENTHUB_SOCKET_PATH: _mcpServerSocketPath,
+        AGENTHUB_SOCKET_TOKEN: _mcpServerSocketToken,
+        ELECTRON_RUN_AS_NODE: '1',
       }
     }
   }
