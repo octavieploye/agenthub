@@ -77,14 +77,57 @@ Write ONLY valid JSON matching this exact structure. No markdown fences, no extr
 - \`infra\` — DevOps, CI, Docker, infrastructure
 - \`security\` — dedicated security hardening tasks
 
-**skills** — one or more skill names that the agent should invoke. Common values:
-- \`team-dev-loop\` — standard implementation loop (scout → impl → test → review)
-- \`team-impl-lead\` — multi-file scoping before implementation
-- \`sr-backend\` / \`sr-frontend\` — senior validator review pass
-- \`dev-backend\` / \`dev-frontend\` — direct implementation agent
-- \`sec-devops\` — security scan (use for tasks touching auth, external APIs, data writes)
-- \`git-commit\` — commit-only tasks (git-ops agent)
-- Omit the array (or use \`[]\`) only when the task is purely exploratory or the document is silent on agents.
+**skills** — one or more skill names that the agent should invoke. Full catalog:
+
+Implementation teams (pick the primary one for the task):
+- \`team-dev-loop\` — standard agentic implementation loop (scout → impl → test → review)
+- \`team-impl-lead\` — multi-file scoping gate before implementation (use when scope is uncertain)
+- \`dev-backend\` — direct backend implementation agent
+- \`dev-frontend\` — direct frontend implementation agent
+- \`sr-backend\` — senior backend validator (review + harden existing code)
+- \`sr-frontend\` — senior frontend validator (review + harden existing code)
+
+Security agents (see mandatory rule below):
+- \`sec-devops\` — security scan: OWASP, data leakage, dependency risk, DevOps/infra hardening
+- \`team-threat-defense\` — threat modeling + attack surface analysis (use for auth, user input, external API exposure)
+- \`sec-insider-threat\` — insider threat + IP protection audit
+
+Design teams:
+- \`team-ui-builder\` — UI component build: layout, visual, interaction patterns
+- \`team-design-research\` — UX research, user flow, interaction design before implementation
+- \`graphic-identity-team\` — brand identity, graphic assets, visual system
+- \`ux-architect\` — UX architecture: component specs, design system, accessibility
+
+Quality and integrity:
+- \`full-code-review\` — deep multi-agent code review (use for large refactors or high-risk merges)
+- \`team-integrity-status\` — cross-system integrity check: contract verification, type safety, API alignment
+- \`team-production-readiness\` — pre-release gate: observability, error handling, rollback, load behaviour
+- \`team-backend-hardening\` — backend security hardening: rate limiting, input validation, secrets management
+
+Ops:
+- \`git-commit\` — commit-only tasks (git-ops agent, no implementation)
+
+## Mandatory security rule
+
+**Every coding task must include a security skill unless it is a pure single-element visual task.**
+
+A task qualifies as pure visual ONLY when ALL of the following are true:
+- It changes appearance only (color, font, spacing, icon, copy)
+- It introduces no event handler, no state change, no API call, no routing change, no data write
+- It touches a single isolated element with no downstream wiring
+
+Examples that DO require \`sec-devops\` even though they look simple:
+- "Add a button that triggers confetti" → has a JS event handler → include \`sec-devops\`
+- "Wire form submit to API" → data write → include \`sec-devops\`
+- "Add search input" → user input → include \`team-threat-defense\`
+- "Refactor auth middleware" → security-critical → include \`sec-devops\` + \`team-threat-defense\`
+
+Examples that do NOT require security:
+- "Change primary button color from blue to teal"
+- "Update hero section font size"
+- "Replace placeholder image with final asset"
+
+When in doubt, include \`sec-devops\`. The cost of a false positive is zero. The cost of a false negative is a vulnerability in production.
 
 **modelOverride** — omit for standard tasks. Set to \`claude-opus-4-6\` only for tasks the document explicitly marks as high-complexity, architectural decisions, or security-critical.
 
