@@ -158,28 +158,36 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
 
 /**
  * Counts tokens consumed during a specific orchestrator run by scanning
- * Claude CLI's JSONL session files and summing entries whose timestamp
- * falls at or after the run's startedAt. Runs synchronously — called
- * from the 30s monitor poll, acceptable latency.
+ * Claude CLI's JSONL session files in the run's project directory and
+ * summing entries whose timestamp falls within the run's time window.
+ *
+ * JSONL files live at ~/.claude/projects/{sanitised-repo-path}/*.jsonl
+ * where the sanitised path replaces '/' with '-'.
  */
 function computeRunTokenUsage(db: Database.Database, runId: string): number {
   const run = getRun(db, runId)
   if (!run?.startedAt) return 0
 
-  const projectsDir = join(homedir(), '.claude', 'projects')
-  if (!existsSync(projectsDir)) return 0
+  // Resolve the repo path so we can find the correct JSONL project subdirectory
+  const repo = getRepoById(db, run.repoId)
+  if (!repo?.path) return 0
+
+  const sanitised = repo.path.replace(/\//g, '-')
+  const projectDir = join(homedir(), '.claude', 'projects', sanitised)
+  if (!existsSync(projectDir)) return 0
 
   const startMs = new Date(run.startedAt).getTime()
+  const endMs = run.completedAt ? new Date(run.completedAt).getTime() : Date.now()
   let total = 0
 
   try {
-    for (const name of readdirSync(projectsDir)) {
+    for (const name of readdirSync(projectDir)) {
       if (!name.endsWith('.jsonl')) continue
       try {
-        const content = readFileSync(join(projectsDir, name), 'utf-8')
+        const content = readFileSync(join(projectDir, name), 'utf-8')
         for (const entry of extractUsageEntries(parseJsonlContent(content))) {
           const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
-          if (isNaN(t) || t < startMs) continue
+          if (isNaN(t) || t < startMs || t > endMs) continue
           const u = entry.message.usage
           if (u) total += u.input_tokens + u.output_tokens
         }
