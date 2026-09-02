@@ -16,7 +16,12 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { join, dirname } from 'path'
 import { readFileSync, existsSync } from 'fs'
 
-import { openReadOnly, listReposReadOnly, getQuotaReadOnly, getSafeguardsReadOnly } from './db/read-connection'
+import {
+  openReadOnly,
+  listReposReadOnly,
+  getQuotaReadOnly,
+  getSafeguardsReadOnly
+} from './db/read-connection'
 import { ParentIpc } from './ipc/parent-ipc'
 import { handleCreateTask, handleListTasks, handleDispatchTask } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
@@ -32,7 +37,7 @@ import type {
   GetGuardrailsToolInput,
   GetSkillsToolInput,
   GetContextToolInput,
-  AuditDepsToolInput,
+  AuditDepsToolInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 
@@ -98,8 +103,9 @@ async function main(): Promise<void> {
     getRepos: () => listReposReadOnly(db),
     getQuota: () => getQuotaReadOnly(db),
     getSafeguards: () => getSafeguardsReadOnly(db),
-    getModelCatalog: (): ModelCatalogEntry[] => [],
+    getModelCatalog: (): ModelCatalogEntry[] => []
   }
+  const auditDependencyRoots = [agenthubPath, ...listReposReadOnly(db).map((repo) => repo.path)]
 
   // 4. MCP Server
   const server = new Server(
@@ -125,32 +131,63 @@ async function main(): Promise<void> {
             epicName: { type: 'string', description: 'Epic name within the sprint' },
             category: { type: 'string', description: 'Task category (e.g. backend, frontend)' },
             priority: { type: 'number', enum: [1, 2, 3], description: '1=High, 2=Medium, 3=Low' },
-            requiresApproval: { type: 'boolean', description: 'Whether the task requires human approval before dispatch' },
-            modelOverride: { type: 'string', description: 'Override the default model for this task' },
+            requiresApproval: {
+              type: 'boolean',
+              description: 'Whether the task requires human approval before dispatch'
+            },
+            modelOverride: {
+              type: 'string',
+              description: 'Override the default model for this task'
+            },
             providerOverride: { type: 'string', description: 'Override the default provider' },
-            targetFiles: { type: 'array', items: { type: 'string' }, description: 'Files this task will modify' },
-            skills: { type: 'array', items: { type: 'string' }, description: 'Skill names or paths to load for this task' },
-            guardrailOverrides: { type: 'object', description: 'Partial GuardrailConfig overrides' },
-            autoEstimate: { type: 'boolean', description: 'Automatically estimate token cost before creating' },
-            autoRecommendModel: { type: 'boolean', description: 'Automatically recommend a model based on complexity and risk' },
-            createdBy: { type: 'string', description: 'Identifier for the creating agent (default: mcp-agent)' },
+            targetFiles: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Files this task will modify'
+            },
+            skills: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Skill names or paths to load for this task'
+            },
+            guardrailOverrides: {
+              type: 'object',
+              description: 'Partial GuardrailConfig overrides'
+            },
+            autoEstimate: {
+              type: 'boolean',
+              description: 'Automatically estimate token cost before creating'
+            },
+            autoRecommendModel: {
+              type: 'boolean',
+              description: 'Automatically recommend a model based on complexity and risk'
+            },
+            createdBy: {
+              type: 'string',
+              description: 'Identifier for the creating agent (default: mcp-agent)'
+            }
           },
-          required: ['repoId', 'title'],
-        },
+          required: ['repoId', 'title']
+        }
       },
       {
         name: 'list_tasks',
-        description: 'List tasks from the Kanban board, optionally filtered by repo, sprint, status, or category.',
+        description:
+          'List tasks from the Kanban board, optionally filtered by repo, sprint, status, or category.',
         inputSchema: {
           type: 'object',
           properties: {
             repoId: { type: 'string', description: 'Filter by repo ID' },
             sprintName: { type: 'string', description: 'Filter by sprint name' },
-            status: { type: 'string', description: 'Filter by status (backlog, today, in_progress, completed, tested, interrupted)' },
+            status: {
+              type: 'string',
+              description:
+                'Filter by status (backlog, today, in_progress, completed, tested, interrupted)'
+            },
             category: { type: 'string', description: 'Filter by category' },
-            limit: { type: 'number', description: 'Maximum number of tasks to return (default 50)' },
-          },
-        },
+            limit: { type: 'number', description: 'Maximum number of tasks to return (default 50)' }
+          }
+        }
       },
       {
         name: 'dispatch_task',
@@ -160,60 +197,88 @@ async function main(): Promise<void> {
           type: 'object',
           properties: {
             taskId: { type: 'string', description: 'ID of the task to dispatch' },
-            telegramNotify: { type: 'boolean', description: 'Send Telegram notifications during execution' },
-            confirmed: { type: 'boolean', description: 'Must be true — explicit confirmation required before dispatch' },
+            telegramNotify: {
+              type: 'boolean',
+              description: 'Send Telegram notifications during execution'
+            },
+            confirmed: {
+              type: 'boolean',
+              description: 'Must be true — explicit confirmation required before dispatch'
+            }
           },
-          required: ['taskId', 'confirmed'],
-        },
+          required: ['taskId', 'confirmed']
+        }
       },
       {
         name: 'estimate_tokens',
-        description: 'Estimate the input token cost for a task, including description, target files, and skill content.',
+        description:
+          'Estimate the input token cost for a task, including description, target files, and skill content.',
         inputSchema: {
           type: 'object',
           properties: {
             description: { type: 'string', description: 'Task description text' },
-            targetFiles: { type: 'array', items: { type: 'string' }, description: 'File paths that will be read as context' },
-            skills: { type: 'array', items: { type: 'string' }, description: 'Skill paths whose SKILL.md files are counted' },
+            targetFiles: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'File paths that will be read as context'
+            },
+            skills: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Skill paths whose SKILL.md files are counted'
+            }
           },
-          required: ['description'],
-        },
+          required: ['description']
+        }
       },
       {
         name: 'recommend_model',
-        description: 'Recommend a Claude model for a task based on complexity, risk score, and token budget.',
+        description:
+          'Recommend a Claude model for a task based on complexity, risk score, and token budget.',
         inputSchema: {
           type: 'object',
           properties: {
             description: { type: 'string', description: 'Task description' },
-            targetFiles: { type: 'array', items: { type: 'string' }, description: 'Target files for context' },
+            targetFiles: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Target files for context'
+            },
             skills: { type: 'array', items: { type: 'string' }, description: 'Skill paths' },
-            estimatedTokens: { type: 'number', description: 'Pre-computed token estimate (skips re-estimation)' },
-            riskScore: { type: 'number', description: 'Risk score 0–1 from risk calculator' },
+            estimatedTokens: {
+              type: 'number',
+              description: 'Pre-computed token estimate (skips re-estimation)'
+            },
+            riskScore: { type: 'number', description: 'Risk score 0–1 from risk calculator' }
           },
-          required: ['description'],
-        },
+          required: ['description']
+        }
       },
       {
         name: 'get_guardrails',
-        description: 'Read the active GuardrailConfig for a repository from its .agenthub.yaml file.',
+        description:
+          'Read the active GuardrailConfig for a repository from its .agenthub.yaml file.',
         inputSchema: {
           type: 'object',
           properties: {
-            repoPath: { type: 'string', description: 'Absolute path to the repository root' },
+            repoPath: { type: 'string', description: 'Absolute path to the repository root' }
           },
-          required: ['repoPath'],
-        },
+          required: ['repoPath']
+        }
       },
       {
         name: 'get_skills',
-        description: 'List available skills from the AgentHub plugin directories, optionally filtered by query string.',
+        description:
+          'List available skills from the AgentHub plugin directories, optionally filtered by query string.',
         inputSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'Optional text filter applied to skill name, ID, and description' },
-          },
-        },
+            query: {
+              type: 'string',
+              description: 'Optional text filter applied to skill name, ID, and description'
+            }
+          }
+        }
       },
       {
         name: 'get_context',
@@ -222,22 +287,26 @@ async function main(): Promise<void> {
         inputSchema: {
           type: 'object',
           properties: {
-            agentId: { type: 'string', description: 'Optional agent ID to scope health anomalies' },
-          },
-        },
+            agentId: { type: 'string', description: 'Optional agent ID to scope health anomalies' }
+          }
+        }
       },
       {
         name: 'audit_deps',
-        description: 'Audit npm dependencies in a package.json against the npm registry (max 20 deps, 5s timeout per package).',
+        description:
+          'Audit npm dependencies in a package.json against the npm registry (max 20 deps, 5s timeout per package).',
         inputSchema: {
           type: 'object',
           properties: {
-            packageJsonPath: { type: 'string', description: 'Absolute path to the package.json file to audit' },
+            packageJsonPath: {
+              type: 'string',
+              description: 'Absolute path to the package.json file to audit'
+            }
           },
-          required: ['packageJsonPath'],
-        },
-      },
-    ],
+          required: ['packageJsonPath']
+        }
+      }
+    ]
   }))
 
   // ─── Tool dispatch ────────────────────────────────────────────────────────
@@ -283,24 +352,27 @@ async function main(): Promise<void> {
           break
 
         case 'audit_deps':
-          result = await handleAuditDeps(safeArgs as unknown as AuditDepsToolInput)
+          result = await handleAuditDeps(
+            safeArgs as unknown as AuditDepsToolInput,
+            auditDependencyRoots
+          )
           break
 
         default:
           return {
             content: [{ type: 'text', text: `Unknown tool: ${name}` }],
-            isError: true,
+            isError: true
           }
       }
 
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return {
         content: [{ type: 'text', text: `Error in ${name}: ${msg}` }],
-        isError: true,
+        isError: true
       }
     }
   })
@@ -322,11 +394,17 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)
   process.on('exit', () => {
-    try { db.close() } catch { /* ignore */ }
+    try {
+      db.close()
+    } catch {
+      /* ignore */
+    }
   })
 }
 
 main().catch((err) => {
-  process.stderr.write(`[mcp-server] Fatal startup error: ${err instanceof Error ? err.message : String(err)}\n`)
+  process.stderr.write(
+    `[mcp-server] Fatal startup error: ${err instanceof Error ? err.message : String(err)}\n`
+  )
   process.exit(1)
 })

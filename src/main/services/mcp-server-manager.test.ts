@@ -38,8 +38,14 @@ function waitForSocket(socketPath: string): Promise<void> {
     const deadline = Date.now() + 1_000
     const poll = (): void => {
       if (fs.existsSync(socketPath)) {
-        resolve()
-        return
+        try {
+          if ((fs.statSync(socketPath).mode & 0o777) === 0o600) {
+            resolve()
+            return
+          }
+        } catch {
+          // The socket may disappear while the manager cleans up; keep polling.
+        }
       }
       if (Date.now() >= deadline) {
         reject(new Error(`Timed out waiting for ${socketPath}`))
@@ -124,6 +130,7 @@ describe('McpServerManager', () => {
     await waitForSocket(socketPath)
 
     expect(fs.existsSync(socketPath)).toBe(true)
+    expect(fs.statSync(socketPath).mode & 0o777).toBe(0o600)
     expect(mockSpawn).toHaveBeenCalledWith(
       process.execPath,
       [expect.stringContaining('mcp-server/server')],
@@ -141,8 +148,34 @@ describe('McpServerManager', () => {
     expect(fs.existsSync(socketPath)).toBe(false)
   })
 
+  it('rejects connections above the unauthenticated connection limit', async () => {
+    manager.start(db, deps)
+    const socketPath = manager.getSocketPath()
+    await waitForSocket(socketPath)
+
+    const connections = await Promise.all(
+      Array.from(
+        { length: 8 },
+        () =>
+          new Promise<net.Socket>((resolve, reject) => {
+            const socket = net.createConnection(socketPath)
+            socket.once('connect', () => resolve(socket))
+            socket.once('error', reject)
+          })
+      )
+    )
+    const overflow = net.createConnection(socketPath)
+    await new Promise<void>((resolve, reject) => {
+      overflow.once('close', resolve)
+      overflow.once('error', reject)
+    })
+
+    for (const socket of connections) socket.destroy()
+  })
+
   it('routes create_task to the database and emits the created task to renderers', async () => {
     manager.start(db, deps)
+    await waitForSocket(manager.getSocketPath())
     const response = await sendRequest(manager.getSocketPath(), getSocketToken(), {
       type: 'create_task',
       payload: { repoId: 'repo-1', title: 'Created through MCP', description: 'socket write' }
@@ -167,6 +200,7 @@ describe('McpServerManager', () => {
       "INSERT INTO tasks (id, repo_id, title, status, created_at, updated_at) VALUES ('task-1', 'repo-1', 'Dispatch through MCP', 'pending', datetime('now'), datetime('now'))"
     ).run()
     manager.start(db, deps)
+    await waitForSocket(manager.getSocketPath())
     const response = await sendRequest(manager.getSocketPath(), getSocketToken(), {
       type: 'dispatch_task',
       payload: { taskId: 'task-1', telegramNotify: true, confirmed: true }

@@ -10,10 +10,15 @@ import type { McpIpcRequest, McpIpcResponse } from '../../shared/types/mcp-serve
 import type { McpIpcFrame, McpIpcResponseFrame } from '../mcp-server/ipc/ipc-protocol'
 import { getTaskById, insertTask, updateTask } from '../db/queries/tasks.queries'
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types/task.types'
-import type { OrchestratorStartInput, OrchestratorStatusResponse } from '../../shared/types/orchestrator.types'
+import type {
+  OrchestratorStartInput,
+  OrchestratorStatusResponse
+} from '../../shared/types/orchestrator.types'
 import type { HealthAnomaly } from '../../shared/types/health.types'
 
 const MAX_FRAME_BYTES = 1024 * 1024
+const MAX_CONNECTIONS = 8
+const AUTH_TIMEOUT_MS = 5_000
 
 type OrchestratorRunLike = {
   id: string
@@ -45,6 +50,8 @@ export class McpServerManager {
   private readonly socketPath = join(tmpdir(), `agenthub-mcp-${process.pid}.sock`)
   private readonly socketToken = randomUUID()
   private readonly connections = new Set<net.Socket>()
+  private readonly unauthenticatedConnections = new Set<net.Socket>()
+  private readonly authenticationTimers = new WeakMap<net.Socket, ReturnType<typeof setTimeout>>()
   private cleanupHooksInstalled = false
 
   start(db: Database.Database, deps: McpManagerDeps): void {
@@ -56,30 +63,38 @@ export class McpServerManager {
       // The caller owns service observability. Keeping this listener prevents an
       // unexpected socket error from terminating the Electron main process.
     })
-    server.listen(this.socketPath)
     this.socketServer = server
     this.installCleanupHooks()
+    server.listen(this.socketPath, () => {
+      try {
+        fs.chmodSync(this.socketPath, 0o600)
+      } catch {
+        this.stop()
+        return
+      }
 
-    const child = spawn(process.execPath, [this.getServerScriptPath()], {
-      cwd: process.cwd(),
-      env: {
-        AGENTHUB_DB_PATH: this.getDatabasePath(db),
-        AGENTHUB_SOCKET_PATH: this.socketPath,
-        AGENTHUB_SOCKET_TOKEN: this.socketToken,
-        ELECTRON_RUN_AS_NODE: '1'
-      },
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    this.child = child
-    child.once('exit', () => {
-      if (this.child !== child) return
-      this.child = null
-      this.stop()
-    })
-    child.once('error', () => {
-      if (this.child !== child) return
-      this.child = null
-      this.stop()
+      if (this.socketServer !== server) return
+      const child = spawn(process.execPath, [this.getServerScriptPath()], {
+        cwd: process.cwd(),
+        env: {
+          AGENTHUB_DB_PATH: this.getDatabasePath(db),
+          AGENTHUB_SOCKET_PATH: this.socketPath,
+          AGENTHUB_SOCKET_TOKEN: this.socketToken,
+          ELECTRON_RUN_AS_NODE: '1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      this.child = child
+      child.once('exit', () => {
+        if (this.child !== child) return
+        this.child = null
+        this.stop()
+      })
+      child.once('error', () => {
+        if (this.child !== child) return
+        this.child = null
+        this.stop()
+      })
     })
   }
 
@@ -90,6 +105,7 @@ export class McpServerManager {
 
     for (const connection of this.connections) connection.destroy()
     this.connections.clear()
+    this.unauthenticatedConnections.clear()
 
     this.socketServer?.close()
     this.socketServer = null
@@ -106,7 +122,18 @@ export class McpServerManager {
   }
 
   private handleConnection(socket: net.Socket, db: Database.Database, deps: McpManagerDeps): void {
+    if (this.connections.size >= MAX_CONNECTIONS) {
+      socket.destroy()
+      return
+    }
     this.connections.add(socket)
+    this.unauthenticatedConnections.add(socket)
+    const authenticationTimer = setTimeout(() => {
+      if (this.unauthenticatedConnections.has(socket)) socket.destroy()
+    }, AUTH_TIMEOUT_MS)
+    authenticationTimer.unref()
+    this.authenticationTimers.set(socket, authenticationTimer)
+
     let buffer = ''
     socket.setEncoding('utf8')
     socket.on('data', (chunk: string) => {
@@ -121,13 +148,26 @@ export class McpServerManager {
         if (line.trim()) void this.handleLine(socket, line, db, deps)
       }
     })
-    socket.once('close', () => this.connections.delete(socket))
-    socket.once('error', () => this.connections.delete(socket))
+    const cleanup = (): void => {
+      this.connections.delete(socket)
+      this.unauthenticatedConnections.delete(socket)
+      const timer = this.authenticationTimers.get(socket)
+      if (timer) clearTimeout(timer)
+      this.authenticationTimers.delete(socket)
+    }
+    socket.once('close', cleanup)
+    socket.once('error', cleanup)
   }
 
-  private async handleLine(socket: net.Socket, line: string, db: Database.Database, deps: McpManagerDeps): Promise<void> {
+  private async handleLine(
+    socket: net.Socket,
+    line: string,
+    db: Database.Database,
+    deps: McpManagerDeps
+  ): Promise<void> {
     let correlationId = ''
     let response: McpIpcResponse
+    let closeAfterResponse = false
     try {
       const frame = JSON.parse(line) as Partial<McpIpcFrame>
       if (
@@ -137,9 +177,11 @@ export class McpServerManager {
       ) {
         throw new Error('Invalid MCP IPC frame')
       }
+      this.authenticateConnection(socket)
       correlationId = frame.correlationId
       response = { type: 'success', data: this.routeRequest(frame.request, db, deps) }
     } catch (error) {
+      closeAfterResponse = this.unauthenticatedConnections.has(socket)
       const code =
         error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
       response = {
@@ -151,9 +193,21 @@ export class McpServerManager {
 
     const frame: McpIpcResponseFrame = { correlationId, response }
     if (!socket.destroyed && socket.writable) socket.write(`${JSON.stringify(frame)}\n`)
+    if (closeAfterResponse) socket.destroy()
   }
 
-  private routeRequest(request: McpIpcRequest, db: Database.Database, deps: McpManagerDeps): unknown {
+  private authenticateConnection(socket: net.Socket): void {
+    if (!this.unauthenticatedConnections.delete(socket)) return
+    const timer = this.authenticationTimers.get(socket)
+    if (timer) clearTimeout(timer)
+    this.authenticationTimers.delete(socket)
+  }
+
+  private routeRequest(
+    request: McpIpcRequest,
+    db: Database.Database,
+    deps: McpManagerDeps
+  ): unknown {
     switch (request.type) {
       case 'create_task': {
         const task = insertTask(db, request.payload as CreateTaskInput)
@@ -194,7 +248,9 @@ export class McpServerManager {
         const agentIds = request.payload.agentId
           ? [request.payload.agentId]
           : deps.listAgents().map((agent) => agent.id)
-        return agentIds.flatMap((agentId) => deps.healthMonitor.getSnapshot(agentId)?.anomalies ?? [])
+        return agentIds.flatMap(
+          (agentId) => deps.healthMonitor.getSnapshot(agentId)?.anomalies ?? []
+        )
       }
     }
   }

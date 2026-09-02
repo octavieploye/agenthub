@@ -1,4 +1,5 @@
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, realpathSync, statSync } from 'fs'
+import { basename, relative, resolve, sep } from 'path'
 import type {
   AuditDepsToolInput,
   AuditDepsToolOutput,
@@ -7,6 +8,7 @@ import type {
 
 const FETCH_TIMEOUT_MS = 5_000
 const MAX_DEPS_CHECKED = 20
+const MAX_PACKAGE_JSON_BYTES = 1024 * 1024
 
 interface NpmLatestResponse {
   version?: string
@@ -118,12 +120,59 @@ function isOutdated(current: string, latest: string | null): boolean {
   return latestVersion ? !satisfiesRange(current, latestVersion) : false
 }
 
-export async function handleAuditDeps(input: AuditDepsToolInput): Promise<AuditDepsToolOutput> {
-  if (!existsSync(input.packageJsonPath)) {
-    throw new Error(`package.json not found at: ${input.packageJsonPath}`)
+function resolveApprovedPackageJsonPath(
+  packageJsonPath: unknown,
+  allowedRoots: readonly string[]
+): string {
+  if (typeof packageJsonPath !== 'string' || !packageJsonPath.trim()) {
+    throw new Error('packageJsonPath must be a non-empty string')
   }
 
-  const raw = readFileSync(input.packageJsonPath, 'utf-8')
+  const requestedPath = resolve(packageJsonPath)
+  let resolvedPath: string
+  try {
+    resolvedPath = realpathSync(requestedPath)
+  } catch {
+    throw new Error('package.json does not exist or cannot be resolved')
+  }
+  if (basename(resolvedPath) !== 'package.json') {
+    throw new Error('packageJsonPath must resolve to a file named package.json')
+  }
+
+  const approvedRoots = allowedRoots.flatMap((root) => {
+    try {
+      return [realpathSync(root)]
+    } catch {
+      return []
+    }
+  })
+  const isApproved = approvedRoots.some((root) => {
+    const pathFromRoot = relative(root, resolvedPath)
+    return (
+      pathFromRoot !== '' &&
+      !pathFromRoot.startsWith(`..${sep}`) &&
+      pathFromRoot !== '..' &&
+      !pathFromRoot.startsWith(sep)
+    )
+  })
+  if (!isApproved) {
+    throw new Error('packageJsonPath must be within an approved AgentHub or repository root')
+  }
+
+  const stat = statSync(resolvedPath)
+  if (!stat.isFile()) throw new Error('packageJsonPath must be a regular file')
+  if (stat.size > MAX_PACKAGE_JSON_BYTES) {
+    throw new Error(`package.json exceeds the ${MAX_PACKAGE_JSON_BYTES} byte size limit`)
+  }
+  return resolvedPath
+}
+
+export async function handleAuditDeps(
+  input: AuditDepsToolInput,
+  allowedRoots: readonly string[]
+): Promise<AuditDepsToolOutput> {
+  const packageJsonPath = resolveApprovedPackageJsonPath(input?.packageJsonPath, allowedRoots)
+  const raw = readFileSync(packageJsonPath, 'utf-8')
   const pkg = JSON.parse(raw) as {
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
