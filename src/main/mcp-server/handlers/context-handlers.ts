@@ -74,7 +74,10 @@ export function handleGetGuardrails(input: GetGuardrailsToolInput): GetGuardrail
 
 export function handleGetSkills(input: GetSkillsToolInput, agenthubPath: string): GetSkillsToolOutput {
   const service = new SkillsService({ ...NOOP_LOGGER, agenthubPath })
-  const all = service.listSkills(agenthubPath)
+  // When repoPath is provided, scan that repo's skills alongside agenthub's.
+  // When absent, pass agenthubPath so the agenthub scan runs as the primary repo.
+  const scanPath = input.repoPath ?? agenthubPath
+  const all = service.listSkills(scanPath)
 
   const skills = input.query
     ? (() => {

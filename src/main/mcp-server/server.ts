@@ -269,13 +269,17 @@ async function main(): Promise<void> {
       {
         name: 'get_skills',
         description:
-          'List available skills from the AgentHub plugin directories, optionally filtered by query string.',
+          'List available skills from the AgentHub plugin directories and optionally a target repo, filtered by query string.',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
               description: 'Optional text filter applied to skill name, ID, and description'
+            },
+            repoPath: {
+              type: 'string',
+              description: 'Absolute path to a target repo — includes that repo\'s skills alongside agenthub skills'
             }
           }
         }

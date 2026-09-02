@@ -144,6 +144,8 @@ export interface GetGuardrailsToolOutput {
 
 export interface GetSkillsToolInput {
   query?: string
+  /** Absolute path to a target repo — includes that repo's skills alongside agenthub skills */
+  repoPath?: string
 }
 
 export interface GetSkillsToolOutput {
