@@ -48,6 +48,7 @@ export interface CreateTaskToolInput {
   description?: string
   sprintName?: string
   epicName?: string
+  projectId?: string
   category?: TaskCategory
   priority?: TaskPriority
   requiresApproval?: boolean

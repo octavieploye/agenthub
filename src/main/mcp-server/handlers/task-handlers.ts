@@ -66,6 +66,7 @@ function validateCreateTaskInput(input: CreateTaskToolInput): void {
     'description',
     'sprintName',
     'epicName',
+    'projectId',
     'category',
     'modelOverride',
     'createdBy'
@@ -188,6 +189,7 @@ export async function handleCreateTask(
     description: input.description,
     sprintName: input.sprintName,
     epicName: input.epicName,
+    projectId: input.projectId,
     category: input.category ?? null,
     priority: input.priority,
     requiresApproval,

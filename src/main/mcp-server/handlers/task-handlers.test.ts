@@ -122,6 +122,18 @@ describe('task handlers', () => {
         expect.arrayContaining([expect.stringContaining('requiresApproval automatically set to true')])
       )
     })
+
+    it('passes projectId to the IPC payload', async () => {
+      const deps = createDeps(createdTaskResponse())
+
+      await handleCreateTask({ repoId, title: 'Project task', projectId: 'proj-abc-123' }, deps)
+
+      const call = (deps.sendIpc as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        type: string
+        payload: { projectId?: string }
+      }
+      expect(call.payload.projectId).toBe('proj-abc-123')
+    })
   })
 
   describe('handleListTasks', () => {

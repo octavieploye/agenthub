@@ -135,6 +135,7 @@ async function main(): Promise<void> {
             description: { type: 'string', description: 'Detailed task description' },
             sprintName: { type: 'string', description: 'Sprint name to associate the task with' },
             epicName: { type: 'string', description: 'Epic name within the sprint' },
+            projectId: { type: 'string', description: 'ID of the project to associate the task with' },
             category: { type: 'string', description: 'Task category (e.g. backend, frontend)' },
             priority: { type: 'number', enum: [1, 2, 3], description: '1=High, 2=Medium, 3=Low' },
             requiresApproval: {
