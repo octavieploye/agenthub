@@ -1096,7 +1096,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   // then send the task as user input once the session is ready.
   // `-p` flag causes print-mode (non-interactive) which exits after one response.
   } else if (isOllama) {
-    const extraArgs = permFlag.trim()
+    // Forward the same instruction-layer flags as the Claude CLI branch so
+    // ollama-cloud agents get MCP tools (agenthub-kanban), plugin, skills, and
+    // guard injection. `--effort` is intentionally omitted — unverified for
+    // ollama models and not part of the MCP registration path.
+    const extraArgs = `${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}`.trim()
     const cmd = extraArgs
       ? `clear; ${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs}\n`
       : `clear; ${ollamaBin} launch claude -y${modelFlag}\n`
