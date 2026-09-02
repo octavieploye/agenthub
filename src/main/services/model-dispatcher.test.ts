@@ -4,7 +4,6 @@ import {
   assessComplexity,
   recommend,
   buildSpawnEnv,
-  CLOUD_MODEL_CATALOG,
   recommendForPhase,
   checkOllamaCloudHealth,
   getUnifiedQuota,
@@ -284,22 +283,6 @@ describe('Model Dispatcher', () => {
     })
   })
 
-  // ─── CLOUD_MODEL_CATALOG ───────────────────────────────────────────
-
-  describe('CLOUD_MODEL_CATALOG', () => {
-    it('has 5 entries', () => {
-      expect(CLOUD_MODEL_CATALOG).toHaveLength(5)
-    })
-
-    it('every entry has id, name, and provider set to ollama-cloud', () => {
-      for (const entry of CLOUD_MODEL_CATALOG) {
-        expect(entry.id).toBeTruthy()
-        expect(entry.name).toBeTruthy()
-        expect(entry.provider).toBe('ollama-cloud')
-      }
-    })
-  })
-
   // ─── recommendForPhase ────────────────────────────────────────────
 
   describe('recommendForPhase', () => {
@@ -325,14 +308,14 @@ describe('Model Dispatcher', () => {
     it('returns cloud model for review phase when cloud available', () => {
       const result: ModelRecommendation = recommendForPhase('review', 'review code changes', true)
       expect(result.provider).toBe('ollama-cloud')
-      expect(result.model).toBe(CLOUD_MODEL_CATALOG[0].id)
+      expect(result.model).toBe('deepseek-v4-pro:0813:cloud')
       expect(result.alternatives).toContain('claude-sonnet-4-6')
     })
 
     it('returns cloud model for security phase when cloud available', () => {
       const result: ModelRecommendation = recommendForPhase('security', 'security audit', true)
       expect(result.provider).toBe('ollama-cloud')
-      expect(result.model).toBe(CLOUD_MODEL_CATALOG[2].id)
+      expect(result.model).toBe('deepseek-v4-pro:0813:cloud')
     })
 
     it('falls back to Sonnet for review phase when cloud unavailable', () => {

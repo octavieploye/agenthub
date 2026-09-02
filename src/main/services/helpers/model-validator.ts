@@ -1,5 +1,4 @@
-import { CLOUD_MODEL_CATALOG } from '../model-dispatcher'
-import { CODEX_MODELS } from '../../../shared/constants/model-catalog'
+import { OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '../../../shared/constants/model-catalog'
 
 const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'] as const
 
@@ -22,9 +21,9 @@ export function validateModelOverride(
   }
 
   if (provider === 'ollama-cloud') {
-    const known = CLOUD_MODEL_CATALOG.some(m => m.id === model)
+    const known = OLLAMA_CLOUD_MODELS.some(m => m.id === model)
     if (!known) {
-      return `Unknown Ollama Cloud model: "${model}". Valid: ${CLOUD_MODEL_CATALOG.map(m => m.id).join(', ')}`
+      return `Unknown Ollama Cloud model: "${model}". Valid: ${OLLAMA_CLOUD_MODELS.map(m => m.id).join(', ')}`
     }
     return null
   }

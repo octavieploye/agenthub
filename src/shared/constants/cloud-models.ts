@@ -11,11 +11,25 @@ export interface CloudModelEntry {
 }
 
 export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
-  { id: 'qwen3:32b-cloud', name: 'Qwen 3 32B', provider: 'ollama-cloud' },
-  { id: 'ministral:24b-cloud', name: 'Ministral 24B', provider: 'ollama-cloud' },
-  { id: 'devstral:cloud', name: 'Devstral', provider: 'ollama-cloud' },
-  { id: 'glm-5.2:cloud', name: 'GLM 5.2', provider: 'ollama-cloud' },
-  { id: 'gemma4:12b-cloud', name: 'Gemma 4 12B', provider: 'ollama-cloud' },
+  { id: 'deepseek-v4-pro:0813:cloud', name: 'DeepSeek V4 Pro', provider: 'ollama-cloud' },
+  { id: 'deepseek-v4-flash:0731:cloud', name: 'DeepSeek V4 Flash', provider: 'ollama-cloud' },
+  { id: 'qwen3.5:397b-cloud', name: 'Qwen3.5 397B', provider: 'ollama-cloud' },
+  { id: 'mistral-large-3:675b-cloud', name: 'Mistral Large 3 675B', provider: 'ollama-cloud' },
+  { id: 'glm-5.3:cloud', name: 'GLM-5.3', provider: 'ollama-cloud' },
+  { id: 'glm-5.2:cloud', name: 'GLM-5.2', provider: 'ollama-cloud' },
+  { id: 'glm-5.1:cloud', name: 'GLM-5.1', provider: 'ollama-cloud' },
+  { id: 'glm-5.3-flash:cloud', name: 'GLM-5.3 Flash', provider: 'ollama-cloud' },
+  { id: 'kimi-k3:cloud', name: 'Kimi K3', provider: 'ollama-cloud' },
+  { id: 'kimi-k2.6:cloud', name: 'Kimi K2.6', provider: 'ollama-cloud' },
+  { id: 'kimi-k2.7-code:cloud', name: 'Kimi K2.7 Code', provider: 'ollama-cloud' },
+  { id: 'minimax-m3:cloud', name: 'MiniMax M3', provider: 'ollama-cloud' },
+  { id: 'minimax-m2.7:cloud', name: 'MiniMax M2.7', provider: 'ollama-cloud' },
+  { id: 'gemma4:31b-cloud', name: 'Gemma 4 31B', provider: 'ollama-cloud' },
+  { id: 'nemotron-3-ultra:cloud', name: 'Nemotron 3 Ultra', provider: 'ollama-cloud' },
+  { id: 'nemotron-3-super:cloud', name: 'Nemotron 3 Super', provider: 'ollama-cloud' },
+  { id: 'nemotron-3-nano:30b-cloud', name: 'Nemotron 3 Nano 30B', provider: 'ollama-cloud' },
+  { id: 'gpt-oss:120b-cloud', name: 'GPT OSS 120B', provider: 'ollama-cloud' },
+  { id: 'gpt-oss:20b-cloud', name: 'GPT OSS 20B', provider: 'ollama-cloud' },
 ]
 
 export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = [

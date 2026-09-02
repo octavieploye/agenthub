@@ -229,19 +229,13 @@ export function buildSpawnEnv(
   }
 }
 
-// ─── Cloud Model Catalog ──────────────────────────────────────────────────────
-
-export const CLOUD_MODEL_CATALOG = [
-  { id: 'qwen3:32b-cloud', name: 'Qwen 3 32B', provider: 'ollama-cloud' as ModelProvider },
-  { id: 'ministral:24b-cloud', name: 'Ministral 24B', provider: 'ollama-cloud' as ModelProvider },
-  { id: 'devstral:cloud', name: 'Devstral', provider: 'ollama-cloud' as ModelProvider },
-  { id: 'glm-5.2:cloud', name: 'GLM 5.2', provider: 'ollama-cloud' as ModelProvider },
-  { id: 'gemma4:12b-cloud', name: 'Gemma 4 12B', provider: 'ollama-cloud' as ModelProvider },
-] as const
-
 // ─── Orchestrator Phase Support ───────────────────────────────────────────────
 
 import type { OrchestratorPhase } from '../../shared/types/orchestrator.types'
+
+// Preferred ollama-cloud model for reasoning-heavy phases (review/security).
+// deepseek-v4-pro:0813:cloud is first-place for high reasoning + context + coding.
+const OLLAMA_CLOUD_REASONING = 'deepseek-v4-pro:0813:cloud'
 
 export function recommendForPhase(
   phase: OrchestratorPhase,
@@ -255,7 +249,7 @@ export function recommendForPhase(
       model: complexity === 'complex' ? CLAUDE_OPUS : CLAUDE_SONNET,
       provider: 'anthropic',
       rationale: `Dev phase: ${complexity === 'complex' ? 'Opus for complex task' : 'Sonnet for standard task'}`,
-      alternatives: ollamaCloudAvailable ? [CLOUD_MODEL_CATALOG[0].id] : [],
+      alternatives: ollamaCloudAvailable ? [OLLAMA_CLOUD_REASONING] : [],
       warnings: []
     }
   }
@@ -273,11 +267,10 @@ export function recommendForPhase(
 
   // review/security — prefer Ollama cloud if available, else Anthropic Sonnet
   if (ollamaCloudAvailable) {
-    const preferred = phase === 'security' ? CLOUD_MODEL_CATALOG[2] : CLOUD_MODEL_CATALOG[0]
     return {
-      model: preferred.id,
-      provider: preferred.provider,
-      rationale: `${phase} phase: using Ollama cloud (${preferred.name}) to conserve Anthropic quota`,
+      model: OLLAMA_CLOUD_REASONING,
+      provider: 'ollama-cloud',
+      rationale: `${phase} phase: using Ollama cloud (deepseek-v4-pro) to conserve Anthropic quota`,
       alternatives: [CLAUDE_SONNET],
       warnings: []
     }
