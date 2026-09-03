@@ -91,12 +91,17 @@ describe('ensureCodexMcpServers', () => {
     vi.resetModules()
   })
 
-  it('skips registration when all three servers already in list output', async () => {
+  it('skips anamnesis and telegram re-registration but always re-registers agenthub-kanban', async () => {
     const execFn = vi.fn().mockResolvedValue({ stdout: 'anamnesis\nagenthub-telegram\nagenthub-kanban', stderr: '' })
     await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
-    // Only the mcp list call — no add calls
-    expect(execFn).toHaveBeenCalledTimes(1)
+    // list + remove agenthub-kanban + add agenthub-kanban = 3 calls
+    expect(execFn).toHaveBeenCalledTimes(3)
     expect(execFn).toHaveBeenCalledWith('codex', ['mcp', 'list'], expect.any(Object))
+    expect(execFn).toHaveBeenCalledWith('codex', ['mcp', 'remove', 'agenthub-kanban'], expect.any(Object))
+    const addCall = execFn.mock.calls.find(
+      (c: unknown[]) => (c[1] as string[])[1] === 'add' && (c[1] as string[])[2] === 'agenthub-kanban'
+    )
+    expect(addCall).toBeDefined()
   })
 
   it('registers anamnesis when absent from list', async () => {
@@ -150,7 +155,7 @@ describe('ensureCodexMcpServers', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('registers agenthub-kanban when absent from list', async () => {
+  it('always removes and re-registers agenthub-kanban regardless of list output', async () => {
     const execFn = vi.fn().mockImplementation(
       (_cmd: string, args: string[]) =>
         args[1] === 'list'
@@ -158,6 +163,12 @@ describe('ensureCodexMcpServers', () => {
           : Promise.resolve({ stdout: '', stderr: '' })
     )
     await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
+
+    const removeCalls = execFn.mock.calls.filter(
+      (c: unknown[]) =>
+        (c[1] as string[])[1] === 'remove' && (c[1] as string[])[2] === 'agenthub-kanban'
+    )
+    expect(removeCalls).toHaveLength(1)
 
     const addCalls = execFn.mock.calls.filter(
       (c: unknown[]) =>
@@ -177,7 +188,8 @@ describe('ensureCodexMcpServers', () => {
     await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
     await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
     await ensureCodexMcpServers(mcpJsonPath, '/fake/telegram.js', '/fake/kanban.js', '/fake/db.db', '/fake/socket.sock', execFn)
-    // Module flag is set after first call — subsequent calls return immediately
-    expect(execFn).toHaveBeenCalledTimes(1)
+    // Module flag is set after first call — subsequent calls return immediately.
+    // First call: list + remove agenthub-kanban + add agenthub-kanban = 3 calls.
+    expect(execFn).toHaveBeenCalledTimes(3)
   })
 })

@@ -119,24 +119,31 @@ export async function ensureCodexMcpServers(
       }
     }
 
-    if (!/\bagenthub-kanban\b/.test(listOutput)) {
-      try {
-        await _exec(
-          'codex',
-          [
-            'mcp', 'add', 'agenthub-kanban',
-            '--env', `AGENTHUB_DB_PATH=${dbPath}`,
-            '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
-            '--env', `AGENTHUB_SOCKET_TOKEN=${socketToken}`,
-            '--', 'node', kanbanScriptPath,
-          ],
-          { timeout: 10000 }
-        )
-      } catch (err) {
-        log.warn('ensureCodexMcpServers: failed to register agenthub-kanban MCP server', {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
+    // agenthub-kanban: always remove the existing entry and re-add with the current
+    // socket path and token. Both values are regenerated on every Electron restart
+    // (pid-based socket path + randomUUID token), so a "skip if already listed" check
+    // leaves stale values in ~/.codex/config.toml → `connection closed: initialize response`.
+    try {
+      await _exec('codex', ['mcp', 'remove', 'agenthub-kanban'], { timeout: 10000 })
+    } catch {
+      // Server may not be registered yet — ignore
+    }
+    try {
+      await _exec(
+        'codex',
+        [
+          'mcp', 'add', 'agenthub-kanban',
+          '--env', `AGENTHUB_DB_PATH=${dbPath}`,
+          '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
+          '--env', `AGENTHUB_SOCKET_TOKEN=${socketToken}`,
+          '--', 'node', kanbanScriptPath,
+        ],
+        { timeout: 10000 }
+      )
+    } catch (err) {
+      log.warn('ensureCodexMcpServers: failed to register agenthub-kanban MCP server', {
+        error: err instanceof Error ? err.message : String(err),
+      })
     }
   } catch (err) {
     log.warn('ensureCodexMcpServers: unexpected error', {
