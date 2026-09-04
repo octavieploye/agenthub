@@ -413,11 +413,11 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
   if (_mcpServerSocketPath && _mcpServerSocketToken) {
     const kanbanScriptPath = app.isPackaged
       ? join(process.resourcesPath, 'mcp-server', 'server.js')
-      : join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
+      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
     const kanbanDb = getDb()
     const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
     mcpServers['agenthub-kanban'] = {
-      command: 'node',
+      command: process.execPath,
       args: [kanbanScriptPath],
       env: {
         AGENTHUB_DB_PATH: kanbanDbPath,
@@ -1061,7 +1061,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
     const kanbanScriptPath = app.isPackaged
       ? join(process.resourcesPath, 'mcp-server', 'server.js')
-      : join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
+      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
 
     const mcpJsonPath = app.isPackaged
       ? join(process.resourcesPath, '.mcp.json')

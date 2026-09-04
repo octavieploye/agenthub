@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
@@ -120,6 +121,7 @@ export class McpServerManager {
     this.socketServer = null
     this.unlinkSocket()
     this.unlinkLiveConfig()
+    this.unpatchSettingsJson()
     this.removeCleanupHooks()
   }
 
@@ -141,7 +143,7 @@ export class McpServerManager {
         mcpServers: {
           'agenthub-kanban': {
             type: 'stdio',
-            command: 'node',
+            command: process.execPath,
             args: [this.getServerScriptPath()],
             env: {
               AGENTHUB_DB_PATH: this.dbPath,
@@ -154,6 +156,7 @@ export class McpServerManager {
       }
       fs.writeFileSync(this.liveConfigPath, JSON.stringify(config, null, 2), 'utf-8')
       fs.chmodSync(this.liveConfigPath, 0o600)
+      this.patchSettingsJson()
     } catch {
       // non-fatal — live config is best-effort for CLI sessions
     }
@@ -167,8 +170,57 @@ export class McpServerManager {
     }
   }
 
+  /**
+   * Inject agenthub-kanban MCP entry into .claude/settings.json so that
+   * user-started Claude CLI sessions auto-discover the kanban MCP server.
+   * Called alongside writeLiveConfig() in the onReady callback.
+   */
+  private patchSettingsJson(): void {
+    const settingsPath = join(process.cwd(), '.claude', 'settings.json')
+    try {
+      const raw = fs.readFileSync(settingsPath, 'utf-8')
+      const settings = JSON.parse(raw) as Record<string, unknown>
+      const mcpServers = (settings.mcpServers ?? {}) as Record<string, unknown>
+      mcpServers['agenthub-kanban'] = {
+        command: process.execPath,
+        args: [this.getServerScriptPath()],
+        env: {
+          AGENTHUB_DB_PATH: this.dbPath,
+          AGENTHUB_SOCKET_PATH: this.socketPath,
+          AGENTHUB_SOCKET_TOKEN: this.socketToken,
+          ELECTRON_RUN_AS_NODE: '1',
+        },
+      }
+      settings.mcpServers = mcpServers
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+    } catch {
+      // non-fatal — settings.json may not exist or be malformed
+    }
+  }
+
+  /**
+   * Remove agenthub-kanban from .claude/settings.json on stop() so stale
+   * socket paths don't cause silent MCP connection failures.
+   */
+  private unpatchSettingsJson(): void {
+    const settingsPath = join(process.cwd(), '.claude', 'settings.json')
+    try {
+      const raw = fs.readFileSync(settingsPath, 'utf-8')
+      const settings = JSON.parse(raw) as Record<string, unknown>
+      const mcpServers = settings.mcpServers as Record<string, unknown> | undefined
+      if (mcpServers && 'agenthub-kanban' in mcpServers) {
+        delete mcpServers['agenthub-kanban']
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
   getServerScriptPath(): string {
-    return join(process.cwd(), 'src', 'main', 'mcp-server', 'server.ts')
+    return app.isPackaged
+      ? join(process.resourcesPath, 'mcp-server', 'server.js')
+      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
   }
 
   private handleConnection(socket: net.Socket, db: Database.Database, deps: McpManagerDeps): void {
@@ -364,6 +416,7 @@ export class McpServerManager {
   private cleanupOnExit = (): void => {
     this.unlinkSocket()
     this.unlinkLiveConfig()
+    this.unpatchSettingsJson()
   }
 
   private cleanupOnSigterm = (): void => {

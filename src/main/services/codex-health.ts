@@ -136,7 +136,7 @@ export async function ensureCodexMcpServers(
           '--env', `AGENTHUB_DB_PATH=${dbPath}`,
           '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
           '--env', `AGENTHUB_SOCKET_TOKEN=${socketToken}`,
-          '--', 'node', kanbanScriptPath,
+          '--', process.execPath, kanbanScriptPath,
         ],
         { timeout: 10000 }
       )
