@@ -23,7 +23,7 @@ import {
   getSafeguardsReadOnly
 } from './db/read-connection'
 import { ParentIpc } from './ipc/parent-ipc'
-import { handleCreateTask, handleListTasks, handleDispatchTask, handleCreateProject } from './handlers/task-handlers'
+import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
 import { handleGetGuardrails, handleGetSkills, handleGetContext } from './handlers/context-handlers'
 import { handleAuditDeps } from './handlers/deps-handler'
@@ -32,6 +32,7 @@ import type {
   CreateTaskToolInput,
   ListTasksToolInput,
   DispatchTaskToolInput,
+  DispatchSprintToolInput,
   EstimateTokensToolInput,
   RecommendModelToolInput,
   GetGuardrailsToolInput,
@@ -173,6 +174,11 @@ async function main(): Promise<void> {
             createdBy: {
               type: 'string',
               description: 'Identifier for the creating agent (default: mcp-agent)'
+            },
+            blockedBy: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Task IDs that must complete before this task can be dispatched'
             }
           },
           required: ['repoId', 'title']
@@ -215,6 +221,23 @@ async function main(): Promise<void> {
             }
           },
           required: ['taskId', 'confirmed']
+        }
+      },
+      {
+        name: 'dispatch_sprint',
+        description:
+          'Dispatch all tasks in a sprint to the orchestrator for sequential/parallel execution respecting blockedBy dependencies. Auto-progresses through tasks as they complete.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sprintName: { type: 'string', description: 'Sprint name to dispatch (must match tasks\' sprintName)' },
+            repoId: { type: 'string', description: 'UUID of the target repository' },
+            projectId: { type: 'string', description: 'Optional project ID to scope tasks' },
+            concurrencyCap: { type: 'number', description: 'Max concurrent agents (default 3)' },
+            telegramNotify: { type: 'boolean', description: 'Send Telegram notifications during execution' },
+            confirmed: { type: 'boolean', description: 'Must be true — explicit confirmation required before dispatch' }
+          },
+          required: ['sprintName', 'repoId', 'confirmed']
         }
       },
       {
@@ -356,6 +379,10 @@ async function main(): Promise<void> {
 
         case 'dispatch_task':
           result = await handleDispatchTask(safeArgs as DispatchTaskToolInput, taskDeps)
+          break
+
+        case 'dispatch_sprint':
+          result = await handleDispatchSprint(safeArgs as DispatchSprintToolInput, taskDeps)
           break
 
         case 'estimate_tokens':

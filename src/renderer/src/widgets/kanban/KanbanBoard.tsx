@@ -86,12 +86,12 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   }, [fetchTasks])
 
   useEffect(() => {
-    const unsub = window.agentHub.on.tasksUpdated(() => { debouncedFetchTasks() })
+    const unsub = window.agentHub.on.tasksUpdated(() => { debouncedFetchTasks(); fetchProjects() })
     return () => {
       unsub()
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [debouncedFetchTasks])
+  }, [debouncedFetchTasks, fetchProjects])
 
   useEffect(() => {
     const unsub = window.agentHub.on.reposChanged(() => { fetchRepos() })

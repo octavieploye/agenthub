@@ -9,7 +9,8 @@ import type Database from 'better-sqlite3'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { McpIpcRequest, McpIpcResponse, McpIpcRouteResult } from '../../shared/types/mcp-server.types'
 import type { McpIpcFrame, McpIpcResponseFrame } from '../mcp-server/ipc/ipc-protocol'
-import { getTaskById, insertTask, updateTask } from '../db/queries/tasks.queries'
+import { getTaskById, insertTask, updateTask, getTasksByRepo } from '../db/queries/tasks.queries'
+import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
 import { insertProject } from '../db/queries/projects.queries'
 import { linkRepoToProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types/task.types'
@@ -32,6 +33,7 @@ type OrchestratorRunLike = {
 export interface McpManagerDeps {
   db: Database.Database
   orchestrator: {
+    start: (input: OrchestratorStartInput) => OrchestratorRunLike
     startSingleTask: (input: OrchestratorStartInput) => OrchestratorRunLike
     getStatus?: () => OrchestratorStatusResponse
   }
@@ -326,7 +328,14 @@ export class McpServerManager {
   ): McpIpcRouteResult {
     switch (request.type) {
       case 'create_task': {
-        const task = insertTask(db, request.payload as CreateTaskInput)
+        const payload = request.payload as CreateTaskInput & { dependsOn?: string[] }
+        const { dependsOn, ...createInput } = payload
+        const task = insertTask(db, createInput)
+        if (dependsOn?.length) {
+          for (const depId of dependsOn) {
+            insertTaskDependency(db, task.id, depId)
+          }
+        }
         deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, task)
         return task
       }
@@ -368,6 +377,32 @@ export class McpServerManager {
         linkRepoToProject(db, project.id, repoId)
         deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, project)
         return { projectId: project.id, name: project.name, created: true }
+      }
+      case 'dispatch_sprint': {
+        const { sprintName, repoId, projectId, concurrencyCap, telegramNotify, confirmed } = request.payload
+        // Resolve task IDs for the sprint
+        const allTasks = getTasksByRepo(db, repoId)
+        const sprintTasks = allTasks.filter((t) => {
+          if (t.sprintName !== sprintName) return false
+          if (projectId && t.projectId !== projectId) return false
+          return true
+        })
+        if (sprintTasks.length === 0) {
+          throw new Error(`No tasks found for sprint "${sprintName}" in repo ${repoId}`)
+        }
+        const taskIds = sprintTasks.map((t) => t.id)
+        const run = deps.orchestrator.start({
+          sprintName,
+          repoId,
+          projectId,
+          concurrencyCap: concurrencyCap ?? 3,
+          telegramNotify: telegramNotify ?? false,
+          confirmed,
+          startedBy: 'mcp-agent',
+          triggerSource: 'manual',
+          taskIds,
+        })
+        return { id: run.id, taskCount: taskIds.length }
       }
       case 'get_health_anomalies': {
         const agentIds = request.payload.agentId

@@ -112,7 +112,7 @@ describe('McpServerManager', () => {
 
     deps = {
       db,
-      orchestrator: { startSingleTask: vi.fn(() => ({ id: 'run-1' })) } as never,
+      orchestrator: { start: vi.fn(() => ({ id: 'run-1' })), startSingleTask: vi.fn(() => ({ id: 'run-1' })) } as never,
       healthMonitor: { getSnapshot: vi.fn() } as never,
       emitToRenderer: vi.fn(),
       listAgents: vi.fn(() => []),

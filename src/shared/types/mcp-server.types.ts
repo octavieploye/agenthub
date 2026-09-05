@@ -60,6 +60,7 @@ export interface CreateTaskToolInput {
   autoEstimate?: boolean
   autoRecommendModel?: boolean
   createdBy?: string
+  blockedBy?: string[]
 }
 
 export interface CreateTaskToolOutput {
@@ -106,6 +107,24 @@ export interface DispatchTaskToolOutput {
   result: DispatchTaskResult
   runId: string | null
   message: string
+}
+
+// ─── Tool 3b: dispatch_sprint ─────────────────────────────────────────────
+
+export interface DispatchSprintToolInput {
+  sprintName: string
+  repoId: string
+  projectId?: string
+  concurrencyCap?: number
+  telegramNotify?: boolean
+  confirmed: boolean
+}
+
+export interface DispatchSprintToolOutput {
+  result: 'dispatched' | 'blocked' | 'requires_confirmation'
+  runId: string | null
+  message: string
+  taskCount: number
 }
 
 // ─── Tool 4: estimate_tokens ────────────────────────────────────────────────
@@ -259,6 +278,7 @@ export type McpIpcRequest =
   | { type: 'get_orchestrator_status'; payload: Record<string, never> }
   | { type: 'get_health_anomalies'; payload: { agentId?: string } }
   | { type: 'create_project'; payload: CreateProjectMcpInput }
+  | { type: 'dispatch_sprint'; payload: { sprintName: string; repoId: string; projectId?: string; concurrencyCap?: number; telegramNotify?: boolean; confirmed: boolean } }
 
 // FCR-007: typed generic variants — backward compatible (T defaults to unknown)
 export type McpIpcSuccessResponse<T = unknown> = { type: 'success'; data: T }

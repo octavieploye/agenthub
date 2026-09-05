@@ -5,6 +5,8 @@ import type {
   ListTasksToolOutput,
   DispatchTaskToolInput,
   DispatchTaskToolOutput,
+  DispatchSprintToolInput,
+  DispatchSprintToolOutput,
   CreateProjectMcpInput,
   CreateProjectMcpOutput,
   McpIpcRequest,
@@ -77,6 +79,7 @@ function validateCreateTaskInput(input: CreateTaskToolInput): void {
   }
   assertOptionalStringArray(input.targetFiles, 'targetFiles')
   assertOptionalStringArray(input.skills, 'skills')
+  assertOptionalStringArray(input.blockedBy, 'blockedBy')
   assertOptionalBoolean(input.requiresApproval, 'requiresApproval')
   assertOptionalBoolean(input.autoEstimate, 'autoEstimate')
   assertOptionalBoolean(input.autoRecommendModel, 'autoRecommendModel')
@@ -206,7 +209,8 @@ export async function handleCreateTask(
     riskScore: riskAssessment?.riskScore,
     riskFactors: riskAssessment?.riskFactors,
     riskFactorsJson: riskAssessment ? JSON.stringify(riskAssessment.riskFactors) : undefined,
-    createdBy: input.createdBy ?? 'mcp-agent'
+    createdBy: input.createdBy ?? 'mcp-agent',
+    dependsOn: input.blockedBy
   }
 
   // --- Send to main process via IPC ---
@@ -346,5 +350,64 @@ export async function handleCreateProject(
     projectId: raw.projectId,
     name: raw.name,
     created: raw.created
+  }
+}
+
+// ─── handleDispatchSprint ────────────────────────────────────────────────────
+
+export async function handleDispatchSprint(
+  input: DispatchSprintToolInput,
+  deps: TaskHandlerDeps
+): Promise<DispatchSprintToolOutput> {
+  assertNonEmptyString(input.sprintName, 'sprintName')
+  assertNonEmptyString(input.repoId, 'repoId')
+  if (typeof input.confirmed !== 'boolean') {
+    throw new Error('confirmed must be a boolean')
+  }
+  assertOptionalBoolean(input.telegramNotify, 'telegramNotify')
+
+  // S1: kill-switch check
+  const orchestratorEnabled = isOrchestratorEnabledReadOnly(deps.db)
+  if (!orchestratorEnabled) {
+    return {
+      result: 'blocked',
+      runId: null,
+      message: 'Orchestrator is disabled (kill-switch active). Enable it in AgentHub settings to dispatch sprints.',
+      taskCount: 0
+    }
+  }
+
+  // S4: confirmation gate
+  if (!input.confirmed) {
+    return {
+      result: 'requires_confirmation',
+      runId: null,
+      message: 'dispatch_sprint requires confirmed: true. Review the sprint tasks, then re-call with confirmed: true.',
+      taskCount: 0
+    }
+  }
+
+  const resp = await deps.sendIpc({
+    type: 'dispatch_sprint',
+    payload: {
+      sprintName: input.sprintName,
+      repoId: input.repoId,
+      projectId: input.projectId,
+      concurrencyCap: input.concurrencyCap,
+      telegramNotify: input.telegramNotify ?? false,
+      confirmed: input.confirmed
+    }
+  })
+
+  if (resp.type === 'error') {
+    throw new Error(`dispatch_sprint IPC error: ${resp.message}`)
+  }
+
+  const data = resp.data as { id: string; taskCount: number }
+  return {
+    result: 'dispatched',
+    runId: data.id,
+    message: `Sprint "${input.sprintName}" dispatched with ${data.taskCount} tasks.`,
+    taskCount: data.taskCount
   }
 }

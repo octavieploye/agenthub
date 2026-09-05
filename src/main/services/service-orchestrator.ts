@@ -599,6 +599,7 @@ export function initializeServices(db: Database.Database): void {
   mcpServerManager.start(db, {
     db,
     orchestrator: {
+      start: (input) => kanbanOrchestrator!.start(input),
       startSingleTask: (input) => kanbanOrchestrator!.startSingleTask(input),
       getStatus: () => kanbanOrchestrator!.getStatus(),
     },
