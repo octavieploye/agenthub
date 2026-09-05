@@ -71,6 +71,7 @@ export interface OrchestratorDeps {
   gitCommit: (repoPath: string, message: string) => string
   gitPush: (repoPath: string) => void
   getAgentOutput?: (agentId: string) => string | null
+  killAgent?: (agentId: string) => void
   onEventInserted?: () => void
   emitToRenderer?: (channel: string, ...args: unknown[]) => void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
@@ -82,6 +83,7 @@ export class KanbanOrchestratorService {
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private completedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   private failedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
+  private statusChangedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   /** Task 2.10: synchronous git mutex — one commit/push per repo at a time */
   private gitLockActive = new Map<string, boolean>()
   /** Security loop-back cycle count per task (C1-C3, loop-back) */
@@ -146,8 +148,10 @@ export class KanbanOrchestratorService {
     // Event subscriptions and tick timer happen OUTSIDE transaction
     this.completedHandler = (event) => this.onAgentCompleted(event)
     this.failedHandler = (event) => this.onAgentFailed(event)
+    this.statusChangedHandler = (event) => this.onAgentStatusChanged(event)
     onOrchestratorEvent('agent:completed', this.completedHandler)
     onOrchestratorEvent('agent:failed', this.failedHandler)
+    onOrchestratorEvent('agent:status-changed', this.statusChangedHandler)
 
     // Start consistency poll
     this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
@@ -240,8 +244,10 @@ export class KanbanOrchestratorService {
     // Subscribe event listeners (same as start, but NO tick timer)
     this.completedHandler = (event) => this.onAgentCompleted(event)
     this.failedHandler = (event) => this.onAgentFailed(event)
+    this.statusChangedHandler = (event) => this.onAgentStatusChanged(event)
     onOrchestratorEvent('agent:completed', this.completedHandler)
     onOrchestratorEvent('agent:failed', this.failedHandler)
+    onOrchestratorEvent('agent:status-changed', this.statusChangedHandler)
 
     log.info('Orchestrator single-task started', {
       runId: updated.id,
@@ -1228,6 +1234,10 @@ export class KanbanOrchestratorService {
       offOrchestratorEvent('agent:failed', this.failedHandler)
       this.failedHandler = null
     }
+    if (this.statusChangedHandler) {
+      offOrchestratorEvent('agent:status-changed', this.statusChangedHandler)
+      this.statusChangedHandler = null
+    }
     // Clear run-scoped state to prevent stale data between runs
     this.securityCycleCount.clear()
     this.phaseRetryCount.clear()
@@ -1517,6 +1527,59 @@ export class KanbanOrchestratorService {
     })
 
     this.advancePhase(activeLog.taskId, activeLog.phase, activeLog.id, run)
+  }
+
+  /**
+   * Detect orchestrator-tracked agents reaching `locked` (waiting at prompt).
+   * With --dangerously-skip-permissions, `locked` means the agent finished its
+   * task and is sitting at the ❯ prompt. The PTY doesn't exit automatically,
+   * so `agent:completed` (which requires PTY exit) never fires. This handler
+   * bridges that gap — treating `locked` as phase completion for tracked agents.
+   */
+  private onAgentStatusChanged(event: OrchestratorAgentEvent): void {
+    if (event.triageEvent.currentStatus !== 'locked') return
+
+    const run = getActiveRun(this.db)
+    if (!run) return
+
+    const agentId = event.triageEvent.agentId
+    const activeLog = getActiveTaskLogByAgentId(this.db, run.id, agentId)
+    if (!activeLog) return
+
+    log.info('Orchestrator: agent reached locked (task done), advancing phase', {
+      agentId,
+      taskId: activeLog.taskId,
+      phase: activeLog.phase,
+    })
+
+    // Store security output before advancing (same as onAgentCompleted)
+    if (activeLog.phase === 'security' && this.deps?.getAgentOutput) {
+      const rawOutput = this.deps.getAgentOutput(agentId)
+      if (rawOutput) {
+        const parsed = parseSecurityOutput(rawOutput)
+        const summaryJson = JSON.stringify({
+          recommendation: parsed.recommendation,
+          findings: parsed.findings,
+          hasCritical: parsed.hasCritical,
+          hasHigh: parsed.hasHigh,
+        })
+        const issuesJson = parsed.findings.length > 0
+          ? JSON.stringify(parsed.findings)
+          : null
+        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson)
+      }
+    }
+
+    this.advancePhase(activeLog.taskId, activeLog.phase, activeLog.id, run)
+
+    // Kill the agent PTY — it's done, sitting at the prompt consuming resources.
+    // The subsequent onExit → agent:completed event is harmless: activeLog is already
+    // marked 'done' by advancePhase, so getActiveTaskLogByAgentId returns null.
+    try {
+      this.deps?.killAgent?.(agentId)
+    } catch (err) {
+      log.warn('Orchestrator: failed to kill agent after phase advance', { agentId, error: String(err) })
+    }
   }
 
   private onAgentFailed(event: OrchestratorAgentEvent): void {

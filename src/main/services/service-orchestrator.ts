@@ -560,6 +560,7 @@ export function initializeServices(db: Database.Database): void {
     gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
     gitPush: (repoPath: string) => gitService!.push(repoPath),
     getAgentOutput,
+    killAgent: (agentId: string) => { try { killAgent(agentId) } catch (err) { log.warn('Orchestrator killAgent failed', { agentId, err }) } },
     onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
     emitToRenderer: emitToAllRenderers,
     sendTelegramNotification: (summary: string, type: 'completed' | 'failed') => {
