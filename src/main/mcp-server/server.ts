@@ -23,7 +23,7 @@ import {
   getSafeguardsReadOnly
 } from './db/read-connection'
 import { ParentIpc } from './ipc/parent-ipc'
-import { handleCreateTask, handleListTasks, handleDispatchTask } from './handlers/task-handlers'
+import { handleCreateTask, handleListTasks, handleDispatchTask, handleCreateProject } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
 import { handleGetGuardrails, handleGetSkills, handleGetContext } from './handlers/context-handlers'
 import { handleAuditDeps } from './handlers/deps-handler'
@@ -37,7 +37,8 @@ import type {
   GetGuardrailsToolInput,
   GetSkillsToolInput,
   GetContextToolInput,
-  AuditDepsToolInput
+  AuditDepsToolInput,
+  CreateProjectMcpInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '@shared/constants/model-catalog'
@@ -304,6 +305,20 @@ async function main(): Promise<void> {
         }
       },
       {
+        name: 'create_project',
+        description:
+          'Create or retrieve a project in the AgentHub Kanban board. Idempotent — returns existing project if name already exists for the repo.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repoId: { type: 'string', description: 'UUID of the target repository' },
+            name: { type: 'string', description: 'Project name (e.g. "Voice Web Search")' },
+            description: { type: 'string', description: 'Optional project description' }
+          },
+          required: ['repoId', 'name']
+        }
+      },
+      {
         name: 'audit_deps',
         description:
           'Audit npm dependencies in a package.json against the npm registry (max 20 deps, 5s timeout per package).',
@@ -369,6 +384,10 @@ async function main(): Promise<void> {
 
         case 'get_context':
           result = await handleGetContext(safeArgs as GetContextToolInput, contextDeps)
+          break
+
+        case 'create_project':
+          result = await handleCreateProject(safeArgs as CreateProjectMcpInput, taskDeps)
           break
 
         case 'audit_deps':

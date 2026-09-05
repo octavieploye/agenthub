@@ -10,6 +10,8 @@ import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { McpIpcRequest, McpIpcResponse, McpIpcRouteResult } from '../../shared/types/mcp-server.types'
 import type { McpIpcFrame, McpIpcResponseFrame } from '../mcp-server/ipc/ipc-protocol'
 import { getTaskById, insertTask, updateTask } from '../db/queries/tasks.queries'
+import { insertProject } from '../db/queries/projects.queries'
+import { linkRepoToProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types/task.types'
 import type {
   OrchestratorStartInput,
@@ -358,6 +360,15 @@ export class McpServerManager {
         return deps.listAgents()
       case 'get_orchestrator_status':
         return deps.orchestrator.getStatus?.() ?? null
+      case 'create_project': {
+        const { repoId, name, description } = request.payload
+        const existing = getProjectsByRepoId(db, repoId).find((p) => p.name === name)
+        if (existing) return { projectId: existing.id, name: existing.name, created: false }
+        const project = insertProject(db, { name, description })
+        linkRepoToProject(db, project.id, repoId)
+        deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, project)
+        return { projectId: project.id, name: project.name, created: true }
+      }
       case 'get_health_anomalies': {
         const agentIds = request.payload.agentId
           ? [request.payload.agentId]

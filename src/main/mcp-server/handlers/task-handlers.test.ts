@@ -6,6 +6,7 @@ import { insertTask } from '../../db/queries/tasks.queries'
 import type { McpIpcResponse } from '@shared/types/mcp-server.types'
 import {
   handleCreateTask,
+  handleCreateProject,
   handleDispatchTask,
   handleListTasks,
   type TaskHandlerDeps
@@ -191,6 +192,49 @@ describe('task handlers', () => {
 
       expect(result.tasks.map((task) => task.title).sort()).toEqual(expectedTitles.sort())
       expect(result.total).toBe(expectedTitles.length)
+    })
+  })
+
+  describe('handleCreateProject', () => {
+    it('returns projectId and created:true on success', async () => {
+      const deps = createDeps({
+        type: 'success',
+        data: { projectId: 'proj-123', name: 'Voice Web Search', created: true }
+      })
+
+      const result = await handleCreateProject({ repoId, name: 'Voice Web Search' }, deps)
+
+      expect(result).toEqual({ projectId: 'proj-123', name: 'Voice Web Search', created: true })
+      expect(deps.sendIpc).toHaveBeenCalledWith({
+        type: 'create_project',
+        payload: { repoId, name: 'Voice Web Search' }
+      })
+    })
+
+    it('returns created:false when project already exists', async () => {
+      const deps = createDeps({
+        type: 'success',
+        data: { projectId: 'existing-proj', name: 'Voice Web Search', created: false }
+      })
+
+      const result = await handleCreateProject({ repoId, name: 'Voice Web Search' }, deps)
+
+      expect(result.created).toBe(false)
+      expect(result.projectId).toBe('existing-proj')
+    })
+
+    it('rejects empty name without calling IPC', async () => {
+      const deps = createDeps()
+
+      await expect(handleCreateProject({ repoId, name: '' }, deps)).rejects.toThrow('name')
+      expect(deps.sendIpc).not.toHaveBeenCalled()
+    })
+
+    it('rejects empty repoId without calling IPC', async () => {
+      const deps = createDeps()
+
+      await expect(handleCreateProject({ repoId: '', name: 'My Project' }, deps)).rejects.toThrow('repoId')
+      expect(deps.sendIpc).not.toHaveBeenCalled()
     })
   })
 

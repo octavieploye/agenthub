@@ -4,6 +4,7 @@ import * as net from 'node:net'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../db/migration-runner'
 import { getTaskById } from '../db/queries/tasks.queries'
+import { getProjectsByRepoId } from '../db/queries/project-repos.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { McpIpcRequest } from '../../shared/types/mcp-server.types'
 import type { McpIpcResponseFrame } from '../mcp-server/ipc/ipc-protocol'
@@ -24,6 +25,9 @@ const { mockSpawn, mockChild } = vi.hoisted(() => {
   return { mockSpawn: vi.fn(() => child), mockChild: child }
 })
 
+vi.mock('electron', () => ({
+  app: { isPackaged: false }
+}))
 vi.mock('node:child_process', () => ({
   default: { spawn: mockSpawn },
   spawn: mockSpawn
@@ -101,6 +105,7 @@ describe('McpServerManager', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     runMigrations(db, __dirname + '/../db/migrations')
+    db.pragma('foreign_keys = ON')
     db.prepare(
       "INSERT INTO repos (id, name, path, created_at, last_used_at) VALUES ('repo-1', 'test', '/tmp/test', datetime('now'), datetime('now'))"
     ).run()
@@ -193,6 +198,54 @@ describe('McpServerManager', () => {
       IPC_EVENTS.TASKS.UPDATED,
       expect.objectContaining({ id: taskId, title: 'Created through MCP' })
     )
+  })
+
+  it('routes create_project: creates project and links to repo', async () => {
+    manager.start(db, deps)
+    await waitForSocket(manager.getSocketPath())
+    const response = await sendRequest(manager.getSocketPath(), getSocketToken(), {
+      type: 'create_project',
+      payload: { repoId: 'repo-1', name: 'Voice Web Search', description: 'SearXNG adapter' }
+    })
+
+    expect(response.response).toMatchObject({
+      type: 'success',
+      data: { name: 'Voice Web Search', created: true }
+    })
+    const projects = getProjectsByRepoId(db, 'repo-1')
+    expect(projects.some((p) => p.name === 'Voice Web Search')).toBe(true)
+  })
+
+  it('routes create_project: returns existing project when name already exists for repo', async () => {
+    manager.start(db, deps)
+    await waitForSocket(manager.getSocketPath())
+    const first = await sendRequest(manager.getSocketPath(), getSocketToken(), {
+      type: 'create_project',
+      payload: { repoId: 'repo-1', name: 'Duplicate Project' }
+    })
+    const firstProjectId = (first.response as { type: 'success'; data: { projectId: string } }).data
+      .projectId
+
+    const second = await sendRequest(manager.getSocketPath(), getSocketToken(), {
+      type: 'create_project',
+      payload: { repoId: 'repo-1', name: 'Duplicate Project' }
+    })
+
+    expect(second.response).toMatchObject({
+      type: 'success',
+      data: { projectId: firstProjectId, name: 'Duplicate Project', created: false }
+    })
+  })
+
+  it('routes create_project: FK constraint error propagates for unknown repoId', async () => {
+    manager.start(db, deps)
+    await waitForSocket(manager.getSocketPath())
+    const response = await sendRequest(manager.getSocketPath(), getSocketToken(), {
+      type: 'create_project',
+      payload: { repoId: 'non-existent-repo', name: 'Bad Project' }
+    })
+
+    expect(response.response.type).toBe('error')
   })
 
   it('routes dispatch_task to the orchestrator and emits the run to renderers', async () => {

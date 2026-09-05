@@ -5,6 +5,8 @@ import type {
   ListTasksToolOutput,
   DispatchTaskToolInput,
   DispatchTaskToolOutput,
+  CreateProjectMcpInput,
+  CreateProjectMcpOutput,
   McpIpcRequest,
   McpIpcResponse,
   TokenEstimation,
@@ -316,5 +318,33 @@ export async function handleDispatchTask(
     result: 'dispatched',
     runId: data.id ?? null,
     message: `Task ${input.taskId} dispatched successfully.`
+  }
+}
+
+// ─── handleCreateProject ──────────────────────────────────────────────────────
+
+export async function handleCreateProject(
+  input: CreateProjectMcpInput,
+  deps: TaskHandlerDeps
+): Promise<CreateProjectMcpOutput> {
+  assertNonEmptyString(input.repoId, 'repoId')
+  assertNonEmptyString(input.name, 'name')
+
+  const resp = await deps.sendIpc({ type: 'create_project', payload: input })
+
+  if (resp.type === 'error') {
+    throw new Error(`create_project IPC error: ${resp.message}`)
+  }
+
+  if (!resp.data) throw new Error('create_project: empty response from main process')
+  const raw = resp.data as Record<string, unknown>
+  if (typeof raw.projectId !== 'string' || typeof raw.name !== 'string' || typeof raw.created !== 'boolean') {
+    throw new Error('create_project: malformed response — missing projectId, name, or created')
+  }
+
+  return {
+    projectId: raw.projectId,
+    name: raw.name,
+    created: raw.created
   }
 }

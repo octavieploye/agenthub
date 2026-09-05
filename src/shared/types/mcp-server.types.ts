@@ -235,6 +235,20 @@ export interface AuditDepsToolOutput {
   checkedAt: string
 }
 
+// ─── Tool 10: create_project ─────────────────────────────────────────────────
+
+export interface CreateProjectMcpInput {
+  repoId: string
+  name: string
+  description?: string
+}
+
+export interface CreateProjectMcpOutput {
+  projectId: string
+  name: string
+  created: boolean
+}
+
 // ─── IPC message protocol (main process ↔ MCP server child) ────────────────
 
 export type McpIpcRequest =
@@ -244,6 +258,7 @@ export type McpIpcRequest =
   | { type: 'get_active_agents'; payload: Record<string, never> }
   | { type: 'get_orchestrator_status'; payload: Record<string, never> }
   | { type: 'get_health_anomalies'; payload: { agentId?: string } }
+  | { type: 'create_project'; payload: CreateProjectMcpInput }
 
 // FCR-007: typed generic variants — backward compatible (T defaults to unknown)
 export type McpIpcSuccessResponse<T = unknown> = { type: 'success'; data: T }
