@@ -60,7 +60,7 @@ export class OrchestratorMonitorService {
   /** Single rules pass. Public so tests can drive it deterministically. */
   check(): void {
     const run = getActiveRun(this.db)
-    if (!run) return
+    if (!run || run.status === 'paused') return
 
     if (this.checkConcurrentAgents(run)) return
     if (this.checkDuration(run)) return
