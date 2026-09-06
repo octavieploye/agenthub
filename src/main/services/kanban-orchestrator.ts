@@ -26,6 +26,7 @@ import {
   updateTaskLogStatus,
   updateTaskLogSummary,
   getActiveTaskLogByAgentId,
+  getFilesChangedForTask,
   getUnacknowledgedRetryFailures,
   acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
 } from '../db/queries/orchestrator.queries'
@@ -703,13 +704,6 @@ export class KanbanOrchestratorService {
     this.emitTaskPhaseChange(run.id, task.id, 'dev', 'active')
 
     log.info('Orchestrator: simple path dispatched', { taskId: task.id, mode, agentId: agent.id, skills })
-  }
-
-  /** Parse FILES_CHANGED: marker from agent output for Path B-2 commit detection. */
-  private parseFilesChanged(output: string): string[] {
-    const match = output.match(/FILES_CHANGED:\s*([^\n]+)/i)
-    if (!match) return []
-    return match[1].split(',').map(f => f.trim()).filter(Boolean)
   }
 
   dispatchReviewPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
@@ -1738,9 +1732,8 @@ export class KanbanOrchestratorService {
       this.simplePathModes.delete(agentId)
       updateTaskLogStatus(this.db, activeLog.id, 'done')
 
-      if (simpleMode === 'b2' && this.deps?.getAgentOutput) {
-        const rawOutput = this.deps.getAgentOutput(agentId)
-        const filesChanged = rawOutput ? this.parseFilesChanged(rawOutput) : []
+      if (simpleMode === 'b2') {
+        const filesChanged = getFilesChangedForTask(this.db, activeLog.taskId)
         if (filesChanged.length > 0) {
           log.info('Orchestrator: Path B-2 files changed, running commit', { taskId: activeLog.taskId, filesChanged })
           const committed = this.executeCommitPhase(activeLog.taskId, run, false)

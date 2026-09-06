@@ -25,7 +25,7 @@ import {
 import { ParentIpc } from './ipc/parent-ipc'
 import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
-import { handleGetGuardrails, handleGetSkills, handleGetContext } from './handlers/context-handlers'
+import { handleGetGuardrails, handleGetSkills, handleGetContext, handleReportFilesChanged } from './handlers/context-handlers'
 import { handleAuditDeps } from './handlers/deps-handler'
 
 import type {
@@ -39,7 +39,8 @@ import type {
   GetSkillsToolInput,
   GetContextToolInput,
   AuditDepsToolInput,
-  CreateProjectMcpInput
+  CreateProjectMcpInput,
+  ReportFilesChangedToolInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '@shared/constants/model-catalog'
@@ -355,6 +356,23 @@ async function main(): Promise<void> {
           },
           required: ['packageJsonPath']
         }
+      },
+      {
+        name: 'report_files_changed',
+        description:
+          'Report the list of files modified by this agent for Path B-2 tasks. Call this instead of printing FILES_CHANGED in text. The orchestrator reads from the DB to decide whether to run commit.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'ID of the current task (from task context)' },
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Relative paths of files modified (max 100). No absolute paths. No .. segments.'
+            }
+          },
+          required: ['taskId', 'files']
+        }
       }
     ]
   }))
@@ -419,6 +437,10 @@ async function main(): Promise<void> {
 
         case 'audit_deps':
           result = await handleAuditDeps(safeArgs as AuditDepsToolInput, auditDependencyRoots)
+          break
+
+        case 'report_files_changed':
+          result = await handleReportFilesChanged(safeArgs as ReportFilesChangedToolInput, contextDeps)
           break
 
         default:

@@ -4,7 +4,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as net from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, isAbsolute } from 'node:path'
 import type Database from 'better-sqlite3'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { McpIpcRequest, McpIpcResponse, McpIpcRouteResult } from '../../shared/types/mcp-server.types'
@@ -419,6 +419,51 @@ export class McpServerManager {
           this.healthSnapshotCache.set(agentId, { anomalies, cachedAt: now })
           return anomalies
         })
+      }
+      case 'report_files_changed': {
+        const { taskId, files } = request.payload
+        if (typeof taskId !== 'string' || taskId.trim().length === 0) {
+          throw new Error('report_files_changed: taskId must be a non-empty string')
+        }
+        if (!Array.isArray(files)) {
+          throw new Error('report_files_changed: files must be an array')
+        }
+        if (files.length > 100) {
+          throw new Error('report_files_changed: files array must not exceed 100 entries')
+        }
+        for (const f of files) {
+          if (typeof f !== 'string') {
+            throw new Error('report_files_changed: each file path must be a string')
+          }
+          if (isAbsolute(f)) {
+            throw new Error(`report_files_changed: absolute paths are not allowed: ${f}`)
+          }
+          const segments = f.split(/[\\/]/)
+          if (segments.some((s) => s === '..')) {
+            throw new Error(`report_files_changed: paths with ".." segments are not allowed: ${f}`)
+          }
+          if (f.length > 260) {
+            throw new Error(`report_files_changed: path exceeds 260 characters: ${f.slice(0, 40)}...`)
+          }
+        }
+        const filesJson = JSON.stringify(files)
+        const now = new Date().toISOString()
+        const result = db.prepare(
+          `UPDATE orchestrator_task_log
+             SET files_changed_json = ?, updated_at = ?
+           WHERE id = (
+             SELECT id FROM orchestrator_task_log
+             WHERE task_id = ? AND phase = 'dev'
+             ORDER BY created_at DESC LIMIT 1
+           )`
+        ).run(filesJson, now, taskId)
+        if (result.changes === 0) {
+          throw Object.assign(
+            new Error(`report_files_changed: no dev-phase log found for task ${taskId}`),
+            { code: 'NO_DEV_LOG' }
+          )
+        }
+        return { ok: true, count: files.length }
       }
       default: {
         // Exhaustiveness check: if McpIpcRequest union is fully covered above,

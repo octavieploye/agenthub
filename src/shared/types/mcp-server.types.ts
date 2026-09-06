@@ -270,6 +270,16 @@ export interface CreateProjectMcpOutput {
 
 // ─── IPC message protocol (main process ↔ MCP server child) ────────────────
 
+export interface ReportFilesChangedToolInput {
+  taskId: string
+  files: string[]
+}
+
+export interface ReportFilesChangedToolOutput {
+  ok: boolean
+  count: number
+}
+
 export type McpIpcRequest =
   | { type: 'create_task'; payload: CreateTaskInput }
   | { type: 'update_task'; payload: { taskId: string; updates: UpdateTaskInput } }
@@ -279,6 +289,7 @@ export type McpIpcRequest =
   | { type: 'get_health_anomalies'; payload: { agentId?: string } }
   | { type: 'create_project'; payload: CreateProjectMcpInput }
   | { type: 'dispatch_sprint'; payload: { sprintName: string; repoId: string; projectId?: string; concurrencyCap?: number; telegramNotify?: boolean; confirmed: boolean } }
+  | { type: 'report_files_changed'; payload: ReportFilesChangedToolInput }
 
 // FCR-007: typed generic variants — backward compatible (T defaults to unknown)
 export type McpIpcSuccessResponse<T = unknown> = { type: 'success'; data: T }

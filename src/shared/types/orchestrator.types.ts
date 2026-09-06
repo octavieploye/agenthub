@@ -39,6 +39,7 @@ export interface OrchestratorTaskLog {
   providerUsed: string | null
   summaryJson: string | null
   issuesJson: string | null
+  filesChangedJson: string | null
   createdAt: string
   updatedAt: string
   startedAt: string | null

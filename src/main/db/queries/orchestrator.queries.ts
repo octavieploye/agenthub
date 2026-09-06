@@ -56,6 +56,7 @@ function mapTaskLogRow(row: Record<string, unknown>): OrchestratorTaskLog {
     providerUsed: (row.provider_used as string) ?? null,
     summaryJson: (row.summary_json as string) ?? null,
     issuesJson: (row.issues_json as string) ?? null,
+    filesChangedJson: (row.files_changed_json as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     startedAt: (row.started_at as string) ?? null,
@@ -217,6 +218,7 @@ export function insertTaskLog(
     providerUsed: input.providerUsed ?? null,
     summaryJson: null,
     issuesJson: null,
+    filesChangedJson: null,
     createdAt: now,
     updatedAt: now,
     startedAt: null,
@@ -332,6 +334,23 @@ export function getActiveTaskLogByAgentId(
     )
     .get(runId, agentId) as Record<string, unknown> | undefined
   return row ? mapTaskLogRow(row) : null
+}
+
+export function getFilesChangedForTask(db: Database.Database, taskId: string): string[] {
+  const row = db
+    .prepare(
+      `SELECT files_changed_json FROM orchestrator_task_log
+       WHERE task_id = ? AND phase = 'dev'
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(taskId) as { files_changed_json: string | null } | undefined
+  if (!row?.files_changed_json) return []
+  try {
+    const parsed = JSON.parse(row.files_changed_json)
+    return Array.isArray(parsed) ? (parsed as string[]) : []
+  } catch {
+    return []
+  }
 }
 
 // ---------------------------------------------------------------------------

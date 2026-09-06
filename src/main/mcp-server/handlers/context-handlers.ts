@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import * as yaml from 'js-yaml'
+import { parse as yamlParse } from 'yaml'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
 import type { GuardrailConfig } from '@shared/types/config.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
@@ -18,8 +18,11 @@ import type {
   SelfAwarenessManifestQuota,
   SelfAwarenessManifestSafeguards,
   McpIpcRequest,
-  McpIpcResponse
+  McpIpcResponse,
+  ReportFilesChangedToolInput,
+  ReportFilesChangedToolOutput
 } from '@shared/types/mcp-server.types'
+import { isAbsolute } from 'path'
 import { SkillsService } from '../../services/skills-service'
 
 // ─── Shared no-op logger for child-process context (no electron-log) ──────────
@@ -61,7 +64,7 @@ export function handleGetGuardrails(
 
   try {
     const raw = readFileSync(yamlPath, 'utf-8')
-    const parsed = yaml.load(raw) as Partial<GuardrailConfig>
+    const parsed = yamlParse(raw) as Partial<GuardrailConfig>
 
     const guardrails: GuardrailConfig = {
       maxDurationMinutes:
@@ -183,6 +186,9 @@ export async function handleGetContext(
     provider: a.provider
   }))
 
+  // Compute safeguards once — reused for orchestrator.enabled and manifest.safeguards
+  const safeguards = deps.getSafeguards()
+
   // Orchestrator — map OrchestratorStatusResponse → SelfAwarenessManifestOrchestrator
   const orchData =
     orchResp.type === 'success' &&
@@ -190,10 +196,8 @@ export async function handleGetContext(
     typeof orchResp.data === 'object'
       ? (orchResp.data as OrchestratorStatusResponse)
       : null
-  const isRunning =
-    orchData?.run?.status === 'running' || orchData?.run?.status === 'paused'
   const orchestrator = {
-    enabled: isRunning,
+    enabled: !safeguards.killSwitchActive,
     status: orchData?.run?.status ?? null,
     activeTaskCount: orchData?.activeTasks?.length ?? 0,
     agentsSpawnedByRun: orchData?.activeTasks?.length ?? 0,
@@ -222,9 +226,56 @@ export async function handleGetContext(
     agents,
     repos: deps.getRepos(),
     quota: deps.getQuota(),
-    safeguards: deps.getSafeguards(),
+    safeguards,
     modelCatalog: deps.getModelCatalog(),
     skills,
     healthAnomalies
   }
+}
+
+// ─── handleReportFilesChanged ─────────────────────────────────────────────────
+
+/**
+ * Report files modified by a Path B-2 agent via the MCP tool.
+ * Validates paths client-side before sending to the main process over IPC.
+ * The main process writes to orchestrator_task_log.files_changed_json.
+ */
+export async function handleReportFilesChanged(
+  input: ReportFilesChangedToolInput,
+  deps: ContextHandlerDeps
+): Promise<ReportFilesChangedToolOutput> {
+  const { taskId, files } = input
+
+  if (typeof taskId !== 'string' || taskId.trim().length === 0) {
+    throw new Error('report_files_changed: taskId must be a non-empty string')
+  }
+  if (!Array.isArray(files)) {
+    throw new Error('report_files_changed: files must be an array')
+  }
+  if (files.length > 100) {
+    throw new Error('report_files_changed: files array must not exceed 100 entries')
+  }
+  for (const f of files) {
+    if (typeof f !== 'string') {
+      throw new Error('report_files_changed: each file path must be a string')
+    }
+    if (isAbsolute(f)) {
+      throw new Error(`report_files_changed: absolute paths are not allowed: ${f}`)
+    }
+    const segments = f.split(/[\\/]/)
+    if (segments.some((s) => s === '..')) {
+      throw new Error(`report_files_changed: paths with ".." segments are not allowed: ${f}`)
+    }
+    if (f.length > 260) {
+      throw new Error(`report_files_changed: path exceeds 260 characters: ${f.slice(0, 40)}...`)
+    }
+  }
+
+  const resp = await deps.sendIpc({ type: 'report_files_changed', payload: { taskId, files } })
+
+  if (resp.type === 'error') {
+    throw new Error(resp.message)
+  }
+
+  return resp.data as ReportFilesChangedToolOutput
 }
