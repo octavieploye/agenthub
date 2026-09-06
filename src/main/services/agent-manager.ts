@@ -1157,7 +1157,10 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
 
 export function sendInput(agentId: string, data: string, opts?: { isSystemAction?: boolean }): void {
   const managed = agents.get(agentId)
-  if (!managed) throw new Error(`Agent ${agentId} not found`)
+  if (!managed) {
+    log.warn('sendInput: agent not found (stale renderer reference)', { agentId })
+    return
+  }
   if (!opts?.isSystemAction) {
     managed.hasSentInput = true
     managed.hasManualFollowUp = true
@@ -1210,7 +1213,10 @@ export function clearPtyOwner(agentId: string): void {
 
 export function resizeAgent(agentId: string, cols: number, rows: number, _webContentsId?: number): void {
   const managed = agents.get(agentId)
-  if (!managed) throw new Error(`Agent ${agentId} not found`)
+  if (!managed) {
+    log.warn('resizeAgent: agent not found (stale renderer reference)', { agentId })
+    return
+  }
   managed.ptyProcess.resize(cols, rows)
   managed.headlessTerminal.resize(cols, rows)
 }

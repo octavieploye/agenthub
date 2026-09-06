@@ -576,6 +576,15 @@ export function initializeServices(db: Database.Database): void {
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 
+  // Startup recovery: fix orphaned tasks and stale runs from previous crashes
+  const recovery = kanbanOrchestrator.recoverOrphanedState()
+  if (recovery.staleRuns > 0 || recovery.orphanedTasks > 0) {
+    orchestratorDeps.sendTelegramNotification?.(
+      `Orchestrator recovery: ${recovery.staleRuns} stale runs failed, ${recovery.orphanedTasks} orphaned tasks reset to backlog`,
+      'failed'
+    )
+  }
+
   // S6: OrchestratorMonitorService — rules-based safety net (no LLM)
   orchestratorMonitor = new OrchestratorMonitorService(db, {
     pause: (runId) => kanbanOrchestrator!.pause(runId),
