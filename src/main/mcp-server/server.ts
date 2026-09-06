@@ -23,7 +23,7 @@ import {
   getSafeguardsReadOnly
 } from './db/read-connection'
 import { ParentIpc } from './ipc/parent-ipc'
-import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject } from './handlers/task-handlers'
+import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject, handleApproveTask } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
 import { handleGetGuardrails, handleGetSkills, handleGetContext, handleReportFilesChanged } from './handlers/context-handlers'
 import { handleAuditDeps } from './handlers/deps-handler'
@@ -40,7 +40,8 @@ import type {
   GetContextToolInput,
   AuditDepsToolInput,
   CreateProjectMcpInput,
-  ReportFilesChangedToolInput
+  ReportFilesChangedToolInput,
+  ApproveTaskToolInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '@shared/constants/model-catalog'
@@ -242,6 +243,20 @@ async function main(): Promise<void> {
         }
       },
       {
+        name: 'approve_task',
+        description:
+          'Approve or reject a task that is pending user approval (requiresApproval flag). Returns the task to the dispatch queue if approved, or to backlog if rejected.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            runId: { type: 'string', description: 'UUID of the orchestrator run' },
+            taskId: { type: 'string', description: 'UUID of the task awaiting approval' },
+            approved: { type: 'boolean', description: 'true to approve and dispatch, false to reject and return to backlog' }
+          },
+          required: ['runId', 'taskId', 'approved']
+        }
+      },
+      {
         name: 'estimate_tokens',
         description:
           'Estimate the input token cost for a task, including description, target files, and skill content.',
@@ -401,6 +416,10 @@ async function main(): Promise<void> {
 
         case 'dispatch_sprint':
           result = await handleDispatchSprint(safeArgs as DispatchSprintToolInput, taskDeps)
+          break
+
+        case 'approve_task':
+          result = await handleApproveTask(safeArgs as ApproveTaskToolInput, taskDeps)
           break
 
         case 'estimate_tokens':

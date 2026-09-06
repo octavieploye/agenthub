@@ -404,6 +404,11 @@ export class McpServerManager {
         })
         return { id: run.id, taskCount: taskIds.length }
       }
+      case 'approve_task': {
+        const { runId, taskId, approved } = request.payload
+        deps.orchestrator.approveTaskDispatch(runId, taskId, approved)
+        return { approved }
+      }
       case 'get_health_anomalies': {
         const agentIds = request.payload.agentId
           ? [request.payload.agentId]

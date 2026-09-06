@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
     PAUSE: 'agents:pause',
     RESUME: 'agents:resume',
     LIST: 'agents:list',
+    LIST_ALL: 'agents:list-all',
     GET_STATE: 'agents:get-state',
     SEND_INPUT: 'agents:send-input',
     RESIZE: 'agents:resize',
@@ -229,6 +230,9 @@ export const IPC_CHANNELS = {
     RETRY_FAILURES: 'orchestrator:retry-failures',
     ACKNOWLEDGE_RETRY_FAILURES: 'orchestrator:acknowledge-retry-failures',
     APPROVE_SECURITY: 'orchestrator:approve-security',
+    APPROVE_TASK: 'orchestrator:approve-task',
+    PAUSE_TICK: 'orchestrator:pause-tick',
+    RESUME_TICK: 'orchestrator:resume-tick',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',
@@ -287,5 +291,6 @@ export const IPC_EVENTS = {
   ORCHESTRATOR: {
     STATUS_CHANGE:      'on-orchestrator:status-change',
     TASK_PHASE_CHANGE:  'on-orchestrator:task-phase-change',
+    TASK_APPROVAL_NEEDED: 'on-orchestrator:task-approval-needed',
   },
 } as const

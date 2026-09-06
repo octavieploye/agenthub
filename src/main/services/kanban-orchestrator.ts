@@ -13,6 +13,7 @@ import type {
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { CODEX_MODELS } from '../../shared/constants/model-catalog'
 import type { AgentSpawnOptions, AgentState } from '../../shared/types/agent.types'
+import type { GuardrailConfig } from '../../shared/types/config.types'
 import {
   insertRun,
   getRun,
@@ -52,7 +53,11 @@ import { getAnamnesisReader } from './anamnesis-reader'
 import { GUARDRAIL_PROMPTS, OPERATING_RULES } from './orchestrator-rules'
 
 const TICK_INTERVAL_MS = 30_000
-const STUCK_THRESHOLD_MS = 30 * 60 * 1000
+const STUCK_THRESHOLD_MS = 60 * 60 * 1000
+/** Informational warning threshold — logs when an agent has been running this long. */
+const STUCK_WARNING_MS = 30 * 60 * 1000
+/** Silence threshold — agent alive but no output for this long = stuck. */
+const SILENCE_THRESHOLD_MS = 10 * 60 * 1000
 
 /** R-004: Shared auto-trigger check — triggers that bypass the manual confirmation gate */
 const AUTO_TRIGGER_SOURCES = new Set(['date-watcher', 'sprint-watcher', 'single-task'])
@@ -73,16 +78,22 @@ export interface OrchestratorDeps {
   gitCommit: (repoPath: string, message: string) => string
   gitPush: (repoPath: string) => void
   getAgentOutput?: (agentId: string) => string | null
+  isAgentAlive?: (agentId: string) => boolean
+  getAgentLastOutputTime?: (agentId: string) => number | null
   killAgent?: (agentId: string) => void
   onEventInserted?: () => void
   emitToRenderer?: (channel: string, ...args: unknown[]) => void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
+  activeGuardrails?: Partial<GuardrailConfig>
 }
 
 export class KanbanOrchestratorService {
   private db: Database.Database
   private deps: OrchestratorDeps | null
   private tickTimer: ReturnType<typeof setInterval> | null = null
+  private tickPaused = false
+  /** Track task IDs that have already received the 30-min warning to avoid log spam. */
+  private stuckWarned = new Set<string>()
   private completedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   private failedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
   private statusChangedHandler: ((event: OrchestratorAgentEvent) => void) | null = null
@@ -94,6 +105,8 @@ export class KanbanOrchestratorService {
   private phaseRetryCount = new Map<string, number>()
   /** Tasks awaiting security approval from the user (C3) */
   private pendingSecurityApproval = new Map<string, SecurityParseResult>()
+  /** Tasks awaiting user approval before dispatch (requiresApproval flag) */
+  private pendingTaskApproval = new Map<string, string>()
   /** S5: total agents spawned per run (budget cap) */
   private agentsSpawnedByRun = new Map<string, number>()
   /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
@@ -335,6 +348,24 @@ export class KanbanOrchestratorService {
     const run = getRun(this.db, runId)
     this.emitStatusChange(runId, 'running', run?.sprintName ?? '')
     log.info('Orchestrator resumed', { runId })
+  }
+
+  pauseTick(): void {
+    this.stopTick()
+    this.tickPaused = true
+    log.info('Orchestrator: tick timer paused by user')
+  }
+
+  resumeTick(): void {
+    this.tickPaused = false
+    if (!this.tickTimer) {
+      this.tickTimer = setInterval(() => this.tick(), TICK_INTERVAL_MS)
+    }
+    log.info('Orchestrator: tick timer resumed by user')
+  }
+
+  isTickPaused(): boolean {
+    return this.tickPaused
   }
 
   private notifyTelegram(run: OrchestratorRun, summary: string, type: 'completed' | 'failed'): void {
@@ -1036,7 +1067,7 @@ export class KanbanOrchestratorService {
     }
   }
 
-  private dispatchNextTasks(run: OrchestratorRun): void {
+  private dispatchNextTasks(run: OrchestratorRun, skipTaskIds?: Set<string>): void {
     // Task 2.4: singleTaskId filter — skip dependency solver, only consider the single task
     if (run.singleTaskId) {
       const allLogs = getTaskLogsByRun(this.db, run.id)
@@ -1113,8 +1144,32 @@ export class KanbanOrchestratorService {
     // Batch mode: use dependency solver with dispatch mode routing
     const dispatchable = this.getNextDispatchableTasks(run.id)
     for (const { id } of dispatchable) {
+      // G3: Skip tasks marked stuck this tick — eligible for re-dispatch on next tick
+      if (skipTaskIds?.has(id)) continue
+
       const fullTask = getTaskById(this.db, id)
       if (!fullTask) continue
+
+      // Approval gate: tasks with requiresApproval must wait for explicit user approval
+      if (fullTask.requiresApproval && !this.pendingTaskApproval.has(id)) {
+        this.pendingTaskApproval.set(id, run.id)
+        if (fullTask.status !== 'today') {
+          updateTask(this.db, id, { status: 'today' })
+        }
+        log.info('Orchestrator: task requires approval — waiting for user', { taskId: id, title: fullTask.title })
+        this.notifyTelegram(run, `Task "${fullTask.title}" requires your approval before dispatch`, 'completed')
+        this.deps?.emitToRenderer?.(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
+          runId: run.id,
+          taskId: id,
+          title: fullTask.title,
+          description: fullTask.description,
+        })
+        continue
+      }
+
+      // Skip tasks already pending approval (waiting for user response)
+      if (this.pendingTaskApproval.has(id)) continue
+
       const mode = classifyDispatchMode(fullTask)
       if (mode === 'a') {
         this.dispatchDevPhase(id, run)
@@ -1165,6 +1220,9 @@ export class KanbanOrchestratorService {
   }
 
   tick(): void {
+    // G4: If tick is paused by user, skip entirely
+    if (this.tickPaused) return
+
     // S72: Runtime kill-switch — auto-pause if disabled mid-run
     // R-001: Clear timer FIRST to guarantee shutdown even if pause() throws
     if (!isOrchestratorEnabled(this.db)) {
@@ -1190,28 +1248,64 @@ export class KanbanOrchestratorService {
 
     updateRunTimestamp(this.db, run.id)
 
-    // Detect stuck agents (>30min in active state)
+    // Detect stuck agents — liveness-aware (G1+G2)
+    const stuckThreshold = this.deps?.activeGuardrails?.stuckThresholdMs ?? STUCK_THRESHOLD_MS
     const activeLogs = getActiveTaskLogs(this.db, run.id)
+    const stuckTaskIds = new Set<string>()
+
     for (const taskLog of activeLogs) {
-      if (taskLog.startedAt) {
-        const elapsed = Date.now() - new Date(taskLog.startedAt).getTime()
-        if (elapsed > STUCK_THRESHOLD_MS) {
-          log.warn('Orchestrator: stuck agent detected, marking as failed', {
-            taskLogId: taskLog.id,
-            taskId: taskLog.taskId,
-            phase: taskLog.phase,
-            elapsedMs: elapsed,
+      if (!taskLog.startedAt || !taskLog.agentId) continue
+      const elapsed = Date.now() - new Date(taskLog.startedAt).getTime()
+
+      if (elapsed > stuckThreshold) {
+        // Check if the agent process is actually alive
+        const alive = this.deps?.isAgentAlive?.(taskLog.agentId) ?? false
+
+        if (alive) {
+          // Agent is alive — check if it's producing output
+          const lastOutput = this.deps?.getAgentLastOutputTime?.(taskLog.agentId)
+          const silentMs = lastOutput ? Date.now() - lastOutput : elapsed
+          if (silentMs < SILENCE_THRESHOLD_MS) {
+            // Agent is alive and recently active — not stuck, just slow
+            log.info('Orchestrator: agent past threshold but alive and active, skipping stuck detection', {
+              taskLogId: taskLog.id, taskId: taskLog.taskId, elapsedMs: elapsed, silentMs,
+            })
+            continue
+          }
+          // Agent is alive but silent for too long — stuck
+          log.warn('Orchestrator: agent alive but silent, marking as stuck', {
+            taskLogId: taskLog.id, taskId: taskLog.taskId, elapsedMs: elapsed, silentMs,
           })
-          updateTaskLogStatus(this.db, taskLog.id, 'failed')
+        } else {
+          log.warn('Orchestrator: agent process dead, marking as stuck', {
+            taskLogId: taskLog.id, taskId: taskLog.taskId, elapsedMs: elapsed,
+          })
         }
+
+        // Mark as failed and kill the zombie agent (G2)
+        updateTaskLogStatus(this.db, taskLog.id, 'failed')
+        stuckTaskIds.add(taskLog.taskId)
+        try {
+          this.deps?.killAgent?.(taskLog.agentId)
+        } catch (err) {
+          log.warn('Orchestrator: failed to kill stuck agent', { agentId: taskLog.agentId, error: String(err) })
+        }
+        // Notify user that a stuck agent was killed
+        this.notifyTelegram(run, `Stuck agent killed: task ${taskLog.taskId} (agent ${taskLog.agentId}, elapsed ${Math.round(elapsed / 60000)} min)`, 'failed')
+      } else if (elapsed > STUCK_WARNING_MS && stuckThreshold > STUCK_WARNING_MS && !this.stuckWarned.has(taskLog.taskId)) {
+        // Informational warning at the 30-min mark when threshold is higher (fires once per task)
+        this.stuckWarned.add(taskLog.taskId)
+        log.info(`Orchestrator: agent running for 30+ min (threshold: ${Math.round(stuckThreshold / 60000)} min)`, {
+          taskLogId: taskLog.id, taskId: taskLog.taskId, elapsedMs: elapsed,
+        })
       }
     }
 
     // Task 4.5: Check date triggers before dispatching
     this.checkDateTriggers(run)
 
-    // Dispatch next tasks if slots available
-    this.dispatchNextTasks(run)
+    // Dispatch next tasks if slots available — skip tasks marked stuck this tick (G3)
+    this.dispatchNextTasks(run, stuckTaskIds)
 
     log.debug('Orchestrator tick', { runId: run.id, activeCount: activeLogs.length })
   }
@@ -1362,6 +1456,9 @@ export class KanbanOrchestratorService {
     this.gitLockActive.clear()
     this.agentsSpawnedByRun.clear()
     this.simplePathModes.clear()
+    this.stuckWarned.clear()
+    this.pendingTaskApproval.clear()
+    this.tickPaused = false
   }
 
   /**
@@ -1650,6 +1747,50 @@ export class KanbanOrchestratorService {
       this.notifyTelegram(run, `Task "${taskId}" rejected after security review`, 'failed')
       this.dispatchNextTasks(run)
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task approval gate (requiresApproval flag)
+  // ---------------------------------------------------------------------------
+
+  approveTaskDispatch(runId: string, taskId: string, approved: boolean): void {
+    const run = getRun(this.db, runId)
+    if (!run) throw new Error(`Run not found: ${runId}`)
+    if (run.status !== 'running' && run.status !== 'paused') {
+      throw new Error(`Cannot approve task for run with status "${run.status}" — must be running or paused`)
+    }
+
+    if (!this.pendingTaskApproval.has(taskId)) {
+      throw new Error(`No pending task approval for task: ${taskId}`)
+    }
+
+    this.pendingTaskApproval.delete(taskId)
+
+    if (approved) {
+      log.info('Orchestrator: task dispatch approved by user', { runId, taskId })
+      if (run.status === 'paused') {
+        this.resume(runId)
+      }
+      // Dispatch the approved task
+      const task = getTaskById(this.db, taskId)
+      if (task) {
+        const mode = classifyDispatchMode(task)
+        if (mode === 'a') {
+          this.dispatchDevPhase(taskId, run)
+        } else {
+          this.dispatchSimplePath(task, run)
+        }
+      }
+    } else {
+      log.info('Orchestrator: task dispatch rejected by user', { runId, taskId })
+      updateTask(this.db, taskId, { status: 'backlog' })
+      this.notifyTelegram(run, `Task "${taskId}" rejected — returned to backlog`, 'failed')
+      this.dispatchNextTasks(run)
+    }
+  }
+
+  getPendingTaskApprovals(): Array<{ taskId: string; runId: string }> {
+    return Array.from(this.pendingTaskApproval.entries()).map(([taskId, runId]) => ({ taskId, runId }))
   }
 
   // ---------------------------------------------------------------------------

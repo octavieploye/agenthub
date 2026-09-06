@@ -9,6 +9,8 @@ import type {
   DispatchSprintToolOutput,
   CreateProjectMcpInput,
   CreateProjectMcpOutput,
+  ApproveTaskToolInput,
+  ApproveTaskToolOutput,
   McpIpcRequest,
   McpIpcResponse,
   TokenEstimation,
@@ -409,5 +411,38 @@ export async function handleDispatchSprint(
     runId: data.id,
     message: `Sprint "${input.sprintName}" dispatched with ${data.taskCount} tasks.`,
     taskCount: data.taskCount
+  }
+}
+
+// ─── handleApproveTask ───────────────────────────────────────────────────────
+
+export async function handleApproveTask(
+  input: ApproveTaskToolInput,
+  deps: TaskHandlerDeps
+): Promise<ApproveTaskToolOutput> {
+  assertNonEmptyString(input.runId, 'runId')
+  assertNonEmptyString(input.taskId, 'taskId')
+  if (typeof input.approved !== 'boolean') {
+    throw new Error('approved must be a boolean')
+  }
+
+  const resp = await deps.sendIpc({
+    type: 'approve_task',
+    payload: {
+      runId: input.runId,
+      taskId: input.taskId,
+      approved: input.approved
+    }
+  })
+
+  if (resp.type === 'error') {
+    throw new Error(`approve_task IPC error: ${resp.message}`)
+  }
+
+  return {
+    approved: input.approved,
+    message: input.approved
+      ? `Task ${input.taskId} approved and dispatched.`
+      : `Task ${input.taskId} rejected and returned to backlog.`
   }
 }

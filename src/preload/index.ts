@@ -337,6 +337,9 @@ const agentHubBridge = {
     getRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES),
     acknowledgeRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES),
     approveSecurity: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_SECURITY, input),
+    approveTask: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_TASK, input),
+    pauseTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE_TICK),
+    resumeTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME_TICK),
     onStatusChange: (callback: (payload: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, handler)
@@ -346,6 +349,11 @@ const agentHubBridge = {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, handler)
       return (): void => { ipcRenderer.removeListener(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, handler) }
+    },
+    onTaskApprovalNeeded: (callback: (payload: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
+      ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, handler)
+      return (): void => { ipcRenderer.removeListener(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, handler) }
     },
   },
   on: {

@@ -153,4 +153,43 @@ export function registerOrchestratorHandlers(): void {
       return error('ORCHESTRATOR_APPROVE_SECURITY_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
+
+  const taskApprovalSchema = z.object({
+    runId: z.string().min(1),
+    taskId: z.string().min(1),
+    approved: z.boolean(),
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.APPROVE_TASK, (_event, input: unknown) => {
+    const v = validateInput(taskApprovalSchema, input)
+    if (!v.valid) return v.response
+    try {
+      getOrchestrator().approveTaskDispatch(v.data.runId, v.data.taskId, v.data.approved)
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_APPROVE_TASK_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PAUSE_TICK, () => {
+    try {
+      getOrchestrator().pauseTick()
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_PAUSE_TICK_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RESUME_TICK, () => {
+    // Gate on kill-switch — resuming tick when disabled would just re-pause immediately
+    if (!isOrchestratorEnabled(getDb())) {
+      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
+    }
+    try {
+      getOrchestrator().resumeTick()
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_RESUME_TICK_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
 }

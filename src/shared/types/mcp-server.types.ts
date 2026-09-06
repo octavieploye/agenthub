@@ -127,6 +127,19 @@ export interface DispatchSprintToolOutput {
   taskCount: number
 }
 
+// ─── Tool 3c: approve_task ────────────────────────────────────────────────
+
+export interface ApproveTaskToolInput {
+  runId: string
+  taskId: string
+  approved: boolean
+}
+
+export interface ApproveTaskToolOutput {
+  approved: boolean
+  message: string
+}
+
 // ─── Tool 4: estimate_tokens ────────────────────────────────────────────────
 
 export interface EstimateTokensToolInput {

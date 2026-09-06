@@ -13,6 +13,8 @@ export interface GuardrailConfig {
   maxConsecutiveErrors: number
   maxTokensPerSession: number
   protectedPaths: string[]
+  /** Override stuck-agent threshold in ms (default: 60 min). Used by orchestrator tick timer. */
+  stuckThresholdMs?: number
 }
 
 export const DEFAULT_GUARDRAILS: GuardrailConfig = {

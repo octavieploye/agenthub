@@ -245,6 +245,7 @@ export interface AgentHubBridge {
   }
   orchestrator: {
     start: (input: import('./orchestrator.types').OrchestratorStartInput) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
+    preview: (input: import('./orchestrator.types').OrchestratorStartInput) => Promise<IpcResponse<unknown>>
     pause: (input: { runId: string }) => Promise<IpcResponse<void>>
     resume: (input: { runId: string }) => Promise<IpcResponse<void>>
     cancel: (input: { runId: string }) => Promise<IpcResponse<void>>
@@ -252,8 +253,13 @@ export interface AgentHubBridge {
     taskLog: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
     getRetryFailures: () => Promise<IpcResponse<import('./orchestrator.types').RetryFailure[]>>
     acknowledgeRetryFailures: () => Promise<IpcResponse<void>>
+    approveSecurity: (input: { runId: string; taskId: string; approved: boolean }) => Promise<IpcResponse<void>>
+    approveTask: (input: { runId: string; taskId: string; approved: boolean }) => Promise<IpcResponse<void>>
+    pauseTick: () => Promise<IpcResponse<void>>
+    resumeTick: () => Promise<IpcResponse<void>>
     onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void
     onTaskPhaseChange: (callback: (payload: import('./orchestrator.types').OrchestratorTaskPhaseChangePayload) => void) => () => void
+    onTaskApprovalNeeded: (callback: (payload: { runId: string; taskId: string; taskTitle: string }) => void) => () => void
   }
   lifecycle: {
     getMetrics: () => Promise<IpcResponse<import('./lifecycle.types').LifecycleMetrics>>

@@ -40,7 +40,7 @@ import { isOrchestratorEnabled } from './orchestrator-settings'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput, setMcpServerInfo } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput, isAgentAlive, getAgentLastOutputTime, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -560,6 +560,8 @@ export function initializeServices(db: Database.Database): void {
     gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
     gitPush: (repoPath: string) => gitService!.push(repoPath),
     getAgentOutput,
+    isAgentAlive,
+    getAgentLastOutputTime,
     killAgent: (agentId: string) => { try { killAgent(agentId) } catch (err) { log.warn('Orchestrator killAgent failed', { agentId, err }) } },
     onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
     emitToRenderer: emitToAllRenderers,
@@ -573,6 +575,7 @@ export function initializeServices(db: Database.Database): void {
         timestamp: new Date().toISOString(),
       })
     },
+    activeGuardrails: guardrailsManager?.getGuardrails('.'),
   }
   kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
 

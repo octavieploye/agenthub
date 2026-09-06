@@ -98,6 +98,8 @@ interface ManagedAgent {
   hasNotifiedCompletion: boolean
   /** Path to the generated .codex/AGENTS.md file — cleaned up on exit. */
   codexAgentsMdPath: string | null
+  /** Epoch ms of last PTY output received — used by orchestrator stuck detection. */
+  lastOutputAt: number
 }
 
 const agents = new Map<string, ManagedAgent>()
@@ -598,6 +600,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       // Accumulate ANSI-stripped text for TTS response capture
       managed.cleanTextBuffer += stripAnsi(data)
       managed.orchestratorBuffer += stripAnsi(data)
+      managed.lastOutputAt = Date.now()
       if (!managed.flushTimer) {
         managed.flushTimer = setTimeout(() => {
           flushOutputBuffer(agentState.id)
@@ -892,6 +895,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     hasNotifiedCompletion: false,
     lastFilteredProse: '',
     silentLockTimer: null,
+    lastOutputAt: Date.now(),
     lastMcpTelegramAt: 0,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify,
@@ -1348,6 +1352,29 @@ export function getAgentState(agentId: string): AgentState | null {
 export function getAgentOutput(agentId: string): string | null {
   const managed = agents.get(agentId)
   return managed?.orchestratorBuffer ?? null
+}
+
+/**
+ * Check if an agent's PTY process is still alive (not exited, not cleaned up).
+ * Note: checks the PTY shell PID, not the Claude CLI child. If CLI crashes but
+ * the shell stays alive, this returns true — the SILENCE_THRESHOLD_MS in tick()
+ * is the safety net for that case.
+ */
+export function isAgentAlive(agentId: string): boolean {
+  const managed = agents.get(agentId)
+  if (!managed) return false
+  try {
+    process.kill(managed.ptyProcess.pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Return epoch ms of last PTY output received, or null if agent not found. */
+export function getAgentLastOutputTime(agentId: string): number | null {
+  const managed = agents.get(agentId)
+  return managed?.lastOutputAt ?? null
 }
 
 export function listAgents(): AgentState[] {
