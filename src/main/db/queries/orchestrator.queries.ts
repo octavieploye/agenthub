@@ -353,6 +353,22 @@ export function getFilesChangedForTask(db: Database.Database, taskId: string): s
   }
 }
 
+/**
+ * Returns true if the agent explicitly called report_files_changed for this task
+ * (files_changed_json is NOT NULL), even when no files were changed (empty array).
+ * NULL means the tool was never called — agent is still working or asking a question.
+ */
+export function wasFilesChangedReported(db: Database.Database, taskId: string): boolean {
+  const row = db
+    .prepare(
+      `SELECT files_changed_json FROM orchestrator_task_log
+       WHERE task_id = ? AND phase = 'dev'
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(taskId) as { files_changed_json: string | null } | undefined
+  return row !== undefined && row.files_changed_json !== null
+}
+
 // ---------------------------------------------------------------------------
 // Retry failures
 // ---------------------------------------------------------------------------

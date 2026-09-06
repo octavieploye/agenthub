@@ -27,6 +27,7 @@ import {
   updateTaskLogSummary,
   getActiveTaskLogByAgentId,
   getFilesChangedForTask,
+  wasFilesChangedReported,
   getUnacknowledgedRetryFailures,
   acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
 } from '../db/queries/orchestrator.queries'
@@ -517,6 +518,16 @@ export class KanbanOrchestratorService {
 
     // Tasks that have completed all phases (push phase done)
     const completedTasks = new Set<string>()
+
+    // Bug fix: seed from task.status for tasks completed in a prior run.
+    // Without this, tasks with status='completed' but no logs in the current run
+    // are invisible to the dependency solver and get re-dispatched.
+    for (const task of tasks) {
+      if (task.status === 'completed' || task.status === 'tested') {
+        completedTasks.add(task.id)
+      }
+    }
+
     const taskLogsByTask = new Map<string, typeof allLogs>()
     for (const l of allLogs) {
       const existing = taskLogsByTask.get(l.taskId) ?? []
@@ -610,6 +621,7 @@ export class KanbanOrchestratorService {
       provider: provider as AgentSpawnOptions['provider'],
       taskDescription: [
         GUARDRAIL_PROMPTS.dev,
+        `ANAMNESIS_REPO_ID: ${run.repoId}`,
         '[TASK CONTENT START]',
         task.description || task.title,
         '[TASK CONTENT END]',
@@ -670,6 +682,7 @@ export class KanbanOrchestratorService {
 
     const prompt = [
       GUARDRAIL_PROMPTS.simple,
+      `ANAMNESIS_REPO_ID: ${run.repoId}`,
       skills.length ? `AVAILABLE SKILLS: ${skills.join(', ')}` : '',
       '[TASK CONTENT START]',
       task.description || task.title,
@@ -1567,6 +1580,7 @@ export class KanbanOrchestratorService {
     const cycleCount = this.securityCycleCount.get(taskId) ?? 1
     const loopBackPrompt = [
       GUARDRAIL_PROMPTS.dev,
+      `ANAMNESIS_REPO_ID: ${run.repoId}`,
       `SECURITY LOOP-BACK (cycle ${cycleCount}): Fix the security findings listed below.`,
       `Security recommendation: ${secResult.recommendation}`,
       'Security findings to fix:',
@@ -1729,24 +1743,47 @@ export class KanbanOrchestratorService {
     // Path B: check if agent was dispatched via simple path (stored at spawn time)
     const simpleMode = this.simplePathModes.get(agentId)
     if (simpleMode === 'b1' || simpleMode === 'b2') {
-      this.simplePathModes.delete(agentId)
-      updateTaskLogStatus(this.db, activeLog.id, 'done')
-
       if (simpleMode === 'b2') {
+        // B-2 completion gate: report_files_changed MUST have been called.
+        // NULL files_changed_json = agent is still working or asking a question — do NOT advance.
+        // Non-NULL (even '[]') = agent explicitly signalled done — safe to advance.
+        if (!wasFilesChangedReported(this.db, activeLog.taskId)) {
+          log.warn('Orchestrator: B-2 agent locked but report_files_changed not called — treating as question/pause, not advancing', {
+            agentId, taskId: activeLog.taskId,
+          })
+          return
+        }
+
+        this.simplePathModes.delete(agentId)
+        updateTaskLogStatus(this.db, activeLog.id, 'done')
+
         const filesChanged = getFilesChangedForTask(this.db, activeLog.taskId)
         if (filesChanged.length > 0) {
           log.info('Orchestrator: Path B-2 files changed, running commit', { taskId: activeLog.taskId, filesChanged })
           const committed = this.executeCommitPhase(activeLog.taskId, run, false)
           if (committed) this.dispatchNextTasks(run)
         } else {
-          log.info('Orchestrator: Path B-2 no files changed, marking complete', { taskId: activeLog.taskId })
+          // report_files_changed called with empty array — done, no commit needed
+          log.info('Orchestrator: Path B-2 report_files_changed(empty) — no commit needed', { taskId: activeLog.taskId })
           updateTask(this.db, activeLog.taskId, { status: 'completed' })
           this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
           this.dispatchNextTasks(run)
         }
       } else {
-        // b1: output only — no commit
-        log.info('Orchestrator: Path B-1 complete, marking task done', { taskId: activeLog.taskId })
+        // B-1: output-only — require DONE sentinel as last line before advancing.
+        // An agent asking a question will not end output with 'DONE'.
+        const output = this.deps?.getAgentOutput?.(agentId) ?? ''
+        const lastLine = output.trimEnd().split('\n').pop()?.trim() ?? ''
+        if (lastLine !== 'DONE') {
+          log.warn('Orchestrator: B-1 agent locked but no DONE sentinel — treating as question/pause, not advancing', {
+            agentId, taskId: activeLog.taskId,
+          })
+          return
+        }
+
+        this.simplePathModes.delete(agentId)
+        updateTaskLogStatus(this.db, activeLog.id, 'done')
+        log.info('Orchestrator: Path B-1 complete (DONE sentinel confirmed)', { taskId: activeLog.taskId })
         updateTask(this.db, activeLog.taskId, { status: 'completed' })
         this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
         this.dispatchNextTasks(run)
