@@ -1,7 +1,9 @@
 import log from 'electron-log/main'
 import type { ModelProvider } from '@shared/types/agent.types'
+import type { TaskItem } from '../../shared/types/task.types'
 
 export type TaskComplexity = 'simple' | 'moderate' | 'complex'
+export type DispatchMode = 'b1' | 'b2' | 'a'
 export type QuotaZone = 'healthy' | 'moderate' | 'hot'
 
 export interface ProviderQuotaState {
@@ -30,8 +32,9 @@ export interface SpawnEnv {
 const COMPLEX_KEYWORDS = ['refactor', 'architecture', 'migrate', 'redesign']
 const SIMPLE_KEYWORDS = ['fix', 'bug', 'typo', 'update', 'lint']
 
-const CLAUDE_SONNET = 'claude-sonnet-4-6'
-const CLAUDE_OPUS = 'claude-opus-4-6'
+export const CLAUDE_SONNET = 'claude-sonnet-4-6'
+export const CLAUDE_OPUS = 'claude-opus-4-6'
+export const CLAUDE_HAIKU = 'claude-haiku-4-5'
 const OLLAMA_DEFAULT = 'llama3'
 const OLLAMA_LOCAL_URL = 'http://localhost:11434'
 
@@ -412,4 +415,96 @@ export async function checkOllamaCloudHealth(model: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+// ─── Hybrid Dispatch Classification ──────────────────────────────────────────
+
+/** Surface keywords that hard-override classification to Path A (non-negotiable). */
+export const COMPLEX_SURFACE_KEYWORDS = [
+  'auth', 'session', 'token', 'payment', 'schema', 'migration',
+  'api route', 'external service', 'gdpr',
+]
+
+/** Category → default skills mapping for Path B skill resolution. */
+export const CATEGORY_DEFAULT_SKILLS: Record<string, string[]> = {
+  backend:       ['full-code-review', 'sec-devops'],
+  database:      ['full-code-review', 'sec-devops'],
+  schema:        ['full-code-review', 'sec-devops'],
+  frontend:      ['team-ui-builder', 'full-code-review'],
+  ui:            ['team-ui-builder', 'full-code-review'],
+  functionality: ['full-code-review', 'team-jailbreak'],
+  security:      ['sec-devops', 'team-insider-threat', 'team-jailbreak'],
+  research:      ['team-knowledge-manager'],
+  content:       ['team-knowledge-manager'],
+  marketing:     ['team-knowledge-manager'],
+  design:        ['team-ux-challenge', 'team-ui-builder'],
+}
+
+function hasSurfaceKeyword(task: TaskItem): boolean {
+  const text = `${task.title} ${task.description ?? ''}`.toLowerCase()
+  return COMPLEX_SURFACE_KEYWORDS.some(kw => text.includes(kw))
+}
+
+function categoryScore(category: string | null): number {
+  if (!category) return 0
+  const lower = category.toLowerCase()
+  if (['research', 'content', 'marketing', 'design', 'documentation'].includes(lower)) return -1
+  if (['backend', 'frontend', 'database', 'schema', 'functionality'].includes(lower)) return 1
+  return 0
+}
+
+function riskScorePoints(riskScore: number | null): number {
+  return (riskScore ?? 0) === 0 ? -1 : 1
+}
+
+function fileCountScore(fileCount: number): number {
+  if (fileCount === 0) return -1
+  if (fileCount <= 2) return 0
+  return 1
+}
+
+function surfaceScore(text: string): number {
+  const lower = text.toLowerCase()
+  return COMPLEX_SURFACE_KEYWORDS.some(kw => lower.includes(kw)) ? 1 : 0
+}
+
+function complexityPoints(complexity: TaskComplexity): number {
+  if (complexity === 'simple') return -1
+  if (complexity === 'complex') return 1
+  return 0
+}
+
+/**
+ * Classify a task into a dispatch mode using 5-signal scoring + hard overrides.
+ *
+ * - 'a'  — full multi-agent pipeline (dev → review → security → commit → push)
+ * - 'b2' — simple code: 1 agent self-verifies, orchestrator commits via GitService
+ * - 'b1' — output only: 1 agent, no commit
+ */
+export function classifyDispatchMode(task: TaskItem): DispatchMode {
+  // Hard overrides (non-negotiable — checked before scoring)
+  if (hasSurfaceKeyword(task)) return 'a'
+  if ((task.riskScore ?? 0) > 2) return 'a'
+  if ((task.targetFiles?.length ?? 0) >= 5) return 'a'
+  if (!task.category && !task.targetFiles?.length) return 'b1'
+
+  // 5-signal scoring
+  let score = 0
+  score += categoryScore(task.category)
+  score += riskScorePoints(task.riskScore)
+  score += fileCountScore(task.targetFiles?.length ?? 0)
+  score += surfaceScore(`${task.description ?? ''} ${task.title}`)
+  score += complexityPoints(assessComplexity(task.description || task.title))
+
+  if (score >= 1) return 'a'
+  if (task.targetFiles?.length) return 'b2'
+  return score <= -1 ? 'b1' : 'b2'
+}
+
+/**
+ * Resolve skills for a task: reads task.skills first, falls back to category defaults.
+ */
+export function resolveSkills(task: TaskItem): string[] {
+  if (task.skills?.length) return task.skills
+  return CATEGORY_DEFAULT_SKILLS[task.category?.toLowerCase() ?? ''] ?? []
 }

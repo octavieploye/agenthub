@@ -36,7 +36,7 @@ import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
 import { isSupervisedCategory } from '../../shared/constants/category-classifier'
-import { recommendForPhase } from './model-dispatcher'
+import { recommendForPhase, classifyDispatchMode, resolveSkills, CLAUDE_HAIKU } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
 import { parseSecurityOutput, type SecurityParseResult } from './helpers/security-output-parser'
 import { getPhaseProfile, shouldSkipSecurity, shouldLoopBack } from './helpers/phase-profile'
@@ -94,6 +94,8 @@ export class KanbanOrchestratorService {
   private pendingSecurityApproval = new Map<string, SecurityParseResult>()
   /** S5: total agents spawned per run (budget cap) */
   private agentsSpawnedByRun = new Map<string, number>()
+  /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
+  private simplePathModes = new Map<string, 'b1' | 'b2'>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -160,10 +162,10 @@ export class KanbanOrchestratorService {
     this.emitStatusChange(updated.id, 'running', updated.sprintName)
     this.notifyTelegram(updated, `Sprint "${updated.sprintName}" started`, 'completed')
 
-    // R-002: When singleTaskId is present via start(), dispatch immediately like startSingleTask()
-    if (updated.singleTaskId) {
-      this.dispatchNextTasks(updated)
-    }
+    // R-002: Dispatch immediately for all modes (batch and single-task).
+    // Previously only singleTaskId dispatched immediately — batch sprints waited
+    // 30s for the first tick, causing 0 agents spawned if auto-pause fired first.
+    this.dispatchNextTasks(updated)
 
     return updated
   }
@@ -281,10 +283,20 @@ export class KanbanOrchestratorService {
     // Mark run as failed
     updateRunStatus(this.db, runId, 'failed')
 
-    // Mark all active task logs for this run as failed
+    // Mark all active task logs for this run as failed + reset task status to backlog
     const activeLogs = getActiveTaskLogs(this.db, runId)
+    const resetTaskIds = new Set<string>()
     for (const taskLog of activeLogs) {
       updateTaskLogStatus(this.db, taskLog.id, 'failed')
+      resetTaskIds.add(taskLog.taskId)
+    }
+
+    // Reset orphaned in_progress tasks back to backlog
+    const tasks = this.resolveRunTasks(run)
+    for (const task of tasks) {
+      if (task.status === 'in_progress' || resetTaskIds.has(task.id)) {
+        updateTask(this.db, task.id, { status: 'backlog' })
+      }
     }
 
     // Clean up event listeners and tick timer
@@ -450,7 +462,8 @@ export class KanbanOrchestratorService {
     if (run.singleTaskId) {
       const taskLogs = allLogs.filter(l => l.taskId === run.singleTaskId)
       const pushLog = taskLogs.find(l => l.phase === 'push')
-      const completedCount = pushLog?.status === 'done' ? 1 : 0
+      const singleTask = getTaskById(this.db, run.singleTaskId)
+      const completedCount = pushLog?.status === 'done' || singleTask?.status === 'completed' ? 1 : 0
       const failedCount = taskLogs.some(l => l.status === 'failed') ? 1 : 0
 
       return {
@@ -464,6 +477,7 @@ export class KanbanOrchestratorService {
     }
 
     // Batch mode: count at task level, group logs by taskId, check push phase
+    const tasks = this.resolveRunTasks(run)
     const taskLogsByTask = new Map<string, typeof allLogs>()
     for (const l of allLogs) {
       const existing = taskLogsByTask.get(l.taskId) ?? []
@@ -472,14 +486,14 @@ export class KanbanOrchestratorService {
     }
     let completedCount = 0
     let failedCount = 0
-    for (const [, logs] of taskLogsByTask) {
+    for (const [taskId, logs] of taskLogsByTask) {
       const pushLog = logs.find(l => l.phase === 'push')
-      if (pushLog?.status === 'done') completedCount++
+      const task = tasks.find(t => t.id === taskId)
+      if (pushLog?.status === 'done' || task?.status === 'completed') completedCount++
       else if (logs.some(l => l.status === 'failed')) failedCount++
     }
 
     // Get total kanban tasks for the run's scope
-    const tasks = this.resolveRunTasks(run)
     const totalCount = tasks.length
 
     return { run, activeTasks, completedCount, totalCount, failedCount, singleTaskId: run.singleTaskId ?? null }
@@ -510,7 +524,8 @@ export class KanbanOrchestratorService {
     }
     for (const [taskId, logs] of taskLogsByTask) {
       const pushLog = logs.find(l => l.phase === 'push')
-      if (pushLog?.status === 'done') {
+      const task = tasks.find(t => t.id === taskId)
+      if (pushLog?.status === 'done' || task?.status === 'completed') {
         completedTasks.add(taskId)
       }
     }
@@ -617,6 +632,84 @@ export class KanbanOrchestratorService {
       taskId, agentId: agent.id, model,
     })
     return taskLog
+  }
+
+  // ---------------------------------------------------------------------------
+  // Path B dispatcher (B-1: output only, B-2: simple code + commit)
+  // ---------------------------------------------------------------------------
+
+  private dispatchSimplePath(task: TaskItem, run: OrchestratorRun): void {
+    if (!this.deps) return
+    if (!this.checkBudget(run)) return
+
+    if (this.hasActiveLogForPhase(run.id, task.id, 'dev')) {
+      log.warn('Orchestrator: duplicate simple path dispatch blocked', { taskId: task.id })
+      return
+    }
+
+    const mode = classifyDispatchMode(task)
+    const skills = resolveSkills(task)
+    const model = task.modelOverride ?? CLAUDE_HAIKU
+    const provider = (task.providerOverride ?? 'anthropic') as AgentSpawnOptions['provider']
+
+    const validationError = validateModelOverride(model, provider)
+    if (validationError) {
+      log.warn('Orchestrator: simple path model validation failed', { taskId: task.id, model, provider, error: validationError })
+      const failedLog = insertTaskLog(this.db, { runId: run.id, taskId: task.id, phase: 'dev', modelUsed: model, providerUsed: provider })
+      updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      this.emitTaskPhaseChange(run.id, task.id, 'dev', 'failed')
+      return
+    }
+
+    const repoPath = this.deps.getRepoPath(run.repoId)
+    if (!repoPath) {
+      log.warn('Orchestrator: repo path not found for simple path', { repoId: run.repoId })
+      return
+    }
+
+    const prompt = [
+      GUARDRAIL_PROMPTS.simple,
+      skills.length ? `AVAILABLE SKILLS: ${skills.join(', ')}` : '',
+      '[TASK CONTENT START]',
+      task.description || task.title,
+      '[TASK CONTENT END]',
+    ].filter(Boolean).join('\n\n')
+
+    const agent = this.deps.spawnAgent({
+      repoId: run.repoId,
+      name: `[simple] ${task.title}`,
+      cwd: repoPath,
+      model,
+      provider,
+      taskDescription: prompt,
+      skipPermissions: true,
+    })
+    if (!agent) {
+      log.warn('Orchestrator: simple path agent spawn failed', { taskId: task.id })
+      return
+    }
+    this.recordSpawn(run.id)
+    this.simplePathModes.set(agent.id, mode)
+
+    const taskLog = insertTaskLog(this.db, {
+      runId: run.id,
+      taskId: task.id,
+      phase: 'dev',
+      modelUsed: model,
+      providerUsed: provider,
+    })
+    updateTaskLogStatus(this.db, taskLog.id, 'active', agent.id)
+    updateTask(this.db, task.id, { status: 'in_progress' })
+    this.emitTaskPhaseChange(run.id, task.id, 'dev', 'active')
+
+    log.info('Orchestrator: simple path dispatched', { taskId: task.id, mode, agentId: agent.id, skills })
+  }
+
+  /** Parse FILES_CHANGED: marker from agent output for Path B-2 commit detection. */
+  private parseFilesChanged(output: string): string[] {
+    const match = output.match(/FILES_CHANGED:\s*([^\n]+)/i)
+    if (!match) return []
+    return match[1].split(',').map(f => f.trim()).filter(Boolean)
   }
 
   dispatchReviewPhase(taskId: string, run: OrchestratorRun): OrchestratorTaskLog | null {
@@ -946,9 +1039,10 @@ export class KanbanOrchestratorService {
       const hasActive = taskLogs.some(l => l.status === 'active')
       if (hasActive) return
 
-      // Check if push phase is done (task fully completed)
+      // Check if push phase is done (Path A) or task completed via simple path (Path B)
       const pushLog = taskLogs.find(l => l.phase === 'push')
-      if (pushLog?.status === 'done') {
+      const singleTask = getTaskById(this.db, run.singleTaskId)
+      if (pushLog?.status === 'done' || singleTask?.status === 'completed') {
         // Task 2.6: Auto-complete single-task run — chain to dependents first
         if (this.promoteToChainedBatch(run)) return
         updateRunStatus(this.db, run.id, 'completed')
@@ -972,9 +1066,17 @@ export class KanbanOrchestratorService {
         return
       }
 
-      // If no logs exist yet, dispatch dev phase
+      // If no logs exist yet, route based on dispatch mode
       if (taskLogs.length === 0) {
-        this.dispatchDevPhase(run.singleTaskId, run)
+        const task = getTaskById(this.db, run.singleTaskId)
+        if (task) {
+          const mode = classifyDispatchMode(task)
+          if (mode === 'a') {
+            this.dispatchDevPhase(run.singleTaskId, run)
+          } else {
+            this.dispatchSimplePath(task, run)
+          }
+        }
         return
       }
 
@@ -1001,10 +1103,17 @@ export class KanbanOrchestratorService {
       return
     }
 
-    // Batch mode: use dependency solver
+    // Batch mode: use dependency solver with dispatch mode routing
     const dispatchable = this.getNextDispatchableTasks(run.id)
-    for (const task of dispatchable) {
-      this.dispatchDevPhase(task.id, run)
+    for (const { id } of dispatchable) {
+      const fullTask = getTaskById(this.db, id)
+      if (!fullTask) continue
+      const mode = classifyDispatchMode(fullTask)
+      if (mode === 'a') {
+        this.dispatchDevPhase(id, run)
+      } else {
+        this.dispatchSimplePath(fullTask, run)
+      }
     }
 
     // Check if all tasks are done
@@ -1017,9 +1126,10 @@ export class KanbanOrchestratorService {
       taskLogsByTask.set(l.taskId, existing)
     }
     let completedCount = 0
-    for (const [, logs] of taskLogsByTask) {
+    for (const [taskId, logs] of taskLogsByTask) {
       const pushLog = logs.find(l => l.phase === 'push')
-      if (pushLog?.status === 'done') completedCount++
+      const task = tasks.find(t => t.id === taskId)
+      if (pushLog?.status === 'done' || task?.status === 'completed') completedCount++
     }
 
     if (completedCount >= tasks.length && tasks.length > 0) {
@@ -1244,6 +1354,54 @@ export class KanbanOrchestratorService {
     this.pendingSecurityApproval.clear()
     this.gitLockActive.clear()
     this.agentsSpawnedByRun.clear()
+    this.simplePathModes.clear()
+  }
+
+  /**
+   * Startup recovery: detect and fix orphaned state from crashed/killed runs.
+   * Call once on app boot, before any new dispatches.
+   *
+   * 1. Stale runs in 'running'/'paused' → mark 'failed'
+   * 2. Tasks stuck in 'in_progress' with no active task log → reset to 'backlog'
+   */
+  recoverOrphanedState(): { staleRuns: number; orphanedTasks: number } {
+    let staleRuns = 0
+    let orphanedTasks = 0
+
+    this.db.transaction(() => {
+      // 1. Find all stale runs (running/paused from a previous app session)
+      const staleRunRows = this.db
+        .prepare("SELECT id, sprint_name FROM orchestrator_runs WHERE status IN ('running', 'paused')")
+        .all() as { id: string; sprint_name: string }[]
+
+      for (const row of staleRunRows) {
+        updateRunStatus(this.db, row.id, 'failed')
+        // Mark any active task logs for this run as failed
+        const activeLogs = getActiveTaskLogs(this.db, row.id)
+        for (const taskLog of activeLogs) {
+          updateTaskLogStatus(this.db, taskLog.id, 'failed')
+        }
+        log.warn('Orchestrator recovery: stale run marked failed', { runId: row.id, sprint: row.sprint_name })
+        staleRuns++
+      }
+
+      // 2. Find tasks stuck in 'in_progress' — these have no active orchestrator log
+      const stuckTasks = this.db
+        .prepare("SELECT id, title FROM tasks WHERE status = 'in_progress'")
+        .all() as { id: string; title: string }[]
+
+      for (const task of stuckTasks) {
+        updateTask(this.db, task.id, { status: 'backlog' })
+        log.warn('Orchestrator recovery: orphaned task reset to backlog', { taskId: task.id, title: task.title })
+        orphanedTasks++
+      }
+    })()
+
+    if (staleRuns > 0 || orphanedTasks > 0) {
+      log.info('Orchestrator recovery complete', { staleRuns, orphanedTasks })
+    }
+
+    return { staleRuns, orphanedTasks }
   }
 
   // ---------------------------------------------------------------------------
@@ -1498,6 +1656,10 @@ export class KanbanOrchestratorService {
     const activeLog = getActiveTaskLogByAgentId(this.db, run.id, agentId)
 
     if (!activeLog) {
+      // If a B-path agent fires `agent:completed` after `onAgentStatusChanged` already
+      // handled the `locked` event, the log is already marked `done` so this returns null.
+      // better-sqlite3 is synchronous — no race between the two handlers on the Node.js
+      // event loop. This early-return covers both untracked agents and B-path cleanup.
       log.debug('Orchestrator: completed agent not tracked by orchestrator', { agentId })
       return
     }
@@ -1570,6 +1732,42 @@ export class KanbanOrchestratorService {
       }
     }
 
+    // Path B: check if agent was dispatched via simple path (stored at spawn time)
+    const simpleMode = this.simplePathModes.get(agentId)
+    if (simpleMode === 'b1' || simpleMode === 'b2') {
+      this.simplePathModes.delete(agentId)
+      updateTaskLogStatus(this.db, activeLog.id, 'done')
+
+      if (simpleMode === 'b2' && this.deps?.getAgentOutput) {
+        const rawOutput = this.deps.getAgentOutput(agentId)
+        const filesChanged = rawOutput ? this.parseFilesChanged(rawOutput) : []
+        if (filesChanged.length > 0) {
+          log.info('Orchestrator: Path B-2 files changed, running commit', { taskId: activeLog.taskId, filesChanged })
+          const committed = this.executeCommitPhase(activeLog.taskId, run, false)
+          if (committed) this.dispatchNextTasks(run)
+        } else {
+          log.info('Orchestrator: Path B-2 no files changed, marking complete', { taskId: activeLog.taskId })
+          updateTask(this.db, activeLog.taskId, { status: 'completed' })
+          this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
+          this.dispatchNextTasks(run)
+        }
+      } else {
+        // b1: output only — no commit
+        log.info('Orchestrator: Path B-1 complete, marking task done', { taskId: activeLog.taskId })
+        updateTask(this.db, activeLog.taskId, { status: 'completed' })
+        this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
+        this.dispatchNextTasks(run)
+      }
+
+      try {
+        this.deps?.killAgent?.(agentId)
+      } catch (err) {
+        log.warn('Orchestrator: failed to kill agent after simple path', { agentId, error: String(err) })
+      }
+      return
+    }
+
+    // Path A: normal pipeline advancement
     this.advancePhase(activeLog.taskId, activeLog.phase, activeLog.id, run)
 
     // Kill the agent PTY — it's done, sitting at the prompt consuming resources.
@@ -1593,6 +1791,9 @@ export class KanbanOrchestratorService {
       log.debug('Orchestrator: failed agent not tracked by orchestrator', { agentId })
       return
     }
+
+    // Clean up simplePathModes on failure (B-path agent failed before locked event)
+    this.simplePathModes.delete(agentId)
 
     // C4: Track retry count per task+phase
     const retryKey = `${activeLog.taskId}:${activeLog.phase}`
