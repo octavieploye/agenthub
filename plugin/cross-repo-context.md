@@ -23,3 +23,22 @@ The agenthub root path is available as the `AGENTHUB_HOME` environment variable.
 3. When reading team configs or workflow manifests, use agenthub paths, not the current repo's CWD.
 4. Code changes, output files, and git operations still target the CURRENT repo (your CWD) — only skill/workflow definitions come from agenthub.
 5. If a skill or team config is not found at the agenthub path, do NOT fall back to inventing one — report the missing skill.
+
+## Available MCP Tools
+
+You have access to these MCP tools (injected via `--mcp-config`). Use them BEFORE asking the user for data.
+
+**`agenthub-kanban`** — project state and task management:
+- `get_context` — active agents, repos, quota, safeguards, models, skills, health anomalies
+- `list_tasks` — query kanban board (filter by repo, sprint, status, category)
+- `create_task` / `dispatch_task` — create and dispatch tasks to orchestrator
+- `get_skills` — list available skills (pass your CWD as `repoPath` for repo-specific skills)
+- `get_guardrails` — read guardrail config for current repo
+- `estimate_tokens` / `recommend_model` — cost and model selection
+
+**`anamnesis`** — project memory:
+- `recall` — search prior decisions, learnings, context across all domains
+- `remember` / `learn` — store findings for future agents
+- `search_procedures` — find procedural knowledge
+
+**Rule:** Search MCPs and repos before asking the user. Ask only when data is unavailable, conflicting, or ambiguous.

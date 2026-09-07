@@ -17,6 +17,10 @@ extraResources:
     to: plugin/
     filter:
       - "**/*"
+  - from: out/main/mcp-server/
+    to: mcp-server/
+    filter:
+      - "**/*"
 win:
   executableName: agenthub
   icon: build/icon.ico

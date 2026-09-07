@@ -45,6 +45,7 @@ export interface AgentState {
   telegramNotify: boolean
   claudeMdHash?: string | null
   claudeSessionId?: string | null
+  sessionId?: string | null
 }
 
 export interface AgentSpawnOptions {

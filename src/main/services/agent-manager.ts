@@ -15,7 +15,7 @@ import { readSettingsMcpServers } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
-import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath } from './service-orchestrator'
+import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath, getCurrentSessionId } from './service-orchestrator'
 import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir, homedir } from 'os'
@@ -498,7 +498,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     color: options.color,
     voiceMode: options.voiceMode,
     telegramNotify: options.telegramNotify ?? false,
-    claudeMdHash
+    claudeMdHash,
+    sessionId: getCurrentSessionId()
   })
 
   // Build provider-specific env vars (Ollama needs ANTHROPIC_BASE_URL, AUTH_TOKEN, empty API_KEY)

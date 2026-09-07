@@ -100,6 +100,7 @@ export function insertAgent(
     voiceMode?: VoiceMode
     telegramNotify?: boolean
     claudeMdHash?: string | null
+    sessionId?: string | null
   }
 ): AgentState {
   const id = randomUUID()
@@ -109,9 +110,15 @@ export function insertAgent(
   const voiceMode = agent.voiceMode ?? 'always_on'
   const telegramNotify = agent.telegramNotify ?? false
 
+  const MAX_TASK_DESC = 2000
+  const rawDesc = agent.taskDescription ?? ''
+  const taskDescription = rawDesc.length > MAX_TASK_DESC
+    ? rawDesc.slice(0, MAX_TASK_DESC - 16) + '... [truncated]'
+    : rawDesc
+
   db.prepare(
-    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, telegram_notify, claude_md_hash, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO agents (id, repo_id, name, cwd, model, provider, effort_level, task_description, color, execution_mode, voice_mode, telegram_notify, claude_md_hash, session_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     agent.repoId,
@@ -120,12 +127,13 @@ export function insertAgent(
     agent.model ?? 'claude-sonnet-4-6',
     agent.provider ?? 'anthropic',
     effortLevel,
-    agent.taskDescription ?? '',
+    taskDescription,
     color,
     agent.executionMode ?? 'native',
     voiceMode,
     telegramNotify ? 1 : 0,
     agent.claudeMdHash ?? null,
+    agent.sessionId ?? null,
     now,
     now
   )

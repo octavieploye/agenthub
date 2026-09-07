@@ -6,9 +6,12 @@ import { APP_DEFAULTS } from '../shared/constants/defaults'
 import { getDb, closeDb, markShuttingDown } from './db/connection'
 import { registerAllIpcHandlers } from './ipc/register-all'
 import { cleanupAllAgents } from './services/agent-manager'
-import { initializeServices, startServices, stopServices } from './services/service-orchestrator'
+import { initializeServices, startServices, stopServices, getCurrentSessionId } from './services/service-orchestrator'
+import { updateSessionHeartbeat, closeSession } from './db/queries/sessions.queries'
 import { getShutdownReason, setShutdownReason } from './shutdown-reason'
 import { initWindowCache } from './utils/emit-to-all-renderers'
+
+let db: ReturnType<typeof getDb> | null = null
 
 log.initialize()
 log.transports.file.level = 'debug'
@@ -179,7 +182,7 @@ app.whenReady().then(() => {
 
   // Initialize database
   const dbPath = join(app.getPath('userData'), 'agenthub.db')
-  const db = getDb(dbPath)
+  db = getDb(dbPath)
   log.info('Database initialized', { path: dbPath })
 
   // Register all IPC handlers
@@ -192,10 +195,15 @@ app.whenReady().then(() => {
       heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
       heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
     })
+    // Update session heartbeat for crash detection
+    const sessionId = getCurrentSessionId()
+    if (sessionId) {
+      try { updateSessionHeartbeat(db!, sessionId) } catch { /* DB may be closing */ }
+    }
   }, 30_000)
 
   // Initialize services (creates instances, wires dependencies)
-  initializeServices(db)
+  initializeServices(db!)
 
   createWindow()
 
@@ -224,6 +232,12 @@ app.on('before-quit', () => {
     setShutdownReason('user-quit (Cmd+Q, menu, or dock)')
   }
   log.info('AgentHub shutting down', { reason: getShutdownReason(), windowCount: BrowserWindow.getAllWindows().length })
+
+  // Stamp session close BEFORE marking shutdown — DB is still writable here
+  const sessionId = getCurrentSessionId()
+  if (db && sessionId) {
+    try { closeSession(db, sessionId, 'clean') } catch { /* best effort */ }
+  }
 
   // Mark DB as shutting down BEFORE killing agents so their
   // async onExit handlers know to skip DB writes.

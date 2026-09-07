@@ -3,12 +3,15 @@ import * as path from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { AgentState } from '../../shared/types/agent.types'
-import type { RecoveryInfo, SBARHandoff } from '../../shared/types/recovery.types'
+import type { RecoveryInfo, SBARHandoff, SessionGroup, SessionInfo } from '../../shared/types/recovery.types'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getLatestSnapshot } from '../db/queries/snapshots.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { getAllAgents, getAllAgentsIncludingDead, updateAgentStatus } from '../db/queries/agents.queries'
+import { getSessionById } from '../db/queries/sessions.queries'
 import { SOCKET_DIR } from './pty-proxy'
+
+const RECOVERY_CUTOFF_HOURS = 24
 
 export function isProcessAlive(pid: number): boolean {
   try {
@@ -25,12 +28,25 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
 
   const lastSnapshot = getLatestSnapshot(db)
   const allAgents = getAllAgentsIncludingDead(db)
+  const cutoff = new Date(Date.now() - RECOVERY_CUTOFF_HOURS * 60 * 60 * 1000).toISOString()
+
+  // Expire agents older than 24h — mark as completed so they never resurface
+  const expiredAgents = allAgents.filter(
+    (a) => a.createdAt < cutoff && a.status !== 'completed'
+  )
+  for (const agent of expiredAgents) {
+    updateAgentStatus(db, agent.id, 'completed', 'confirmed')
+    log.info('Expired old agent', { id: agent.id, createdAt: agent.createdAt })
+  }
+
+  // Work with recent agents only
+  const recentAgents = allAgents.filter((a) => a.createdAt >= cutoff)
 
   const activeStatuses = ['spawning', 'busy', 'idle', 'locked', 'looping', 'paused', 'tray_running']
-  const previouslyActiveAgents = allAgents.filter((a) =>
+  const previouslyActiveAgents = recentAgents.filter((a) =>
     activeStatuses.includes(a.status)
   )
-  const alreadyInterruptedAgents = allAgents.filter((a) => a.status === 'interrupted')
+  const alreadyInterruptedAgents = recentAgents.filter((a) => a.status === 'interrupted')
 
   if (previouslyActiveAgents.length === 0 && alreadyInterruptedAgents.length === 0) {
     log.info('No agents to recover')
@@ -38,7 +54,8 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
       hadInterruption: false,
       lastSnapshot,
       recoveredAgents: [],
-      interruptedAgents: []
+      interruptedAgents: [],
+      sessionGroups: []
     }
   }
 
@@ -70,8 +87,6 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
     }
   }
 
-  // Agents already marked 'interrupted' at startup (resetStaleAgentsOnStartup)
-  // are not returned by getAllAgents, so surface them here with their SBAR handoff.
   for (const agent of alreadyInterruptedAgents) {
     const handoff = getSBARByAgentId(db, agent.id)
     interruptedAgents.push({
@@ -81,11 +96,16 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
     log.info('Agent already interrupted at startup', { id: agent.id })
   }
 
+  // Build session groups from all recoverable agents
+  const allRecoverable = [...recoveredAgents, ...interruptedAgents]
+  const sessionGroups = buildSessionGroups(db, allRecoverable)
+
   const hadInterruption = interruptedAgents.length > 0 || recoveredAgents.length > 0
 
   log.info('Recovery info built', {
     recovered: recoveredAgents.length,
     interrupted: interruptedAgents.length,
+    sessionGroups: sessionGroups.length,
     hadInterruption
   })
 
@@ -93,8 +113,54 @@ export function buildRecoveryInfo(db: Database.Database): RecoveryInfo {
     hadInterruption,
     lastSnapshot,
     recoveredAgents,
-    interruptedAgents
+    interruptedAgents,
+    sessionGroups
   }
+}
+
+function buildSessionGroups(
+  db: Database.Database,
+  agents: Array<AgentState & { handoff?: SBARHandoff }>
+): SessionGroup[] {
+  const groupMap = new Map<string | null, Array<AgentState & { handoff?: SBARHandoff }>>()
+
+  for (const agent of agents) {
+    const key = (agent as AgentState & { sessionId?: string | null }).sessionId ?? null
+    const group = groupMap.get(key)
+    if (group) {
+      group.push(agent)
+    } else {
+      groupMap.set(key, [agent])
+    }
+  }
+
+  const groups: SessionGroup[] = []
+
+  for (const [sessionId, groupAgents] of groupMap) {
+    let sessionInfo: SessionInfo | null = null
+    if (sessionId) {
+      const row = getSessionById(db, sessionId)
+      if (row) {
+        sessionInfo = {
+          id: row.id,
+          startedAt: row.started_at,
+          endedAt: row.ended_at,
+          closeReason: row.close_reason
+        }
+      }
+    }
+    groups.push({ session: sessionInfo, agents: groupAgents })
+  }
+
+  // Sort: newest session first, null-session group last
+  groups.sort((a, b) => {
+    if (!a.session && !b.session) return 0
+    if (!a.session) return 1
+    if (!b.session) return -1
+    return b.session.startedAt.localeCompare(a.session.startedAt)
+  })
+
+  return groups
 }
 
 /**

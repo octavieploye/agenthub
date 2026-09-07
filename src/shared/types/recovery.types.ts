@@ -53,9 +53,22 @@ export interface CreateSBARInput {
   recommendation: string
 }
 
+export interface SessionInfo {
+  id: string
+  startedAt: string
+  endedAt: string | null
+  closeReason: 'clean' | 'crash' | 'unknown'
+}
+
+export interface SessionGroup {
+  session: SessionInfo | null
+  agents: Array<AgentState & { handoff?: SBARHandoff }>
+}
+
 export interface RecoveryInfo {
   hadInterruption: boolean
   lastSnapshot: SessionSnapshot | null
   recoveredAgents: AgentState[]
   interruptedAgents: Array<AgentState & { handoff?: SBARHandoff }>
+  sessionGroups: SessionGroup[]
 }

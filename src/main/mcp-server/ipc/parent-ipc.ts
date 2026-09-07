@@ -48,7 +48,8 @@ export class ParentIpc {
     return this.connectPromise
   }
 
-  send(request: McpIpcRequest): Promise<McpIpcResponse> {
+  async send(request: McpIpcRequest): Promise<McpIpcResponse> {
+    await this.connect()
     return new Promise((resolve, reject) => {
       const socket = this.socket
       if (!socket || socket.destroyed || !socket.writable) {

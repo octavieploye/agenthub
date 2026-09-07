@@ -112,6 +112,7 @@ function PreLaunchCard({
               type="text"
               value={task}
               onChange={(e) => setTask(e.target.value)}
+              maxLength={2000}
               placeholder="Describe the task..."
               className="input input-bordered flex-1 rounded-xl bg-base-200/50 text-sm"
             />

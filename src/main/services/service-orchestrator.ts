@@ -43,6 +43,7 @@ import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clear
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
+import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
 import { cleanupOldRetryFailures, getRun } from '../db/queries/orchestrator.queries'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -77,6 +78,11 @@ let orchestratorMonitor: OrchestratorMonitorService | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
 let mcpServerManager: McpServerManager | null = null
 let intakeDir = ''
+let currentSessionId: string | null = null
+
+export function getCurrentSessionId(): string | null {
+  return currentSessionId
+}
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows()
@@ -206,12 +212,20 @@ export function initializeServices(db: Database.Database): void {
   // Runs before any agent can be spawned (agents require user interaction post-startup).
   installClaudePlugin().catch((err) => log.warn('Claude plugin install failed', { err }))
 
-  // Purge dead agents older than 24h to prevent DB bloat
-  purgeDeadAgents(db, 24)
-  // Reset any non-terminal agents left over from a crashed or force-quit session
+  // Reset stale agents FIRST so they become 'interrupted' before the purge runs.
+  // Without this ordering, agents stuck in 'busy'/'idle' escape the 24h purge window.
   resetStaleAgentsOnStartup(db)
+  // Now purge dead agents (completed/interrupted) older than 24h
+  purgeDeadAgents(db, 24)
   // Clean up acknowledged retry failures older than 30 days
   cleanupOldRetryFailures(db)
+
+  // Session tracking — detect previous session state and start a new one
+  const prevSession = detectPreviousSessionState(db)
+  if (prevSession) {
+    log.info('Previous session detected', { id: prevSession.id, closeReason: prevSession.closeReason })
+  }
+  currentSessionId = createSession(db)
   // 1. GuardrailsManager — standalone, no deps
   guardrailsManager = new GuardrailsManager({
     readFile: (path: string) => {
