@@ -518,7 +518,12 @@ export function initializeServices(db: Database.Database): void {
   // Queue processor only needs db — construct before setTelegramNotifier so enqueue works immediately
   telegramQueueProcessor = new TelegramQueueProcessor({
     db,
-    notify: (payload) => telegramSidecarService?.notify(payload),
+    notify: (payload) => {
+      if (!telegramSidecarService?.isRunning()) {
+        throw new Error('Telegram sidecar not running')
+      }
+      telegramSidecarService.notify(payload)
+    },
     logInfo: (msg, meta) => log.info(msg, meta),
     logError: (msg, meta) => log.error(msg, meta),
   })
@@ -566,9 +571,10 @@ export function initializeServices(db: Database.Database): void {
     onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
     emitToRenderer: emitToAllRenderers,
     sendTelegramNotification: (summary: string, type: 'completed' | 'failed') => {
+      const msgKey = `orchestrator:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
       telegramQueueProcessor?.enqueue({
         type,
-        agentId: 'orchestrator',
+        agentId: msgKey,
         agentName: 'Kanban Orchestrator',
         repo: '',
         summary: summary.slice(0, 200),
