@@ -59,7 +59,7 @@ export interface HandlerModelRecommendation {
 
 const CLAUDE_OPUS = 'claude-opus-4-6'
 const CLAUDE_SONNET = 'claude-sonnet-4-6'
-const CLAUDE_HAIKU = 'claude-haiku-4-5-20251001'
+const CLAUDE_HAIKU = 'claude-haiku-4-5'
 const CLAUDE_CONTEXT_WINDOW = 200_000
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────

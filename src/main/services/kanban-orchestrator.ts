@@ -1940,13 +1940,23 @@ export class KanbanOrchestratorService {
           this.dispatchNextTasks(run)
         }
       } else {
-        // B-1: output-only — require DONE sentinel as last line before advancing.
-        // An agent asking a question will not end output with 'DONE'.
+        // B-1: output-only — scan for DONE sentinel anywhere in last 10 lines before advancing.
+        // An agent asking a question will not output 'DONE'.
+        // Claude CLI outputs DONE as a bullet '⏺ DONE' and may output additional summary text
+        // after it, so checking only the last line is too strict. Strip ANSI escape codes and
+        // carriage returns first, then search the tail for a line that is exactly 'DONE' or
+        // ends with ' DONE' (the bullet prefix).
         const output = this.deps?.getAgentOutput?.(agentId) ?? ''
-        const lastLine = output.trimEnd().split('\n').pop()?.trim() ?? ''
-        if (lastLine !== 'DONE') {
-          log.warn('Orchestrator: B-1 agent locked but no DONE sentinel — treating as question/pause, not advancing', {
-            agentId, taskId: activeLog.taskId,
+        const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
+        const lines = stripped.trimEnd().split('\n')
+        const tail = lines.slice(-20)
+        const hasDoneSentinel = tail.some((l) => {
+          const t = l.trim()
+          return t === 'DONE' || t.endsWith(' DONE') || t === '⏺ DONE'
+        })
+        if (!hasDoneSentinel) {
+          log.warn('Orchestrator: B-1 agent locked but no DONE sentinel in last 20 lines — treating as question/pause, not advancing', {
+            agentId, taskId: activeLog.taskId, lastLines: tail.slice(-5).join(' | '),
           })
           return
         }
