@@ -999,10 +999,13 @@ function AppMain(): React.JSX.Element {
               ...recoveryInfo.recoveredAgents.map(a => a.id),
               ...recoveryInfo.interruptedAgents.map(a => a.id)
             ]
-            for (const id of allIds) {
-              await handleKillDirect(id).catch(() => {})
-              removeAgent(id)
-            }
+            // Kill via IPC (best-effort for already-dead agents), then dismiss
+            await Promise.all(
+              allIds.map((id) =>
+                window.agentHub.agents.kill(id).catch(() => {})
+              )
+            )
+            for (const id of allIds) removeAgent(id)
             handleRecoveryContinue()
           }}
         />
