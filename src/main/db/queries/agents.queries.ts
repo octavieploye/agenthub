@@ -24,7 +24,8 @@ function mapRow(row: Record<string, unknown>): AgentState {
     executionMode: (row.execution_mode as ExecutionMode) ?? 'native',
     voiceMode: (row.voice_mode as VoiceMode) ?? 'always_on',
     telegramNotify: Boolean(row.telegram_notify as number),
-    claudeMdHash: (row.claude_md_hash as string) ?? null
+    claudeMdHash: (row.claude_md_hash as string) ?? null,
+    sessionId: (row.session_id as string) ?? null
   }
 }
 
@@ -148,7 +149,7 @@ export function insertAgent(
     model: agent.model ?? 'claude-sonnet-4-6',
     provider: agent.provider ?? 'anthropic',
     effortLevel,
-    taskDescription: agent.taskDescription ?? '',
+    taskDescription,
     pid: null,
     ptyFd: null,
     cwd: agent.cwd,
@@ -159,7 +160,8 @@ export function insertAgent(
     executionMode: agent.executionMode ?? 'native',
     voiceMode,
     telegramNotify,
-    claudeMdHash: agent.claudeMdHash ?? null
+    claudeMdHash: agent.claudeMdHash ?? null,
+    sessionId: agent.sessionId ?? null
   }
 }
 

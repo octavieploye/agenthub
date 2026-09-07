@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildContinuationPrompt, stripAnsi, extractTail } from './buildContinuationPrompt'
+import { buildContinuationPrompt, stripAnsi, extractTail, MAX_CONTINUATION_PROMPT } from './buildContinuationPrompt'
 import type { SBARHandoff } from '@shared/types/recovery.types'
 
 const mockSbar: SBARHandoff = {
@@ -68,5 +68,29 @@ describe('buildContinuationPrompt', () => {
     const prompt = buildContinuationPrompt(null, 'some tail')
     expect(prompt).toContain('some tail')
     expect(typeof prompt).toBe('string')
+  })
+
+  it('caps output at MAX_CONTINUATION_PROMPT chars', () => {
+    const longTail = 'x'.repeat(5000)
+    const result = buildContinuationPrompt(null, longTail)
+    expect(result.length).toBeLessThanOrEqual(MAX_CONTINUATION_PROMPT)
+    expect(result).toContain('[truncated for length]')
+  })
+
+  it('does not truncate short prompts', () => {
+    const result = buildContinuationPrompt(null, 'short')
+    expect(result).not.toContain('[truncated')
+  })
+
+  it('caps SBAR prompt with large fields', () => {
+    const bigSbar = {
+      ...mockSbar,
+      situation: 'a'.repeat(2000),
+      background: 'b'.repeat(2000),
+      assessment: 'c'.repeat(2000),
+      recommendation: 'd'.repeat(2000)
+    }
+    const result = buildContinuationPrompt(bigSbar, 'tail')
+    expect(result.length).toBeLessThanOrEqual(MAX_CONTINUATION_PROMPT)
   })
 })

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AgentState } from '@shared/types/agent.types'
 import type { SBARHandoff } from '@shared/types/recovery.types'
-import { buildContinuationPrompt, stripAnsi, extractTail } from './buildContinuationPrompt'
+import { buildContinuationPrompt, stripAnsi, extractTail, MAX_CONTINUATION_PROMPT } from './buildContinuationPrompt'
 
 interface ContinuationDialogProps {
   agent: AgentState & { claudeSessionId?: string | null }
@@ -167,6 +167,9 @@ export function ContinuationDialog({
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Write a new prompt or reset to generated."
                 />
+                <div className="text-[11px] text-base-content/40 text-right" data-testid="char-counter">
+                  {prompt.length.toLocaleString()} / {MAX_CONTINUATION_PROMPT.toLocaleString()}
+                </div>
               </div>
 
               {/* Zone 3 — Agent config */}

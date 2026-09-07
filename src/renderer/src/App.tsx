@@ -994,6 +994,17 @@ function AppMain(): React.JSX.Element {
               }
             }
           }}
+          onDropAll={async () => {
+            const allIds = [
+              ...recoveryInfo.recoveredAgents.map(a => a.id),
+              ...recoveryInfo.interruptedAgents.map(a => a.id)
+            ]
+            for (const id of allIds) {
+              await handleKillDirect(id).catch(() => {})
+              removeAgent(id)
+            }
+            handleRecoveryContinue()
+          }}
         />
       </div>
     )

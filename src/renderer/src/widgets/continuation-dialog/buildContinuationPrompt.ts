@@ -13,18 +13,21 @@ export function extractTail(content: string, n: number): string {
   return lines.slice(Math.max(0, lines.length - n)).join('\n')
 }
 
+export const MAX_CONTINUATION_PROMPT = 4000
+
 export function buildContinuationPrompt(sbar: SBARHandoff | null, tail: string): string {
   if (!sbar) {
-    return [
+    const raw = [
       'Continue the work from the previous agent session.',
       '',
       '## Last terminal output (tail)',
       '',
       tail || '(no output recorded)',
     ].join('\n')
+    return truncatePrompt(raw)
   }
 
-  return [
+  const raw = [
     'Continue the work from the previous agent session.',
     '',
     '## Summary of where we left off',
@@ -42,4 +45,12 @@ export function buildContinuationPrompt(sbar: SBARHandoff | null, tail: string):
     '',
     sbar.recommendation,
   ].join('\n')
+  return truncatePrompt(raw)
+}
+
+const TRUNCATION_SUFFIX = '\n... [truncated for length]'
+
+function truncatePrompt(text: string): string {
+  if (text.length <= MAX_CONTINUATION_PROMPT) return text
+  return text.slice(0, MAX_CONTINUATION_PROMPT - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX
 }

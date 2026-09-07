@@ -137,6 +137,31 @@ describe('Agents Queries', () => {
     const row = db.prepare('SELECT claude_session_id FROM agents WHERE id = ?').get(agent.id) as { claude_session_id: string | null }
     expect(row.claude_session_id).toBeNull()
   })
+
+  it('truncates task_description at 2000 chars', () => {
+    const longDesc = 'z'.repeat(3000)
+    const agent = insertAgent(db, { repoId, name: 'long-desc', cwd: '/tmp', taskDescription: longDesc })
+    expect(agent.taskDescription.length).toBeLessThanOrEqual(2000)
+    expect(agent.taskDescription).toContain('... [truncated]')
+  })
+
+  it('preserves short task_description unchanged', () => {
+    const agent = insertAgent(db, { repoId, name: 'short-desc', cwd: '/tmp', taskDescription: 'fix bug' })
+    expect(agent.taskDescription).toBe('fix bug')
+  })
+
+  it('stores session_id when provided', () => {
+    db.prepare("INSERT INTO sessions (id) VALUES ('sess-test')").run()
+    const agent = insertAgent(db, { repoId, name: 'sess-agent', cwd: '/tmp', sessionId: 'sess-test' })
+    expect(agent.sessionId).toBe('sess-test')
+    const row = db.prepare('SELECT session_id FROM agents WHERE id = ?').get(agent.id) as { session_id: string }
+    expect(row.session_id).toBe('sess-test')
+  })
+
+  it('defaults session_id to null', () => {
+    const agent = insertAgent(db, { repoId, name: 'no-sess', cwd: '/tmp' })
+    expect(agent.sessionId).toBeNull()
+  })
 })
 
 describe('resetStaleAgentsOnStartup', () => {
