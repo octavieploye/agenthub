@@ -349,6 +349,32 @@ export class KanbanOrchestratorService {
     const run = getRun(this.db, runId)
     this.emitStatusChange(runId, 'running', run?.sprintName ?? '')
     log.info('Orchestrator resumed', { runId })
+    // F3 back-fill: reset any in_progress tasks with no active log to backlog,
+    // then tick immediately so they re-dispatch without waiting 30s.
+    if (run) {
+      this.reconcileOrphanedInProgressTasks(run)
+    }
+    this.tick()
+  }
+
+  /**
+   * F3: Reset tasks that are stuck in_progress with no active task log.
+   * Called on resume so orphaned tasks from the pause window are immediately
+   * eligible for re-dispatch rather than waiting for startup recovery.
+   */
+  private reconcileOrphanedInProgressTasks(run: OrchestratorRun): void {
+    const tasks = this.resolveRunTasks(run)
+    const activeLogs = getActiveTaskLogs(this.db, run.id)
+    const activeTaskIds = new Set(activeLogs.map(l => l.taskId))
+
+    for (const task of tasks) {
+      if (task.status === 'in_progress' && !activeTaskIds.has(task.id)) {
+        updateTask(this.db, task.id, { status: 'backlog' })
+        log.warn('Orchestrator resume: orphaned in_progress task reset to backlog', {
+          taskId: task.id, title: task.title,
+        })
+      }
+    }
   }
 
   pauseTick(): void {

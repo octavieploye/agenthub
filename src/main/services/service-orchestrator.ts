@@ -214,7 +214,9 @@ function computeRunTokenUsage(db: Database.Database, runId: string): number {
           const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
           if (isNaN(t) || t < startMs || t > endMs) continue
           const u = entry.message.usage
-          if (u) total += u.input_tokens + u.output_tokens
+          // Count only output_tokens — input_tokens grow with conversation history
+          // (bash tool results like npm install stdout inflate input_tokens per turn)
+          if (u) total += u.output_tokens
         }
       } catch {
         // Skip unreadable file — non-fatal
