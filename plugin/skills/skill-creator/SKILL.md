@@ -328,6 +328,28 @@ Add the team's display name entry under `"items"`:
 
 ---
 
+## Step 4C — Register in `settings.json` (human-invocable skills only)
+
+If the skill is intended for direct human invocation via `/skill-name` in Claude Code CLI, register it in `.claude/settings.json` under the `skills` key:
+
+```json
+"skill-name": {
+  "description": "{one-line description shown in /help}",
+  "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/plugin/skills/{skill-name}/SKILL.md and execute the {skill-name} workflow for: "
+}
+```
+
+**When to register:**
+- Skill is invoked directly by a human (not an orchestrated agent)
+- The user will type `/skill-name` from a Claude Code CLI session
+- Examples: `/prompt-ready`, `/compress-context`, `/git-commit`, `/optimize`
+
+**When NOT to register:**
+- Skills invoked only by the orchestrator or sub-agents
+- Team orchestrator skills (registered via team UI, not CLI shortcuts)
+
+---
+
 ## Step 5 — Verify
 
 Before declaring done:
@@ -343,6 +365,7 @@ Before declaring done:
 - [ ] **Plugin commands mirrored** — all command files exist in `plugin/commands/`
 - [ ] **Plugin `index.json` updated** — `plugin/skills/index.json` has all new entries
 - [ ] **Plugin `display-registry.json` updated** — team/skill visible in UI dropdown
+- [ ] If human-invocable: entry added to `.claude/settings.json` skills section (Step 4C)
 - [ ] User has reviewed all files before commit
 
 ## Constraints
