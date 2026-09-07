@@ -147,6 +147,14 @@ export class TelegramSidecarService {
     this.send({ type: 'repo_list', repos })
   }
 
+  sendApprovalResult(requestId: string, decision: 'approved' | 'denied'): void {
+    try {
+      this.send({ type: 'approval_result', requestId, decision })
+    } catch {
+      // sidecar may have restarted — acknowledgment is best-effort
+    }
+  }
+
   sendUser(telegramUserId: number, chatId: number): void {
     this.send({ type: 'set_user', telegramUserId, chatId })
   }

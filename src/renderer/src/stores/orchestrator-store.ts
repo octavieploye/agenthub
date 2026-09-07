@@ -15,6 +15,12 @@ interface PhaseState {
   status: OrchestratorPhaseStatus
 }
 
+interface PendingApproval {
+  runId: string
+  taskId: string
+  title: string
+}
+
 interface OrchestratorStore {
   // State
   runStatus: OrchestratorRunStatus | null
@@ -29,6 +35,7 @@ interface OrchestratorStore {
   retryFailures: RetryFailure[]
   loading: boolean
   error: string | null
+  pendingApproval: PendingApproval | null
 
   // Actions
   fetchStatus: () => Promise<void>
@@ -42,6 +49,9 @@ interface OrchestratorStore {
   resume: () => Promise<boolean>
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => void
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => void
+  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => void
+  approveTask: () => Promise<void>
+  denyTask: () => Promise<void>
   clearError: () => void
 }
 
@@ -58,6 +68,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   retryFailures: [],
   loading: false,
   error: null,
+  pendingApproval: null,
 
   fetchTaskLogs: async (taskId: string) => {
     if (get().taskLogs.has(taskId)) return
@@ -258,6 +269,32 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
       logs.delete(payload.taskId)
       return { taskPhases: phases, taskLogs: logs }
     })
+  },
+
+  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => {
+    set({ pendingApproval: { runId: payload.runId, taskId: payload.taskId, title: payload.title } })
+  },
+
+  approveTask: async () => {
+    const { pendingApproval } = get()
+    if (!pendingApproval) return
+    set({ pendingApproval: null })
+    try {
+      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: true })
+    } catch {
+      // silent — backend will surface the error via status change
+    }
+  },
+
+  denyTask: async () => {
+    const { pendingApproval } = get()
+    if (!pendingApproval) return
+    set({ pendingApproval: null })
+    try {
+      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: false })
+    } catch {
+      // silent
+    }
   },
 
   clearError: () => set({ error: null }),

@@ -84,6 +84,7 @@ export interface OrchestratorDeps {
   onEventInserted?: () => void
   emitToRenderer?: (channel: string, ...args: unknown[]) => void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
+  requestTelegramApproval?: (taskId: string, runId: string, title: string) => void
   activeGuardrails?: Partial<GuardrailConfig>
 }
 
@@ -1157,7 +1158,9 @@ export class KanbanOrchestratorService {
           updateTask(this.db, id, { status: 'today' })
         }
         log.info('Orchestrator: task requires approval — waiting for user', { taskId: id, title: fullTask.title })
-        this.notifyTelegram(run, `Task "${fullTask.title}" requires your approval before dispatch`, 'completed')
+        if (run.telegramNotify) {
+          this.deps?.requestTelegramApproval?.(id, run.id, fullTask.title)
+        }
         this.deps?.emitToRenderer?.(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
           runId: run.id,
           taskId: id,

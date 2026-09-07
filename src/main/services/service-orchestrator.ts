@@ -120,10 +120,30 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       killAgent(msg.agentId)
       break
     case 'approve':
-      sendInput(msg.requestId, 'y\r', { isSystemAction: true })
+      if (msg.requestId.startsWith('task:')) {
+        const parts = msg.requestId.split(':')
+        try {
+          kanbanOrchestrator?.approveTaskDispatch(parts[2], parts[1], true)
+          telegramSidecarService?.sendApprovalResult(msg.requestId, 'approved')
+        } catch (err) {
+          log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
+        }
+      } else {
+        sendInput(msg.requestId, 'y\r', { isSystemAction: true })
+      }
       break
     case 'deny':
-      sendInput(msg.requestId, 'n\r', { isSystemAction: true })
+      if (msg.requestId.startsWith('task:')) {
+        const parts = msg.requestId.split(':')
+        try {
+          kanbanOrchestrator?.approveTaskDispatch(parts[2], parts[1], false)
+          telegramSidecarService?.sendApprovalResult(msg.requestId, 'denied')
+        } catch (err) {
+          log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
+        }
+      } else {
+        sendInput(msg.requestId, 'n\r', { isSystemAction: true })
+      }
       break
     case 'spawn_agent': {
       const allRepos = getAllRepos(db)
@@ -591,6 +611,18 @@ export function initializeServices(db: Database.Database): void {
         agentName: 'Kanban Orchestrator',
         repo: '',
         summary: summary.slice(0, 200),
+        timestamp: new Date().toISOString(),
+      })
+    },
+    requestTelegramApproval: (taskId: string, runId: string, title: string) => {
+      telegramQueueProcessor?.enqueue({
+        type: 'awaiting_approval',
+        agentId: `orchestrator:approval:${taskId}`,
+        agentName: 'Kanban Orchestrator',
+        repo: '',
+        summary: 'Task approval required',
+        proposedAction: title.slice(0, 300),
+        requestId: `task:${taskId}:${runId}`,
         timestamp: new Date().toISOString(),
       })
     },
