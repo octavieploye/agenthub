@@ -13,6 +13,7 @@ import CodeBluePanel from './widgets/code-blue/CodeBluePanel'
 import KillConfirmToast from './widgets/kill-confirm/KillConfirmToast'
 import { RecoveryScreen } from './widgets/recovery-screen/RecoveryScreen'
 import { RetryFailureToast } from './components/RetryFailureToast'
+import { ApprovalGateToast } from './components/ApprovalGateToast'
 import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
 import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
@@ -1017,6 +1018,7 @@ function AppMain(): React.JSX.Element {
     <VoiceInputProvider>
     <div className="flex flex-col h-full" data-theme={theme}>
       <RetryFailureToast showRecovery={showRecovery} />
+      <ApprovalGateToast showRecovery={showRecovery} />
       <RateLimitPrompt />
       {/* CLI version mismatch banner */}
       {cliVersionBanner && (

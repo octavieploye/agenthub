@@ -521,6 +521,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     ...(options.envOverrides ?? {}),
     AGENTHUB_BUILDER: '1',   // signals plugin hook: this is a builder session
     AGENTHUB_HOME: agenthubRoot,  // agents can read this to know where instructions live
+    NODE_ENV: 'production',   // agents always run in production context — prevent dev mode from breaking npm builds
     // Point zsh dotfile lookup to an empty dir so oh-my-zsh and user .zshrc
     // don't pollute the terminal before Claude CLI appears.
     // /etc/zprofile still runs, keeping macOS PATH (path_helper) intact.

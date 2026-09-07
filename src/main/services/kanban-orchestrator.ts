@@ -112,6 +112,8 @@ export class KanbanOrchestratorService {
   private agentsSpawnedByRun = new Map<string, number>()
   /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
   private simplePathModes = new Map<string, DispatchMode>()
+  /** B6: debounce timers for BEL-triggered B-1 sentinel checks (agentId → timer) */
+  private belDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -1487,6 +1489,8 @@ export class KanbanOrchestratorService {
     this.simplePathModes.clear()
     this.stuckWarned.clear()
     this.pendingTaskApproval.clear()
+    for (const timer of this.belDebounceTimers.values()) clearTimeout(timer)
+    this.belDebounceTimers.clear()
     this.tickPaused = false
   }
 
@@ -1940,33 +1944,42 @@ export class KanbanOrchestratorService {
           this.dispatchNextTasks(run)
         }
       } else {
-        // B-1: output-only — scan for DONE sentinel anywhere in last 10 lines before advancing.
-        // An agent asking a question will not output 'DONE'.
-        // Claude CLI outputs DONE as a bullet '⏺ DONE' and may output additional summary text
-        // after it, so checking only the last line is too strict. Strip ANSI escape codes and
-        // carriage returns first, then search the tail for a line that is exactly 'DONE' or
-        // ends with ' DONE' (the bullet prefix).
-        const output = this.deps?.getAgentOutput?.(agentId) ?? ''
-        const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
-        const lines = stripped.trimEnd().split('\n')
-        const tail = lines.slice(-20)
-        const hasDoneSentinel = tail.some((l) => {
-          const t = l.trim()
-          return t === 'DONE' || t.endsWith(' DONE') || t === '⏺ DONE'
-        })
-        if (!hasDoneSentinel) {
-          log.warn('Orchestrator: B-1 agent locked but no DONE sentinel in last 20 lines — treating as question/pause, not advancing', {
-            agentId, taskId: activeLog.taskId, lastLines: tail.slice(-5).join(' | '),
+        // B-1: output-only — debounce the DONE sentinel check (B6 fix).
+        // BEL fires mid-output before the PTY buffer fully flushes. Waiting 400ms
+        // ensures all remaining output is delivered before we read it.
+        // Cancel any previous debounce for this agent (multiple BELs can fire).
+        const existing = this.belDebounceTimers.get(agentId)
+        if (existing) clearTimeout(existing)
+        const taskId = activeLog.taskId
+        const logId = activeLog.id
+        const timer = setTimeout(() => {
+          this.belDebounceTimers.delete(agentId)
+          // Re-validate: agent must still be tracked and a run must still be active
+          if (!this.simplePathModes.has(agentId)) return
+          const currentRun = getActiveRun(this.db)
+          if (!currentRun) return
+          const output = this.deps?.getAgentOutput?.(agentId) ?? ''
+          const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
+          const lines = stripped.trimEnd().split('\n')
+          const tail = lines.slice(-20)
+          const hasDoneSentinel = tail.some((l) => {
+            const t = l.trim()
+            return t === 'DONE' || t.endsWith(' DONE') || t === '⏺ DONE'
           })
-          return
-        }
-
-        this.simplePathModes.delete(agentId)
-        updateTaskLogStatus(this.db, activeLog.id, 'done')
-        log.info('Orchestrator: Path B-1 complete (DONE sentinel confirmed)', { taskId: activeLog.taskId })
-        updateTask(this.db, activeLog.taskId, { status: 'completed' })
-        this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
-        this.dispatchNextTasks(run)
+          if (!hasDoneSentinel) {
+            log.warn('Orchestrator: B-1 agent locked but no DONE sentinel in last 20 lines — treating as question/pause, not advancing', {
+              agentId, taskId, lastLines: tail.slice(-5).join(' | '),
+            })
+            return
+          }
+          this.simplePathModes.delete(agentId)
+          updateTaskLogStatus(this.db, logId, 'done')
+          log.info('Orchestrator: Path B-1 complete (DONE sentinel confirmed)', { taskId })
+          updateTask(this.db, taskId, { status: 'completed' })
+          this.emitTaskPhaseChange(currentRun.id, taskId, 'dev', 'done')
+          this.dispatchNextTasks(currentRun)
+        }, 400)
+        this.belDebounceTimers.set(agentId, timer)
       }
 
       try {
