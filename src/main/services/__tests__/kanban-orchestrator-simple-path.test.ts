@@ -3,7 +3,7 @@
  * These tests MUST fail before T4 implementation exists.
  * Sprint: orchestrator-hybrid-dispatch
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { classifyDispatchMode, resolveSkills, CATEGORY_DEFAULT_SKILLS } from '../model-dispatcher'
 import type { TaskItem } from '../../../shared/types/task.types'
 
@@ -15,7 +15,7 @@ function makeTask(overrides: Partial<TaskItem> = {}): TaskItem {
     title: 'Test task',
     description: '',
     status: 'backlog',
-    priority: 'medium' as TaskItem['priority'],
+    priority: 2 as TaskItem['priority'],
     category: null,
     riskScore: 0,
     targetFilesJson: null,

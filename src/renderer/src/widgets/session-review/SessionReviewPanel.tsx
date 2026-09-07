@@ -82,7 +82,7 @@ function SessionReviewPanel({ sbar, todos, bugs }: SessionReviewPanelProps): Rea
                 <span className={`badge badge-xs mt-0.5 ${bug.severity === 'critical' ? 'badge-error' : bug.severity === 'high' ? 'badge-warning' : 'badge-info'}`}>
                   {bug.severity}
                 </span>
-                <span>{bug.title}</span>
+                <span>{bug.message}</span>
               </li>
             ))}
           </ul>

@@ -89,7 +89,7 @@ async function sendRequest(
 }
 
 function getSocketToken(): string {
-  const spawnOptions = mockSpawn.mock.calls.at(-1)?.[2] as
+  const spawnOptions = (mockSpawn.mock.calls.at(-1) as unknown[] | undefined)?.[2] as
     | { env?: Record<string, string> }
     | undefined
   const token = spawnOptions?.env?.AGENTHUB_SOCKET_TOKEN

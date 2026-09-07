@@ -338,12 +338,12 @@ export function KanbanCard({
                 </span>
               )}
               {task.requiresApproval ? (
-                <Lock size={10} className="text-warning/70" title="Requires approval" />
+                <Lock size={10} className="text-warning/70" aria-label="Requires approval" />
               ) : task.sectionTargetDate ? (
-                <Unlock size={10} className="text-success/50" title="Auto-dispatch eligible" />
+                <Unlock size={10} className="text-success/50" aria-label="Auto-dispatch eligible" />
               ) : null}
               {task.category && isSupervisedCategory(task.category) && (
-                <Shield size={10} className="text-info/50" title="Supervised category" />
+                <Shield size={10} className="text-info/50" aria-label="Supervised category" />
               )}
             </div>
           )}

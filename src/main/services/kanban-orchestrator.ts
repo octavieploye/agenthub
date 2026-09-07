@@ -39,7 +39,7 @@ import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getDispatchableTasks, type DependencyTask } from './helpers/dependency-solver'
 import { buildExecutionSummary } from './helpers/execution-summary-builder'
 import { isSupervisedCategory } from '../../shared/constants/category-classifier'
-import { recommendForPhase, classifyDispatchMode, resolveSkills, CLAUDE_HAIKU } from './model-dispatcher'
+import { recommendForPhase, classifyDispatchMode, resolveSkills, CLAUDE_HAIKU, type DispatchMode } from './model-dispatcher'
 import { validateModelOverride } from './helpers/model-validator'
 import { parseSecurityOutput, type SecurityParseResult } from './helpers/security-output-parser'
 import { getPhaseProfile, shouldSkipSecurity, shouldLoopBack } from './helpers/phase-profile'
@@ -110,7 +110,7 @@ export class KanbanOrchestratorService {
   /** S5: total agents spawned per run (budget cap) */
   private agentsSpawnedByRun = new Map<string, number>()
   /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
-  private simplePathModes = new Map<string, 'b1' | 'b2'>()
+  private simplePathModes = new Map<string, DispatchMode>()
 
   constructor(db: Database.Database, deps?: OrchestratorDeps) {
     this.db = db
@@ -1827,7 +1827,7 @@ export class KanbanOrchestratorService {
         const issuesJson = parsed.findings.length > 0
           ? JSON.stringify(parsed.findings)
           : null
-        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson)
+        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson ?? undefined)
       }
     }
 
@@ -1877,7 +1877,7 @@ export class KanbanOrchestratorService {
         const issuesJson = parsed.findings.length > 0
           ? JSON.stringify(parsed.findings)
           : null
-        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson)
+        updateTaskLogSummary(this.db, activeLog.id, summaryJson, issuesJson ?? undefined)
       }
     }
 

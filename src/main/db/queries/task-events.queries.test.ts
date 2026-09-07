@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../migration-runner'
 import { insertTaskEvent, getUnsyncedEvents, markEventSynced, getEventsByTask } from './task-events.queries'

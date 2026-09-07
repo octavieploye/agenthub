@@ -1,4 +1,3 @@
-import React from 'react'
 import { BrainEntry } from '../../../../shared/types/brain.types'
 import BrainEntryRow from './BrainEntryRow'
 

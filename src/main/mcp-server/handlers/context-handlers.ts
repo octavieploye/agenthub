@@ -209,7 +209,7 @@ export async function handleGetContext(
     healthResp.type === 'success' && Array.isArray(healthResp.data)
       ? (healthResp.data as HealthAnomaly[]).filter(
           (h): h is HealthAnomaly =>
-            h !== null && typeof h === 'object' && typeof (h as Record<string, unknown>).type === 'string'
+            h !== null && typeof h === 'object' && typeof (h as unknown as Record<string, unknown>).type === 'string'
         )
       : []
 

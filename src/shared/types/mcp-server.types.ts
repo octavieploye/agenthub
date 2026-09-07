@@ -302,6 +302,7 @@ export type McpIpcRequest =
   | { type: 'get_health_anomalies'; payload: { agentId?: string } }
   | { type: 'create_project'; payload: CreateProjectMcpInput }
   | { type: 'dispatch_sprint'; payload: { sprintName: string; repoId: string; projectId?: string; concurrencyCap?: number; telegramNotify?: boolean; confirmed: boolean } }
+  | { type: 'approve_task'; payload: ApproveTaskToolInput }
   | { type: 'report_files_changed'; payload: ReportFilesChangedToolInput }
 
 // FCR-007: typed generic variants — backward compatible (T defaults to unknown)

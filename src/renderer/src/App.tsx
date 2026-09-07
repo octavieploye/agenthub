@@ -298,12 +298,12 @@ function AppMain(): React.JSX.Element {
         if (!tts) return
         const { piperVoiceId, ttsRate } = useViewStore.getState()
         try {
-          const result = await tts.speak({
+          const result = (await tts.speak({
             text,
             voiceId: piperVoiceId || 'en_US-amy-medium',
             rate: ttsRate,
             volume,
-          })
+          })) as unknown as { data?: ArrayBuffer }
           if (result?.data) {
             const { playWav } = await import('./services/tts-player')
             await playWav(result.data, volume)

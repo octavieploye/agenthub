@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { runMigrations } from '../../db/migration-runner'
 import { insertRepo } from '../../db/queries/repos.queries'
 import { insertTask } from '../../db/queries/tasks.queries'
-import type { McpIpcResponse } from '@shared/types/mcp-server.types'
+import type { McpIpcResponse, ListTasksToolInput } from '@shared/types/mcp-server.types'
 import {
   handleCreateTask,
   handleCreateProject,
@@ -188,7 +188,7 @@ describe('task handlers', () => {
       ['status', { status: 'completed' }, ['Backend later task']],
       ['category', { category: 'frontend' }, ['Frontend sprint task']]
     ])('filters tasks by %s', (_filterName, filter, expectedTitles) => {
-      const result = handleListTasks(filter, db)
+      const result = handleListTasks(filter as ListTasksToolInput, db)
 
       expect(result.tasks.map((task) => task.title).sort()).toEqual(expectedTitles.sort())
       expect(result.total).toBe(expectedTitles.length)

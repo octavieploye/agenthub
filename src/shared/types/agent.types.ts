@@ -44,6 +44,7 @@ export interface AgentState {
   voiceMode: VoiceMode
   telegramNotify: boolean
   claudeMdHash?: string | null
+  claudeSessionId?: string | null
 }
 
 export interface AgentSpawnOptions {
@@ -63,4 +64,5 @@ export interface AgentSpawnOptions {
   voiceMode?: VoiceMode
   projectId?: string        // triggers workspace_memory.md injection at spawn
   telegramNotify?: boolean  // when true, appends send_telegram instruction to prompt
+  resumeSessionId?: string  // when set, passes --resume <uuid> to Claude CLI
 }

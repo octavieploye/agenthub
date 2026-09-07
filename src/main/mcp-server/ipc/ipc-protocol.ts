@@ -1,4 +1,5 @@
 import type { McpIpcRequest, McpIpcResponse } from '@shared/types/mcp-server.types'
+export type { McpIpcRequest, McpIpcResponse }
 
 // Tool I/O types are re-exported directly from @shared/types/mcp-server.types by all
 // consumers (server.ts, handlers). Only the wire-frame types are specific to this layer

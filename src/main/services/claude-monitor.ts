@@ -170,17 +170,26 @@ export class ClaudeMonitor {
   }
 
   private async readJsonlFiles(dir: string, entries: SessionEntry[]): Promise<void> {
-    const items = await fsp.readdir(dir)
+    let items: fs.Dirent[]
+    try {
+      items = await fsp.readdir(dir, { withFileTypes: true }) as fs.Dirent[]
+    } catch (err) {
+      log.debug(`Failed to read directory ${dir}:`, err)
+      return
+    }
 
-    for (const name of items) {
-      if (!name.endsWith('.jsonl')) continue
-      const fullPath = join(dir, name)
-      try {
-        const content = await fsp.readFile(fullPath, 'utf-8')
-        const parsed = parseJsonlContent(content)
-        entries.push(...parsed)
-      } catch (err) {
-        log.debug(`Failed to read ${fullPath}:`, err)
+    for (const item of items) {
+      if (item.isDirectory()) {
+        await this.readJsonlFiles(join(dir, item.name), entries)
+      } else if (item.isFile() && item.name.endsWith('.jsonl')) {
+        const fullPath = join(dir, item.name)
+        try {
+          const content = await fsp.readFile(fullPath, 'utf-8')
+          const parsed = parseJsonlContent(content)
+          entries.push(...parsed)
+        } catch (err) {
+          log.debug(`Failed to read ${fullPath}:`, err)
+        }
       }
     }
   }

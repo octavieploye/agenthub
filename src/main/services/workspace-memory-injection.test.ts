@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'

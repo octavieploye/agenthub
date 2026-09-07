@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shouldScrape, QuotaScrapeScheduler } from './quota-scrape-scheduler'
+import { shouldScrape, QuotaScrapeScheduler, type SettingsAccessor } from './quota-scrape-scheduler'
 
 vi.mock('electron-log/main', () => ({
   default: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() }
@@ -53,13 +53,13 @@ describe('Quota Scrape Scheduler', () => {
     })
 
     it('can be constructed', () => {
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       expect(scheduler).toBeDefined()
     })
 
     it('checkAndScrape triggers scrape when shouldScrape returns true', async () => {
       mockSettings.get.mockReturnValue(null) // no last scrape
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       await scheduler.checkAndScrape()
       expect(mockScrape).toHaveBeenCalledTimes(1)
     })
@@ -67,14 +67,14 @@ describe('Quota Scrape Scheduler', () => {
     it('checkAndScrape does not trigger when recently scraped', async () => {
       const recentDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
       mockSettings.get.mockReturnValue(recentDate)
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       await scheduler.checkAndScrape()
       expect(mockScrape).not.toHaveBeenCalled()
     })
 
     it('checkAndScrape persists timestamp on success', async () => {
       mockSettings.get.mockReturnValue(null)
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       await scheduler.checkAndScrape()
       expect(mockSettings.set).toHaveBeenCalledWith(
         'quota_last_scrape',
@@ -85,14 +85,14 @@ describe('Quota Scrape Scheduler', () => {
     it('checkAndScrape does not persist timestamp on scrape failure', async () => {
       mockSettings.get.mockReturnValue(null)
       mockScrape.mockRejectedValue(new Error('scrape failed'))
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       await scheduler.checkAndScrape()
       expect(mockSettings.set).not.toHaveBeenCalled()
     })
 
     it('start sets an interval and defers first check', () => {
       vi.useFakeTimers()
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       scheduler.start()
       // Should not trigger immediately (60s defer)
       expect(mockScrape).not.toHaveBeenCalled()
@@ -102,7 +102,7 @@ describe('Quota Scrape Scheduler', () => {
 
     it('stop clears timers', () => {
       vi.useFakeTimers()
-      const scheduler = new QuotaScrapeScheduler(mockSettings, mockScrape)
+      const scheduler = new QuotaScrapeScheduler(mockSettings as unknown as SettingsAccessor, mockScrape as unknown as () => Promise<void>)
       scheduler.start()
       scheduler.stop()
       // Advance past defer — should not trigger

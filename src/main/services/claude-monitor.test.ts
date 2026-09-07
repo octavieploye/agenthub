@@ -27,6 +27,22 @@ import { detectPlan, calculateBurnRate, aggregateUsage, ClaudeMonitor } from './
 import fs from 'node:fs'
 import fsp, { readdir } from 'node:fs/promises'
 
+// Helper: create a mock fs.Dirent-like object for use with readdir withFileTypes: true
+function mockFileDirent(name: string): fs.Dirent {
+  return {
+    name,
+    isDirectory: () => false,
+    isFile: () => true,
+    isBlockDevice: () => false,
+    isCharacterDevice: () => false,
+    isFIFO: () => false,
+    isSocket: () => false,
+    isSymbolicLink: () => false,
+    parentPath: '',
+    path: ''
+  } as unknown as fs.Dirent
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -404,7 +420,7 @@ describe('ClaudeMonitor', () => {
       }
       const fileContent = lines.join('\n')
 
-      mockedReaddir.mockResolvedValue(['session1.jsonl'] as unknown as Awaited<ReturnType<typeof readdir>>)
+      mockedReaddir.mockResolvedValue([mockFileDirent('session1.jsonl')] as unknown as Awaited<ReturnType<typeof readdir>>)
       mockedReadFile.mockResolvedValue(fileContent)
 
       const monitor = new ClaudeMonitor({ claudeDir: '/tmp/test-claude' })

@@ -18,18 +18,17 @@ export default function BrainTaskModal({ brainEntry, onClose, onSuccess }: Brain
     setError(null)
 
     try {
-      const result = await window.agentHub.brain.createTask({
+      await window.agentHub.brain.createTask({
         brainEntryId: brainEntry.id,
         subject: `Implement: ${brainEntry.subject}`,
         description: description || `Task created from brain entry: ${brainEntry.subject}`
       })
-      const taskId = result.taskId
 
       setIsCreating(false)
       onSuccess()
     } catch (err) {
       setIsCreating(false)
-      setError(err.message || 'Failed to create task')
+      setError((err as Error).message || 'Failed to create task')
     }
   }
 

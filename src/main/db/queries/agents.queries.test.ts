@@ -13,7 +13,8 @@ import {
   updateAgentStatus,
   updateAgentPid,
   deleteAgent,
-  resetStaleAgentsOnStartup
+  resetStaleAgentsOnStartup,
+  updateAgentSessionId
 } from './agents.queries'
 import type Database from 'better-sqlite3'
 
@@ -120,6 +121,21 @@ describe('Agents Queries', () => {
     expect(agent.voiceMode).toBe('off')
     const fromDb = getAgentById(db, agent.id)
     expect(fromDb!.voiceMode).toBe('off')
+  })
+
+  it('updates claude_session_id on an agent', () => {
+    const agent = insertAgent(db, { repoId, name: 'session-agent', cwd: '/tmp' })
+    updateAgentSessionId(db, agent.id, 'test-uuid-xyz')
+    const row = db.prepare('SELECT claude_session_id FROM agents WHERE id = ?').get(agent.id) as { claude_session_id: string }
+    expect(row.claude_session_id).toBe('test-uuid-xyz')
+  })
+
+  it('allows setting claude_session_id to null', () => {
+    const agent = insertAgent(db, { repoId, name: 'session-null', cwd: '/tmp' })
+    updateAgentSessionId(db, agent.id, 'some-uuid')
+    updateAgentSessionId(db, agent.id, null)
+    const row = db.prepare('SELECT claude_session_id FROM agents WHERE id = ?').get(agent.id) as { claude_session_id: string | null }
+    expect(row.claude_session_id).toBeNull()
   })
 })
 

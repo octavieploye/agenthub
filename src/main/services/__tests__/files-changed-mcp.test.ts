@@ -18,7 +18,7 @@ function makeDeps(sendIpc: ContextHandlerDeps['sendIpc']): ContextHandlerDeps {
     agenthubPath: '/fake/agenthub',
     appVersion: '0.0.0',
     getRepos: () => [],
-    getQuota: () => ({ used: 0, limit: 1000, percent: 0 }),
+    getQuota: () => ({ tokensThisSession: 0, sessionCap: 1000 }),
     getSafeguards: () => ({
       killSwitchActive: false,
       protectedPaths: [],

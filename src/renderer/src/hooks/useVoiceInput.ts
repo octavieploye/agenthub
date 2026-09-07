@@ -83,7 +83,7 @@ export function useVoiceInput({ inputRef, onAutoSend }: UseVoiceInputOptions) {
 
     try {
       const audioBuffer = await recorder.stopRecording()
-      const response = await window.agentHub.voice.transcribe(audioBuffer, voiceLanguage)
+      const response = await window.agentHub.voice.transcribe(audioBuffer)
 
       if (response.success && response.data.transcript) {
         const el = inputRef.current

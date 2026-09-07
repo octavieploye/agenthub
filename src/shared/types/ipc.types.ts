@@ -290,5 +290,8 @@ export interface AgentHubBridge {
     agentRateLimited: (
       callback: (agentId: string, detail: { provider: string; codexAvailable: boolean }) => void
     ) => () => void
+    sprintAutoStart: (callback: (payload: { sprintName: string; repoId: string }) => void) => () => void
+    agentErrorDetail: (callback: (payload: { agentId: string; errorType: string }) => void) => () => void
+    agentSkillInjectSkipped: (callback: (agentId: string) => void) => () => void
   }
 }

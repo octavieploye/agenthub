@@ -6,7 +6,6 @@ import { useSettledStatus } from '@renderer/hooks/use-settled-status'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useSkillsStore } from '@renderer/stores/skills-store'
-import { useViewStore } from '@renderer/stores/view-store'
 import { getShortModelName } from '@renderer/utils/model-utils'
 import IntentInput from './IntentInput'
 import ChipSurface from './ChipSurface'
@@ -28,6 +27,8 @@ interface AgentSidebarProps {
   onOpenGuardrails?: (agentId: string) => void
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
+  onContinueAgent?: (id: string) => void
+  onViewAgent?: (id: string) => void
   // New props
   skills?: SkillItem[]
   onLaunchWithIntent?: (text: string, skillId?: string) => void
@@ -52,7 +53,7 @@ interface GlowResult {
   glowClass: string
 }
 
-function getGlowConfig(agent: AgentState, isEscalated: boolean, isRead: boolean): GlowResult | null {
+function getGlowConfig(agent: AgentState, _isEscalated: boolean, isRead: boolean): GlowResult | null {
   if (isRead) return null
 
   const color = agent.color
@@ -465,20 +466,6 @@ function AgentCard({
   )
 }
 
-function EmptyAgentMessage(): React.JSX.Element {
-  const selectedRepoId = useViewStore((s) => s.selectedRepoId)
-  const repoName = selectedRepoId
-    ? selectedRepoId.split('/').filter(Boolean).pop() ?? selectedRepoId
-    : null
-  return (
-    <span>
-      {repoName
-        ? `No agents in ${repoName}. Click + to add one.`
-        : 'Select a repo to see agents.'}
-    </span>
-  )
-}
-
 function AgentSidebar({
   agents,
   activeAgentId,
@@ -490,6 +477,8 @@ function AgentSidebar({
   onOpenGuardrails,
   onToggleVoiceMode,
   onToggleTelegramNotify,
+  onContinueAgent,
+  onViewAgent,
   skills: skillsProp,
   onLaunchWithIntent,
   skillInjectSkipped,
@@ -504,6 +493,27 @@ function AgentSidebar({
   const [recentSkillIds, setRecentSkillIds] = useState<string[]>([])
 
   const readAgentIds = useAgentStore((s) => s.readAgentIds)
+
+  // Past sessions state
+  const [pastAgents, setPastAgents] = useState<AgentState[]>([])
+  const [pastSessionsOpen, setPastSessionsOpen] = useState(true)
+
+  useEffect(() => {
+    const loadPastAgents = async (): Promise<void> => {
+      try {
+        const result = await window.electron.ipcRenderer.invoke('agents:list-all')
+        if (result.success) {
+          const dead = (result.data as AgentState[]).filter(
+            (a) => a.status === 'completed' || a.status === 'interrupted'
+          )
+          setPastAgents(dead)
+        }
+      } catch {
+        // graceful degradation — no past sessions shown
+      }
+    }
+    loadPastAgents()
+  }, [])
 
   // Get skills from store if not passed as prop
   const storeSkills = useSkillsStore((s) => s.skills)
@@ -630,6 +640,34 @@ function AgentSidebar({
           </div>
         )}
       </div>
+
+      {/* Zone E2 — Past Sessions */}
+      {pastAgents.length > 0 && (
+        <div className="border-t border-base-content/8 shrink-0">
+          <button
+            className="flex items-center gap-1 w-full text-[11px] text-base-content/50 font-semibold uppercase tracking-wider px-3 py-1.5 hover:bg-base-content/4 text-left"
+            onClick={() => setPastSessionsOpen((prev) => !prev)}
+          >
+            <span>{pastSessionsOpen ? '\u25BC' : '\u25B6'}</span>
+            <span>Past Sessions ({pastAgents.length})</span>
+          </button>
+          {pastSessionsOpen && (
+            <div className="overflow-y-auto max-h-48 py-1" role="list" aria-label="Past sessions">
+              {pastAgents.map((agent) => (
+                <AgentMiniCard
+                  key={agent.id}
+                  agent={agent}
+                  isActive={false}
+                  isRead={readAgentIds.has(agent.id)}
+                  onSelectAgent={onSelectAgent}
+                  onContinue={onContinueAgent}
+                  onView={onViewAgent}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Zone F — Footer */}
       <div className="px-3 py-1.5 border-t border-base-content/10 shrink-0">

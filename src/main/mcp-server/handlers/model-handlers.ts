@@ -4,7 +4,7 @@ import type {
   EstimateTokensToolOutput,
   RecommendModelToolInput
 } from '@shared/types/mcp-server.types'
-import type { ModelProvider, CapabilityTier, ModelCatalogEntry } from '@shared/types/model.types'
+import type { ModelProvider, ModelCatalogEntry } from '@shared/types/model.types'
 
 // ─── Pure quota / complexity helpers ─────────────────────────────────────────
 //
@@ -149,7 +149,7 @@ export function handleRecommendModel(
   return {
     modelId,
     provider,
-    capabilityTier: tier as CapabilityTier,
+    capabilityTier: tier,
     rationale,
     estimatedTokens,
     contextWindowFit,

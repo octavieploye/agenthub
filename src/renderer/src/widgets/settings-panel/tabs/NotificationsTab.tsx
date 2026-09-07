@@ -39,9 +39,10 @@ export function NotificationsTab(): React.JSX.Element {
     if (!tts) return
     tts.speak({ text: 'Agent task complete', voiceId: 'en_US-amy-medium', rate: 1.0, volume: ttsVolume })
       .then(async (result) => {
-        if (result?.data) {
+        const r = result as unknown as { data?: ArrayBuffer }
+        if (r.data) {
           const { playWav } = await import('../../../services/tts-player')
-          await playWav(result.data, ttsVolume)
+          await playWav(r.data, ttsVolume)
         }
       })
       .catch(console.warn)

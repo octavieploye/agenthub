@@ -95,7 +95,7 @@ export function AdvancedTab(): React.JSX.Element {
   // TODO: Add shell:open-path IPC channel (R7-S1 backend task)
   const handleOpenInEditor = async (): Promise<void> => {
     try {
-      await (window.agentHub.system as Record<string, unknown> & { openPath?: (path: string) => Promise<void> }).openPath?.('~/.claude/CLAUDE.md')
+      await (window.agentHub.system as unknown as Record<string, unknown> & { openPath?: (path: string) => Promise<void> }).openPath?.('~/.claude/CLAUDE.md')
     } catch {
       console.warn('openPath IPC not yet available')
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useBrainStore } from './brain-store'
 import { useReposStore } from '@renderer/stores/repos-store'
 import BrainRepoGroup from './BrainRepoGroup'

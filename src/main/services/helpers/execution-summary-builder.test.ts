@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildExecutionSummary } from './execution-summary-builder'
-import type { OrchestratorTaskLog } from '../../../../shared/types/orchestrator.types'
+import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
 
 function makeLog(overrides: Partial<OrchestratorTaskLog> & { id: string }): OrchestratorTaskLog {
   return {
@@ -13,6 +13,7 @@ function makeLog(overrides: Partial<OrchestratorTaskLog> & { id: string }): Orch
     providerUsed: null,
     summaryJson: null,
     issuesJson: null,
+    filesChangedJson: null,
     createdAt: '2026-08-20T10:00:00.000Z',
     updatedAt: '2026-08-20T10:05:00.000Z',
     startedAt: null,

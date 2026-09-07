@@ -300,7 +300,7 @@ export class SprintWatcher {
           }
 
           const task = insertTask(db, {
-            repoId: payload.repoId,
+            repoId: payload.repoId ?? '',
             title: story.title,
             description: story.description,
             priority: story.priority,

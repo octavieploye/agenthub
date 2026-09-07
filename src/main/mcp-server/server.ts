@@ -403,7 +403,7 @@ async function main(): Promise<void> {
 
       switch (name) {
         case 'create_task':
-          result = await handleCreateTask(safeArgs as CreateTaskToolInput, taskDeps)
+          result = await handleCreateTask(safeArgs as unknown as CreateTaskToolInput, taskDeps)
           break
 
         case 'list_tasks':
@@ -411,28 +411,28 @@ async function main(): Promise<void> {
           break
 
         case 'dispatch_task':
-          result = await handleDispatchTask(safeArgs as DispatchTaskToolInput, taskDeps)
+          result = await handleDispatchTask(safeArgs as unknown as DispatchTaskToolInput, taskDeps)
           break
 
         case 'dispatch_sprint':
-          result = await handleDispatchSprint(safeArgs as DispatchSprintToolInput, taskDeps)
+          result = await handleDispatchSprint(safeArgs as unknown as DispatchSprintToolInput, taskDeps)
           break
 
         case 'approve_task':
-          result = await handleApproveTask(safeArgs as ApproveTaskToolInput, taskDeps)
+          result = await handleApproveTask(safeArgs as unknown as ApproveTaskToolInput, taskDeps)
           break
 
         case 'estimate_tokens':
-          result = handleEstimateTokens(safeArgs as EstimateTokensToolInput)
+          result = handleEstimateTokens(safeArgs as unknown as EstimateTokensToolInput)
           break
 
         case 'recommend_model':
-          result = handleRecommendModel(safeArgs as RecommendModelToolInput, contextDeps.getModelCatalog())
+          result = handleRecommendModel(safeArgs as unknown as RecommendModelToolInput, contextDeps.getModelCatalog())
           break
 
         case 'get_guardrails':
           result = handleGetGuardrails(
-            safeArgs as GetGuardrailsToolInput,
+            safeArgs as unknown as GetGuardrailsToolInput,
             contextDeps.getRepos().map((r) => r.path),
             agenthubPath
           )
@@ -451,15 +451,15 @@ async function main(): Promise<void> {
           break
 
         case 'create_project':
-          result = await handleCreateProject(safeArgs as CreateProjectMcpInput, taskDeps)
+          result = await handleCreateProject(safeArgs as unknown as CreateProjectMcpInput, taskDeps)
           break
 
         case 'audit_deps':
-          result = await handleAuditDeps(safeArgs as AuditDepsToolInput, auditDependencyRoots)
+          result = await handleAuditDeps(safeArgs as unknown as AuditDepsToolInput, auditDependencyRoots)
           break
 
         case 'report_files_changed':
-          result = await handleReportFilesChanged(safeArgs as ReportFilesChangedToolInput, contextDeps)
+          result = await handleReportFilesChanged(safeArgs as unknown as ReportFilesChangedToolInput, contextDeps)
           break
 
         default:

@@ -29,7 +29,8 @@ export function VoiceTab(): React.JSX.Element {
     const ttsApi = (window as Window & typeof globalThis & { agentHub?: { tts?: TtsApi } }).agentHub?.tts
     if (!ttsApi) return
     ttsApi.listVoices().then((result) => {
-      if (result?.data) setVoices(result.data)
+      const r = result as unknown as { data?: PiperVoice[] }
+      if (r.data) setVoices(r.data)
     }).catch(console.warn)
   }, [])
 

@@ -24,7 +24,8 @@ const STATUS_BADGE_CLASSES: Record<AgentLifecycleStatus, string> = {
   interrupted: 'badge-error',
   tray_running: 'badge-success',
   error: 'badge-error',
-  awaiting_approval: 'badge-warning'
+  awaiting_approval: 'badge-warning',
+  rate_limited: 'badge-warning'
 }
 
 const CONFIDENCE_LABELS: Record<string, string> = {

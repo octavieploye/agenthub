@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useBrainStore } from './brain-store'
 import { useViewStore } from '@renderer/stores/view-store'
 import BrainTimelineEntry from './BrainTimelineEntry'
@@ -7,7 +7,7 @@ import BrainTimelineEntry from './BrainTimelineEntry'
  * Timeline view showing merged brain events and git commits
  */
 export default function BrainTimelineView() {
-  const { timelineData, loading, error, getTimeline } = useBrainStore()
+  const { timelineData, loading: _loading, error: _error, getTimeline } = useBrainStore()
   const selectedRepoId = useViewStore((s) => s.selectedRepoId)
 
   useEffect(() => {

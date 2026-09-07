@@ -36,6 +36,7 @@ export interface McpManagerDeps {
     start: (input: OrchestratorStartInput) => OrchestratorRunLike
     startSingleTask: (input: OrchestratorStartInput) => OrchestratorRunLike
     getStatus?: () => OrchestratorStatusResponse
+    approveTaskDispatch: (runId: string, taskId: string, approved: boolean) => void
   }
   healthMonitor: {
     getSnapshot: (agentId: string) => { anomalies: HealthAnomaly[] } | null
@@ -337,14 +338,14 @@ export class McpServerManager {
           }
         }
         deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, task)
-        return task
+        return task as unknown as McpIpcRouteResult
       }
       case 'update_task': {
         updateTask(db, request.payload.taskId, request.payload.updates as UpdateTaskInput)
         const task = getTaskById(db, request.payload.taskId)
         if (!task) throw new Error(`Task not found: ${request.payload.taskId}`)
         deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, task)
-        return task
+        return task as unknown as McpIpcRouteResult
       }
       case 'dispatch_task': {
         const task = getTaskById(db, request.payload.taskId)
@@ -368,7 +369,7 @@ export class McpServerManager {
       case 'get_active_agents':
         return deps.listAgents()
       case 'get_orchestrator_status':
-        return deps.orchestrator.getStatus?.() ?? null
+        return (deps.orchestrator.getStatus?.() ?? null) as unknown as McpIpcRouteResult
       case 'create_project': {
         const { repoId, name, description } = request.payload
         const existing = getProjectsByRepoId(db, repoId).find((p) => p.name === name)

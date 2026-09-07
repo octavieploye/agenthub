@@ -87,6 +87,8 @@ describe('snapshots.queries', () => {
             effortLevel: 'medium' as const,
             color: '#3B82F6',
             executionMode: 'native' as const,
+            voiceMode: 'off' as const,
+            telegramNotify: false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           }

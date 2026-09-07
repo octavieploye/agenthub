@@ -191,7 +191,6 @@ describe('SprintWatcher.confirmDraft', () => {
   it('rejects a path-traversal projectId and does not rename any file', () => {
     const evilProjectId = '../evil'
     // Create a file that would be targeted if the guard did not fire
-    const draftPath = join(intakeDir, `sprint-${evilProjectId}.draft.json`)
     // We deliberately do NOT create the file — the guard must return before renameSync is reached
     // Calling confirmDraft should return silently without throwing
     expect(() => watcher.confirmDraft(evilProjectId, intakeDir)).not.toThrow()
@@ -268,7 +267,6 @@ describe('SprintWatcher.parseAndStage — Fix A: file size limit', () => {
   })
 
   it('stages a file that is exactly at the 5 MB boundary (not over)', () => {
-    const FIVE_MB = 5 * 1024 * 1024
     const payload: SprintIntakePayload = {
       sprintName: 'Sprint Boundary',
       repoId: 'r1',

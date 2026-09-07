@@ -255,3 +255,9 @@ export function updateAgentExecutionMode(
   db.prepare('UPDATE agents SET execution_mode = ?, updated_at = ? WHERE id = ?')
     .run(executionMode, new Date().toISOString(), id)
 }
+
+export function updateAgentSessionId(db: Database.Database, id: string, claudeSessionId: string | null): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE agents SET claude_session_id = ?, updated_at = ? WHERE id = ?').run(claudeSessionId, now, id)
+  log.debug('Agent session ID updated', { id, claudeSessionId })
+}

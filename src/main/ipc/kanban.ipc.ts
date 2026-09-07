@@ -54,7 +54,7 @@ export function registerKanbanHandlers(): void {
           repoId: s.repoId,
           title: s.title,
           description: s.description,
-          priority: s.priority,
+          priority: s.priority as import('../../shared/types/task.types').TaskPriority,
           status: 'backlog',
           sprintName: s.sprintName,
           epicName: s.epicName

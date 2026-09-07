@@ -79,7 +79,7 @@ function createWindow(): void {
   mainWindow.on('close', () => {
     log.info('Main window close event', {
       reason: getShutdownReason(),
-      isQuitting: app.isQuitting?.() ?? 'unknown'
+      isQuitting: (app as unknown as { isQuitting?: () => boolean }).isQuitting?.() ?? 'unknown'
     })
   })
 

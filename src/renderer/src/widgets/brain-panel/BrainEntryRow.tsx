@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { BrainEntry } from '../../../../shared/types/brain.types'
 import { useBrainStore } from './brain-store'
 import { useReposStore } from '@renderer/stores/repos-store'
@@ -159,7 +159,7 @@ export default function BrainEntryRow({ entry }: BrainEntryRowProps) {
                 className={`badge ${getStatusBadgeClass()} badge-lg cursor-pointer`}
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
               >
-                {entry.status === 'not_actioned' ? '⚠ NOT ACTIONED' : entry.status.toUpperCase()}
+                {(entry.status as string) === 'not_actioned' ? '⚠ NOT ACTIONED' : entry.status.toUpperCase()}
               </div>
               {isStatusDropdownOpen && (
                 <>

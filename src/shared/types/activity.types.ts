@@ -4,6 +4,7 @@ export type ActivityEventType =
   | 'agent_completed'
   | 'agent_interrupted'
   | 'agent_respawned'
+  | 'agent_fallback_respawned'
   | 'agent_error'
   | 'task_created'
   | 'task_status_changed'

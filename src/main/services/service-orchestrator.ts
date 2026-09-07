@@ -36,7 +36,6 @@ import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orche
 import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
 import { OrchestratorMonitorService } from './orchestrator-monitor'
 import { McpServerManager } from './mcp-server-manager'
-import { isOrchestratorEnabled } from './orchestrator-settings'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
@@ -320,7 +319,7 @@ export function initializeServices(db: Database.Database): void {
   })
 
   // 7a. BrainScannerService — depends on GitService for timeline merging
-  const brainScanner = initBrainScanner(gitService)
+  initBrainScanner(gitService)
 
   // Brain scanner auto-discovers on query — no watcher needed
 
@@ -621,13 +620,14 @@ export function initializeServices(db: Database.Database): void {
       start: (input) => kanbanOrchestrator!.start(input),
       startSingleTask: (input) => kanbanOrchestrator!.startSingleTask(input),
       getStatus: () => kanbanOrchestrator!.getStatus(),
+      approveTaskDispatch: (runId, taskId, approved) => kanbanOrchestrator!.approveTaskDispatch(runId, taskId, approved),
     },
     healthMonitor: {
       getSnapshot: (agentId) => healthMonitor?.getSnapshot(agentId) ?? null,
     },
     emitToRenderer: emitToAllRenderers,
     listAgents,
-    spawnAgent,
+    spawnAgent: spawnAgent as unknown as (...args: unknown[]) => unknown,
   }, () => {
     // onReady: socket is bound and chmod'd — safe to publish path and token
     setMcpServerInfo(mcpServerManager!.getSocketPath(), mcpServerManager!.getSocketToken())

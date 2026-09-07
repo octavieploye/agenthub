@@ -41,7 +41,7 @@ interface GlowResult {
   glowClass: string
 }
 
-function getGlowConfig(agent: AgentState, isEscalated: boolean, isRead: boolean): GlowResult | null {
+function getGlowConfig(agent: AgentState, _isEscalated: boolean, isRead: boolean): GlowResult | null {
   if (isRead) return null
 
   const color = agent.color
@@ -74,6 +74,8 @@ interface AgentMiniCardProps {
   onToggleVoiceMode?: (agentId: string, mode: VoiceMode) => void
   onToggleTelegramNotify?: (agentId: string, enabled: boolean) => void
   onOpenGuardrails?: (agentId: string) => void
+  onContinue?: (id: string) => void
+  onView?: (id: string) => void
   skillInjectSkipped?: Set<string>
 }
 
@@ -88,6 +90,8 @@ function AgentMiniCard({
   onToggleVoiceMode,
   onToggleTelegramNotify,
   onOpenGuardrails,
+  onContinue,
+  onView,
   skillInjectSkipped,
 }: AgentMiniCardProps): React.JSX.Element {
   // Escalation tracking (30s for awaiting/locked)
@@ -252,6 +256,24 @@ function AgentMiniCard({
           </span>
         )}
       </div>
+      {(agent.status === 'completed' || agent.status === 'interrupted') && (
+        <div className="flex gap-1 pb-1.5 px-3 ml-8">
+          <button
+            onClick={(e) => { e.stopPropagation(); onView?.(agent.id) }}
+            className="btn btn-xs btn-ghost gap-1"
+            title="View output"
+          >
+            View
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onContinue?.(agent.id) }}
+            className="btn btn-xs btn-ghost gap-1"
+            title="Continue agent"
+          >
+            Continue
+          </button>
+        </div>
+      )}
       {isActive && (
         <div className="flex gap-1 pb-1.5 px-3 ml-8">
           {(agent.status === 'busy' || agent.status === 'locked') && onPauseAgent && (

@@ -4,7 +4,6 @@ import { runMigrations } from '../db/migration-runner'
 import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
 import {
   getActiveTaskLogs,
-  getTaskLogsByRun,
   insertTaskLog,
   updateTaskLogStatus,
 } from '../db/queries/orchestrator.queries'
@@ -76,7 +75,7 @@ function enableOrchestrator(): void {
  */
 function setupStuckScenario(
   service: KanbanOrchestratorService,
-  deps: OrchestratorDeps,
+  _deps: OrchestratorDeps,
   elapsedMs: number
 ): { runId: string; taskId: string; taskLogId: string; agentId: string } {
   const run = service.start({
@@ -173,8 +172,6 @@ describe('Tick timer safety (G1-G5)', () => {
       service.tick()
 
       // spawnAgent should NOT have been called beyond the initial dispatch from start()
-      // If tick ran, it would try to dispatch — verify no additional spawn calls
-      const spawnCalls = (deps.spawnAgent as ReturnType<typeof vi.fn>).mock.calls.length
       // tick() should have returned immediately — no new dispatches
       expect(service.isTickPaused()).toBe(true)
       // The key assertion: tick() returned early and didn't update the run timestamp

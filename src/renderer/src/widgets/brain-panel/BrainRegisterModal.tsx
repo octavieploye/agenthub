@@ -30,7 +30,7 @@ export default function BrainRegisterModal({ onClose, onSuccess }: {
     setError(null)
 
     try {
-      const result = await window.agentHub.brain.register({
+      await window.agentHub.brain.register({
         repoId: formData.repoId,
         subject: formData.subject,
         type: formData.type,
@@ -43,7 +43,7 @@ export default function BrainRegisterModal({ onClose, onSuccess }: {
       onSuccess()
     } catch (err) {
       setIsCreating(false)
-      setError(err.message || 'Failed to register brain entry')
+      setError((err as Error).message || 'Failed to register brain entry')
     }
   }
 

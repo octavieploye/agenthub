@@ -37,7 +37,7 @@ describe('TelegramQueueProcessor', () => {
     notifySpy = vi.fn()
     processor = new TelegramQueueProcessor({
       db,
-      notify: notifySpy,
+      notify: notifySpy as unknown as (payload: TelegramNotificationPayload) => void,
       logInfo: vi.fn(),
       logError: vi.fn(),
     })

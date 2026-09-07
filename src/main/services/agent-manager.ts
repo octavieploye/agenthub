@@ -4,7 +4,7 @@ import log from 'electron-log/main'
 import type { AgentState, AgentSpawnOptions, AgentLifecycleStatus, ModelProvider } from '../../shared/types/agent.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { getDb, isDbShuttingDown } from '../db/connection'
-import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, updateAgentTelegramNotify as dbUpdateAgentTelegramNotify, getAgentById, getAllAgents } from '../db/queries/agents.queries'
+import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
 import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
@@ -241,7 +241,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
         const task = recentOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
         const payload: TelegramNotificationPayload = {
-          type: payloadType,
+          type: payloadType as TelegramNotificationPayload['type'],
           agentId: agent.id,
           agentName: agent.name,
           repo: agent.cwd.split('/').pop() ?? agent.cwd,

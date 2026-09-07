@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import BrainEntryRow from './BrainEntryRow'
 import { BrainEntry } from '../../../../shared/types/brain.types'
 
@@ -17,7 +17,7 @@ export default function BrainRepoGroup({ repoName, entries, summary }: BrainRepo
   const [isExpanded, setIsExpanded] = useState(true)
 
   // Calculate summary text
-  const summaryParts = []
+  const summaryParts: string[] = []
   if (summary.active > 0) summaryParts.push(`${summary.active} active`)
   if (summary.notActioned > 0) summaryParts.push(`${summary.notActioned} not actioned`)
   if (summary.parked > 0) summaryParts.push(`${summary.parked} parked`)

@@ -719,7 +719,7 @@ describe('KanbanOrchestratorService', () => {
     it('tick dispatches next tasks when slots are available', () => {
       const deps = createMockDeps()
       const service = trackService(new KanbanOrchestratorService(db, deps))
-      const run = service.start({
+      service.start({
         sprintName: 'R7-B',
         repoId: 'repo-1',
         concurrencyCap: 2,
@@ -820,7 +820,7 @@ describe('KanbanOrchestratorService', () => {
         })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
-      const run = service.start({ sprintName: 'C3-test', repoId: 'repo-1', confirmed: true })
+      service.start({ sprintName: 'C3-test', repoId: 'repo-1', confirmed: true })
       insertTask(db, { repoId: 'repo-1', title: 'Wire Anamnesis', priority: 1, status: 'backlog' })
 
       // Drive task through all phases
@@ -867,7 +867,7 @@ describe('KanbanOrchestratorService', () => {
         })
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
-      const run = service.start({ sprintName: 'Sprint-C3', repoId: 'repo-1', confirmed: true })
+      service.start({ sprintName: 'Sprint-C3', repoId: 'repo-1', confirmed: true })
       insertTask(db, { repoId: 'repo-1', title: 'Only task', priority: 1, status: 'backlog' })
 
       // Complete the single task through all phases

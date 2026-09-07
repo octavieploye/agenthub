@@ -4,9 +4,9 @@ import type { SBARHandoff } from '@shared/types/recovery.types'
 import { buildContinuationPrompt, stripAnsi, extractTail } from './buildContinuationPrompt'
 
 interface ContinuationDialogProps {
-  agent: AgentState
+  agent: AgentState & { claudeSessionId?: string | null }
   onClose: () => void
-  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string) => Promise<string | null>
+  onSpawn: (cwd: string, name: string, repoId: string, model?: string, task?: string, resumeSessionId?: string) => Promise<string | null>
 }
 
 export function ContinuationDialog({
@@ -22,6 +22,7 @@ export function ContinuationDialog({
   const [cwd, setCwd] = useState(agent.cwd ?? '')
   const [model, setModel] = useState(agent.model ?? '')
   const [summaryVisible, setSummaryVisible] = useState(true)
+  const [useResume, setUseResume] = useState(false)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [spawning, setSpawning] = useState(false)
@@ -64,7 +65,8 @@ export function ContinuationDialog({
   const handleSpawn = async (): Promise<void> => {
     setSpawning(true)
     setSpawnError(null)
-    const err = await onSpawn(cwd, name, agent.repoId, model || undefined, prompt)
+    const resumeSessionId = useResume ? (agent.claudeSessionId ?? undefined) : undefined
+    const err = await onSpawn(cwd, name, agent.repoId, model || undefined, prompt, resumeSessionId)
     if (err) {
       setSpawnError(err)
       setSpawning(false)
@@ -124,6 +126,25 @@ export function ContinuationDialog({
                   </div>
                 )}
               </div>
+
+              {/* Zone 1.5 — Resume mode toggle (only when session ID available) */}
+              {agent.claudeSessionId && (
+                <div className="flex gap-2 items-center">
+                  <label className="text-sm font-medium text-base-content/70">Mode:</label>
+                  <button
+                    onClick={() => setUseResume(false)}
+                    className={`text-xs px-2 py-1 rounded ${!useResume ? 'bg-primary text-white' : 'bg-base-200'}`}
+                  >
+                    Context Summary
+                  </button>
+                  <button
+                    onClick={() => setUseResume(true)}
+                    className={`text-xs px-2 py-1 rounded ${useResume ? 'bg-primary text-white' : 'bg-base-200'}`}
+                  >
+                    True Resume
+                  </button>
+                </div>
+              )}
 
               {/* Zone 2 — Prompt editor */}
               <div className="space-y-1">
