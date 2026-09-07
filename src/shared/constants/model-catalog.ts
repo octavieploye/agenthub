@@ -30,7 +30,7 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
     claudeComparison: 'Most capable Claude model'
   },
   {
-    id: 'claude-haiku-4-5',
+    id: 'claude-haiku-4-5-20251001',
     name: 'Claude Haiku 4.5',
     provider: 'anthropic',
     category: 'coding',

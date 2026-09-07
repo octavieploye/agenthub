@@ -1,6 +1,6 @@
 import { OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '../../../shared/constants/model-catalog'
 
-const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'] as const
+const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'] as const
 
 /**
  * Validates that a model override is a known model for the given provider.

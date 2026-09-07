@@ -34,7 +34,7 @@ const SIMPLE_KEYWORDS = ['fix', 'bug', 'typo', 'update', 'lint']
 
 export const CLAUDE_SONNET = 'claude-sonnet-4-6'
 export const CLAUDE_OPUS = 'claude-opus-4-6'
-export const CLAUDE_HAIKU = 'claude-haiku-4-5'
+export const CLAUDE_HAIKU = 'claude-haiku-4-5-20251001'
 const OLLAMA_DEFAULT = 'llama3'
 const OLLAMA_LOCAL_URL = 'http://localhost:11434'
 

@@ -35,7 +35,7 @@ export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
 export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = [
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet', provider: 'anthropic' },
   { id: 'claude-opus-4-6', name: 'Claude Opus', provider: 'anthropic' },
-  { id: 'claude-haiku-4-5', name: 'Claude Haiku', provider: 'anthropic' },
+  { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku', provider: 'anthropic' },
 ]
 
 export const CODEX_MODEL_OPTIONS: CloudModelEntry[] = [
