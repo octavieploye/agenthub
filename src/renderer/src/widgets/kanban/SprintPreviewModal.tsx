@@ -60,6 +60,14 @@ export function SprintPreviewModal() {
             </div>
           </div>
 
+          {pending.newRepoRegistered && (
+            <div className="text-xs bg-info/10 text-info border border-info/20 rounded px-2 py-1.5">
+              New repo registered: <span className="font-medium">{pending.newRepoName}</span>
+              <br />
+              <span className="text-[10px] opacity-70">{pending.newRepoPath}</span>
+            </div>
+          )}
+
           <div className="text-xs text-base-content/50">
             All tasks will be added to the <span className="font-medium">Backlog</span> column.
           </div>

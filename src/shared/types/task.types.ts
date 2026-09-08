@@ -213,6 +213,10 @@ export interface SprintPendingPayload {
   taskCount: number
   dependencyCount: number
   repoId: string
+  /** Set when the repo was auto-registered from repoPath during sprint staging */
+  newRepoRegistered?: boolean
+  newRepoName?: string
+  newRepoPath?: string
 }
 
 export interface SprintDraftReadyPayload {

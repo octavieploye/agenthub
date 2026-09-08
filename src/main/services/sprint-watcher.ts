@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3'
 import { insertTask } from '../db/queries/tasks.queries'
 import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
 import { getRepoExistsById, getSprintTaskCount, getRepoByPath } from '../db/queries/sprint-watcher.queries'
+import { insertRepo } from '../db/queries/repos.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type { SprintIntakePayload, SprintPendingPayload, SprintDraftReadyPayload } from '../../shared/types/task.types'
 import { SprintCardEnricher } from './sprint-card-enricher'
@@ -22,6 +23,7 @@ interface PendingEntry {
   payload: SprintIntakePayload
   stagedAt: number
   fromRepo: boolean
+  autoRegistered?: boolean
 }
 
 export class SprintWatcher {
@@ -158,17 +160,39 @@ export class SprintWatcher {
         return null
       }
       // Resolve repoPath → repoId when repoId is absent
+      let repoAutoRegistered = false
       if (!payload.repoId && payload.repoPath) {
         if (!this.db) {
           log.warn('SprintWatcher: repoPath provided but db not available', { filePath })
           return null
         }
         const resolved = getRepoByPath(this.db, payload.repoPath)
-        if (!resolved) {
-          log.warn('SprintWatcher: repoPath not found in repos', { repoPath: payload.repoPath, filePath })
-          return null
+        if (resolved) {
+          payload = { ...payload, repoId: resolved }
+        } else {
+          // Auto-register: verify path exists on disk and is a directory
+          try {
+            const pathStat = statSync(payload.repoPath)
+            if (!pathStat.isDirectory()) {
+              log.warn('SprintWatcher: repoPath is not a directory', { repoPath: payload.repoPath })
+              return null
+            }
+          } catch {
+            log.warn('SprintWatcher: repoPath does not exist on disk', { repoPath: payload.repoPath })
+            return null
+          }
+          const newRepo = insertRepo(this.db, {
+            name: basename(payload.repoPath),
+            path: payload.repoPath,
+          })
+          payload = { ...payload, repoId: newRepo.id }
+          repoAutoRegistered = true
+          log.info('SprintWatcher: auto-registered new repo from repoPath', {
+            repoId: newRepo.id,
+            name: newRepo.name,
+            path: payload.repoPath,
+          })
         }
-        payload = { ...payload, repoId: resolved }
       }
 
       if (!payload.sprintName || !payload.repoId || !Array.isArray(payload.epics)) {
@@ -182,7 +206,7 @@ export class SprintWatcher {
       }
 
       const pendingId = randomUUID()
-      const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now(), fromRepo }
+      const entry: PendingEntry = { pendingId, filePath, projectId, payload, stagedAt: Date.now(), fromRepo, autoRegistered: repoAutoRegistered }
       this.pending.set(pendingId, entry)
 
       // Auto-confirm: skip the import modal and insert tasks immediately
@@ -211,7 +235,12 @@ export class SprintWatcher {
         epicCount: payload.epics.length,
         taskCount,
         dependencyCount,
-        repoId: payload.repoId
+        repoId: payload.repoId,
+        ...(entry.autoRegistered ? {
+          newRepoRegistered: true,
+          newRepoName: basename(payload.repoPath!),
+          newRepoPath: payload.repoPath,
+        } : {}),
       }
       emitFn(IPC_EVENTS.KANBAN.SPRINT_PENDING, summary)
       log.info('SprintWatcher: sprint staged', { pendingId, sprintName: payload.sprintName, taskCount })
