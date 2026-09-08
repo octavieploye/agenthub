@@ -124,6 +124,14 @@ describe('ClaudeCliOutputParser', () => {
       const result = parser.parse('❯ hello world')
       expect(result?.status).not.toBe('locked')
     })
+
+    it('does NOT trigger locked for the always-visible ❯ input bar while the agent is working', () => {
+      // Claude CLI v2.x renders the ❯ input bar at the bottom of the terminal at ALL
+      // times — even mid-task. A mid-buffer ❯ followed by spinner/thinking output is
+      // NOT the agent waiting at the prompt. Regression: 2026-09-08 orchestrator kill.
+      const result = parser.parse('❯  \n⏵⏵bypasspermissionson (shift+tab to cycle) · esc to interrupt\n✢ (thinking with medium effort)')
+      expect(result?.status).not.toBe('locked')
+    })
   })
 
   describe('real Claude CLI prompt detection', () => {

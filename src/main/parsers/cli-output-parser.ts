@@ -38,7 +38,7 @@ const PATTERNS = {
   ],
   waiting_input: [
     /^\?\s+\S/m,
-    /^❯\s*$/m,                             // Claude CLI v2.x empty prompt (❯ alone on a line, no content)
+    /❯\s*$/,                               // Claude CLI v2.x idle prompt — ❯ must be the LAST thing in the buffer (the input bar is always rendered, so a mid-buffer ❯ is NOT idle)
     /waiting for (?:input|response)/i,
     /\[Y\/n\]/,
     /press enter/i

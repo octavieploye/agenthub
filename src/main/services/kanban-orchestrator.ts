@@ -2073,11 +2073,6 @@ export class KanbanOrchestratorService {
           if (!currentRun) return
           // R-004: Read output BEFORE killing the agent so the buffer is still intact.
           const output = this.deps?.getAgentOutput?.(agentId) ?? ''
-          try {
-            this.deps?.killAgent?.(agentId)
-          } catch (err) {
-            log.warn('Orchestrator: failed to kill agent after simple path', { agentId, error: String(err) })
-          }
           const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
           const lines = stripped.trimEnd().split('\n')
           const tail = lines.slice(-20)
@@ -2086,10 +2081,19 @@ export class KanbanOrchestratorService {
             return t === 'DONE' || t.endsWith(' DONE') || t === '⏺ DONE'
           })
           if (!hasDoneSentinel) {
+            // No DONE sentinel — agent is paused/thinking, NOT done. Leave it alive
+            // (G2 stuck-detection handles genuinely stuck agents). Killing here would
+            // turn a false 'locked' into a dead agent + failed phase (see 2026-09-08 incident).
             log.warn('Orchestrator: B-1 agent locked but no DONE sentinel in last 20 lines — treating as question/pause, not advancing', {
               agentId, taskId, lastLines: tail.slice(-5).join(' | '),
             })
             return
+          }
+          // Sentinel confirmed — only now kill the agent (read already happened above).
+          try {
+            this.deps?.killAgent?.(agentId)
+          } catch (err) {
+            log.warn('Orchestrator: failed to kill agent after simple path', { agentId, error: String(err) })
           }
           this.simplePathModes.delete(agentId)
           updateTaskLogStatus(this.db, logId, 'done')
