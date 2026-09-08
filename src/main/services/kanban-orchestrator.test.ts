@@ -823,7 +823,7 @@ describe('KanbanOrchestratorService', () => {
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       service.start({ sprintName: 'C3-test', repoId: 'repo-1', confirmed: true })
-      insertTask(db, { repoId: 'repo-1', title: 'Wire Anamnesis', priority: 1, status: 'backlog' })
+      insertTask(db, { repoId: 'repo-1', title: 'Wire Anamnesis', priority: 1, status: 'backlog', category: 'backend', riskScore: 3 })
 
       // Drive task through all phases
       service.tick()
@@ -870,7 +870,7 @@ describe('KanbanOrchestratorService', () => {
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       service.start({ sprintName: 'Sprint-C3', repoId: 'repo-1', confirmed: true })
-      insertTask(db, { repoId: 'repo-1', title: 'Only task', priority: 1, status: 'backlog' })
+      insertTask(db, { repoId: 'repo-1', title: 'Only task', priority: 1, status: 'backlog', category: 'backend', riskScore: 3 })
 
       // Complete the single task through all phases
       service.tick()
@@ -920,7 +920,7 @@ describe('KanbanOrchestratorService', () => {
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({ sprintName: 'C3-summary', repoId: 'repo-1', confirmed: true })
-      insertTask(db, { repoId: 'repo-1', title: 'Summary test', priority: 1, status: 'backlog' })
+      insertTask(db, { repoId: 'repo-1', title: 'Summary test', priority: 1, status: 'backlog', category: 'backend', riskScore: 3 })
 
       service.tick()
 
@@ -984,7 +984,7 @@ describe('KanbanOrchestratorService', () => {
       })
       const service = trackService(new KanbanOrchestratorService(db, deps))
       service.start({ sprintName: 'Flush-test', repoId: 'repo-1', confirmed: true })
-      insertTask(db, { repoId: 'repo-1', title: 'Flush task', priority: 1, status: 'backlog' })
+      insertTask(db, { repoId: 'repo-1', title: 'Flush task', priority: 1, status: 'backlog', category: 'backend', riskScore: 3 })
 
       service.tick()
       service['onAgentCompleted']({
@@ -1860,13 +1860,17 @@ describe('KanbanOrchestratorService', () => {
         repoId: 'repo-1',
         title: 'Chain source',
         priority: 1,
-        status: 'backlog'
+        status: 'backlog',
+        category: 'backend',
+        riskScore: 3,
       })
       const t2 = insertTask(db, {
         repoId: 'repo-1',
         title: 'Chain dependent',
         priority: 2,
-        status: 'backlog'
+        status: 'backlog',
+        category: 'backend',
+        riskScore: 3,
       })
       insertTaskDependency(db, t2.id, t1.id)
 
@@ -2128,7 +2132,9 @@ describe('KanbanOrchestratorService', () => {
         repoId: 'repo-1',
         title: 'Standalone task',
         priority: 1,
-        status: 'backlog'
+        status: 'backlog',
+        category: 'backend',
+        riskScore: 3,
       })
 
       const service = trackService(new KanbanOrchestratorService(db, deps))
