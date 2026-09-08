@@ -115,6 +115,8 @@ export class KanbanOrchestratorService {
   private agentsSpawnedByRun = new Map<string, number>()
   /** OLH-4: Total retries across all tasks per run */
   private totalRetriesByRun = new Map<string, number>()
+  /** OLH-2: Sliding window of spawn timestamps per run */
+  private spawnTimestamps = new Map<string, number[]>()
   /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
   private simplePathModes = new Map<string, DispatchMode>()
   /** B6: debounce timers for BEL-triggered B-1 sentinel checks (agentId → timer) */
@@ -486,6 +488,27 @@ export class KanbanOrchestratorService {
       }
     }
 
+    // OLH-2: Spawn rate limiter
+    if (!this.checkSpawnRate(run.id)) return false
+
+    return true
+  }
+
+  private checkSpawnRate(runId: string): boolean {
+    const now = Date.now()
+    const windowMs = 60_000
+    const maxPerWindow = 5
+
+    const timestamps = this.spawnTimestamps.get(runId) ?? []
+    const recent = timestamps.filter(t => now - t < windowMs)
+    this.spawnTimestamps.set(runId, recent)
+
+    if (recent.length >= maxPerWindow) {
+      log.warn('Orchestrator: spawn rate limit hit, deferring to next tick', {
+        runId, recentSpawns: recent.length, windowMs,
+      })
+      return false
+    }
     return true
   }
 
@@ -498,6 +521,9 @@ export class KanbanOrchestratorService {
   private recordSpawn(runId: string): void {
     this.agentsSpawnedByRun.set(runId, (this.agentsSpawnedByRun.get(runId) ?? 0) + 1)
     incrementAgentsSpawned(this.db, runId)
+    const ts = this.spawnTimestamps.get(runId) ?? []
+    ts.push(Date.now())
+    this.spawnTimestamps.set(runId, ts)
   }
 
   private emitStatusChange(runId: string, status: string, sprintName: string): void {
@@ -1498,6 +1524,7 @@ export class KanbanOrchestratorService {
     this.gitLockActive.clear()
     this.agentsSpawnedByRun.clear()
     this.totalRetriesByRun.clear()
+    this.spawnTimestamps.clear()
     this.simplePathModes.clear()
     this.stuckWarned.clear()
     this.pendingTaskApproval.clear()

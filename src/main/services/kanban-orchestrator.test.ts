@@ -1713,11 +1713,14 @@ describe('KanbanOrchestratorService', () => {
       sendTelegramNotification.mockClear() // ignore the "started" notification
 
       for (let i = 0; i < OPERATING_RULES.limits.maxAgents; i++) {
+        // Advance past rate-limit window every 5 spawns (OLH-2: 5 per 60s)
+        if (i > 0 && i % 5 === 0) vi.advanceTimersByTime(61_000)
         const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
         service.dispatchDevPhase(task.id, run)
       }
       expect(deps.spawnAgent).toHaveBeenCalledTimes(OPERATING_RULES.limits.maxAgents)
 
+      vi.advanceTimersByTime(61_000)
       const extraTask = insertTask(db, { repoId: 'repo-1', title: 'Extra task', status: 'backlog' })
       const result = service.dispatchDevPhase(extraTask.id, run)
 
@@ -1899,6 +1902,70 @@ describe('KanbanOrchestratorService', () => {
       const t2SpawnCall = (deps.spawnAgent as any).mock.calls[3][0]
       expect(t2SpawnCall.name).toContain('Chain dependent')
     })
+
+  // ---------------------------------------------------------------------------
+  // OLH-2: Spawn rate limiter
+  // ---------------------------------------------------------------------------
+
+  describe('OLH-2: spawn rate limiter', () => {
+    it('allows up to 5 spawns within 60s window', () => {
+      vi.useFakeTimers()
+      const deps = createMockDeps()
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'OLH-2-allow', repoId: 'repo-1', confirmed: true })
+
+      for (let i = 0; i < 5; i++) {
+        const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
+        service.dispatchDevPhase(task.id, run)
+      }
+
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(5)
+      vi.useRealTimers()
+    })
+
+    it('blocks 6th spawn within 60s window without pausing the run', () => {
+      vi.useFakeTimers()
+      const deps = createMockDeps()
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'OLH-2-block', repoId: 'repo-1', confirmed: true })
+
+      for (let i = 0; i < 5; i++) {
+        const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
+        service.dispatchDevPhase(task.id, run)
+      }
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(5)
+
+      const extraTask = insertTask(db, { repoId: 'repo-1', title: 'Rate-limited task', status: 'backlog' })
+      const result = service.dispatchDevPhase(extraTask.id, run)
+
+      expect(result).toBeNull()
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(5)
+      // Rate limit defers — run must NOT be paused
+      expect(getRun(db, run.id)!.status).toBe('running')
+      vi.useRealTimers()
+    })
+
+    it('allows spawns again after 60s window expires', () => {
+      vi.useFakeTimers()
+      const deps = createMockDeps()
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'OLH-2-window', repoId: 'repo-1', confirmed: true })
+
+      for (let i = 0; i < 5; i++) {
+        const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
+        service.dispatchDevPhase(task.id, run)
+      }
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(5)
+
+      vi.advanceTimersByTime(61_000)
+
+      const task6 = insertTask(db, { repoId: 'repo-1', title: 'Task after window', status: 'backlog' })
+      service.dispatchDevPhase(task6.id, run)
+
+      expect(deps.spawnAgent).toHaveBeenCalledTimes(6)
+      vi.useRealTimers()
+    })
+  })
 
   // ---------------------------------------------------------------------------
   // OLH-1: Persist agentsSpawnedByRun to DB
