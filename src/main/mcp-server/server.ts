@@ -23,7 +23,7 @@ import {
   getSafeguardsReadOnly
 } from './db/read-connection'
 import { ParentIpc } from './ipc/parent-ipc'
-import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject, handleApproveTask } from './handlers/task-handlers'
+import { handleCreateTask, handleListTasks, handleDispatchTask, handleDispatchSprint, handleCreateProject, handleApproveTask, handleArchiveTask } from './handlers/task-handlers'
 import { handleEstimateTokens, handleRecommendModel } from './handlers/model-handlers'
 import { handleGetGuardrails, handleGetSkills, handleGetContext, handleReportFilesChanged } from './handlers/context-handlers'
 import { handleAuditDeps } from './handlers/deps-handler'
@@ -41,7 +41,8 @@ import type {
   AuditDepsToolInput,
   CreateProjectMcpInput,
   ReportFilesChangedToolInput,
-  ApproveTaskToolInput
+  ApproveTaskToolInput,
+  ArchiveTaskToolInput
 } from '@shared/types/mcp-server.types'
 import type { ModelCatalogEntry } from '@shared/types/model.types'
 import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '@shared/constants/model-catalog'
@@ -201,7 +202,8 @@ async function main(): Promise<void> {
                 'Filter by status (backlog, today, in_progress, completed, tested, interrupted)'
             },
             category: { type: 'string', description: 'Filter by category' },
-            limit: { type: 'number', description: 'Maximum number of tasks to return (default 50)' }
+            limit: { type: 'number', description: 'Maximum number of tasks to return (default 50)' },
+            includeArchived: { type: 'boolean', description: 'Include archived tasks in results (default false)' }
           }
         }
       },
@@ -388,6 +390,18 @@ async function main(): Promise<void> {
           },
           required: ['taskId', 'files']
         }
+      },
+      {
+        name: 'archive_task',
+        description:
+          'Soft-delete a task by setting its status to archived. Archived tasks are excluded from list_tasks by default. Cannot archive in_progress tasks.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'ID of the task to archive' }
+          },
+          required: ['taskId']
+        }
       }
     ]
   }))
@@ -460,6 +474,10 @@ async function main(): Promise<void> {
 
         case 'report_files_changed':
           result = await handleReportFilesChanged(safeArgs as unknown as ReportFilesChangedToolInput, contextDeps)
+          break
+
+        case 'archive_task':
+          result = await handleArchiveTask(safeArgs as unknown as ArchiveTaskToolInput, taskDeps)
           break
 
         default:

@@ -429,12 +429,13 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
     const kanbanDb = getDb()
     const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
     mcpServers['agenthub-kanban'] = {
-      command: 'node',
+      command: process.execPath,
       args: [kanbanScriptPath],
       env: {
         AGENTHUB_DB_PATH: kanbanDbPath,
         AGENTHUB_SOCKET_PATH: _mcpServerSocketPath,
         AGENTHUB_SOCKET_TOKEN: _mcpServerSocketToken,
+        ELECTRON_RUN_AS_NODE: '1',
       }
     }
   }

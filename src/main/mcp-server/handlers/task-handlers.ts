@@ -11,6 +11,8 @@ import type {
   CreateProjectMcpOutput,
   ApproveTaskToolInput,
   ApproveTaskToolOutput,
+  ArchiveTaskToolInput,
+  ArchiveTaskToolOutput,
   McpIpcRequest,
   McpIpcResponse,
   TokenEstimation,
@@ -23,7 +25,7 @@ import type Database from 'better-sqlite3'
 import { estimateTokens } from '../engines/token-estimator'
 import { calculateRisk } from '../engines/risk-calculator'
 import { handleRecommendModel } from './model-handlers'
-import { listTasksReadOnly, isOrchestratorEnabledReadOnly } from '../db/read-connection'
+import { listTasksReadOnly, getTaskByIdReadOnly, isOrchestratorEnabledReadOnly } from '../db/read-connection'
 
 // ─── Handler deps ─────────────────────────────────────────────────────────────
 
@@ -256,7 +258,8 @@ export function handleListTasks(
     sprintName: input.sprintName,
     status: input.status,
     category: input.category,
-    limit
+    limit,
+    includeArchived: input.includeArchived
   })
 
   return { tasks, total: tasks.length }
@@ -452,5 +455,45 @@ export async function handleApproveTask(
     message: input.approved
       ? `Task ${input.taskId} approved and dispatched.`
       : `Task ${input.taskId} rejected and returned to backlog.`
+  }
+}
+
+// ─── handleArchiveTask ────────────────────────────────────────────────────
+
+export async function handleArchiveTask(
+  input: ArchiveTaskToolInput,
+  deps: TaskHandlerDeps
+): Promise<ArchiveTaskToolOutput> {
+  assertNonEmptyString(input.taskId, 'taskId')
+
+  const existing = getTaskByIdReadOnly(deps.db, input.taskId)
+  if (!existing) {
+    throw new Error(`Task not found: ${input.taskId}`)
+  }
+  if (existing.status === 'archived') {
+    return {
+      taskId: input.taskId,
+      previousStatus: 'archived',
+      message: `Task ${input.taskId} is already archived.`
+    }
+  }
+  if (existing.status === 'in_progress') {
+    throw new Error(`Cannot archive task ${input.taskId} — status is in_progress. Stop the task first.`)
+  }
+
+  const previousStatus = existing.status
+  const resp = await deps.sendIpc({
+    type: 'update_task',
+    payload: { taskId: input.taskId, updates: { status: 'archived' } }
+  })
+
+  if (resp.type === 'error') {
+    throw new Error(`archive_task IPC error: ${resp.message}`)
+  }
+
+  return {
+    taskId: input.taskId,
+    previousStatus,
+    message: `Task ${input.taskId} archived (was: ${previousStatus}).`
   }
 }

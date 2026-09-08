@@ -88,6 +88,7 @@ export interface ListTasksFilter {
   status?: TaskStatus
   category?: TaskCategory
   limit?: number
+  includeArchived?: boolean
 }
 
 const DEFAULT_TASK_LIMIT = 50
@@ -135,6 +136,9 @@ export function listTasksReadOnly(db: Database.Database, filter: ListTasksFilter
   if (filter.category) {
     sql += ' AND category = ?'
     params.push(filter.category)
+  }
+  if (!filter.includeArchived && filter.status !== 'archived') {
+    sql += " AND status != 'archived'"
   }
 
   sql += ' ORDER BY priority ASC, created_at DESC'

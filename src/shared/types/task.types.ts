@@ -1,6 +1,6 @@
 export type TaskPriority = 1 | 2 | 3
 
-export type TaskStatus = 'backlog' | 'today' | 'in_progress' | 'completed' | 'tested' | 'interrupted'
+export type TaskStatus = 'backlog' | 'today' | 'in_progress' | 'completed' | 'tested' | 'interrupted' | 'archived'
 
 export type TaskCategory = string
 
@@ -18,7 +18,8 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   in_progress: 'In Progress',
   completed: 'Done',
   tested: 'Tested',
-  interrupted: 'Interrupted'
+  interrupted: 'Interrupted',
+  archived: 'Archived'
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

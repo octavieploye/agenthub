@@ -82,6 +82,7 @@ export interface ListTasksToolInput {
   status?: TaskStatus
   category?: TaskCategory
   limit?: number
+  includeArchived?: boolean
 }
 
 export interface ListTasksToolOutput {
@@ -279,6 +280,18 @@ export interface CreateProjectMcpOutput {
   projectId: string
   name: string
   created: boolean
+}
+
+// ─── Tool 14: archive_task ──────────────────────────────────────────────────
+
+export interface ArchiveTaskToolInput {
+  taskId: string
+}
+
+export interface ArchiveTaskToolOutput {
+  taskId: string
+  previousStatus: string
+  message: string
 }
 
 // ─── IPC message protocol (main process ↔ MCP server child) ────────────────
