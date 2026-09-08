@@ -18,12 +18,7 @@ export interface ToastNotification {
   createdAt: number
 }
 
-export type AgentSoundEvent =
-  | 'agent_spawned'
-  | 'agent_completed'
-  | 'code_blue'
-  | 'mission_complete'
-  | 'user_approval'
+export type AgentSoundEvent = 'agent_spawned' | 'agent_completed' | 'user_approval'
 
 export interface DesktopNotificationPayload {
   agentId: string

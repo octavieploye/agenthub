@@ -237,10 +237,6 @@ function AppMain(): React.JSX.Element {
   // Sounds for individual agent events (spawned, completed, locked, etc.)
   // are now handled by the agentTriaged subscriber below.
   useEffect(() => {
-    const pendingMissionComplete = new Map<string, ReturnType<typeof setTimeout>>()
-    // Delayed code_blue timers — suppressed if 'completed' arrives within 2s
-    const pendingCodeBlue = new Map<string, ReturnType<typeof setTimeout>>()
-
     const unsubStatus = window.agentHub.on.agentStatusChange((agentId, status, confidence) => {
       updateStatus(
         agentId,
@@ -269,22 +265,8 @@ function AppMain(): React.JSX.Element {
         updateStatus(agentId, 'error', 'confirmed')
       } else {
         updateStatus(agentId, 'completed', 'confirmed')
+        playAgentSound('agent_completed', soundDeps.current)
       }
-
-      // mission_complete: check after exit (the definitive "agent done" event)
-      const timer = setTimeout(() => {
-        pendingMissionComplete.delete(agentId)
-        const currentAgents = useAgentStore.getState().agents
-        if (currentAgents.size > 1) {
-          const allDone = Array.from(currentAgents.values()).every(
-            (a) => a.status === 'completed' || a.status === 'interrupted' || a.status === 'error'
-          )
-          if (allDone) {
-            playAgentSound('mission_complete', soundDeps.current)
-          }
-        }
-      }, 500)
-      pendingMissionComplete.set(agentId, timer)
     })
 
     // ── Unified notification routing (agentTriaged) ───────────────────────
@@ -332,37 +314,12 @@ function AppMain(): React.JSX.Element {
         sendDesktopNotificationFromRenderer(triageEvent)
       }
 
-      // Layer 3: Sound
+      // Layer 3: Sound — agent_completed fires from agentExit (single definitive event)
       if (layers.includes('sound')) {
-        // Individual agent completion — always plays (mission_complete fires separately via agentExit)
-        if (triageEvent.currentStatus === 'completed') {
-          // Cancel any pending code_blue for this agent — the agent recovered
-          const pendingCB = pendingCodeBlue.get(triageEvent.agentId)
-          if (pendingCB) {
-            clearTimeout(pendingCB)
-            pendingCodeBlue.delete(triageEvent.agentId)
-          }
-          playAgentSound('agent_completed', soundDeps.current)
-        }
-
-        // awaiting_approval → user_approval sound
         const soundEvent = statusToSoundEvent(triageEvent.currentStatus)
         if (soundEvent) {
           playAgentSound(soundEvent, soundDeps.current)
         }
-      }
-
-      // code_blue: delayed 2s for error/looping — cancelled if 'completed' arrives first.
-      // The 4s status debounce in agent-manager can emit a 'looping' triage event
-      // right before the exit handler emits 'completed', causing a false code-blue alert.
-      if (triageEvent.currentStatus === 'error' || triageEvent.currentStatus === 'looping') {
-        const existingCB = pendingCodeBlue.get(triageEvent.agentId)
-        if (existingCB) clearTimeout(existingCB)
-        const cbTimer = setTimeout(() => {
-          pendingCodeBlue.delete(triageEvent.agentId)
-          playAgentSound('code_blue', soundDeps.current)
-        }, 2000)
-        pendingCodeBlue.set(triageEvent.agentId, cbTimer)
       }
 
       // Layer 4: Voice TTS — critical events, gated by voiceEnabled
@@ -372,14 +329,6 @@ function AppMain(): React.JSX.Element {
     })
 
     return () => {
-      for (const timer of pendingMissionComplete.values()) {
-        clearTimeout(timer)
-      }
-      pendingMissionComplete.clear()
-      for (const timer of pendingCodeBlue.values()) {
-        clearTimeout(timer)
-      }
-      pendingCodeBlue.clear()
       unsubStatus()
       unsubExit()
       unsubTriaged?.()

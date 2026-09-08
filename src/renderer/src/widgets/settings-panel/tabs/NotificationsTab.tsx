@@ -25,7 +25,7 @@ export function NotificationsTab(): React.JSX.Element {
   }
 
   const handleTestSound = (): void => {
-    new Audio('/sounds/bridge-beep.wav').play().catch(() => {})
+    new Audio('sounds/bridge-beep.wav').play().catch(() => {})
   }
 
   const handleTestDesktop = (): void => {
