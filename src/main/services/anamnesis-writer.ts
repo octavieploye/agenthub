@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 import { getUnsyncedEvents, markEventSynced } from '../db/queries/task-events.queries'
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
+import { loadAnamnesisSecret } from './secret-store'
 
 const ENDPOINT_MAP: Record<TaskEventType, string> = {
   CARD_TRANSITION: '/memory/episodic',
@@ -46,7 +47,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     this.db = db
     this.anamnesisUrl = deps.anamnesisUrl
     this.fetch = deps.fetch ?? globalThis.fetch
-    this.authSecret = deps.authSecret ?? process.env['AUTH_SECRET'] ?? ''
+    this.authSecret = deps.authSecret ?? loadAnamnesisSecret()
   }
 
   onEventInserted(): void {

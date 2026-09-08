@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../db/migration-runner'
@@ -31,6 +32,11 @@ function createRunningRun(sprintName = 'S6-run'): string {
 
 function insertReviewFailure(runId: string, taskId: string): void {
   const log = insertTaskLog(db, { runId, taskId, phase: 'review' })
+  updateTaskLogStatus(db, log.id, 'failed')
+}
+
+function insertPhaseFailure(runId: string, taskId: string, phase: string): void {
+  const log = insertTaskLog(db, { runId, taskId, phase })
   updateTaskLogStatus(db, log.id, 'failed')
 }
 
@@ -79,6 +85,66 @@ describe('OrchestratorMonitorService', () => {
 
     for (let i = 0; i < MONITOR_LIMITS.stuckLoopThreshold - 1; i++) {
       insertReviewFailure(runId, 'task-1')
+    }
+
+    monitor.check()
+
+    expect(pause).not.toHaveBeenCalled()
+    expect(sendTelegramNotification).not.toHaveBeenCalled()
+  })
+
+  it('detects stuck-loop in dev phase and pauses + alerts', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    // 3 dev phase failures for the same task = stuck loop
+    for (let i = 0; i < MONITOR_LIMITS.stuckLoopThreshold; i++) {
+      insertPhaseFailure(runId, 'task-1', 'dev')
+    }
+
+    monitor.check()
+
+    expect(pause).toHaveBeenCalledWith(runId)
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('stuck-loop')
+  })
+
+  it('detects stuck-loop in security phase and pauses + alerts', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    // 3 security phase failures for the same task = stuck loop
+    for (let i = 0; i < MONITOR_LIMITS.stuckLoopThreshold; i++) {
+      insertPhaseFailure(runId, 'task-1', 'security')
+    }
+
+    monitor.check()
+
+    expect(pause).toHaveBeenCalledWith(runId)
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('stuck-loop')
+  })
+
+  it('does not flag stuck-loop when same task fails in different phases below threshold', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    // 2 dev failures + 2 review failures for the same task (each phase below 3)
+    for (let i = 0; i < 2; i++) {
+      insertPhaseFailure(runId, 'task-1', 'dev')
+      insertPhaseFailure(runId, 'task-1', 'review')
     }
 
     monitor.check()
@@ -150,6 +216,50 @@ describe('OrchestratorMonitorService', () => {
     const monitor = trackMonitor(
       new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
     )
+
+    monitor.check()
+
+    expect(pause).not.toHaveBeenCalled()
+    expect(sendTelegramNotification).not.toHaveBeenCalled()
+  })
+
+  // -------------------------------------------------------------------------
+  // OLH-4: Global retry cap (total failed logs >= maxRunRetries)
+  // -------------------------------------------------------------------------
+
+  it('checkTotalRetries pauses when failed logs >= maxRunRetries', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    // Insert 30 failed task logs — each with a unique task ID so no
+    // single task+phase combo hits the stuck-loop threshold of 3
+    for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries; i++) {
+      insertPhaseFailure(runId, `task-cap-${i}`, 'dev')
+    }
+
+    monitor.check()
+
+    expect(pause).toHaveBeenCalledWith(runId)
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('global retry cap')
+  })
+
+  it('checkTotalRetries does not pause below threshold', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    // Insert 29 failed task logs (one below threshold) — spread across many tasks
+    for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries - 1; i++) {
+      insertPhaseFailure(runId, `task-${i}`, 'dev')
+    }
 
     monitor.check()
 

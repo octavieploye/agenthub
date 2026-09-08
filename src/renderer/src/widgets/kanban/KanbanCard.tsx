@@ -7,6 +7,7 @@ import type { OrchestratorPhase, OrchestratorPhaseStatus, OrchestratorTaskLog } 
 import { PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
 import { isSupervisedCategory } from '@shared/constants/category-classifier'
 import { KanbanCardPopover } from './KanbanCardPopover'
+import { KanbanCardOrchestratorBadge } from './KanbanCardOrchestratorBadge'
 
 interface KanbanCardProps {
   task: TaskItem
@@ -64,21 +65,6 @@ const STATUS_BADGE: Record<string, { label: string; pulse: boolean; class: strin
   interrupted:       { label: 'Stopped',     pulse: false, class: 'text-base-content/40' },
 }
 
-const PHASE_ICON: Record<OrchestratorPhase, string> = {
-  dev:      '\u2699',
-  review:   '\uD83D\uDC41',
-  security: '\uD83D\uDEE1',
-  commit:   '\uD83D\uDCDD',
-  push:     '\uD83D\uDE80'
-}
-
-const PHASE_STATUS_CLASS: Record<OrchestratorPhaseStatus, string> = {
-  pending: 'badge-ghost opacity-50',
-  active:  'badge-primary animate-pulse',
-  done:    'badge-success',
-  failed:  'badge-error',
-  skipped: 'badge-ghost'
-}
 
 function cyclePriority(p: TaskPriority): TaskPriority {
   return p === 1 ? 2 : p === 2 ? 3 : 1
@@ -351,12 +337,7 @@ export function KanbanCard({
           {/* Footer */}
           <div className="flex items-center gap-1.5">
             {orchestratorPhase && (
-              <span
-                className={`badge badge-xs text-[10px] ${PHASE_STATUS_CLASS[orchestratorPhase.status]}`}
-                title={`${orchestratorPhase.phase}: ${orchestratorPhase.status}`}
-              >
-                {PHASE_ICON[orchestratorPhase.phase]} {orchestratorPhase.phase}
-              </span>
+              <KanbanCardOrchestratorBadge phase={orchestratorPhase.phase} status={orchestratorPhase.status} />
             )}
             {blockedByCount > 0 ? (
               unresolvedBlockerCount > 0 ? (

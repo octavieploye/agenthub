@@ -340,6 +340,7 @@ const agentHubBridge = {
     approveTask: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_TASK, input),
     pauseTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE_TICK),
     resumeTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME_TICK),
+    startSingleTask: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START_SINGLE_TASK, input),
     onStatusChange: (callback: (payload: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
       ipcRenderer.on(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, handler)

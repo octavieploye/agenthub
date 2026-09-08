@@ -35,7 +35,7 @@ export interface TaskHandlerDeps {
 
 const VALID_PRIORITIES = new Set([1, 2, 3])
 const VALID_PROVIDERS = new Set(['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'])
-const MAX_LIST_TASKS = 50
+const MAX_LIST_TASKS = 100
 
 function assertNonEmptyString(value: unknown, fieldName: string): asserts value is string {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -405,6 +405,10 @@ export async function handleDispatchSprint(
     throw new Error(`dispatch_sprint IPC error: ${resp.message}`)
   }
 
+  if (!resp || typeof resp !== 'object' || !('data' in resp)) {
+    throw new Error('dispatch_sprint: unexpected response shape from orchestrator')
+  }
+
   const data = resp.data as { id: string; taskCount: number }
   return {
     result: 'dispatched',
@@ -437,6 +441,10 @@ export async function handleApproveTask(
 
   if (resp.type === 'error') {
     throw new Error(`approve_task IPC error: ${resp.message}`)
+  }
+
+  if (!resp || typeof resp !== 'object' || !('data' in resp)) {
+    throw new Error('approve_task: unexpected response shape from orchestrator')
   }
 
   return {

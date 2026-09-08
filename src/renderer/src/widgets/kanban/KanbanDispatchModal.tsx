@@ -6,10 +6,9 @@ import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ANTHROPIC_MODEL_OPTIONS, CLOUD_MODEL_OPTIONS, CODEX_MODEL_OPTIONS } from '@shared/constants/cloud-models'
 import type { ValidProvider } from '@shared/constants/cloud-models'
+import { KanbanDispatchAdvanced } from './KanbanDispatchAdvanced'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
-
-const ROLES = ['dev-backend', 'dev-frontend', 'dev-integration']
 
 type DispatchMode = 'existing' | 'spawn'
 
@@ -95,17 +94,13 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
       .catch(() => {})
   }, [])
 
-  const [recsOpen, setRecsOpen] = useState(true)
-  const [teamOpen, setTeamOpen] = useState(false)
   const [teamName, setTeamName] = useState('dev-stack')
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set())
 
-  const activeAgents = Array.from(agents.values()).filter(
+  const activeAgentCount = Array.from(agents.values()).filter(
     (a) => a.status !== 'completed' && a.status !== 'interrupted'
-  )
-  const activeAgentCount = activeAgents.length
+  ).length
   const spawnCount = mode === 'spawn' ? 1 : 0
-  const wouldExceed = activeAgentCount + selectedRoles.size + spawnCount > 5
 
   const recommendations = buildRecommendations(task, agent?.status)
 
@@ -333,100 +328,16 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
           />
         </div>
 
-        {/* Recommendations */}
-        {recommendations.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <button
-              className="flex items-center gap-1 text-xs text-base-content/50 font-medium uppercase tracking-wide text-left"
-              onClick={() => setRecsOpen((o) => !o)}
-            >
-              <span>{recsOpen ? '▾' : '▸'}</span> Recommendations
-            </button>
-            {recsOpen && (
-              <ul className="flex flex-col gap-1 pl-3">
-                {recommendations.map((tip, i) => (
-                  <li key={i} className="text-xs text-base-content/60 flex gap-1.5">
-                    <span className="text-warning shrink-0">•</span>
-                    <span>{tip}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Team spawn */}
-        <div className="flex flex-col gap-1">
-          <button
-            className="flex items-center gap-1 text-xs text-base-content/50 font-medium uppercase tracking-wide text-left"
-            onClick={() => setTeamOpen((o) => !o)}
-          >
-            <span>{teamOpen ? '▾' : '▸'}</span> Team spawn
-          </button>
-          {teamOpen && (
-            <div className="flex flex-col gap-2 pl-3 border-l-2 border-base-300">
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="team-name"
-                  className="text-xs text-base-content/50"
-                >Team name</label>
-                <input
-                  id="team-name"
-                  aria-label="Team name"
-                  className="input input-xs input-bordered w-full"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="dev-stack"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-base-content/50">Roles to spawn</span>
-                {ROLES.map((role) => (
-                  <label key={role} className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs"
-                      aria-label={role}
-                      checked={selectedRoles.has(role)}
-                      onChange={(e) => {
-                        setSelectedRoles((prev) => {
-                          const next = new Set(prev)
-                          e.target.checked ? next.add(role) : next.delete(role)
-                          return next
-                        })
-                      }}
-                    />
-                    <span className="font-mono">{role}</span>
-                  </label>
-                ))}
-              </div>
-              {wouldExceed && (
-                <div className="text-xs text-warning bg-warning/10 rounded-lg p-2 flex flex-col gap-1">
-                  <span>{activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 5 active agents. You can still dispatch.</span>
-                  {activeAgents.map((a) => (
-                    <span key={a.id} className="text-[10px] text-base-content/50 truncate pl-2">
-                      <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ backgroundColor: a.color }} />
-                      {a.name} — {a.taskDescription || a.status}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Capacity warning — shown outside team section so it's always visible */}
-        {wouldExceed && !teamOpen && (
-          <div className="text-xs text-warning bg-warning/10 rounded-lg p-2 flex flex-col gap-1">
-            <span>{activeAgentCount} active + {selectedRoles.size + spawnCount} to spawn exceeds 5 active agents. You can still dispatch.</span>
-            {activeAgents.map((a) => (
-              <span key={a.id} className="text-[10px] text-base-content/50 truncate pl-2">
-                <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ backgroundColor: a.color }} />
-                {a.name} — {a.taskDescription || a.status}
-              </span>
-            ))}
-          </div>
-        )}
+        <KanbanDispatchAdvanced
+          recommendations={recommendations}
+          agents={agents}
+          activeAgentCount={activeAgentCount}
+          spawnCount={spawnCount}
+          teamName={teamName}
+          onTeamNameChange={setTeamName}
+          selectedRoles={selectedRoles}
+          onSelectedRolesChange={setSelectedRoles}
+        />
 
         {/* Footer */}
         <div className="flex justify-end gap-2 pt-1">

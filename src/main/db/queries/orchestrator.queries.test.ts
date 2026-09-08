@@ -15,7 +15,9 @@ import {
   updateTaskLogSummary,
   getTaskLogsByRun,
   getTaskLogsByTask,
-  getActiveTaskLogs
+  getActiveTaskLogs,
+  incrementAgentsSpawned,
+  getAgentsSpawned
 } from './orchestrator.queries'
 
 let db: Database.Database
@@ -430,6 +432,55 @@ describe('orchestrator.queries', () => {
       const repoId = seedRepo()
       const taskId = seedTask(repoId)
       expect(getTaskLogsByTask(db, taskId)).toEqual([])
+    })
+  })
+
+  describe('agentsSpawned', () => {
+    it('new run has agentsSpawned: 0 by default', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'OLH-1-default', repoId })
+
+      expect(run.agentsSpawned).toBe(0)
+
+      const found = getRun(db, run.id)
+      expect(found).not.toBeNull()
+      expect(found!.agentsSpawned).toBe(0)
+    })
+
+    it('incrementAgentsSpawned increments from 0 to 1, then 1 to 2', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'OLH-1-increment', repoId })
+
+      expect(getAgentsSpawned(db, run.id)).toBe(0)
+
+      incrementAgentsSpawned(db, run.id)
+      expect(getAgentsSpawned(db, run.id)).toBe(1)
+
+      incrementAgentsSpawned(db, run.id)
+      expect(getAgentsSpawned(db, run.id)).toBe(2)
+    })
+
+    it('getAgentsSpawned returns current count', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'OLH-1-get', repoId })
+
+      incrementAgentsSpawned(db, run.id)
+      incrementAgentsSpawned(db, run.id)
+      incrementAgentsSpawned(db, run.id)
+
+      expect(getAgentsSpawned(db, run.id)).toBe(3)
+    })
+
+    it('getAgentsSpawned is isolated per run', () => {
+      const repoId = seedRepo()
+      const run1 = insertRun(db, { sprintName: 'OLH-1-iso-A', repoId })
+      const run2 = insertRun(db, { sprintName: 'OLH-1-iso-B', repoId })
+
+      incrementAgentsSpawned(db, run1.id)
+      incrementAgentsSpawned(db, run1.id)
+
+      expect(getAgentsSpawned(db, run1.id)).toBe(2)
+      expect(getAgentsSpawned(db, run2.id)).toBe(0)
     })
   })
 

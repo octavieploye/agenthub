@@ -15,7 +15,7 @@ import { readSettingsMcpServers } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
-import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath, getCurrentSessionId } from './service-orchestrator'
+import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath, getCurrentSessionId } from './service-registry'
 import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir, homedir } from 'os'
@@ -27,6 +27,7 @@ import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
+import { loadAnamnesisSecret } from './secret-store'
 import { emitOrchestratorEvent, type OrchestratorEventType } from './orchestrator-events'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
@@ -391,6 +392,15 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
   const targetServers = readSettingsMcpServers(join(targetCwd, '.claude', 'settings.json'))
 
   const mcpServers: Record<string, unknown> = { ...baseServers, ...targetServers }
+
+  // Inject anamnesis auth secret at runtime (never stored in config files)
+  const anamnesisSecret = loadAnamnesisSecret()
+  if (mcpServers['anamnesis'] && anamnesisSecret) {
+    const anamnesisCfg = mcpServers['anamnesis'] as Record<string, unknown>
+    const env = (anamnesisCfg.env ?? {}) as Record<string, string>
+    env['AUTH_SECRET'] = anamnesisSecret
+    anamnesisCfg.env = env
+  }
 
   // B1: Telegram is optional — add it only when the socket is available.
   // Never gate the entire MCP config on telegram availability.

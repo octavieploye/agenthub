@@ -15,13 +15,14 @@ import type { OrchestratorRun } from '../../shared/types/orchestrator.types'
  *  - max concurrent agents (active task logs > OPERATING_RULES.limits.maxAgents)
  *  - max run duration (startedAt elapsed > OPERATING_RULES.limits.maxWallClockMs)
  *  - max token cost (injected getRunTokenUsage(runId) > MONITOR_LIMITS.maxTokens)
- *  - stuck-loop (a task's review phase failed >= MONITOR_LIMITS.stuckLoopThreshold times)
+ *  - max total retries (failed logs count >= OPERATING_RULES.limits.maxRunRetries)
+ *  - stuck-loop (a task's phase failed >= MONITOR_LIMITS.stuckLoopThreshold times in any phase)
  */
 
 export const MONITOR_LIMITS = {
   /** Token cap per run. Per-run attribution is injected (claude-monitor is global). */
   maxTokens: 2_000_000,
-  /** Consecutive review-phase failures for a single task before flagging a stuck loop. */
+  /** Consecutive failures in any phase for a single task before flagging a stuck loop. */
   stuckLoopThreshold: 3,
 }
 
@@ -65,15 +66,17 @@ export class OrchestratorMonitorService {
     if (this.checkConcurrentAgents(run)) return
     if (this.checkDuration(run)) return
     if (this.checkTokens(run)) return
+    if (this.checkTotalRetries(run)) return
     this.checkStuckLoop(run)
   }
 
   private checkConcurrentAgents(run: OrchestratorRun): boolean {
     const active = getActiveTaskLogs(this.db, run.id)
-    if (active.length > OPERATING_RULES.limits.maxAgents) {
+    const cap = run.concurrencyCap ?? OPERATING_RULES.limits.maxAgents
+    if (active.length > cap) {
       this.breach(
         run,
-        `concurrent agents exceeded (${active.length}/${OPERATING_RULES.limits.maxAgents})`
+        `concurrent agents exceeded (${active.length}/${cap})`
       )
       return true
     }
@@ -104,17 +107,28 @@ export class OrchestratorMonitorService {
     return false
   }
 
+  private checkTotalRetries(run: OrchestratorRun): boolean {
+    const logs = getTaskLogsByRun(this.db, run.id)
+    const totalFailed = logs.filter(l => l.status === 'failed').length
+    if (totalFailed >= OPERATING_RULES.limits.maxRunRetries) {
+      this.breach(run, `global retry cap exceeded (${totalFailed}/${OPERATING_RULES.limits.maxRunRetries} total failures)`)
+      return true
+    }
+    return false
+  }
+
   private checkStuckLoop(run: OrchestratorRun): void {
     const logs = getTaskLogsByRun(this.db, run.id)
-    const reviewFailures = new Map<string, number>()
+    const phaseFailures = new Map<string, number>()
     for (const log of logs) {
-      if (log.phase === 'review' && log.status === 'failed') {
-        reviewFailures.set(log.taskId, (reviewFailures.get(log.taskId) ?? 0) + 1)
+      if (log.status === 'failed') {
+        const key = `${log.taskId}:${log.phase}`
+        phaseFailures.set(key, (phaseFailures.get(key) ?? 0) + 1)
       }
     }
-    for (const [taskId, count] of reviewFailures) {
+    for (const [key, count] of phaseFailures) {
       if (count >= MONITOR_LIMITS.stuckLoopThreshold) {
-        this.breach(run, `stuck-loop detected (task ${taskId}: ${count} review failures)`)
+        this.breach(run, `stuck-loop detected (${key}: ${count} failures)`)
         return
       }
     }

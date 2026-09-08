@@ -31,6 +31,8 @@ import {
   wasFilesChangedReported,
   getUnacknowledgedRetryFailures,
   acknowledgeRetryFailures as dbAcknowledgeRetryFailures,
+  incrementAgentsSpawned,
+  getAgentsSpawned,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTasksBySprint, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import type { TaskItem } from '../../shared/types/task.types'
@@ -51,6 +53,7 @@ import {
 import { isOrchestratorEnabled } from './orchestrator-settings'
 import { getAnamnesisReader } from './anamnesis-reader'
 import { GUARDRAIL_PROMPTS, OPERATING_RULES } from './orchestrator-rules'
+import { loadAnamnesisSecret } from './secret-store'
 
 const TICK_INTERVAL_MS = 30_000
 const STUCK_THRESHOLD_MS = 60 * 60 * 1000
@@ -110,6 +113,8 @@ export class KanbanOrchestratorService {
   private pendingTaskApproval = new Map<string, string>()
   /** S5: total agents spawned per run (budget cap) */
   private agentsSpawnedByRun = new Map<string, number>()
+  /** OLH-4: Total retries across all tasks per run */
+  private totalRetriesByRun = new Map<string, number>()
   /** Agent IDs dispatched via simple path, mapped to their dispatch mode (b1/b2) */
   private simplePathModes = new Map<string, DispatchMode>()
   /** B6: debounce timers for BEL-triggered B-1 sentinel checks (agentId → timer) */
@@ -416,7 +421,7 @@ export class KanbanOrchestratorService {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 3000)
       const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
-      const authSecret = process.env['ANAMNESIS_AUTH_SECRET'] ?? process.env['AUTH_SECRET'] ?? ''
+      const authSecret = loadAnamnesisSecret()
 
       const resp = await fetch(
         `${anamnesisUrl}/api/v1/memory/procedural?domain=sprint_inventory&query=${encodeURIComponent(sprintName)}`,
@@ -452,8 +457,8 @@ export class KanbanOrchestratorService {
           'failed'
         )
       }
-    } catch {
-      // Circuit breaker: never block dispatch if Anamnesis is down
+    } catch (err) {
+      log.warn('checkSprintInventory failed', { error: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -462,7 +467,9 @@ export class KanbanOrchestratorService {
     const fresh = getRun(this.db, run.id) ?? run
     const { maxAgents, maxWallClockMs } = OPERATING_RULES.limits
 
-    const spawned = this.agentsSpawnedByRun.get(run.id) ?? 0
+    const mapCount = this.agentsSpawnedByRun.get(run.id) ?? 0
+    const dbCount = getAgentsSpawned(this.db, run.id)
+    const spawned = Math.max(mapCount, dbCount)
     if (spawned >= maxAgents) {
       this.pauseForBudget(fresh, `agent budget exceeded (${spawned}/${maxAgents} agents spawned)`)
       return false
@@ -490,6 +497,7 @@ export class KanbanOrchestratorService {
 
   private recordSpawn(runId: string): void {
     this.agentsSpawnedByRun.set(runId, (this.agentsSpawnedByRun.get(runId) ?? 0) + 1)
+    incrementAgentsSpawned(this.db, runId)
   }
 
   private emitStatusChange(runId: string, status: string, sprintName: string): void {
@@ -551,7 +559,7 @@ export class KanbanOrchestratorService {
     for (const [taskId, logs] of taskLogsByTask) {
       const pushLog = logs.find(l => l.phase === 'push')
       const task = tasks.find(t => t.id === taskId)
-      if (pushLog?.status === 'done' || task?.status === 'completed') completedCount++
+      if (pushLog?.status === 'done' || task?.status === 'completed' || task?.status === 'tested') completedCount++
       else if (logs.some(l => l.status === 'failed')) failedCount++
     }
 
@@ -669,6 +677,7 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
       const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'dev', modelUsed: model, providerUsed: provider })
       updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      updateTask(this.db, taskId, { status: 'interrupted' })
       this.emitTaskPhaseChange(run.id, taskId, 'dev', 'failed')
       return null
     }
@@ -730,6 +739,7 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: simple path model validation failed', { taskId: task.id, model, provider, error: validationError })
       const failedLog = insertTaskLog(this.db, { runId: run.id, taskId: task.id, phase: 'dev', modelUsed: model, providerUsed: provider })
       updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      updateTask(this.db, task.id, { status: 'interrupted' })
       this.emitTaskPhaseChange(run.id, task.id, 'dev', 'failed')
       return
     }
@@ -804,6 +814,7 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
       const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'review', modelUsed: model, providerUsed: provider })
       updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      updateTask(this.db, taskId, { status: 'interrupted' })
       this.emitTaskPhaseChange(run.id, taskId, 'review', 'failed')
       return null
     }
@@ -868,6 +879,7 @@ export class KanbanOrchestratorService {
       log.warn('Orchestrator: model validation failed at dispatch', { taskId, model, provider, error: validationError })
       const failedLog = insertTaskLog(this.db, { runId: run.id, taskId, phase: 'security', modelUsed: model, providerUsed: provider })
       updateTaskLogStatus(this.db, failedLog.id, 'failed')
+      updateTask(this.db, taskId, { status: 'interrupted' })
       this.emitTaskPhaseChange(run.id, taskId, 'security', 'failed')
       return null
     }
@@ -1090,9 +1102,6 @@ export class KanbanOrchestratorService {
         }
         break
       }
-      case 'push':
-        // push is handled within executeCommitPhase
-        break
     }
   }
 
@@ -1219,13 +1228,15 @@ export class KanbanOrchestratorService {
       taskLogsByTask.set(l.taskId, existing)
     }
     let completedCount = 0
+    let failedCount = 0
     for (const [taskId, logs] of taskLogsByTask) {
       const pushLog = logs.find(l => l.phase === 'push')
       const task = tasks.find(t => t.id === taskId)
       if (pushLog?.status === 'done' || task?.status === 'completed') completedCount++
+      else if (!logs.some(l => l.status === 'active') && (task?.status === 'interrupted' || logs.some(l => l.status === 'failed'))) failedCount++
     }
 
-    if (completedCount >= tasks.length && tasks.length > 0) {
+    if (completedCount + failedCount >= tasks.length && tasks.length > 0) {
       updateRunStatus(this.db, run.id, 'completed')
       this.emitStatusChange(run.id, 'completed', run.sprintName)
       log.info('Orchestrator: sprint completed', { runId: run.id, sprintName: run.sprintName })
@@ -1486,6 +1497,7 @@ export class KanbanOrchestratorService {
     this.pendingSecurityApproval.clear()
     this.gitLockActive.clear()
     this.agentsSpawnedByRun.clear()
+    this.totalRetriesByRun.clear()
     this.simplePathModes.clear()
     this.stuckWarned.clear()
     this.pendingTaskApproval.clear()
@@ -1601,6 +1613,9 @@ export class KanbanOrchestratorService {
     if (run.sprintName && !run.sprintName.startsWith('date-trigger-')) {
       const sprintTasks = getTasksBySprint(this.db, run.repoId, run.sprintName)
       if (sprintTasks.length > 0) return sprintTasks
+      log.warn('Orchestrator: sprint name matched no tasks — falling back to repo-wide tasks', {
+        sprintName: run.sprintName, repoId: run.repoId,
+      })
     }
 
     return getTasksByRepo(this.db, run.repoId)
@@ -1958,7 +1973,13 @@ export class KanbanOrchestratorService {
           if (!this.simplePathModes.has(agentId)) return
           const currentRun = getActiveRun(this.db)
           if (!currentRun) return
+          // R-004: Read output BEFORE killing the agent so the buffer is still intact.
           const output = this.deps?.getAgentOutput?.(agentId) ?? ''
+          try {
+            this.deps?.killAgent?.(agentId)
+          } catch (err) {
+            log.warn('Orchestrator: failed to kill agent after simple path', { agentId, error: String(err) })
+          }
           const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
           const lines = stripped.trimEnd().split('\n')
           const tail = lines.slice(-20)
@@ -1980,12 +2001,6 @@ export class KanbanOrchestratorService {
           this.dispatchNextTasks(currentRun)
         }, 400)
         this.belDebounceTimers.set(agentId, timer)
-      }
-
-      try {
-        this.deps?.killAgent?.(agentId)
-      } catch (err) {
-        log.warn('Orchestrator: failed to kill agent after simple path', { agentId, error: String(err) })
       }
       return
     }
@@ -2043,6 +2058,15 @@ export class KanbanOrchestratorService {
       this.notifyTelegram(run,
         `Task "${activeLog.taskId}" failed after ${retries} retries in ${activeLog.phase} phase`,
         'failed')
+    }
+
+    // OLH-4: Track total retries across all tasks per run
+    const runRetries = (this.totalRetriesByRun.get(run.id) ?? 0) + 1
+    this.totalRetriesByRun.set(run.id, runRetries)
+
+    if (runRetries >= OPERATING_RULES.limits.maxRunRetries) {
+      this.pauseForBudget(run, `global retry cap exceeded (${runRetries}/${OPERATING_RULES.limits.maxRunRetries} total retries)`)
+      return  // Do NOT dispatch next tasks — run is paused
     }
 
     // Dispatch next tasks (other tasks may be unblocked)

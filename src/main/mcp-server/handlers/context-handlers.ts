@@ -24,6 +24,7 @@ import type {
 } from '@shared/types/mcp-server.types'
 import { isAbsolute } from 'path'
 import { SkillsService } from '../../services/skills-service'
+import { OPERATING_RULES } from '../../services/orchestrator-rules'
 
 // ─── Shared no-op logger for child-process context (no electron-log) ──────────
 
@@ -201,7 +202,7 @@ export async function handleGetContext(
     status: orchData?.run?.status ?? null,
     activeTaskCount: orchData?.activeTasks?.length ?? 0,
     agentsSpawnedByRun: orchData?.activeTasks?.length ?? 0,
-    agentCap: 3
+    agentCap: OPERATING_RULES.limits.maxAgents
   }
 
   // Health anomalies — flat array from parent monitor

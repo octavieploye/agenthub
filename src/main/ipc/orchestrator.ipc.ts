@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getKanbanOrchestrator } from '../services/service-orchestrator'
 import { getDb } from '../db/connection'
 import { isOrchestratorEnabled } from '../services/orchestrator-settings'
+import { getTaskById } from '../db/queries/tasks.queries'
 import { success, error, validateInput } from './ipc-helpers'
 
 const startSchema = z.object({
@@ -190,6 +191,31 @@ export function registerOrchestratorHandlers(): void {
       return success(undefined)
     } catch (err) {
       return error('ORCHESTRATOR_RESUME_TICK_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START_SINGLE_TASK, (_event, input: unknown) => {
+    const schema = z.object({ taskId: z.string().min(1) })
+    const v = validateInput(schema, input)
+    if (!v.valid) return v.response
+    if (!isOrchestratorEnabled(getDb())) {
+      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
+    }
+    try {
+      const db = getDb()
+      const task = getTaskById(db, v.data.taskId)
+      if (!task) return error('TASK_NOT_FOUND', `Task not found: ${v.data.taskId}`)
+      const run = getOrchestrator().startSingleTask({
+        sprintName: task.sprintName ?? `pipeline-${v.data.taskId.slice(0, 8)}`,
+        repoId: task.repoId,
+        singleTaskId: v.data.taskId,
+        concurrencyCap: 1,
+        confirmed: true,
+        triggerSource: 'single-task',
+      })
+      return success(run)
+    } catch (err) {
+      return error('ORCHESTRATOR_START_SINGLE_TASK_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
 }

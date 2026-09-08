@@ -5,6 +5,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import log from 'electron-log/main'
 import type { CodexHealthStatus } from '../../shared/types/codex-health.types'
+import { loadAnamnesisSecret } from './secret-store'
 
 const execFileAsync = promisify(execFile)
 
@@ -90,7 +91,12 @@ export async function ensureCodexMcpServers(
         if (anamnesisCfg?.command) {
           const addArgs = ['mcp', 'add', 'anamnesis']
           for (const [k, v] of Object.entries(anamnesisCfg.env ?? {})) {
+            if (k === 'AUTH_SECRET') continue // injected from secure store below
             addArgs.push('--env', `${k}=${v}`)
+          }
+          const secret = loadAnamnesisSecret()
+          if (secret) {
+            addArgs.push('--env', `AUTH_SECRET=${secret}`)
           }
           addArgs.push('--', anamnesisCfg.command)
           if (Array.isArray(anamnesisCfg.args) && anamnesisCfg.args.length > 0) {

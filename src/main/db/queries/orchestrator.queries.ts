@@ -40,7 +40,8 @@ function mapRunRow(row: Record<string, unknown>): OrchestratorRun {
     singleTaskId: (row.single_task_id as string) ?? null,
     startedBy: (row.started_by as string) ?? null,
     triggerSource: (row.trigger_source as OrchestratorTriggerSource) ?? null,
-    taskIds: parseTaskIds(row.task_ids_json)
+    taskIds: parseTaskIds(row.task_ids_json),
+    agentsSpawned: (row.agents_spawned as number) ?? 0
   }
 }
 
@@ -122,7 +123,8 @@ export function insertRun(
     singleTaskId: input.singleTaskId ?? null,
     startedBy: input.startedBy ?? null,
     triggerSource: input.triggerSource ?? null,
-    taskIds: input.taskIds ?? null
+    taskIds: input.taskIds ?? null,
+    agentsSpawned: 0
   }
 }
 
@@ -135,7 +137,7 @@ export function getRun(db: Database.Database, id: string): OrchestratorRun | nul
 
 export function getActiveRun(db: Database.Database): OrchestratorRun | null {
   const row = db
-    .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') LIMIT 1")
+    .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') ORDER BY updated_at DESC LIMIT 1")
     .get() as Record<string, unknown> | undefined
   return row ? mapRunRow(row) : null
 }
@@ -171,6 +173,19 @@ export function updateRunStatus(
 export function updateRunTimestamp(db: Database.Database, id: string): void {
   const now = new Date().toISOString()
   db.prepare('UPDATE orchestrator_runs SET updated_at = ? WHERE id = ?').run(now, id)
+}
+
+export function incrementAgentsSpawned(db: Database.Database, runId: string): void {
+  db.prepare(
+    'UPDATE orchestrator_runs SET agents_spawned = agents_spawned + 1 WHERE id = ?'
+  ).run(runId)
+}
+
+export function getAgentsSpawned(db: Database.Database, runId: string): number {
+  const row = db
+    .prepare('SELECT agents_spawned FROM orchestrator_runs WHERE id = ?')
+    .get(runId) as { agents_spawned: number } | undefined
+  return row?.agents_spawned ?? 0
 }
 
 // ---------------------------------------------------------------------------

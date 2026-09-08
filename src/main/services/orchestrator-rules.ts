@@ -127,5 +127,6 @@ export const OPERATING_RULES = {
   limits: {
     maxAgents: 50,
     maxWallClockMs: 4 * 60 * 60 * 1000, // 4h
+    maxRunRetries: 30,
   },
 }

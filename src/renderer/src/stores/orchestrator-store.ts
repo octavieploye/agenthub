@@ -19,6 +19,7 @@ interface PendingApproval {
   runId: string
   taskId: string
   title: string
+  description: string
 }
 
 interface OrchestratorStore {
@@ -192,18 +193,10 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
-  startSingleTask: async (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => {
+  startSingleTask: async (taskId: string, _repoId: string, _sprintName?: string | null, _projectId?: string) => {
     set({ loading: true, error: null })
     try {
-      const res = await window.agentHub.orchestrator.start({
-        sprintName: sprintName || `pipeline-${taskId.slice(0, 8)}`,
-        repoId,
-        projectId,
-        singleTaskId: taskId,
-        concurrencyCap: 1,
-        confirmed: true,
-        triggerSource: 'single-task',
-      })
+      const res = await window.agentHub.orchestrator.startSingleTask({ taskId })
       if (res.success) {
         set({
           runId: res.data.id,
@@ -272,7 +265,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   },
 
   handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => {
-    set({ pendingApproval: { runId: payload.runId, taskId: payload.taskId, title: payload.title } })
+    set({ pendingApproval: { runId: payload.runId, taskId: payload.taskId, title: payload.title, description: payload.description } })
   },
 
   approveTask: async () => {

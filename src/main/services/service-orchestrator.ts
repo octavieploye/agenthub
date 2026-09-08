@@ -50,6 +50,8 @@ import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
+import { loadAnamnesisSecret } from './secret-store'
+import { registerWindowManager, registerAnamnesisWriter, registerTelegramSocketPathFn, registerCurrentSessionId } from './service-registry'
 
 let snapshotEngine: SnapshotEngine | null = null
 let claudeMonitor: ClaudeMonitor | null = null
@@ -248,6 +250,8 @@ export function initializeServices(db: Database.Database): void {
     log.info('Previous session detected', { id: prevSession.id, closeReason: prevSession.closeReason })
   }
   currentSessionId = createSession(db)
+  registerCurrentSessionId(currentSessionId)
+  registerTelegramSocketPathFn(() => telegramSocketServer?.getSocketPath() ?? null)
   // 1. GuardrailsManager — standalone, no deps
   guardrailsManager = new GuardrailsManager({
     readFile: (path: string) => {
@@ -398,6 +402,7 @@ export function initializeServices(db: Database.Database): void {
     onBreakoutOpened: (agentId, webContentsId) => setPtyOwner(agentId, webContentsId),
     onBreakoutClosed: (agentId) => clearPtyOwner(agentId)
   })
+  registerWindowManager(windowManager)
 
   // 10. SettingsService — app-level settings persistence
   settingsService = new SettingsService(db, {
@@ -471,6 +476,7 @@ export function initializeServices(db: Database.Database): void {
   const appMode = resolveAppMode()
   const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
   anamnesisWriter = createAnamnesisAdapter(appMode, db, { anamnesisUrl })
+  registerAnamnesisWriter(anamnesisWriter)
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
 
   // 15a. AnamnesisReader — lifecycle data reader (system mode only)
@@ -479,7 +485,7 @@ export function initializeServices(db: Database.Database): void {
   // (registered in .claude/settings.json). This reader serves orchestrator-level queries
   // such as sprint_inventory pre-flight checks (M4) and lifecycle dashboard data.
   if (appMode === 'system') {
-    const authSecret = process.env['ANAMNESIS_AUTH_SECRET'] ?? process.env['AUTH_SECRET'] ?? ''
+    const authSecret = loadAnamnesisSecret()
     initAnamnesisReader({ baseUrl: anamnesisUrl, authSecret, caller: 'hephaestus' })
   }
 

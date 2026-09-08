@@ -233,6 +233,7 @@ export const IPC_CHANNELS = {
     APPROVE_TASK: 'orchestrator:approve-task',
     PAUSE_TICK: 'orchestrator:pause-tick',
     RESUME_TICK: 'orchestrator:resume-tick',
+    START_SINGLE_TASK: 'orchestrator:start-single-task',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',

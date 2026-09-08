@@ -28,7 +28,7 @@ export function RetryFailureToast({ showRecovery }: RetryFailureToastProps) {
               {retryFailures.length} task{retryFailures.length > 1 ? 's' : ''} failed overnight
             </span>
             <span className="text-xs opacity-80">
-              Ollama Cloud was unreachable. Tasks moved to Interrupted.
+              {retryFailures[0]?.lastError ?? `${retryFailures[0]?.provider ?? 'Provider'} was unreachable`}. Tasks moved to Interrupted.
             </span>
           </div>
           <button

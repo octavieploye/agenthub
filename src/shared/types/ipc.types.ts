@@ -257,9 +257,10 @@ export interface AgentHubBridge {
     approveTask: (input: { runId: string; taskId: string; approved: boolean }) => Promise<IpcResponse<void>>
     pauseTick: () => Promise<IpcResponse<void>>
     resumeTick: () => Promise<IpcResponse<void>>
+    startSingleTask: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
     onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void
     onTaskPhaseChange: (callback: (payload: import('./orchestrator.types').OrchestratorTaskPhaseChangePayload) => void) => () => void
-    onTaskApprovalNeeded: (callback: (payload: { runId: string; taskId: string; taskTitle: string }) => void) => () => void
+    onTaskApprovalNeeded: (callback: (payload: { runId: string; taskId: string; title: string; description: string }) => void) => () => void
   }
   lifecycle: {
     getMetrics: () => Promise<IpcResponse<import('./lifecycle.types').LifecycleMetrics>>

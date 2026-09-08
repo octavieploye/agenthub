@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../db/migration-runner'
@@ -6,7 +7,8 @@ import {
   getRun,
   insertTaskLog,
   getTaskLogsByRun,
-  getTaskLogsByTask
+  getTaskLogsByTask,
+  getAgentsSpawned
 } from '../db/queries/orchestrator.queries'
 import { insertTask, getTaskById } from '../db/queries/tasks.queries'
 import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
@@ -1698,6 +1700,7 @@ describe('KanbanOrchestratorService', () => {
 
   describe('S5: budget / duration cap', () => {
     it('pauses and alerts when agent budget (maxAgents) is exceeded', () => {
+      vi.useFakeTimers()
       const sendTelegramNotification = vi.fn()
       const deps = createMockDeps({ sendTelegramNotification })
       const service = trackService(new KanbanOrchestratorService(db, deps))
@@ -1723,6 +1726,7 @@ describe('KanbanOrchestratorService', () => {
       expect(getRun(db, run.id)!.status).toBe('paused')
       expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
       expect(sendTelegramNotification.mock.calls[0][0]).toContain('auto-paused')
+      vi.useRealTimers()
     })
 
     it('pauses and alerts when wall-clock budget (maxWallClockMs) is exceeded', () => {
@@ -1753,16 +1757,20 @@ describe('KanbanOrchestratorService', () => {
     })
 
     it('tracks spawns exactly once per spawn (no double-count)', () => {
+      vi.useFakeTimers()
       const deps = createMockDeps()
       const service = trackService(new KanbanOrchestratorService(db, deps))
       const run = service.start({ sprintName: 'S5-count', repoId: 'repo-1', confirmed: true })
 
       for (let i = 0; i < OPERATING_RULES.limits.maxAgents - 1; i++) {
+        // Advance past rate-limit window every 5 spawns (OLH-2: 5 per 60s)
+        if (i > 0 && i % 5 === 0) vi.advanceTimersByTime(61_000)
         const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
         service.dispatchDevPhase(task.id, run)
       }
 
       // The maxAgents-th spawn is still allowed (counter is exactly maxAgents - 1)
+      vi.advanceTimersByTime(61_000)
       const lastTask = insertTask(db, {
         repoId: 'repo-1',
         title: 'Last allowed',
@@ -1772,6 +1780,7 @@ describe('KanbanOrchestratorService', () => {
       expect(deps.spawnAgent).toHaveBeenCalledTimes(OPERATING_RULES.limits.maxAgents)
 
       // The (maxAgents + 1)-th spawn is blocked (counter is exactly maxAgents)
+      vi.advanceTimersByTime(61_000)
       const overflowTask = insertTask(db, {
         repoId: 'repo-1',
         title: 'Overflow',
@@ -1779,6 +1788,7 @@ describe('KanbanOrchestratorService', () => {
       })
       expect(service.dispatchDevPhase(overflowTask.id, run)).toBeNull()
       expect(deps.spawnAgent).toHaveBeenCalledTimes(OPERATING_RULES.limits.maxAgents)
+      vi.useRealTimers()
     })
   })
 
@@ -1889,6 +1899,149 @@ describe('KanbanOrchestratorService', () => {
       const t2SpawnCall = (deps.spawnAgent as any).mock.calls[3][0]
       expect(t2SpawnCall.name).toContain('Chain dependent')
     })
+
+  // ---------------------------------------------------------------------------
+  // OLH-1: Persist agentsSpawnedByRun to DB
+  // ---------------------------------------------------------------------------
+
+  describe('OLH-1: agentsSpawned persistence', () => {
+    it('recordSpawn increments agents_spawned in DB on each dispatch', () => {
+      const deps = createMockDeps()
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({ sprintName: 'OLH-1-persist', repoId: 'repo-1', confirmed: true })
+
+      expect(getAgentsSpawned(db, run.id)).toBe(0)
+
+      const t1 = insertTask(db, { repoId: 'repo-1', title: 'Task 1', status: 'backlog' })
+      service.dispatchDevPhase(t1.id, run)
+      expect(getAgentsSpawned(db, run.id)).toBe(1)
+
+      const t2 = insertTask(db, { repoId: 'repo-1', title: 'Task 2', status: 'backlog' })
+      service.dispatchDevPhase(t2.id, run)
+      expect(getAgentsSpawned(db, run.id)).toBe(2)
+    })
+
+    it('checkBudget enforces limit from DB after in-memory Map is cleared (simulated restart)', () => {
+      vi.useFakeTimers()
+      // Phase 1: spawn agents up to the budget limit, persisting to DB
+      const deps1 = createMockDeps()
+      const service1 = trackService(new KanbanOrchestratorService(db, deps1))
+      const run = service1.start({ sprintName: 'OLH-1-restart', repoId: 'repo-1', confirmed: true })
+
+      for (let i = 0; i < OPERATING_RULES.limits.maxAgents; i++) {
+        // Advance past rate-limit window every 5 spawns (OLH-2: 5 per 60s)
+        if (i > 0 && i % 5 === 0) vi.advanceTimersByTime(61_000)
+        const task = insertTask(db, { repoId: 'repo-1', title: `Task ${i}`, status: 'backlog' })
+        service1.dispatchDevPhase(task.id, run)
+      }
+      expect(getAgentsSpawned(db, run.id)).toBe(OPERATING_RULES.limits.maxAgents)
+
+      // Phase 2: create a new service instance (in-memory Map is zero, DB has the full count)
+      // Re-set run to running so it is still active
+      const deps2 = createMockDeps()
+      const service2 = trackService(new KanbanOrchestratorService(db, deps2))
+
+      // The new service has agentsSpawnedByRun empty (Map starts at 0).
+      // checkBudget must use Math.max(mapCount=0, dbCount=50) → budget reached.
+      const extraTask = insertTask(db, { repoId: 'repo-1', title: 'Extra after restart', status: 'backlog' })
+      const result = service2.dispatchDevPhase(extraTask.id, run)
+
+      expect(result).toBeNull()
+      expect(deps2.spawnAgent).not.toHaveBeenCalled()
+      expect(getRun(db, run.id)!.status).toBe('paused')
+      vi.useRealTimers()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // OLH-4: Global retry cap per run
+  // ---------------------------------------------------------------------------
+
+  describe('OLH-4: global retry cap per run', () => {
+    it('pauses run after maxRunRetries total failures across multiple tasks', () => {
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => createMockAgent())
+      })
+
+      // Insert 30 real tasks in the sprint so dispatchNextTasks won't complete
+      // the run prematurely. Each task gets 1 failure → 30 total.
+      const tasks: ReturnType<typeof insertTask>[] = []
+      for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries; i++) {
+        tasks.push(insertTask(db, {
+          repoId: 'repo-1',
+          title: `Task ${i}`,
+          sprintName: 'OLH-4-cap',
+          status: 'backlog'
+        }))
+      }
+
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({
+        sprintName: 'OLH-4-cap',
+        repoId: 'repo-1',
+        concurrencyCap: 0,
+        confirmed: true
+      })
+
+      // Simulate 30 agent failures: one per task, using real task IDs
+      for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries; i++) {
+        const agentId = `cap-agent-${i}`
+        const tl = insertTaskLog(db, { runId: run.id, taskId: tasks[i].id, phase: 'dev' })
+        db.prepare('UPDATE orchestrator_task_log SET status = ?, agent_id = ? WHERE id = ?')
+          .run('active', agentId, tl.id)
+
+        service['onAgentFailed']({
+          type: 'agent:failed',
+          triageEvent: { agentId } as any
+        })
+      }
+
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('paused')
+    })
+
+    it('allows retries below global threshold (maxRunRetries - 1 total)', () => {
+      const deps = createMockDeps({
+        spawnAgent: vi.fn(() => createMockAgent())
+      })
+
+      // Insert 30 tasks — we'll fail only 29 of them (below threshold)
+      const tasks: ReturnType<typeof insertTask>[] = []
+      for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries; i++) {
+        tasks.push(insertTask(db, {
+          repoId: 'repo-1',
+          title: `Task ${i}`,
+          sprintName: 'OLH-4-below',
+          status: 'backlog'
+        }))
+      }
+
+      const service = trackService(new KanbanOrchestratorService(db, deps))
+      const run = service.start({
+        sprintName: 'OLH-4-below',
+        repoId: 'repo-1',
+        concurrencyCap: 0,
+        confirmed: true
+      })
+
+      // Simulate 29 failures (one below the 30 threshold)
+      for (let i = 0; i < OPERATING_RULES.limits.maxRunRetries - 1; i++) {
+        const agentId = `below-agent-${i}`
+        const tl = insertTaskLog(db, { runId: run.id, taskId: tasks[i].id, phase: 'dev' })
+        db.prepare('UPDATE orchestrator_task_log SET status = ?, agent_id = ? WHERE id = ?')
+          .run('active', agentId, tl.id)
+
+        service['onAgentFailed']({
+          type: 'agent:failed',
+          triageEvent: { agentId } as any
+        })
+      }
+
+      // Run should NOT be paused — 29 is below the 30 threshold
+      const updatedRun = getRun(db, run.id)
+      expect(updatedRun!.status).toBe('running')
+    })
+  })
 
     it('completes normally without chaining when single task has no dependents', () => {
       const devAgent = createMockAgent({ id: 'no-dep-dev' })

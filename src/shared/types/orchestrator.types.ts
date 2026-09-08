@@ -1,4 +1,4 @@
-export type OrchestratorRunStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed'
+export type OrchestratorRunStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
 export type OrchestratorTriggerSource = 'manual' | 'date-watcher' | 'sprint-watcher' | 'single-task'
 
@@ -26,6 +26,7 @@ export interface OrchestratorRun {
   startedBy: string | null
   triggerSource: OrchestratorTriggerSource | null
   taskIds: string[] | null
+  agentsSpawned: number
 }
 
 export interface OrchestratorTaskLog {

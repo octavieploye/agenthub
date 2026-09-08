@@ -160,7 +160,9 @@ export class ParentIpc {
     if (this.closed || this.reconnectTimer || this.connectPromise) return
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      void this.connect().catch(() => {})
+      void this.connect().catch((err: unknown) => {
+        console.warn('ParentIpc: reconnect failed', err instanceof Error ? err.message : String(err))
+      })
     }, RECONNECT_DELAY_MS)
   }
 

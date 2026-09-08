@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import log from 'electron-log/main'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import * as fs from 'node:fs'
@@ -71,9 +72,10 @@ export class McpServerManager {
     this.dbPath = this.getDatabasePath(db)
     this.unlinkSocket()
     const server = net.createServer((socket) => this.handleConnection(socket, db, deps))
-    server.on('error', () => {
+    server.on('error', (err) => {
       // The caller owns service observability. Keeping this listener prevents an
       // unexpected socket error from terminating the Electron main process.
+      log.warn('McpServerManager: socket server error', err)
     })
     this.socketServer = server
     this.installCleanupHooks()
@@ -162,8 +164,8 @@ export class McpServerManager {
       fs.writeFileSync(this.liveConfigPath, JSON.stringify(config, null, 2), 'utf-8')
       fs.chmodSync(this.liveConfigPath, 0o600)
       this.patchSettingsJson()
-    } catch {
-      // non-fatal — live config is best-effort for CLI sessions
+    } catch (err) {
+      log.warn('McpServerManager: writeLiveConfig failed', err)
     }
   }
 
@@ -181,7 +183,9 @@ export class McpServerManager {
    * Called alongside writeLiveConfig() in the onReady callback.
    */
   private patchSettingsJson(): void {
-    const settingsPath = join(process.cwd(), '.claude', 'settings.json')
+    const settingsPath = app.isPackaged
+      ? join(process.resourcesPath, '.claude', 'settings.json')
+      : join(app.getAppPath(), '.claude', 'settings.json')
     try {
       const raw = fs.readFileSync(settingsPath, 'utf-8')
       const settings = JSON.parse(raw) as Record<string, unknown>
@@ -198,8 +202,8 @@ export class McpServerManager {
       }
       settings.mcpServers = mcpServers
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
-    } catch {
-      // non-fatal — settings.json may not exist or be malformed
+    } catch (err) {
+      log.warn('McpServerManager: patchSettingsJson failed', err)
     }
   }
 
@@ -359,7 +363,6 @@ export class McpServerManager {
           triggerSource: 'single-task'
         })
         deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, {
-          id: run.id,
           runId: run.id,
           status: run.status,
           sprintName: run.sprintName

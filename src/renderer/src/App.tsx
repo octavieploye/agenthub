@@ -47,6 +47,7 @@ import { speakTriageEvent } from './services/voice-tts'
 import type { VoiceTtsDeps } from './services/voice-tts'
 import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
+import { useOrchestratorStore } from './stores/orchestrator-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
@@ -357,6 +358,15 @@ function AppMain(): React.JSX.Element {
     })
     return unsub
   }, [setActiveAgent, setFocusedAgent])
+
+  // Register approval-needed IPC in the main window so ApprovalGateToast can render
+  useEffect(() => {
+    const handleApprovalNeeded = useOrchestratorStore.getState().handleApprovalNeeded
+    const unsub = window.agentHub.orchestrator.onTaskApprovalNeeded(
+      handleApprovalNeeded as (payload: unknown) => void
+    )
+    return unsub
+  }, [])
 
   // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {

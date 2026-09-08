@@ -7,7 +7,6 @@
       "args": [],
       "env": {
         "ANAMNESIS_URL": "http://localhost:9300",
-        "AUTH_SECRET": "f8751b2ec895015bae7e1989f5424c71e6108c18dc6024fc3ac168294cef9743",
         "OPTIMAEUS_CALLER": "hephaestus"
       }
     },
@@ -15,7 +14,7 @@
       "_note": "Paths and token are injected at runtime — see agent-manager.ts:writeMcpConfig() and codex-health.ts:ensureCodexMcpServers()",
       "type": "stdio",
       "command": "node",
-      "args": ["src/main/mcp-server/server.ts"],
+      "args": ["out/main/mcp-server/server.js"],
       "env": {
         "AGENTHUB_DB_PATH": "<absolute-path-injected-at-runtime>",
         "AGENTHUB_SOCKET_PATH": "<runtime-socket-tmpdir/agenthub-mcp-{pid}.sock>",
