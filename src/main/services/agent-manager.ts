@@ -823,11 +823,12 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
 
     const previousStatusOnExit = agentState.status
-    updateAgentStatus(db, agentState.id, 'completed', 'confirmed')
-    agentState.status = 'completed'
+    const exitStatus = exitCode === 0 ? 'completed' : 'error'
+    updateAgentStatus(db, agentState.id, exitStatus, 'confirmed')
+    agentState.status = exitStatus
     agentState.confidence = 'confirmed'
     emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
-    emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, 'completed', 'confirmed')
+    emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, exitStatus, 'confirmed')
     insertActivityEvent(db, {
       eventType: exitCode === 0 ? 'agent_completed' : 'agent_error',
       entityType: 'agent',
@@ -837,7 +838,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       details: { exitCode }
     })
     emitTriageResult(agentState, previousStatusOnExit)
-    syncKanbanCard(db, agentState.id, 'completed')
+    syncKanbanCard(db, agentState.id, exitStatus)
 
     // Auto-close breakout window for this agent
     const wm = getWindowManager()

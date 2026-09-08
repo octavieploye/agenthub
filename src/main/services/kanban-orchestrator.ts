@@ -723,6 +723,10 @@ export class KanbanOrchestratorService {
       ].filter(Boolean).join('\n\n'),
       skipPermissions: true,
     })
+    if (!agent) {
+      log.warn('Orchestrator: dev phase agent spawn failed', { taskId })
+      return null
+    }
     this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
@@ -864,6 +868,10 @@ export class KanbanOrchestratorService {
       taskDescription: reviewPrompt,
       skipPermissions: true,
     })
+    if (!agent) {
+      log.warn('Orchestrator: review phase agent spawn failed', { taskId })
+      return null
+    }
     this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
@@ -939,6 +947,10 @@ export class KanbanOrchestratorService {
       taskDescription: securityPrompt,
       skipPermissions: true,
     })
+    if (!agent) {
+      log.warn('Orchestrator: security phase agent spawn failed', { taskId })
+      return null
+    }
     this.recordSpawn(run.id)
 
     const taskLog = insertTaskLog(this.db, {
@@ -1888,6 +1900,65 @@ export class KanbanOrchestratorService {
       return
     }
 
+    // Path B guard: if the agent was dispatched via simple path, handle B-path completion
+    // directly instead of advancing through the mode 'a' pipeline. This is critical for
+    // phantom agents that skip `locked` and go straight to `completed` — without this
+    // guard, advancePhase would cascade them through review→security→commit.
+    const simpleMode = this.simplePathModes.get(agentId)
+    if (simpleMode === 'b1' || simpleMode === 'b2') {
+      if (simpleMode === 'b2') {
+        this.simplePathModes.delete(agentId)
+        updateTaskLogStatus(this.db, activeLog.id, 'done')
+
+        if (wasFilesChangedReported(this.db, activeLog.taskId)) {
+          const filesChanged = getFilesChangedForTask(this.db, activeLog.taskId)
+          if (filesChanged.length > 0) {
+            log.info('Orchestrator: Path B-2 completed (PTY exit), running commit', { taskId: activeLog.taskId, filesChanged })
+            const committed = this.executeCommitPhase(activeLog.taskId, run, false)
+            if (committed) this.dispatchNextTasks(run)
+          } else {
+            log.info('Orchestrator: Path B-2 completed (PTY exit), no files changed', { taskId: activeLog.taskId })
+            updateTask(this.db, activeLog.taskId, { status: 'completed' })
+            this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
+            this.dispatchNextTasks(run)
+          }
+        } else {
+          // report_files_changed was never called — treat as incomplete/failed
+          log.warn('Orchestrator: Path B-2 agent exited without report_files_changed', { agentId, taskId: activeLog.taskId })
+          updateTaskLogStatus(this.db, activeLog.id, 'failed')
+          updateTask(this.db, activeLog.taskId, { status: 'backlog' })
+          this.dispatchNextTasks(run)
+        }
+      } else {
+        // B-1: output-only — read output, check DONE sentinel (agent PTY already gone)
+        this.simplePathModes.delete(agentId)
+        const output = this.deps?.getAgentOutput?.(agentId) ?? ''
+        const stripped = output.replace(/\x1b\[[0-9;]*[mGKHFABCDJK]/g, '').replace(/\r/g, '')
+        const lines = stripped.trimEnd().split('\n')
+        const tail = lines.slice(-20)
+        const hasDoneSentinel = tail.some((l) => {
+          const t = l.trim()
+          return t === 'DONE' || t.endsWith(' DONE') || t === '⏺ DONE'
+        })
+
+        if (hasDoneSentinel) {
+          log.info('Orchestrator: Path B-1 completed (PTY exit, DONE sentinel confirmed)', { taskId: activeLog.taskId })
+          updateTaskLogStatus(this.db, activeLog.id, 'done')
+          updateTask(this.db, activeLog.taskId, { status: 'completed' })
+          this.emitTaskPhaseChange(run.id, activeLog.taskId, 'dev', 'done')
+          this.dispatchNextTasks(run)
+        } else {
+          log.warn('Orchestrator: Path B-1 agent exited without DONE sentinel', {
+            agentId, taskId: activeLog.taskId, lastLines: tail.slice(-5).join(' | '),
+          })
+          updateTaskLogStatus(this.db, activeLog.id, 'failed')
+          updateTask(this.db, activeLog.taskId, { status: 'backlog' })
+          this.dispatchNextTasks(run)
+        }
+      }
+      return
+    }
+
     // C1: Store security phase output for later parsing
     if (activeLog.phase === 'security' && this.deps?.getAgentOutput) {
       const rawOutput = this.deps.getAgentOutput(agentId)
@@ -1906,7 +1977,7 @@ export class KanbanOrchestratorService {
       }
     }
 
-    log.info('Orchestrator: agent completed, advancing phase', {
+    log.info('Orchestrator: agent completed, advancing phase (Path A)', {
       agentId,
       taskId: activeLog.taskId,
       phase: activeLog.phase,
