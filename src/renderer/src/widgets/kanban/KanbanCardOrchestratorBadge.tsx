@@ -1,8 +1,14 @@
 const STATUS_CLASS: Record<string, string> = {
+  // OrchestratorRunStatus values (from store.runStatus)
   running:   'badge-primary animate-pulse',
   completed: 'badge-success',
   failed:    'badge-error',
   cancelled: 'badge-ghost',
+  // OrchestratorPhaseStatus values (from store.taskProgress[id].status)
+  active:    'badge-primary animate-pulse',
+  done:      'badge-success',
+  pending:   'badge-ghost opacity-50',
+  skipped:   'badge-ghost',
 }
 
 function statusClass(status: string): string {

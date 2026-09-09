@@ -507,6 +507,7 @@ export class OrchestratorScheduler {
         updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
         this.retryMap.delete(taskLog.taskId)
         log.error('OrchestratorScheduler: agent failed after retry, giving up', { agentId, taskId: taskLog.taskId })
+        this.maybeCompleteRun(run)
 
         this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
           runId: run.id,
@@ -541,7 +542,14 @@ export class OrchestratorScheduler {
 
     const candidateTasks = this.fetchCandidateTasks(run)
     const completedIds = new Set(allLogs.filter(l => l.status === 'done').map(l => l.taskId))
-    const remainingTasks = candidateTasks.filter(t => !completedIds.has(t.id))
+    const failedIds = new Set(allLogs.filter(l => l.status === 'failed').map(l => l.taskId))
+    // A task is still "remaining" (pending dispatch) only if it hasn't completed AND
+    // isn't retry-exhausted. Retry-exhausted = failed log exists AND no retryMap entry.
+    const remainingTasks = candidateTasks.filter(t => {
+      if (completedIds.has(t.id)) return false
+      if (failedIds.has(t.id) && !this.retryMap.has(t.id)) return false
+      return true
+    })
 
     if (remainingTasks.length === 0) {
       const hasFailed = allLogs.some(l => l.status === 'failed')
