@@ -703,6 +703,17 @@ export function initializeServices(db: Database.Database): void {
       },
     },
     emitToRenderer: emitToAllRenderers,
+    notifyApproval: (taskId, runId, title, repoId) => {
+      const repoName = getRepoById(db, repoId)?.name ?? repoId
+      telegramQueueProcessor?.enqueue({
+        type: 'awaiting_approval',
+        agentId: `orchestrator:approval:${taskId}`,
+        agentName: 'Orchestrator',
+        proposedAction: title,
+        repo: repoName,
+        requestId: `task:${taskId}:${runId}`,
+      })
+    },
     maxAgents: 50,
   }
 

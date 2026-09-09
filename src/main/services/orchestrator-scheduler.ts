@@ -70,6 +70,7 @@ export interface SchedulerDeps {
   emitToRenderer: (channel: string, ...args: unknown[]) => void
   maxAgents: number
   tickIntervalMs?: number
+  notifyApproval?: (taskId: string, runId: string, title: string, repoId: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,7 @@ export class OrchestratorScheduler {
   private tickInFlight = false
   private pausedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
+  private pendingApproval = new Set<string>()
 
   // Bound handlers stored so we can remove them in stop()
   private readonly onCompleted: (e: OrchestratorAgentEvent) => void
@@ -310,6 +312,8 @@ export class OrchestratorScheduler {
       return
     }
 
+    this.pendingApproval.delete(taskId)
+
     if (!approved) {
       log.info('OrchestratorScheduler: task dispatch rejected', { runId, taskId })
       // Mark any pending log for this task as skipped
@@ -400,6 +404,21 @@ export class OrchestratorScheduler {
     const firstDispatchable = dispatchable[0]
     const fullTask = candidateTasks.find(t => t.id === firstDispatchable.id)
     if (!fullTask) return
+
+    // Approval gate — hold task if requiresApproval and not yet acknowledged
+    if (fullTask.requiresApproval && !this.pendingApproval.has(fullTask.id)) {
+      this.pendingApproval.add(fullTask.id)
+      this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
+        runId: run.id,
+        taskId: fullTask.id,
+        title: fullTask.title,
+      })
+      if (run.telegramNotify) {
+        this.deps.notifyApproval?.(fullTask.id, run.id, fullTask.title, run.repoId)
+      }
+      log.info('OrchestratorScheduler: task gated on approval', { runId: run.id, taskId: fullTask.id })
+      return
+    }
 
     const context: SchedulerBrainContext = {
       run,
@@ -528,15 +547,18 @@ export class OrchestratorScheduler {
   // -------------------------------------------------------------------------
 
   private fetchCandidateTasks(run: OrchestratorRun): TaskItem[] {
+    const isDispatchable = (t: TaskItem | null): t is TaskItem =>
+      t !== null && (t.status === 'backlog' || t.status === 'today')
+
     if (run.taskIds && run.taskIds.length > 0) {
-      // Scoped run: only the explicitly listed task IDs with status 'ready'
+      // Scoped run: only the explicitly listed task IDs that are queued
       return run.taskIds
         .map(id => getTaskById(this.db, id))
-        .filter((t): t is TaskItem => t !== null && t.status === 'ready')
+        .filter(isDispatchable)
     }
 
-    // Sprint-scoped run: all ready tasks for this repo
-    return getTasksByRepo(this.db, run.repoId).filter(t => t.status === 'ready')
+    // Sprint-scoped run: all queued tasks for this repo
+    return getTasksByRepo(this.db, run.repoId).filter(isDispatchable)
   }
 
   private maybeCompleteRun(run: OrchestratorRun): void {
