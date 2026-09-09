@@ -112,19 +112,3 @@ export interface OrchestratorTaskPhaseChangePayload {
   phase: OrchestratorPhase
   status: OrchestratorPhaseStatus
 }
-
-export interface RetryFailure {
-  id: string
-  taskId: string
-  provider: string
-  attempts: number
-  lastError: string | null
-  diagnostics: string | null
-  createdAt: string
-}
-
-export interface SecurityApprovalInput {
-  runId: string
-  taskId: string
-  approved: boolean
-}

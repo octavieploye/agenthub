@@ -1,6 +1,6 @@
 import log from 'electron-log/main'
-import { assessComplexity, recommend } from './model-dispatcher'
-import type { TaskComplexity } from './model-dispatcher'
+import { assessComplexity, recommend } from './model-recommender'
+import type { TaskComplexity } from './model-recommender'
 import type { ModelProvider } from '@shared/types/agent.types'
 
 export interface PipelineInput {

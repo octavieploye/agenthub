@@ -32,10 +32,10 @@ import { TokenBudgetTracker } from './token-budget'
 import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
-import { KanbanOrchestratorService, type OrchestratorDeps } from './kanban-orchestrator'
-import { DateWatcherService, type DateWatcherDeps } from './date-watcher'
-import { OrchestratorMonitorService } from './orchestrator-monitor'
-import { McpServerManager } from './mcp-server-manager'
+import { OrchestratorScheduler, type SchedulerDeps } from './orchestrator-scheduler'
+import { OrchestratorBrain, type BrainConfig } from './orchestrator-brain'
+import { OrchestratorValidator } from './orchestrator-validator'
+import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
@@ -74,11 +74,9 @@ let sprintWatcher: SprintWatcher | null = null
 let telegramSidecarService: TelegramSidecarService | null = null
 let telegramSocketServer: TelegramSocketServer | null = null
 let telegramQueueProcessor: TelegramQueueProcessor | null = null
-let kanbanOrchestrator: KanbanOrchestratorService | null = null
-let dateWatcher: DateWatcherService | null = null
-let orchestratorMonitor: OrchestratorMonitorService | null = null
+let orchestratorScheduler: OrchestratorScheduler | null = null
+let mcpBridgeHandler: McpBridgeHandler | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
-let mcpServerManager: McpServerManager | null = null
 let intakeDir = ''
 let currentSessionId: string | null = null
 
@@ -125,7 +123,7 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       if (msg.requestId.startsWith('task:')) {
         const parts = msg.requestId.split(':')
         try {
-          kanbanOrchestrator?.approveTaskDispatch(parts[2], parts[1], true)
+          orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], true)
           telegramSidecarService?.sendApprovalResult(msg.requestId, 'approved')
         } catch (err) {
           log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
@@ -138,7 +136,7 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       if (msg.requestId.startsWith('task:')) {
         const parts = msg.requestId.split(':')
         try {
-          kanbanOrchestrator?.approveTaskDispatch(parts[2], parts[1], false)
+          orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], false)
           telegramSidecarService?.sendApprovalResult(msg.requestId, 'denied')
         } catch (err) {
           log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
@@ -595,98 +593,138 @@ export function initializeServices(db: Database.Database): void {
     })
   }
 
-  // 18. KanbanOrchestratorService — sprint execution engine
-  const orchestratorDeps: OrchestratorDeps = {
-    spawnAgent,
-    getRepoPath: (repoId: string) => {
-      const repo = getRepoById(db, repoId)
-      return repo?.path ?? null
-    },
-    gitStageAll: (repoPath: string) => gitService!.stageFiles(repoPath, ['-A']),
-    gitCommit: (repoPath: string, message: string) => gitService!.commit(repoPath, message),
-    gitPush: (repoPath: string) => gitService!.push(repoPath),
-    getAgentOutput,
-    isAgentAlive,
-    getAgentLastOutputTime,
-    killAgent: (agentId: string) => { try { killAgent(agentId) } catch (err) { log.warn('Orchestrator killAgent failed', { agentId, err }) } },
-    onEventInserted: () => getAnamnesisWriter()?.onEventInserted(),
-    emitToRenderer: emitToAllRenderers,
-    sendTelegramNotification: (summary: string, type: 'completed' | 'failed') => {
-      const msgKey = `orchestrator:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
-      telegramQueueProcessor?.enqueue({
-        type,
-        agentId: msgKey,
-        agentName: 'Kanban Orchestrator',
-        repo: '',
-        summary: summary.slice(0, 200),
-        timestamp: new Date().toISOString(),
-      })
-    },
-    requestTelegramApproval: (taskId: string, runId: string, title: string) => {
-      telegramQueueProcessor?.enqueue({
-        type: 'awaiting_approval',
-        agentId: `orchestrator:approval:${taskId}`,
-        agentName: 'Kanban Orchestrator',
-        repo: '',
-        summary: 'Task approval required',
-        proposedAction: title.slice(0, 300),
-        requestId: `task:${taskId}:${runId}`,
-        timestamp: new Date().toISOString(),
-      })
-    },
-    activeGuardrails: guardrailsManager?.getGuardrails('.'),
+  // 18. OrchestratorScheduler — new modular sprint execution engine
+  const sendTelegramNotification = (summary: string, type: 'completed' | 'failed'): void => {
+    const msgKey = `orchestrator:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
+    telegramQueueProcessor?.enqueue({
+      type,
+      agentId: msgKey,
+      agentName: 'Orchestrator',
+      repo: '',
+      summary: summary.slice(0, 200),
+      timestamp: new Date().toISOString(),
+    })
   }
-  kanbanOrchestrator = new KanbanOrchestratorService(db, orchestratorDeps)
+
+  // Brain config — uses local Ollama by default; cloud endpoint can be overridden via env
+  const brainConfig: BrainConfig = {
+    provider: 'ollama-local',
+    model: process.env['ORCHESTRATOR_BRAIN_MODEL'] ?? 'qwen3:8b',
+    endpoint: (process.env['OLLAMA_URL'] ?? 'http://localhost:11434') + '/api/chat',
+    timeoutMs: 30_000,
+  }
+
+  const brain = new OrchestratorBrain(brainConfig)
+  const validator = new OrchestratorValidator()
+
+  const schedulerDeps: SchedulerDeps = {
+    db,
+    brain: {
+      decide: async (context) => {
+        // Bridge: translate scheduler BrainContext → OrchestratorBrain BrainContext
+        const brainContext = {
+          readyTasks: context.candidateTasks.map(t => ({
+            id: t.id,
+            description: t.description ?? t.title,
+            category: t.category ?? 'general',
+            priority: t.priority,
+            repo: t.repoId,
+            skill: t.skills?.[0] ?? null,
+            blockedBy: t.blockedBy ?? [],
+          })),
+          activeAgentCount: context.activeLogs.length,
+          recentOutcomes: [],
+        }
+        const brainDecision = await brain.decide(brainContext)
+        if (!brainDecision) return null
+        // Bridge: translate OrchestratorBrain BrainDecision → scheduler BrainDecision
+        const task = context.candidateTasks.find(t => t.id === brainDecision.taskId)
+        if (!task) return null
+        const repoId = task.repoId
+        const repo = getRepoById(db, repoId)
+        if (!repo?.path) {
+          log.warn('Orchestrator brain bridge: repo not found or has no path', { taskId: brainDecision.taskId, repoId })
+          return null
+        }
+        return {
+          taskId: brainDecision.taskId,
+          spawnOptions: {
+            repoId,
+            name: `orchestrator-${brainDecision.taskId.slice(0, 8)}`,
+            cwd: repo.path,
+            model: brainDecision.model,
+            taskDescription: task.description ?? task.title,
+            projectId: task.projectId ?? undefined,
+          },
+          reason: brainDecision.reason,
+        }
+      },
+    },
+    validator: {
+      validate: (decision, run) => {
+        // Bridge: translate scheduler validate signature → OrchestratorValidator.validate signature
+        const activeLogs = [] as unknown[]  // scheduler handles budget tracking itself
+        const validatorContext = {
+          db,
+          // Rate limiter and budget are already gated in scheduler.tick() before reaching
+          // the validator — these stubs avoid double-consumption of the same window.
+          rateLimiter: { tryAcquire: () => true } as Parameters<typeof validator.validate>[1]['rateLimiter'],
+          maxAgents: schedulerDeps.maxAgents,
+          currentAgentCount: activeLogs.length,
+          runId: run.id,
+          agenthubPath: app.isPackaged ? join(app.getAppPath(), '..') : process.cwd(),
+        }
+        const outcome = validator.validate(
+          { taskId: decision.taskId, skill: '', model: decision.spawnOptions.model ?? '', reason: decision.reason },
+          validatorContext
+        )
+        if (!outcome.valid) {
+          return { valid: false, failures: outcome.failures }
+        }
+        return { valid: true, failures: [] }
+      },
+    },
+    dispatch: {
+      execute: (spawnOptions, taskId, runId) => {
+        // Spawn only — the scheduler inserts task log + emits TASK_PHASE_CHANGE itself.
+        try {
+          const agentState = spawnAgent(spawnOptions)
+          return agentState.id
+        } catch (err) {
+          log.error('Orchestrator dispatch spawn failed', { taskId, runId, err })
+          return null
+        }
+      },
+    },
+    emitToRenderer: emitToAllRenderers,
+    maxAgents: 50,
+  }
+
+  orchestratorScheduler = new OrchestratorScheduler(schedulerDeps)
 
   // Startup recovery: fix orphaned tasks and stale runs from previous crashes
-  const recovery = kanbanOrchestrator.recoverOrphanedState()
+  const recovery = orchestratorScheduler.recoverOrphanedState()
   if (recovery.staleRuns > 0 || recovery.orphanedTasks > 0) {
-    orchestratorDeps.sendTelegramNotification?.(
+    sendTelegramNotification(
       `Orchestrator recovery: ${recovery.staleRuns} stale runs failed, ${recovery.orphanedTasks} orphaned tasks reset to backlog`,
       'failed'
     )
   }
 
-  // S6: OrchestratorMonitorService — rules-based safety net (no LLM)
-  orchestratorMonitor = new OrchestratorMonitorService(db, {
-    pause: (runId) => kanbanOrchestrator!.pause(runId),
-    sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
-    getRunTokenUsage: (runId) => computeRunTokenUsage(db, runId),
-  })
-
-  // Task 4.19: DateWatcherService — polls for date-triggered tasks
-  const dateWatcherDeps: DateWatcherDeps = {
-    startOrchestratorRun: (input) => kanbanOrchestrator!.start(input),
-    sendTelegramNotification: orchestratorDeps.sendTelegramNotification,
-    onEventInserted: orchestratorDeps.onEventInserted,
-    getOllamaBaseUrl: () => process.env['OLLAMA_URL'] ?? 'http://localhost:11434',
-  }
-  // R-011: Always construct DateWatcher — poll() already gates on isOrchestratorEnabled (S74)
-  dateWatcher = new DateWatcherService(db, dateWatcherDeps)
-
-  // Kanban + Projects IPC handlers now registered in register-all.ts
-
-  // 19. McpServerManager — AgentHub Kanban MCP child-process bridge
-  mcpServerManager = new McpServerManager()
-  mcpServerManager.start(db, {
+  // 19. McpBridgeHandler — AgentHub Kanban MCP Unix-socket bridge
+  const bridgeDeps: BridgeDeps = {
     db,
-    orchestrator: {
-      start: (input) => kanbanOrchestrator!.start(input),
-      startSingleTask: (input) => kanbanOrchestrator!.startSingleTask(input),
-      getStatus: () => kanbanOrchestrator!.getStatus(),
-      approveTaskDispatch: (runId, taskId, approved) => kanbanOrchestrator!.approveTaskDispatch(runId, taskId, approved),
+    scheduler: {
+      start: (input) => orchestratorScheduler!.start(input as Parameters<OrchestratorScheduler['start']>[0]),
+      startSingleTask: (input) => orchestratorScheduler!.startSingleTask(input as Parameters<OrchestratorScheduler['startSingleTask']>[0]),
+      approveTaskDispatch: (runId, taskId, approved) => orchestratorScheduler!.approveTaskDispatch(runId, taskId, approved),
     },
-    healthMonitor: {
-      getSnapshot: (agentId) => healthMonitor?.getSnapshot(agentId) ?? null,
-    },
-    emitToRenderer: emitToAllRenderers,
-    listAgents,
-    spawnAgent: spawnAgent as unknown as (...args: unknown[]) => unknown,
-  }, () => {
-    // onReady: socket is bound and chmod'd — safe to publish path and token
-    setMcpServerInfo(mcpServerManager!.getSocketPath(), mcpServerManager!.getSocketToken())
-    log.info('AgentHub MCP live config written', { path: mcpServerManager!.getLiveConfigPath() })
-  })
+  }
+  mcpBridgeHandler = new McpBridgeHandler(bridgeDeps)
+  mcpBridgeHandler.start()
+  // Publish socket path + token to agent-manager so agents can reach the MCP bridge
+  setMcpServerInfo(mcpBridgeHandler.socketPath, mcpBridgeHandler.token)
+  log.info('MCP bridge handler started', { socketPath: mcpBridgeHandler.socketPath })
 
   log.info('All services initialized')
 }
@@ -696,8 +734,6 @@ export function startServices(): void {
   claudeMonitor?.start().catch((err) => log.error('ClaudeMonitor start failed', err))
   healthMonitor?.startWatchdog()
   autoPauseService?.startReminderTimer()
-  dateWatcher?.start()
-  orchestratorMonitor?.start()
   quotaScrapeScheduler?.start()
   log.info('All periodic services started')
 }
@@ -713,10 +749,6 @@ export function stopServices(): void {
   piperService = null
   containerManager?.stopAll().catch((err) => log.error('ContainerManager stopAll failed', err))
   sprintWatcher?.stop()
-  dateWatcher?.stop()
-  dateWatcher = null
-  orchestratorMonitor?.stop()
-  orchestratorMonitor = null
   quotaScrapeScheduler?.stop()
   quotaScrapeScheduler = null
   telegramQueueProcessor?.stop()
@@ -724,10 +756,10 @@ export function stopServices(): void {
   telegramSocketServer?.stop()
   telegramSocketServer = null
   telegramSidecarService?.stop()
-  kanbanOrchestrator?.stop()
-  kanbanOrchestrator = null
-  mcpServerManager?.stop()
-  mcpServerManager = null
+  orchestratorScheduler?.stop()
+  orchestratorScheduler = null
+  mcpBridgeHandler?.stop()
+  mcpBridgeHandler = null
   setMcpServerInfo('', '')
   setTelegramNotifier(null)
   setTelegramAgentSync(null)
@@ -806,12 +838,12 @@ export function getTelegramQueueProcessor(): TelegramQueueProcessor | null {
   return telegramQueueProcessor
 }
 
-export function getKanbanOrchestrator(): KanbanOrchestratorService | null {
-  return kanbanOrchestrator
+export function getScheduler(): OrchestratorScheduler | null {
+  return orchestratorScheduler
 }
 
-export function getDateWatcher(): DateWatcherService | null {
-  return dateWatcher
+export function getMcpBridgeHandler(): McpBridgeHandler | null {
+  return mcpBridgeHandler
 }
 
 export function getTelegramSocketPath(): string | null {

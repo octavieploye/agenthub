@@ -1,7 +1,7 @@
 import { classifyTask } from './skill-classifier'
 import { composePipeline, type BudgetState, type ComposedPipeline } from './pipeline-composer'
 import { PIPELINE_TEMPLATES } from './pipeline-templates'
-import { recommendForSkill } from './model-dispatcher'
+import { recommendForSkill } from './model-recommender'
 import type { SkillsService } from './skills-service'
 import type { TokenBudgetTracker } from './token-budget'
 import type { SkillItem } from '../../shared/types/skills.types'

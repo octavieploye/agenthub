@@ -3,7 +3,7 @@ import { GripHorizontal, Pencil, Zap, X, Check, Pin, FileText, Rocket, Calendar,
 import type { TaskItem, TaskPriority, UpdateTaskInput } from '@shared/types/task.types'
 import { PRIORITY_LABEL, STATUS_LABEL, CATEGORY_LABEL, KNOWN_CATEGORIES } from '@shared/types/task.types'
 import type { AgentState, AgentLifecycleStatus } from '@shared/types/agent.types'
-import type { OrchestratorPhase, OrchestratorPhaseStatus, OrchestratorTaskLog } from '@shared/types/orchestrator.types'
+import type { OrchestratorTaskLog } from '@shared/types/orchestrator.types'
 import { PROVIDER_BADGE_LABEL } from '@shared/constants/cloud-models'
 import { isSupervisedCategory } from '@shared/constants/category-classifier'
 import { KanbanCardPopover } from './KanbanCardPopover'
@@ -28,10 +28,12 @@ interface KanbanCardProps {
   blockedByCount?: number
   /** Number of blockers that are not yet completed/tested */
   unresolvedBlockerCount?: number
-  /** Current orchestrator phase + status for this task */
-  orchestratorPhase?: {
-    phase: OrchestratorPhase
-    status: OrchestratorPhaseStatus
+  /** Current orchestrator progress for this task */
+  taskProgress?: {
+    status: string
+    skill: string | null
+    model: string | null
+    startedAt: string | null
   }
   phaseHistory?: OrchestratorTaskLog[]
 }
@@ -91,7 +93,7 @@ function computePopoverPosition(rect: DOMRect): { top: number; left: number } {
 export function KanbanCard({
   task, agentColor, agentName, agentStatus, repoGlowColor, defaultProjectId, agents,
   onSBARClick, onPriorityChange, onDelete, onEdit, onDispatch, onAutoPipeline, isOrchestratorActive, onBadgeClick, blockedByCount = 0, unresolvedBlockerCount = 0,
-  orchestratorPhase, phaseHistory
+  taskProgress, phaseHistory
 }: KanbanCardProps) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -336,8 +338,8 @@ export function KanbanCard({
 
           {/* Footer */}
           <div className="flex items-center gap-1.5">
-            {orchestratorPhase && (
-              <KanbanCardOrchestratorBadge phase={orchestratorPhase.phase} status={orchestratorPhase.status} />
+            {taskProgress && (
+              <KanbanCardOrchestratorBadge skill={taskProgress.skill} status={taskProgress.status} />
             )}
             {blockedByCount > 0 ? (
               unresolvedBlockerCount > 0 ? (

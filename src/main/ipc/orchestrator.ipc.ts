@@ -1,9 +1,8 @@
 import { ipcMain } from 'electron'
 import { z } from 'zod'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
-import { getKanbanOrchestrator } from '../services/service-orchestrator'
+import { getScheduler } from '../services/service-orchestrator'
 import { getDb } from '../db/connection'
-import { isOrchestratorEnabled } from '../services/orchestrator-settings'
 import { getTaskById } from '../db/queries/tasks.queries'
 import { success, error, validateInput } from './ipc-helpers'
 
@@ -29,7 +28,7 @@ const taskIdSchema = z.object({
 })
 
 function getOrchestrator() {
-  const orchestrator = getKanbanOrchestrator()
+  const orchestrator = getScheduler()
   if (!orchestrator) throw new Error('Orchestrator service not initialized')
   return orchestrator
 }
@@ -38,9 +37,6 @@ export function registerOrchestratorHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START, (_event, input: unknown) => {
     const v = validateInput(startSchema, input)
     if (!v.valid) return v.response
-    if (!isOrchestratorEnabled(getDb())) {
-      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
-    }
     // S4: Defense in depth — reject manual start without explicit confirmation
     if (v.data.confirmed !== true) {
       return error('ORCHESTRATOR_NOT_CONFIRMED', 'Manual start requires confirmed: true')
@@ -49,20 +45,14 @@ export function registerOrchestratorHandlers(): void {
     const allowedFromIpc = new Set(['manual', 'single-task'])
     const sanitized = { ...v.data, triggerSource: allowedFromIpc.has(v.data.triggerSource ?? '') ? v.data.triggerSource : 'manual' as const }
     try {
-      const run = getOrchestrator().start(sanitized)
+      const run = getOrchestrator().start({
+        sprintName: sanitized.sprintName,
+        repoId: sanitized.repoId,
+        taskIds: sanitized.taskIds,
+      })
       return success(run)
     } catch (err) {
       return error('ORCHESTRATOR_START_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PREVIEW, (_event, input: unknown) => {
-    const v = validateInput(startSchema, input)
-    if (!v.valid) return v.response
-    try {
-      return success(getOrchestrator().previewRun(v.data))
-    } catch (err) {
-      return error('ORCHESTRATOR_PREVIEW_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
 
@@ -80,10 +70,6 @@ export function registerOrchestratorHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RESUME, (_event, input: unknown) => {
     const v = validateInput(runIdSchema, input)
     if (!v.valid) return v.response
-    // S72: Gate resume on kill-switch
-    if (!isOrchestratorEnabled(getDb())) {
-      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
-    }
     try {
       getOrchestrator().resume(v.data.runId)
       return success(undefined)
@@ -121,40 +107,6 @@ export function registerOrchestratorHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES, () => {
-    try {
-      return success(getOrchestrator().getRetryFailures())
-    } catch (err) {
-      return error('ORCHESTRATOR_RETRY_FAILURES_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES, () => {
-    try {
-      getOrchestrator().acknowledgeRetryFailures()
-      return success(undefined)
-    } catch (err) {
-      return error('ORCHESTRATOR_ACK_RETRY_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
-  const securityApprovalSchema = z.object({
-    runId: z.string().min(1),
-    taskId: z.string().min(1),
-    approved: z.boolean(),
-  })
-
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.APPROVE_SECURITY, (_event, input: unknown) => {
-    const v = validateInput(securityApprovalSchema, input)
-    if (!v.valid) return v.response
-    try {
-      getOrchestrator().approveSecurityFindings(v.data.runId, v.data.taskId, v.data.approved)
-      return success(undefined)
-    } catch (err) {
-      return error('ORCHESTRATOR_APPROVE_SECURITY_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
   const taskApprovalSchema = z.object({
     runId: z.string().min(1),
     taskId: z.string().min(1),
@@ -172,46 +124,16 @@ export function registerOrchestratorHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.PAUSE_TICK, () => {
-    try {
-      getOrchestrator().pauseTick()
-      return success(undefined)
-    } catch (err) {
-      return error('ORCHESTRATOR_PAUSE_TICK_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RESUME_TICK, () => {
-    // Gate on kill-switch — resuming tick when disabled would just re-pause immediately
-    if (!isOrchestratorEnabled(getDb())) {
-      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
-    }
-    try {
-      getOrchestrator().resumeTick()
-      return success(undefined)
-    } catch (err) {
-      return error('ORCHESTRATOR_RESUME_TICK_FAILED', err instanceof Error ? err.message : String(err))
-    }
-  })
-
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START_SINGLE_TASK, (_event, input: unknown) => {
     const schema = z.object({ taskId: z.string().min(1) })
     const v = validateInput(schema, input)
     if (!v.valid) return v.response
-    if (!isOrchestratorEnabled(getDb())) {
-      return error('ORCHESTRATOR_DISABLED', 'Orchestrator is disabled. Set orchestrator.enabled = true to enable.')
-    }
     try {
       const db = getDb()
       const task = getTaskById(db, v.data.taskId)
       if (!task) return error('TASK_NOT_FOUND', `Task not found: ${v.data.taskId}`)
       const run = getOrchestrator().startSingleTask({
-        sprintName: task.sprintName ?? `pipeline-${v.data.taskId.slice(0, 8)}`,
-        repoId: task.repoId,
-        singleTaskId: v.data.taskId,
-        concurrencyCap: 1,
-        confirmed: true,
-        triggerSource: 'single-task',
+        taskId: v.data.taskId,
       })
       return success(run)
     } catch (err) {

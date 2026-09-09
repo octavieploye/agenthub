@@ -5,22 +5,7 @@ import type {
   OrchestratorStatusChangePayload,
   OrchestratorTaskPhaseChangePayload,
   OrchestratorTaskLog,
-  OrchestratorPhase,
-  OrchestratorPhaseStatus,
-  RetryFailure,
 } from '@shared/types/orchestrator.types'
-
-interface PhaseState {
-  phase: OrchestratorPhase
-  status: OrchestratorPhaseStatus
-}
-
-interface PendingApproval {
-  runId: string
-  taskId: string
-  title: string
-  description: string
-}
 
 interface OrchestratorStore {
   // State
@@ -31,18 +16,14 @@ interface OrchestratorStore {
   completedCount: number
   totalCount: number
   failedCount: number
-  taskPhases: Map<string, PhaseState>
   taskLogs: Map<string, OrchestratorTaskLog[]>
-  retryFailures: RetryFailure[]
+  taskProgress: Map<string, { status: string; skill: string | null; model: string | null; startedAt: string | null }>
   loading: boolean
   error: string | null
-  pendingApproval: PendingApproval | null
 
   // Actions
   fetchStatus: () => Promise<void>
   fetchTaskLogs: (taskId: string) => Promise<void>
-  fetchRetryFailures: () => Promise<void>
-  acknowledgeRetryFailures: () => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
   startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<boolean>
   cancel: () => Promise<void>
@@ -50,9 +31,6 @@ interface OrchestratorStore {
   resume: () => Promise<boolean>
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => void
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => void
-  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => void
-  approveTask: () => Promise<void>
-  denyTask: () => Promise<void>
   clearError: () => void
 }
 
@@ -64,12 +42,10 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   completedCount: 0,
   totalCount: 0,
   failedCount: 0,
-  taskPhases: new Map(),
   taskLogs: new Map(),
-  retryFailures: [],
+  taskProgress: new Map(),
   loading: false,
   error: null,
-  pendingApproval: null,
 
   fetchTaskLogs: async (taskId: string) => {
     if (get().taskLogs.has(taskId)) return
@@ -87,27 +63,6 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
-  fetchRetryFailures: async () => {
-    try {
-      const res = await window.agentHub.orchestrator.getRetryFailures()
-      if (res.success) {
-        set({ retryFailures: res.data })
-      }
-    } catch {
-      // silent — retry failures are non-critical
-    }
-  },
-
-  acknowledgeRetryFailures: async () => {
-    try {
-      const res = await window.agentHub.orchestrator.acknowledgeRetryFailures()
-      if (res.success) {
-        set({ retryFailures: [] })
-      }
-    } catch {
-      // silent
-    }
-  },
 
   fetchStatus: async () => {
     set({ loading: true, error: null })
@@ -226,7 +181,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     try {
       const res = await window.agentHub.orchestrator.cancel({ runId })
       if (res.success) {
-        set({ runStatus: 'failed', singleTaskId: null })
+        set({ runStatus: 'cancelled', singleTaskId: null, taskProgress: new Map() })
       } else {
         set({ error: res.error.message })
       }
@@ -238,12 +193,13 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   },
 
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => {
-    if (payload.status === 'completed' || payload.status === 'failed') {
+    if (payload.status === 'completed' || payload.status === 'failed' || payload.status === 'cancelled') {
       set({
         runStatus: payload.status,
         sprintName: payload.sprintName,
         runId: payload.runId,
         singleTaskId: null,
+        taskProgress: new Map(),
       })
     } else {
       set({
@@ -254,40 +210,21 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
+
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => {
+    if (!payload?.taskId) return
     set((state) => {
-      const phases = new Map(state.taskPhases)
-      phases.set(payload.taskId, { phase: payload.phase, status: payload.status })
-      const logs = new Map(state.taskLogs)
-      logs.delete(payload.taskId)
-      return { taskPhases: phases, taskLogs: logs }
+      const next = new Map(state.taskProgress)
+      const existing = next.get(payload.taskId)
+      next.set(payload.taskId, {
+        // payload.phase maps to the displayed skill label (e.g. 'dev', 'review', 'security')
+        status: payload.status,
+        skill: payload.phase ?? existing?.skill ?? null,
+        model: existing?.model ?? null,
+        startedAt: existing?.startedAt ?? new Date().toISOString(),
+      })
+      return { taskProgress: next }
     })
-  },
-
-  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => {
-    set({ pendingApproval: { runId: payload.runId, taskId: payload.taskId, title: payload.title, description: payload.description } })
-  },
-
-  approveTask: async () => {
-    const { pendingApproval } = get()
-    if (!pendingApproval) return
-    set({ pendingApproval: null })
-    try {
-      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: true })
-    } catch {
-      // silent — backend will surface the error via status change
-    }
-  },
-
-  denyTask: async () => {
-    const { pendingApproval } = get()
-    if (!pendingApproval) return
-    set({ pendingApproval: null })
-    try {
-      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: false })
-    } catch {
-      // silent
-    }
   },
 
   clearError: () => set({ error: null }),

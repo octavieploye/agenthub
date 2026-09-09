@@ -221,18 +221,12 @@ export const IPC_CHANNELS = {
   },
   ORCHESTRATOR: {
     START:    'orchestrator:start',
-    PREVIEW:  'orchestrator:preview',
     PAUSE:    'orchestrator:pause',
     RESUME:   'orchestrator:resume',
     STATUS:   'orchestrator:status',
     TASK_LOG: 'orchestrator:task-log',
     CANCEL:   'orchestrator:cancel',
-    RETRY_FAILURES: 'orchestrator:retry-failures',
-    ACKNOWLEDGE_RETRY_FAILURES: 'orchestrator:acknowledge-retry-failures',
-    APPROVE_SECURITY: 'orchestrator:approve-security',
     APPROVE_TASK: 'orchestrator:approve-task',
-    PAUSE_TICK: 'orchestrator:pause-tick',
-    RESUME_TICK: 'orchestrator:resume-tick',
     START_SINGLE_TASK: 'orchestrator:start-single-task',
   },
   LIFECYCLE: {

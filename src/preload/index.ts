@@ -328,18 +328,12 @@ const agentHubBridge = {
   },
   orchestrator: {
     start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
-    preview: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PREVIEW, input),
     pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),
     resume: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME, input),
     cancel: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.CANCEL, input),
     status: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.STATUS),
     taskLog: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.TASK_LOG, input),
-    getRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES),
-    acknowledgeRetryFailures: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES),
-    approveSecurity: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_SECURITY, input),
     approveTask: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.APPROVE_TASK, input),
-    pauseTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE_TICK),
-    resumeTick: () => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.RESUME_TICK),
     startSingleTask: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START_SINGLE_TASK, input),
     onStatusChange: (callback: (payload: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)

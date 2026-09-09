@@ -12,8 +12,6 @@ import EvidencePanel from './widgets/evidence-panel/EvidencePanel'
 import CodeBluePanel from './widgets/code-blue/CodeBluePanel'
 import KillConfirmToast from './widgets/kill-confirm/KillConfirmToast'
 import { RecoveryScreen } from './widgets/recovery-screen/RecoveryScreen'
-import { RetryFailureToast } from './components/RetryFailureToast'
-import { ApprovalGateToast } from './components/ApprovalGateToast'
 import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
 import AgentContextMenu from './widgets/context-menu/AgentContextMenu'
@@ -47,7 +45,6 @@ import { speakTriageEvent } from './services/voice-tts'
 import type { VoiceTtsDeps } from './services/voice-tts'
 import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
-import { useOrchestratorStore } from './stores/orchestrator-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
 import { startIpcListener } from './widgets/full-terminal/terminal-manager'
@@ -358,15 +355,6 @@ function AppMain(): React.JSX.Element {
     })
     return unsub
   }, [setActiveAgent, setFocusedAgent])
-
-  // Register approval-needed IPC in the main window so ApprovalGateToast can render
-  useEffect(() => {
-    const handleApprovalNeeded = useOrchestratorStore.getState().handleApprovalNeeded
-    const unsub = window.agentHub.orchestrator.onTaskApprovalNeeded(
-      handleApprovalNeeded as (payload: unknown) => void
-    )
-    return unsub
-  }, [])
 
   // Start terminal IPC listener immediately so no data is lost
   useEffect(() => {
@@ -976,8 +964,6 @@ function AppMain(): React.JSX.Element {
   return (
     <VoiceInputProvider>
     <div className="flex flex-col h-full" data-theme={theme}>
-      <RetryFailureToast showRecovery={showRecovery} />
-      <ApprovalGateToast showRecovery={showRecovery} />
       <RateLimitPrompt />
       {/* CLI version mismatch banner */}
       {cliVersionBanner && (

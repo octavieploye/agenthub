@@ -1,33 +1,27 @@
-import type { OrchestratorPhase, OrchestratorPhaseStatus } from '@shared/types/orchestrator.types'
-
-const PHASE_ICON: Record<OrchestratorPhase, string> = {
-  dev:      '\u2699',
-  review:   '\uD83D\uDC41',
-  security: '\uD83D\uDEE1',
-  commit:   '\uD83D\uDCDD',
-  push:     '\uD83D\uDE80'
+const STATUS_CLASS: Record<string, string> = {
+  running:   'badge-primary animate-pulse',
+  completed: 'badge-success',
+  failed:    'badge-error',
+  cancelled: 'badge-ghost',
 }
 
-const PHASE_STATUS_CLASS: Record<OrchestratorPhaseStatus, string> = {
-  pending: 'badge-ghost opacity-50',
-  active:  'badge-primary animate-pulse',
-  done:    'badge-success',
-  failed:  'badge-error',
-  skipped: 'badge-ghost'
+function statusClass(status: string): string {
+  return STATUS_CLASS[status] ?? 'badge-ghost opacity-70'
 }
 
 interface KanbanCardOrchestratorBadgeProps {
-  phase: OrchestratorPhase
-  status: OrchestratorPhaseStatus
+  skill: string | null
+  status: string
 }
 
-export function KanbanCardOrchestratorBadge({ phase, status }: KanbanCardOrchestratorBadgeProps) {
+export function KanbanCardOrchestratorBadge({ skill, status }: KanbanCardOrchestratorBadgeProps) {
+  const label = skill ?? 'running'
   return (
     <span
-      className={`badge badge-xs text-[10px] ${PHASE_STATUS_CLASS[status]}`}
-      title={`${phase}: ${status}`}
+      className={`badge badge-xs text-[10px] ${statusClass(status)}`}
+      title={`${label}: ${status}`}
     >
-      {PHASE_ICON[phase]} {phase}
+      {label} · {status}
     </span>
   )
 }

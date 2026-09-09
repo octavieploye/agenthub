@@ -44,7 +44,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
   const [draftMap, setDraftMap] = useState<Map<string, string>>(new Map())
   const { setViewMode, setFocusedAgent } = useViewStore()
   const { setActiveAgent } = useAgentStore()
-  const taskPhases = useOrchestratorStore((s) => s.taskPhases)
+  const taskProgress = useOrchestratorStore((s) => s.taskProgress)
   const taskLogs = useOrchestratorStore((s) => s.taskLogs)
   const runStatus = useOrchestratorStore((s) => s.runStatus)
   const startSingleTask = useOrchestratorStore((s) => s.startSingleTask)
@@ -191,7 +191,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
                 agents={agentList}
                 blockedByCount={task.blockedBy?.length ?? 0}
                 unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
-                orchestratorPhase={taskPhases.get(task.id)}
+                taskProgress={taskProgress.get(task.id)}
                 phaseHistory={taskLogs.get(task.id)}
                 onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
                 onEdit={(input) => updateTaskRemote(task.id, input)}
@@ -247,7 +247,7 @@ export function KanbanBoard({ defaultAgentFilter }: KanbanBoardProps) {
               agents={agentList}
               blockedByCount={task.blockedBy?.length ?? 0}
               unresolvedBlockerCount={getUnresolvedBlockerCount(task)}
-              orchestratorPhase={taskPhases.get(task.id)}
+              taskProgress={taskProgress.get(task.id)}
               phaseHistory={taskLogs.get(task.id)}
               onPriorityChange={(p) => updateTaskRemote(task.id, { priority: p })}
               onEdit={(input) => updateTaskRemote(task.id, input)}

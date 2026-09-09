@@ -15,6 +15,7 @@ const STATUS_BADGE: Record<OrchestratorRunStatus, string> = {
   paused: 'badge-warning',
   completed: 'badge-info',
   failed: 'badge-error',
+  cancelled: 'badge-ghost',
 }
 
 export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorControlsProps) {
@@ -28,7 +29,6 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     failedCount,
     loading,
     error,
-    pendingApproval,
     fetchStatus,
     start,
     pause,
@@ -36,9 +36,6 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     cancel,
     handleStatusChange,
     handleTaskPhaseChange,
-    handleApprovalNeeded,
-    approveTask,
-    denyTask,
     clearError,
   } = useOrchestratorStore()
 
@@ -70,13 +67,11 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
   useEffect(() => {
     const unsubStatus = window.agentHub.orchestrator.onStatusChange(handleStatusChange)
     const unsubPhase = window.agentHub.orchestrator.onTaskPhaseChange(handleTaskPhaseChange)
-    const unsubApproval = window.agentHub.orchestrator.onTaskApprovalNeeded(handleApprovalNeeded as (payload: unknown) => void)
     return () => {
       unsubStatus()
       unsubPhase()
-      unsubApproval()
     }
-  }, [handleStatusChange, handleTaskPhaseChange, handleApprovalNeeded])
+  }, [handleStatusChange, handleTaskPhaseChange])
 
   // Auto-start: triggered when a sprint JSON with autoConfirm + autoStart is imported
   useEffect(() => {
@@ -92,7 +87,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
 
   // Re-fetch counts when status changes to keep progress in sync (including terminal states)
   useEffect(() => {
-    if (runStatus === 'running' || runStatus === 'paused' || runStatus === 'completed' || runStatus === 'failed') {
+    if (runStatus === 'running' || runStatus === 'paused' || runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled') {
       fetchStatus()
     }
   }, [runStatus, fetchStatus])
@@ -113,22 +108,9 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     }
   }
 
-  const isIdle = !runStatus || runStatus === 'idle' || runStatus === 'completed' || runStatus === 'failed'
+  const isIdle = !runStatus || runStatus === 'idle' || runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled'
   const isRunning = runStatus === 'running'
   const isPaused = runStatus === 'paused'
-
-  if (pendingApproval) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="badge badge-sm badge-warning">approval needed</span>
-        <span className="text-[10px] text-base-content/80 max-w-[140px] truncate" title={pendingApproval.title}>
-          {pendingApproval.title}
-        </span>
-        <button className="btn btn-xs btn-success" onClick={approveTask} title="Approve task">✓</button>
-        <button className="btn btn-xs btn-error btn-outline" onClick={denyTask} title="Deny task">✗</button>
-      </div>
-    )
-  }
 
   return (
     <div className="flex items-center gap-2">

@@ -21,14 +21,14 @@ import { join } from 'path'
 import { tmpdir, homedir } from 'os'
 import { createHash } from 'crypto'
 import { app, webContents } from 'electron'
-import { buildSpawnEnv } from './model-dispatcher'
+import { buildSpawnEnv } from './model-recommender'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
 import { loadAnamnesisSecret } from './secret-store'
-import { emitOrchestratorEvent, type OrchestratorEventType } from './orchestrator-events'
+import { emitOrchestratorEvent, type OrchestratorEventType } from './agent-lifecycle-bus'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
 import { stripAnsi } from '../utils/strip-ansi'
@@ -423,19 +423,16 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
 
   // Add agenthub-kanban when McpServerManager is running (socket + token available)
   if (_mcpServerSocketPath && _mcpServerSocketToken) {
-    const kanbanScriptPath = app.isPackaged
-      ? join(process.resourcesPath, 'mcp-server', 'server.js')
-      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
-    const kanbanDb = getDb()
-    const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
+    const bridgeScriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'mcp-bridge-server', 'index.js')
+      : join(process.cwd(), 'src', 'main', 'mcp-bridge-server', 'index.js')
     mcpServers['agenthub-kanban'] = {
-      command: process.execPath,
-      args: [kanbanScriptPath],
+      command: 'node',
+      args: [bridgeScriptPath],
       env: {
-        AGENTHUB_DB_PATH: kanbanDbPath,
-        AGENTHUB_SOCKET_PATH: _mcpServerSocketPath,
-        AGENTHUB_SOCKET_TOKEN: _mcpServerSocketToken,
-        ELECTRON_RUN_AS_NODE: '1',
+        AGENTHUB_MCP_BRIDGE_SOCK: _mcpServerSocketPath,
+        AGENTHUB_MCP_BRIDGE_TOKEN: _mcpServerSocketToken,
+        AGENTHUB_REPO_ROOT: process.cwd(),
       }
     }
   }
