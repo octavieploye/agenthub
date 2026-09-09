@@ -392,6 +392,10 @@ export class OrchestratorScheduler {
 
     if (dispatchable.length === 0) return
 
+    // Throughput ceiling: dispatch at most 1 task per tick (60 s).
+    // This prevents a burst of tasks from overwhelming agent slots when a
+    // sprint starts with many ready tasks.  The next tick will pick up the
+    // next candidate.
     // Ask brain for a decision on the first dispatchable task
     const firstDispatchable = dispatchable[0]
     const fullTask = candidateTasks.find(t => t.id === firstDispatchable.id)

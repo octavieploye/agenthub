@@ -2,6 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { OrchestratorBrain } from './orchestrator-brain'
 import type { BrainConfig, BrainContext, BrainTask } from './orchestrator-brain'
 
+// Mock electron-log so log.warn is spy-able in vitest (electron-log is not
+// available in the Node test environment without Electron).
+vi.mock('electron-log/main', () => ({
+  default: {
+    warn: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  }
+}))
+import log from 'electron-log/main'
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -115,13 +127,12 @@ describe('OrchestratorBrain', () => {
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse('not valid json at all'))
 
     const brain = new OrchestratorBrain(makeConfig())
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(log.warn).mockClear()
 
     const result = await brain.decide(makeContext())
 
     expect(result).toBeNull()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('invalid JSON'))
-    warnSpy.mockRestore()
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('invalid JSON'))
   })
 
   // -------------------------------------------------------------------------
@@ -133,13 +144,12 @@ describe('OrchestratorBrain', () => {
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse(JSON.stringify(decision)))
 
     const brain = new OrchestratorBrain(makeConfig())
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(log.warn).mockClear()
 
     const result = await brain.decide(makeContext())
 
     expect(result).toBeNull()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('ghost-999'))
-    warnSpy.mockRestore()
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('ghost-999'))
   })
 
   // -------------------------------------------------------------------------
@@ -162,7 +172,7 @@ describe('OrchestratorBrain', () => {
     )
 
     const brain = new OrchestratorBrain(makeConfig({ timeoutMs: 5_000 }))
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(log.warn).mockClear()
 
     const resultPromise = brain.decide(makeContext())
 
@@ -172,8 +182,7 @@ describe('OrchestratorBrain', () => {
     const result = await resultPromise
 
     expect(result).toBeNull()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('timeout'))
-    warnSpy.mockRestore()
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('timeout'))
   })
 
   // -------------------------------------------------------------------------
@@ -186,13 +195,12 @@ describe('OrchestratorBrain', () => {
     )
 
     const brain = new OrchestratorBrain(makeConfig())
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(log.warn).mockClear()
 
     const result = await brain.decide(makeContext())
 
     expect(result).toBeNull()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('500'))
-    warnSpy.mockRestore()
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('500'))
   })
 
   // -------------------------------------------------------------------------

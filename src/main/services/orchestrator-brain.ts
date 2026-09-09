@@ -5,6 +5,8 @@
  * Selects the single highest-priority unblocked task to execute next.
  * All failures return null — never throws.
  */
+import log from 'electron-log/main'
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -78,8 +80,6 @@ interface OpenAIApiResponse {
 // ---------------------------------------------------------------------------
 
 const LOG_PREFIX = '[orchestrator-brain]'
-// console.warn is intentional here — electron-log does not route through console.warn in vitest;
-// 4 tests spy on console.warn directly. Migration to electron-log requires a separate test-update commit.
 const DEFAULT_TIMEOUT_MS = 30_000
 
 const SYSTEM_PROMPT = `You are a task dispatcher for an AI coding agent system. Given the list of ready tasks and current system state, select the single highest-priority unblocked task to execute next.
@@ -175,7 +175,7 @@ export class OrchestratorBrain {
       clearTimeout(timer)
 
       if (!response.ok) {
-        console.warn(LOG_PREFIX, `HTTP error ${response.status} from provider ${this.config.provider}`)
+        log.warn(LOG_PREFIX, `HTTP error ${response.status} from provider ${this.config.provider}`)
         return null
       }
 
@@ -184,17 +184,17 @@ export class OrchestratorBrain {
       clearTimeout(timer)
 
       if (controller.signal.aborted) {
-        console.warn(LOG_PREFIX, `LLM timeout after ${this.timeoutMs}ms on provider ${this.config.provider}`)
+        log.warn(LOG_PREFIX, `LLM timeout after ${this.timeoutMs}ms on provider ${this.config.provider}`)
         return null
       }
 
-      console.warn(LOG_PREFIX, `fetch error from provider ${this.config.provider}:`, err instanceof Error ? err.message : String(err))
+      log.warn(LOG_PREFIX, `fetch error from provider ${this.config.provider}:`, err instanceof Error ? err.message : String(err))
       return null
     }
 
     const content = extractContent(rawJson)
     if (content === null) {
-      console.warn(LOG_PREFIX, `invalid JSON: could not extract content from LLM response`, rawJson)
+      log.warn(LOG_PREFIX, `invalid JSON: could not extract content from LLM response`, rawJson)
       return null
     }
 
@@ -202,12 +202,12 @@ export class OrchestratorBrain {
     try {
       parsed = JSON.parse(content)
     } catch {
-      console.warn(LOG_PREFIX, `invalid JSON from LLM: ${content}`)
+      log.warn(LOG_PREFIX, `invalid JSON from LLM: ${content}`)
       return null
     }
 
     if (parsed === null || typeof parsed !== 'object') {
-      console.warn(LOG_PREFIX, `invalid JSON from LLM: parsed value is not an object`)
+      log.warn(LOG_PREFIX, `invalid JSON from LLM: parsed value is not an object`)
       return null
     }
 
@@ -215,13 +215,13 @@ export class OrchestratorBrain {
     const taskId = typeof obj['taskId'] === 'string' ? obj['taskId'] : null
 
     if (!taskId) {
-      console.warn(LOG_PREFIX, `invalid JSON from LLM: missing taskId field`)
+      log.warn(LOG_PREFIX, `invalid JSON from LLM: missing taskId field`)
       return null
     }
 
     const readyIds = new Set(context.readyTasks.map(t => t.id))
     if (!readyIds.has(taskId)) {
-      console.warn(LOG_PREFIX, `LLM picked unknown taskId: ${taskId} (not in ready list)`)
+      log.warn(LOG_PREFIX, `LLM picked unknown taskId: ${taskId} (not in ready list)`)
       return null
     }
 

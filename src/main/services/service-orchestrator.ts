@@ -44,7 +44,7 @@ import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
-import { cleanupOldRetryFailures, getRun } from '../db/queries/orchestrator.queries'
+import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -633,7 +633,13 @@ export function initializeServices(db: Database.Database): void {
             blockedBy: t.blockedBy ?? [],
           })),
           activeAgentCount: context.activeLogs.length,
-          recentOutcomes: [],
+          recentOutcomes: getTaskLogsByRun(db, context.run.id)
+            .filter(l => l.status === 'done' || l.status === 'failed')
+            .map(l => ({
+              taskId: l.taskId,
+              status: (l.status === 'done' ? 'completed' : 'failed') as 'completed' | 'failed',
+              skill: null,
+            })),
         }
         const brainDecision = await brain.decide(brainContext)
         if (!brainDecision) return null
