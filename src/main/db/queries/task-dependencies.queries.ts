@@ -10,8 +10,13 @@ export function insertTaskDependency(
   ).run(taskId, dependsOnId)
 }
 
-export function getDependencyMap(db: Database.Database): Map<string, string[]> {
-  const rows = db.prepare('SELECT task_id, depends_on_id FROM task_dependencies').all() as {
+export function getDependencyMap(db: Database.Database, taskIds?: string[]): Map<string, string[]> {
+  if (taskIds?.length === 0) return new Map()
+
+  const sql = taskIds
+    ? `SELECT task_id, depends_on_id FROM task_dependencies WHERE task_id IN (${taskIds.map(() => '?').join(', ')})`
+    : 'SELECT task_id, depends_on_id FROM task_dependencies'
+  const rows = db.prepare(sql).all(...(taskIds ?? [])) as {
     task_id: string
     depends_on_id: string
   }[]

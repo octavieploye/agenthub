@@ -11,7 +11,10 @@ import { createJsonLineParser } from './helpers/json-line-protocol'
 import {
   insertTask,
   updateTask,
+  getTaskById,
+  listTasksFiltered,
 } from '../db/queries/tasks.queries'
+import type { ListTasksFilter } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 
 // Queries — repos
@@ -23,17 +26,13 @@ import { getRun, getActiveRun } from '../db/queries/orchestrator.queries'
 // Queries — projects
 import { insertProject } from '../db/queries/projects.queries'
 
-// Read-connection helpers (filter-aware listTasks, typed repo/run queries, settings, safeguards, quota)
+// Queries — settings, quota, safeguards
 import {
-  listTasksReadOnly,
-  getTaskByIdReadOnly,
-  getSettingReadOnly,
-  isOrchestratorEnabledReadOnly,
-  getQuotaReadOnly,
-  getSafeguardsReadOnly,
-} from '../mcp-server/db/read-connection'
-
-import type { ListTasksFilter } from '../mcp-server/db/read-connection'
+  getSetting,
+  isOrchestratorEnabled,
+  getQuota,
+  getSafeguards,
+} from '../db/queries/settings.queries'
 import type { CreateTaskInput } from '../../shared/types/task.types'
 import type { CreateProjectInput } from '../../shared/types/project.types'
 
@@ -170,12 +169,12 @@ export class McpBridgeHandler {
           limit: params['limit'] as number | undefined,
           includeArchived: Boolean(params['includeArchived']),
         }
-        return listTasksReadOnly(db, filter)
+        return listTasksFiltered(db, filter)
       }
 
       case 'getTaskById': {
         const taskId = params['taskId'] as string
-        return getTaskByIdReadOnly(db, taskId)
+        return getTaskById(db, taskId)
       }
 
       case 'getDependencyMap': {
@@ -212,25 +211,25 @@ export class McpBridgeHandler {
       // ── Read: settings ───────────────────────────────────────────────────────
       case 'getSetting': {
         const key = params['key'] as string
-        return getSettingReadOnly(db, key)
+        return getSetting(db, key)
       }
 
       case 'isOrchestratorEnabled': {
-        return isOrchestratorEnabledReadOnly(db)
+        return isOrchestratorEnabled(db)
       }
 
       // ── Read: quota (stub — reads session cap from settings) ─────────────────
       case 'getQuota': {
-        // getQuotaReadOnly returns { tokensThisSession, sessionCap }.
+        // getQuota returns { tokensThisSession, sessionCap }.
         // tokensThisSession is always 0 here (main process does not track live token counts
         // on this path — orchestrator accumulates them separately). Callers should treat
         // tokensThisSession as advisory in this context.
-        return getQuotaReadOnly(db)
+        return getQuota(db)
       }
 
       // ── Read: safeguards ─────────────────────────────────────────────────────
       case 'getSafeguards': {
-        return getSafeguardsReadOnly(db)
+        return getSafeguards(db)
       }
 
       // ── Write: tasks ─────────────────────────────────────────────────────────

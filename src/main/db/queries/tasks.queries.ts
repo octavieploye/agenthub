@@ -359,3 +359,55 @@ export function getCompletedTasksSince(db: Database.Database, since: string): Ta
   const depMap = getDependencyMap(db)
   return rows.map((r) => mapRow(r as Record<string, unknown>, depMap))
 }
+
+// ─── Filtered query (used by MCP bridge) ──────────────────────────────────────
+
+export interface ListTasksFilter {
+  repoId?: string
+  sprintName?: string
+  status?: TaskStatus
+  category?: TaskCategory
+  limit?: number
+  includeArchived?: boolean
+}
+
+const DEFAULT_TASK_LIMIT = 50
+const MAX_TASK_LIMIT = 100
+
+function normalizeTaskLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_TASK_LIMIT
+  return Math.min(MAX_TASK_LIMIT, Math.max(1, Math.floor(limit)))
+}
+
+export function listTasksFiltered(db: Database.Database, filter: ListTasksFilter): TaskItem[] {
+  let sql = 'SELECT * FROM tasks WHERE 1=1'
+  const params: (string | number)[] = []
+
+  if (filter.repoId) {
+    sql += ' AND repo_id = ?'
+    params.push(filter.repoId)
+  }
+  if (filter.sprintName) {
+    sql += ' AND sprint_name = ?'
+    params.push(filter.sprintName)
+  }
+  if (filter.status) {
+    sql += ' AND status = ?'
+    params.push(filter.status)
+  }
+  if (filter.category) {
+    sql += ' AND category = ?'
+    params.push(filter.category)
+  }
+  if (!filter.includeArchived && filter.status !== 'archived') {
+    sql += " AND status != 'archived'"
+  }
+
+  sql += ' ORDER BY priority ASC, created_at DESC'
+  sql += ' LIMIT ?'
+  params.push(normalizeTaskLimit(filter.limit))
+
+  const rows = db.prepare(sql).all(...params) as Record<string, unknown>[]
+  const depMap = getDependencyMap(db, rows.map((row) => row.id as string))
+  return rows.map((row) => mapRow(row, depMap))
+}
