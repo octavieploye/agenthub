@@ -137,7 +137,7 @@ export class OrchestratorScheduler {
   // Lifecycle — public API consumed by service-orchestrator.ts
   // -------------------------------------------------------------------------
 
-  start(input: { sprintName?: string; taskIds?: string[]; repoId?: string; telegramNotify?: boolean }): OrchestratorRun {
+  start(input: { sprintName?: string; taskIds?: string[]; repoId?: string; concurrencyCap?: number; telegramNotify?: boolean }): OrchestratorRun {
     if (!this.isOrchestratorEnabled()) {
       throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
     }
@@ -160,6 +160,7 @@ export class OrchestratorScheduler {
       repoId: input.repoId ?? 'default',
       taskIds: input.taskIds,
       triggerSource: 'manual',
+      concurrencyCap: input.concurrencyCap,
       telegramNotify: input.telegramNotify ?? false,
     })
 

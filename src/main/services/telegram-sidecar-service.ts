@@ -32,6 +32,9 @@ export class TelegramSidecarService {
   private proc: ChildProcess | null = null
   private encryptedToken: Buffer | null = null
   private readonly deps: TelegramSidecarDeps
+  private intentionallyStopped = false
+  private restartAttempts = 0
+  private static readonly MAX_RESTART_ATTEMPTS = 5
 
   constructor(deps: TelegramSidecarDeps) {
     this.deps = deps
@@ -108,16 +111,47 @@ export class TelegramSidecarService {
     this.proc.on('exit', (code) => {
       this.deps.logInfo('telegram sidecar exited', { code })
       this.proc = null
+      if (!this.intentionallyStopped) {
+        this.scheduleRestart()
+      }
     })
 
     this.proc.on('error', (err) => {
       this.deps.logError('telegram sidecar error', { err: String(err) })
       this.proc = null
+      if (!this.intentionallyStopped) {
+        this.scheduleRestart()
+      }
     })
+
+    this.restartAttempts = 0
+    this.intentionallyStopped = false
+  }
+
+  private scheduleRestart(): void {
+    if (this.restartAttempts >= TelegramSidecarService.MAX_RESTART_ATTEMPTS) {
+      this.deps.logError('telegram sidecar: max restart attempts reached, giving up', {
+        attempts: this.restartAttempts,
+      })
+      return
+    }
+    this.restartAttempts++
+    const delayMs = Math.min(2000 * Math.pow(2, this.restartAttempts - 1), 60_000)
+    this.deps.logInfo('telegram sidecar: scheduling restart', {
+      attempt: this.restartAttempts,
+      delayMs,
+    })
+    setTimeout(() => {
+      if (this.intentionallyStopped || this.isRunning()) return
+      this.start().catch((err) => {
+        this.deps.logError('telegram sidecar: restart failed', { err: String(err) })
+      })
+    }, delayMs)
   }
 
   stop(): void {
     if (!this.proc) return
+    this.intentionallyStopped = true
     this.send({ type: 'shutdown' })
     setTimeout(() => {
       if (this.proc && !this.proc.killed) this.proc.kill('SIGTERM')

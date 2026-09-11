@@ -102,9 +102,14 @@ async function handleMethod(id, method, params) {
           format: args.format || 'status'
         })
 
-        if (result.ok) {
+        if (result.ok && !result.queued) {
           sendResponse(id, {
             content: [{ type: 'text', text: 'Message sent to Telegram successfully.' }]
+          })
+        } else if (result.ok && result.queued) {
+          sendResponse(id, {
+            content: [{ type: 'text', text: 'Telegram sidecar not running — message queued for retry but may not be delivered. Check AgentHub Telegram settings.' }],
+            isError: true
           })
         } else {
           sendResponse(id, {
