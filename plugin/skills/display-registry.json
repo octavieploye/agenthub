@@ -72,6 +72,9 @@
 
     "_build": "── Build & Engineering ─────────────────────────────────────────────────",
     "skill-creator":               { "displayName": "Create New Skill",                 "category": "build" },
+    "sprint-reset":                { "displayName": "Reset / Archive Sprint",            "category": "build" },
+    "sprint-to-orchestrator":      { "displayName": "Launch Sprint to Orchestrator",      "category": "build" },
+    "sprint-json-builder":         { "displayName": "Build Sprint JSON",                 "category": "build" },
     "test-integrity-review":       { "displayName": "Check Test Integrity",             "category": "build" },
     "full-code-review":            { "displayName": "Full Code Review",                 "category": "build" },
     "token-optimizer":             { "displayName": "Optimize AI Instructions",         "category": "build" },

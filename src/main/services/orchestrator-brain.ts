@@ -34,8 +34,6 @@ export interface BrainContext {
 
 export interface BrainDecision {
   taskId: string
-  skill: string
-  model: string
   reason: string
 }
 
@@ -85,12 +83,11 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const SYSTEM_PROMPT = `You are a task dispatcher for an AI coding agent system. Given the list of ready tasks and current system state, select the single highest-priority unblocked task to execute next.
 
 Return ONLY valid JSON in this exact format:
-{"taskId": "<id>", "skill": "<skill-name>", "model": "<model-id>", "reason": "<brief reason>"}
+{"taskId": "<id>", "reason": "<brief reason>"}
 
 Rules:
 - taskId must be one of the provided ready task IDs
-- skill should match the task's assigned skill or default to "team-dev-loop"
-- model should be appropriate for the task complexity
+- Do NOT select a model or skill — both are defined in task metadata
 - reason should be 1 sentence`
 
 // ---------------------------------------------------------------------------
@@ -176,7 +173,7 @@ export class OrchestratorBrain {
 
       if (!response.ok) {
         log.warn(LOG_PREFIX, `HTTP error ${response.status} from provider ${this.config.provider}`)
-        return null
+        return this.deterministicFallback(context)
       }
 
       rawJson = await response.json()
@@ -185,30 +182,32 @@ export class OrchestratorBrain {
 
       if (controller.signal.aborted) {
         log.warn(LOG_PREFIX, `LLM timeout after ${this.timeoutMs}ms on provider ${this.config.provider}`)
-        return null
+      } else {
+        log.warn(LOG_PREFIX, `fetch error from provider ${this.config.provider}:`, err instanceof Error ? err.message : String(err))
       }
-
-      log.warn(LOG_PREFIX, `fetch error from provider ${this.config.provider}:`, err instanceof Error ? err.message : String(err))
-      return null
+      return this.deterministicFallback(context)
     }
 
     const content = extractContent(rawJson)
     if (content === null) {
       log.warn(LOG_PREFIX, `invalid JSON: could not extract content from LLM response`, rawJson)
-      return null
+      return this.deterministicFallback(context)
     }
+
+    // Strip markdown fences (```json ... ```) that many LLMs wrap around JSON
+    const cleaned = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
 
     let parsed: unknown
     try {
-      parsed = JSON.parse(content)
+      parsed = JSON.parse(cleaned)
     } catch {
-      log.warn(LOG_PREFIX, `invalid JSON from LLM: ${content}`)
-      return null
+      log.warn(LOG_PREFIX, `invalid JSON from LLM (raw truncated): ${content.slice(0, 200)}`)
+      return this.deterministicFallback(context)
     }
 
     if (parsed === null || typeof parsed !== 'object') {
       log.warn(LOG_PREFIX, `invalid JSON from LLM: parsed value is not an object`)
-      return null
+      return this.deterministicFallback(context)
     }
 
     const obj = parsed as Record<string, unknown>
@@ -216,19 +215,28 @@ export class OrchestratorBrain {
 
     if (!taskId) {
       log.warn(LOG_PREFIX, `invalid JSON from LLM: missing taskId field`)
-      return null
+      return this.deterministicFallback(context)
     }
 
     const readyIds = new Set(context.readyTasks.map(t => t.id))
     if (!readyIds.has(taskId)) {
       log.warn(LOG_PREFIX, `LLM picked unknown taskId: ${taskId} (not in ready list)`)
-      return null
+      return this.deterministicFallback(context)
     }
 
-    const skill = typeof obj['skill'] === 'string' ? obj['skill'] : 'team-dev-loop'
-    const model = typeof obj['model'] === 'string' ? obj['model'] : this.config.model
     const reason = typeof obj['reason'] === 'string' ? obj['reason'] : ''
 
-    return { taskId, skill, model, reason }
+    return { taskId, reason }
+  }
+
+  private deterministicFallback(context: BrainContext): BrainDecision {
+    const task = context.readyTasks.reduce((best, t) =>
+      t.priority < best.priority ? t : best
+    )
+    log.info(LOG_PREFIX, `deterministic fallback: selecting task ${task.id} (priority ${task.priority})`)
+    return {
+      taskId: task.id,
+      reason: 'deterministic fallback — LLM unavailable'
+    }
   }
 }

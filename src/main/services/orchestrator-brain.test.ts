@@ -89,7 +89,7 @@ describe('OrchestratorBrain', () => {
   // -------------------------------------------------------------------------
 
   it('returns BrainDecision on valid JSON from Ollama message.content', async () => {
-    const decision = { taskId: 'task-1', skill: 'team-dev-loop', model: 'qwen3:8b', reason: 'Highest priority' }
+    const decision = { taskId: 'task-1', reason: 'Highest priority' }
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse(JSON.stringify(decision)))
 
     const brain = new OrchestratorBrain(makeConfig())
@@ -97,8 +97,8 @@ describe('OrchestratorBrain', () => {
 
     expect(result).not.toBeNull()
     expect(result?.taskId).toBe('task-1')
-    expect(result?.skill).toBe('team-dev-loop')
-    expect(result?.model).toBe('qwen3:8b')
+    expect(result).not.toHaveProperty('skill')
+    expect(result).not.toHaveProperty('model')
     expect(result?.reason).toBe('Highest priority')
   })
 
@@ -107,7 +107,7 @@ describe('OrchestratorBrain', () => {
   // -------------------------------------------------------------------------
 
   it('returns BrainDecision on valid JSON from OpenAI choices[0].message.content', async () => {
-    const decision = { taskId: 'task-1', skill: 'team-dev-loop', model: 'o4-mini', reason: 'Only ready task' }
+    const decision = { taskId: 'task-1', reason: 'Only ready task' }
     const config = makeConfig({ provider: 'codex', model: 'o4-mini', endpoint: 'https://api.openai.com/v1/chat/completions', apiKey: 'sk-test' })
     vi.mocked(fetch).mockResolvedValueOnce(openaiResponse(JSON.stringify(decision)))
 
@@ -116,14 +116,15 @@ describe('OrchestratorBrain', () => {
 
     expect(result).not.toBeNull()
     expect(result?.taskId).toBe('task-1')
-    expect(result?.model).toBe('o4-mini')
+    expect(result).not.toHaveProperty('model')
+    expect(result).not.toHaveProperty('skill')
   })
 
   // -------------------------------------------------------------------------
   // Invalid JSON from LLM
   // -------------------------------------------------------------------------
 
-  it('returns null on invalid JSON from LLM (no throw)', async () => {
+  it('falls back to deterministic selection on invalid JSON from LLM', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse('not valid json at all'))
 
     const brain = new OrchestratorBrain(makeConfig())
@@ -131,7 +132,9 @@ describe('OrchestratorBrain', () => {
 
     const result = await brain.decide(makeContext())
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.taskId).toBe('task-1')
+    expect(result?.reason).toBe('deterministic fallback — LLM unavailable')
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('invalid JSON'))
   })
 
@@ -139,8 +142,8 @@ describe('OrchestratorBrain', () => {
   // Unknown taskId
   // -------------------------------------------------------------------------
 
-  it('returns null if taskId from LLM is not in readyTasks', async () => {
-    const decision = { taskId: 'ghost-999', skill: 'team-dev-loop', model: 'qwen3:8b', reason: 'Hallucinated task' }
+  it('falls back to deterministic selection if taskId from LLM is not in readyTasks', async () => {
+    const decision = { taskId: 'ghost-999', reason: 'Hallucinated task' }
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse(JSON.stringify(decision)))
 
     const brain = new OrchestratorBrain(makeConfig())
@@ -148,7 +151,9 @@ describe('OrchestratorBrain', () => {
 
     const result = await brain.decide(makeContext())
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.taskId).toBe('task-1')
+    expect(result?.reason).toBe('deterministic fallback — LLM unavailable')
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('ghost-999'))
   })
 
@@ -156,7 +161,7 @@ describe('OrchestratorBrain', () => {
   // Timeout
   // -------------------------------------------------------------------------
 
-  it('returns null on timeout (no throw)', async () => {
+  it('falls back to deterministic selection on timeout', async () => {
     vi.useFakeTimers()
 
     // fetch that never resolves
@@ -181,7 +186,9 @@ describe('OrchestratorBrain', () => {
 
     const result = await resultPromise
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.taskId).toBe('task-1')
+    expect(result?.reason).toBe('deterministic fallback — LLM unavailable')
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('timeout'))
   })
 
@@ -189,7 +196,7 @@ describe('OrchestratorBrain', () => {
   // HTTP error from endpoint
   // -------------------------------------------------------------------------
 
-  it('returns null on non-OK HTTP response', async () => {
+  it('falls back to deterministic selection on non-OK HTTP response', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response('Internal Server Error', { status: 500 })
     )
@@ -199,7 +206,9 @@ describe('OrchestratorBrain', () => {
 
     const result = await brain.decide(makeContext())
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.taskId).toBe('task-1')
+    expect(result?.reason).toBe('deterministic fallback — LLM unavailable')
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('[orchestrator-brain]'), expect.stringContaining('500'))
   })
 
@@ -221,12 +230,29 @@ describe('OrchestratorBrain', () => {
   // Multiple ready tasks — LLM picks the second one
   // -------------------------------------------------------------------------
 
+  it('deterministic fallback selects lowest priority number (highest urgency) when LLM fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('Service Unavailable', { status: 503 })
+    )
+
+    const tasks = [
+      makeTask({ id: 'task-low', priority: 3 }),
+      makeTask({ id: 'task-high', priority: 1 }),
+      makeTask({ id: 'task-mid', priority: 2 }),
+    ]
+    const brain = new OrchestratorBrain(makeConfig())
+    const result = await brain.decide(makeContext({ readyTasks: tasks }))
+
+    expect(result?.taskId).toBe('task-high')
+    expect(result?.reason).toBe('deterministic fallback — LLM unavailable')
+  })
+
   it('accepts any valid taskId from the readyTasks list', async () => {
     const tasks = [
       makeTask({ id: 'task-alpha' }),
       makeTask({ id: 'task-beta', priority: 2 })
     ]
-    const decision = { taskId: 'task-beta', skill: 'team-dev-loop', model: 'qwen3:8b', reason: 'Higher priority' }
+    const decision = { taskId: 'task-beta', reason: 'Higher priority' }
     vi.mocked(fetch).mockResolvedValueOnce(ollamaResponse(JSON.stringify(decision)))
 
     const brain = new OrchestratorBrain(makeConfig())

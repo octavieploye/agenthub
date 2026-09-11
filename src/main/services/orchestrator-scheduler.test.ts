@@ -134,7 +134,7 @@ function insertTestTask(
     overrides.repoId ?? 'repo-1',
     overrides.title ?? 'Test Task',
     overrides.priority ?? 3,
-    overrides.status ?? 'ready',
+    overrides.status ?? 'today',
     now,
     now
   )
@@ -396,7 +396,7 @@ describe('OrchestratorScheduler', () => {
 
   describe('tick() — dispatch flow', () => {
     it('dispatches a ready task when all conditions are met', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -427,7 +427,7 @@ describe('OrchestratorScheduler', () => {
     })
 
     it('does not dispatch when brain returns null', async () => {
-      insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const dispatch = { execute: vi.fn() }
       // brain already defaults to returning null via buildDeps
@@ -441,7 +441,7 @@ describe('OrchestratorScheduler', () => {
     })
 
     it('does not dispatch when validator rejects the decision', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -462,8 +462,8 @@ describe('OrchestratorScheduler', () => {
       expect(dispatch.execute).not.toHaveBeenCalled()
     })
 
-    it('does not call brain when no ready tasks exist', async () => {
-      insertTestTask(db, { repoId: 'repo-1', status: 'backlog' })
+    it('does not call brain when no dispatchable tasks exist', async () => {
+      insertTestTask(db, { repoId: 'repo-1', status: 'in_progress' })
 
       const brain = { decide: vi.fn().mockResolvedValue(null) }
       const dispatch = { execute: vi.fn() }
@@ -473,13 +473,13 @@ describe('OrchestratorScheduler', () => {
       scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       await vi.advanceTimersByTimeAsync(60_000)
 
-      // Returns early before brain because candidateTasks is empty
+      // Returns early before brain because candidateTasks is empty (in_progress is not dispatchable)
       expect(brain.decide).not.toHaveBeenCalled()
       expect(dispatch.execute).not.toHaveBeenCalled()
     })
 
     it('marks task log failed when dispatch returns null', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -505,7 +505,7 @@ describe('OrchestratorScheduler', () => {
 
   describe('rate limiter', () => {
     it('blocks a second dispatch within the same window', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -537,7 +537,7 @@ describe('OrchestratorScheduler', () => {
 
   describe('handleAgentEvent()', () => {
     it('marks task log done when agent:completed fires', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -572,7 +572,7 @@ describe('OrchestratorScheduler', () => {
     })
 
     it('retries once on agent:failed then marks failed on second failure', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -626,7 +626,7 @@ describe('OrchestratorScheduler', () => {
     })
 
     it('returns the active run with correct counts', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'ready' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
 
       const decision: SchedulerBrainDecision = {
         taskId,
@@ -684,6 +684,123 @@ describe('OrchestratorScheduler', () => {
       // No ready tasks, but brain is reached (empty candidateTasks returns before brain, that's OK)
       // The key assertion: tick was triggered (the scheduler did not error)
       expect(brain.decide).not.toHaveBeenCalled() // no ready tasks → returns before brain
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Integration: full critical path (C1+C2+C3+C4+H1+L1)
+  // -------------------------------------------------------------------------
+
+  describe('integration — requiresApproval full dispatch path', () => {
+    it('C1: approved task dispatches on next tick (no infinite re-approval loop)', async () => {
+      // Insert a task that requires approval
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('approval-task-1', 'repo-1', 'Bootstrap project', 'Init the project', 1, 'today', 1, now, now)
+
+      const decision: SchedulerBrainDecision = {
+        taskId: 'approval-task-1',
+        spawnOptions: { repoId: 'repo-1', name: 'agent-approval', cwd: '/tmp' },
+        reason: 'highest priority',
+      }
+      const brain = { decide: vi.fn().mockResolvedValue(decision) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id-approval') }
+      const emitToRenderer = vi.fn()
+      const deps = buildDeps(db, { brain, dispatch, emitToRenderer, tickIntervalMs: 60_000 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'test-sprint', repoId: 'repo-1', taskIds: ['approval-task-1'] })
+
+      // --- Tick 1: immediate tick fires, approval gate triggers ---
+      await vi.advanceTimersByTimeAsync(1) // flush setTimeout(0) from start()
+
+      // Brain should NOT have been called (approval gate returned early)
+      expect(brain.decide).not.toHaveBeenCalled()
+      // Renderer should have received TASK_APPROVAL_NEEDED
+      expect(emitToRenderer).toHaveBeenCalled()
+
+      // --- User approves ---
+      scheduler.approveTaskDispatch(run.id, 'approval-task-1', true)
+
+      // --- Tick 2: approval kick fires, task should now dispatch ---
+      await vi.advanceTimersByTimeAsync(1) // flush setTimeout(0) from approval
+
+      expect(brain.decide).toHaveBeenCalled()
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-1' }),
+        'approval-task-1',
+        run.id
+      )
+
+      // --- Tick 3: verify NO re-approval (C1 fix) ---
+      brain.decide.mockClear()
+      dispatch.execute.mockClear()
+      emitToRenderer.mockClear()
+
+      await vi.advanceTimersByTimeAsync(60_000) // next interval tick
+
+      // The task is already dispatched (active log exists), so it should NOT
+      // re-dispatch the same task
+      expect(dispatch.execute).not.toHaveBeenCalled()
+    })
+
+    it('L1: approval-gated task does not block non-approval tasks', async () => {
+      const now = new Date().toISOString()
+      // Task A requires approval (priority 1)
+      db.prepare(
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('approval-blocker', 'repo-1', 'Needs approval', 'desc', 1, 'today', 1, now, now)
+      // Task B does NOT require approval (priority 2)
+      db.prepare(
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('free-task', 'repo-1', 'Free task', 'desc', 2, 'today', 0, now, now)
+
+      const decision: SchedulerBrainDecision = {
+        taskId: 'free-task',
+        spawnOptions: { repoId: 'repo-1', name: 'agent-free', cwd: '/tmp' },
+        reason: 'fallback to non-approval task',
+      }
+      const brain = { decide: vi.fn().mockResolvedValue(decision) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-free-id') }
+      const deps = buildDeps(db, { brain, dispatch, tickIntervalMs: 60_000 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'test-sprint', repoId: 'repo-1' })
+
+      // Tick fires — approval-blocker gated, but free-task dispatches
+      await vi.advanceTimersByTimeAsync(1) // immediate tick
+
+      expect(brain.decide).toHaveBeenCalled()
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-1' }),
+        'free-task',
+        expect.any(String)
+      )
+    })
+
+    it('C4: immediate tick fires within 1ms of start()', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-imm', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-imm-id') }
+      const deps = buildDeps(db, { brain, dispatch, tickIntervalMs: 60_000 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+
+      // Only advance 1ms — should still dispatch (immediate tick)
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(brain.decide).toHaveBeenCalled()
+      expect(dispatch.execute).toHaveBeenCalled()
     })
   })
 

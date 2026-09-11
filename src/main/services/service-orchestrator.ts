@@ -45,6 +45,7 @@ import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
 import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
+import { updateTask } from '../db/queries/tasks.queries'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -646,20 +647,74 @@ export function initializeServices(db: Database.Database): void {
         // Bridge: translate OrchestratorBrain BrainDecision → scheduler BrainDecision
         const task = context.candidateTasks.find(t => t.id === brainDecision.taskId)
         if (!task) return null
-        const repoId = task.repoId
-        const repo = getRepoById(db, repoId)
-        if (!repo?.path) {
-          log.warn('Orchestrator brain bridge: repo not found or has no path', { taskId: brainDecision.taskId, repoId })
+        const taskRepoId = task.repoId
+        const taskRepo = getRepoById(db, taskRepoId)
+        if (!taskRepo?.path) {
+          log.warn('Orchestrator brain bridge: repo not found or has no path', { taskId: brainDecision.taskId, repoId: taskRepoId })
           return null
         }
+        // FIX: Always use agenthub as agent CWD (skills/workflows live here).
+        // The target repo is injected into the task prompt so the agent knows where to work.
+        const agenthubCwd = app.isPackaged ? join(app.getAppPath(), '..') : process.cwd()
+        const isTargetRepoExternal = taskRepo.path !== agenthubCwd
+        // FIX H6+M1 — model and skill come from task metadata, never from brain LLM
+        const effectiveModel = task.modelOverride ?? task.recommendedModel ?? brainConfig.model
+        const effectiveSkill = task.skills?.[0] ?? 'team-dev-loop'
+
+        // FIX C2 — derive provider: task override → model-name heuristic → brain config
+        let effectiveProvider: ModelProvider
+        if (task.providerOverride) {
+          effectiveProvider = task.providerOverride as ModelProvider
+        } else if (effectiveModel.includes(':cloud')) {
+          effectiveProvider = 'ollama-cloud'
+        } else if (/^[a-z][\w.-]*:\d|^(llama|qwen|gemma|mistral|phi|deepseek|codestral|devstral|granite|glm)/i.test(effectiveModel)) {
+          effectiveProvider = 'ollama-local'
+        } else if (/^claude/i.test(effectiveModel)) {
+          effectiveProvider = 'anthropic'
+        } else {
+          effectiveProvider = brainConfig.provider as ModelProvider
+        }
+
+        // FIX H3 — prepend skill instruction to task description so the agent executes it
+        const baseDescription = task.description ?? task.title
+
+        // Wire sprint metadata into the agent prompt
+        const metadataParts: string[] = []
+        // FIX: Always inject target repo path so the agent knows where to work
+        if (isTargetRepoExternal) {
+          metadataParts.push(`Target repo: ${taskRepo.path}`)
+        }
+        if (task.targetFiles?.length) {
+          metadataParts.push(`Target files: ${task.targetFiles.join(', ')}`)
+        }
+        if (task.note) {
+          metadataParts.push(`Note: ${task.note}`)
+        }
+        const metadataBlock = metadataParts.length > 0 ? `\n\n${metadataParts.join('\n')}` : ''
+
+        const taskDescription = effectiveSkill
+          ? `Use skill: /${effectiveSkill}\n\n${baseDescription}${metadataBlock}`
+          : `${baseDescription}${metadataBlock}`
+
+        if (task.estimatedTokens || task.riskScore) {
+          log.info('[orchestrator] task metadata', {
+            taskId: task.id,
+            estimatedTokens: task.estimatedTokens ?? null,
+            riskScore: task.riskScore ?? null,
+          })
+        }
+
         return {
           taskId: brainDecision.taskId,
           spawnOptions: {
-            repoId,
+            repoId: taskRepoId,
             name: `orchestrator-${brainDecision.taskId.slice(0, 8)}`,
-            cwd: repo.path,
-            model: brainDecision.model,
-            taskDescription: task.description ?? task.title,
+            cwd: agenthubCwd,
+            model: effectiveModel,
+            provider: effectiveProvider,                // FIX C2
+            skipPermissions: true,                      // FIX C3
+            telegramNotify: true,                       // FIX L3
+            taskDescription,
             projectId: task.projectId ?? undefined,
           },
           reason: brainDecision.reason,
@@ -679,9 +734,12 @@ export function initializeServices(db: Database.Database): void {
           currentAgentCount: activeLogs.length,
           runId: run.id,
           agenthubPath: app.isPackaged ? join(app.getAppPath(), '..') : process.cwd(),
+          provider: decision.spawnOptions.provider ?? null,  // FIX M1 — pass provider so model validation actually fires
         }
+        // FIX H3 — pass the actual skill from spawnOptions (extracted from brain decision + task)
+        const skillFromDescription = decision.spawnOptions.taskDescription?.match(/^Use skill: \/(\S+)/)?.[1] ?? ''
         const outcome = validator.validate(
-          { taskId: decision.taskId, skill: '', model: decision.spawnOptions.model ?? '', reason: decision.reason },
+          { taskId: decision.taskId, skill: skillFromDescription, model: decision.spawnOptions.model ?? '', reason: decision.reason },
           validatorContext
         )
         if (!outcome.valid) {
@@ -695,6 +753,12 @@ export function initializeServices(db: Database.Database): void {
         // Spawn only — the scheduler inserts task log + emits TASK_PHASE_CHANGE itself.
         try {
           const agentState = spawnAgent(spawnOptions)
+          // FIX H1 — link agent_id to the kanban task so syncKanbanCard / getTaskByAgentId works
+          try {
+            updateTask(db, taskId, { agentId: agentState.id, status: 'in_progress' })
+          } catch (linkErr) {
+            log.warn('Orchestrator dispatch: failed to link agent_id to task', { taskId, agentId: agentState.id, err: String(linkErr) })
+          }
           return agentState.id
         } catch (err) {
           log.error('Orchestrator dispatch spawn failed', { taskId, runId, err })

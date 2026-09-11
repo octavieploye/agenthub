@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { OrchestratorValidator, type BrainDecision, type ValidatorContext } from './orchestrator-validator'
@@ -24,6 +25,8 @@ function makeContext(overrides: Partial<ValidatorContext> = {}): ValidatorContex
     maxAgents: 3,
     currentAgentCount: 1,
     runId: 'run-1',
+    agenthubPath: process.cwd(),
+    provider: null,
     ...overrides
   }
 }
@@ -117,9 +120,9 @@ describe('OrchestratorValidator', () => {
     }
   })
 
-  it('task-exists fails when task not in ready status', () => {
+  it('task-exists fails when task not in dispatchable status', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -134,7 +137,7 @@ describe('OrchestratorValidator', () => {
 
     expect(result.valid).toBe(false)
     if (!result.valid) {
-      expect(result.failures[0]).toContain('not in ready status')
+      expect(result.failures[0]).toContain('not in dispatchable status')
     }
   })
 
@@ -142,9 +145,9 @@ describe('OrchestratorValidator', () => {
   // model-allowed check
   // -------------------------------------------------------------------------
 
-  it('model-allowed rejects unknown models', () => {
+  it('model-allowed rejects unknown models when provider is set', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -152,8 +155,8 @@ describe('OrchestratorValidator', () => {
       ) VALUES (?, ?, ?, ?, ?, ?)
     `).run('task-1', 'repo-1', 'Fix bug', 'ready', '2026-09-09T00:00:00Z', '2026-09-09T00:00:00Z')
 
-    const context = makeContext({ db })
-    const decision = makeDecision({ model: 'invalid-model-xyz' })
+    const context = makeContext({ db, provider: 'ollama-cloud' })
+    const decision = makeDecision({ model: 'gpt-4o' })
 
     const result = validator.validate(decision, context)
 
@@ -163,13 +166,34 @@ describe('OrchestratorValidator', () => {
     }
   })
 
+  it('model-allowed passes when provider is null (ollama-local — runtime validation)', () => {
+    db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
+
+    db.prepare(`
+      INSERT INTO tasks (
+        id, repo_id, title, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run('task-1', 'repo-1', 'Fix bug', 'ready', '2026-09-09T00:00:00Z', '2026-09-09T00:00:00Z')
+
+    const context = makeContext({ db, provider: null })
+    const decision = makeDecision({ model: 'qwen3:8b' })
+
+    const result = validator.validate(decision, context)
+
+    // model-allowed should not fail when provider is null (local models validated at runtime)
+    if (!result.valid) {
+      expect(result.failures.some(f => f.includes('model not allowed'))).toBe(false)
+    }
+  })
+
   // -------------------------------------------------------------------------
   // budget-ok check
   // -------------------------------------------------------------------------
 
   it('budget-ok rejects when at max agents', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -198,7 +222,7 @@ describe('OrchestratorValidator', () => {
 
   it('rate-limit-ok rejects when limiter is exhausted', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -251,7 +275,7 @@ describe('OrchestratorValidator', () => {
 
   it('skill-exists passes when skill is null', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -277,7 +301,7 @@ describe('OrchestratorValidator', () => {
 
   it('all-pass returns valid:true when all checks pass', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -299,9 +323,9 @@ describe('OrchestratorValidator', () => {
   // -------------------------------------------------------------------------
 
   it('multiple failures all reported', () => {
-    // Repo exists but task is in wrong status and model is invalid
+    // Repo exists but task is in wrong status, model is invalid for provider, and budget exhausted
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (
@@ -309,14 +333,14 @@ describe('OrchestratorValidator', () => {
       ) VALUES (?, ?, ?, ?, ?, ?)
     `).run('task-1', 'repo-1', 'Fix bug', 'in_progress', '2026-09-09T00:00:00Z', '2026-09-09T00:00:00Z')
 
-    const context = makeContext({ db, maxAgents: 3, currentAgentCount: 3 })
-    const decision = makeDecision({ model: 'invalid-model-xyz' })
+    const context = makeContext({ db, maxAgents: 3, currentAgentCount: 3, provider: 'ollama-cloud' })
+    const decision = makeDecision({ model: 'gpt-4o' })
 
     const result = validator.validate(decision, context)
 
     expect(result.valid).toBe(false)
     if (!result.valid) {
-      // Should have multiple failures: model-allowed, budget-ok, task-exists (ready status)
+      // Should have multiple failures: model-allowed, budget-ok, task-exists (dispatchable status)
       expect(result.failures.length).toBeGreaterThanOrEqual(2)
       expect(result.failures.some(f => f.includes('model not allowed'))).toBe(true)
       expect(result.failures.some(f => f.includes('agent budget exhausted'))).toBe(true)
@@ -329,7 +353,7 @@ describe('OrchestratorValidator', () => {
 
   it('uses title as taskDescription when description is empty', () => {
     db.prepare('INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)')
-      .run('repo-1', 'agenthub', '/path/to/agenthub', '2026-09-09T00:00:00Z')
+      .run('repo-1', 'agenthub', process.cwd(), '2026-09-09T00:00:00Z')
 
     db.prepare(`
       INSERT INTO tasks (

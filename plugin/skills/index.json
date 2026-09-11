@@ -27,6 +27,30 @@
       "source": "project"
     },
     {
+      "id": "sprint-reset",
+      "name": "sprint-reset",
+      "description": "Archive or reset an orchestrator sprint — archives tasks, clears the active run in the app DB, and optionally restores for fresh re-dispatch",
+      "category": "dev-skills",
+      "path": ".claude/skills/sprint-reset/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "sprint-to-orchestrator",
+      "name": "sprint-to-orchestrator",
+      "description": "Validate a sprint against the codebase (risks, conflicts, debt, inconsistencies) then dispatch to the Kanban orchestrator. Blocks launch until all checks pass.",
+      "category": "dev-skills",
+      "path": ".claude/skills/sprint-to-orchestrator/SKILL.md",
+      "source": "project"
+    },
+    {
+      "id": "sprint-json-builder",
+      "name": "sprint-json-builder",
+      "description": "Build a sprint intake JSON from scratch — covers schema, model/skill/provider selection, dependency chains, and both injection paths (file drop + MCP). Companion to sprint-to-orchestrator.",
+      "category": "dev-skills",
+      "path": "plugin/skills/sprint-json-builder/SKILL.md",
+      "source": "plugin"
+    },
+    {
       "id": "test-integrity-review",
       "name": "test-integrity-review",
       "description": "Check code changes for 'test changed to pass' patterns during review or before commits",

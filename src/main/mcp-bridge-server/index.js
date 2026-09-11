@@ -254,11 +254,27 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        repoId: { type: 'string' },
-        title: { type: 'string' }
+        repoId: { type: 'string', description: 'Repository UUID (always use agenthub repo ID)' },
+        title: { type: 'string', description: 'Task title' },
+        description: { type: 'string', description: 'Full task description — include target repo path here' },
+        priority: { type: 'number', description: 'Priority 1-5 (1=highest)' },
+        status: { type: 'string', description: 'Initial status (default: backlog)' },
+        category: { type: 'string', description: 'Task category' },
+        sprintName: { type: 'string', description: 'Sprint name for grouping' },
+        epicName: { type: 'string', description: 'Epic name' },
+        projectId: { type: 'string', description: 'Project UUID' },
+        note: { type: 'string', description: 'Additional note for the agent' },
+        requiresApproval: { type: 'boolean', description: 'Require human approval before dispatch' },
+        modelOverride: { type: 'string', description: 'LLM model override (e.g. deepseek-v4-pro:0813:cloud)' },
+        providerOverride: { type: 'string', description: 'Provider override: anthropic | ollama-local | ollama-cloud | openai-codex' },
+        dependsOn: { type: 'array', items: { type: 'string' }, description: 'Task IDs this task depends on (blocked until those complete)' },
+        targetFiles: { type: 'array', items: { type: 'string' }, description: 'Files the agent should focus on' },
+        skills: { type: 'array', items: { type: 'string' }, description: 'Skill names to use (first is primary)' },
+        estimatedTokens: { type: 'number', description: 'Estimated input tokens' },
+        recommendedModel: { type: 'string', description: 'Recommended model from estimate' },
+        riskScore: { type: 'number', description: 'Risk score 0-100' }
       },
-      required: ['repoId', 'title'],
-      additionalProperties: true
+      required: ['repoId', 'title']
     }
   },
   {

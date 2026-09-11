@@ -1123,17 +1123,38 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       ptyProcess.write(cmd)
       log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider })
 
-      // Send task as input after claude session initializes
+      // Send task once Claude REPL is ready — detect via PTY output rather than blind delay.
+      // Claude CLI emits BEL (\x07) or shows a `>` prompt when ready for input.
+      // Fallback fires after 15 s in case the readiness signal is missed.
       if (task) {
-        setTimeout(() => {
+        let taskSent = false
+        let ollamaFallbackTimer: ReturnType<typeof setTimeout>
+        const sendOllamaTask = (reason: string) => {
+          if (taskSent) return
+          taskSent = true
           const mOllama = agents.get(agentState.id)
           if (mOllama) {
             mOllama.cleanTextBuffer = ''
             mOllama.hasSentInput = true
           }
           ptyProcess.write(task + '\n')
-          log.info('Sent task to Ollama agent', { id: agentState.id, task })
-        }, 3000)
+          log.info('Sent task to Ollama agent', { id: agentState.id, reason, taskLength: task.length })
+        }
+        const ollamaPollTimer = setInterval(() => {
+          const mOllama = agents.get(agentState.id)
+          if (!mOllama || taskSent) { clearInterval(ollamaPollTimer); return }
+          const buf = mOllama.orchestratorBuffer
+          // Claude CLI ready signals: BEL (\x07) after startup banner, or `>` prompt at end of output
+          if (buf.includes('\x07') || />\s*$/.test(buf)) {
+            clearInterval(ollamaPollTimer)
+            clearTimeout(ollamaFallbackTimer)
+            sendOllamaTask('repl-ready')
+          }
+        }, 300)
+        ollamaFallbackTimer = setTimeout(() => {
+          clearInterval(ollamaPollTimer)
+          sendOllamaTask('timeout-fallback')
+        }, 15_000)
       }
     }, 500)
   } else if (task) {
@@ -1151,7 +1172,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
       // Do NOT use -p flag — it requires an API key and fails with OAuth/subscription auth.
       // Instead launch interactive claude and send the task as the first prompt.
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag} -- '${escapedTask}'\n`
+      // Use exec so the shell is replaced by claude — when claude exits, the PTY exits and onExit fires.
+      // Without exec, zsh stays alive after claude finishes, blocking orchestrator dependency chains.
+      const cmd = `clear; exec claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       // S24: log metadata only — never log full cmd string (reveals plugin paths + task content)
       log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasCrossRepo: !!appendCrossRepoFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })

@@ -3,7 +3,7 @@ import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import type { TaskItem, TaskPriority, TaskStatus, TaskCategory, CreateTaskInput, UpdateTaskInput } from '../../../shared/types/task.types'
 import { insertActivityEvent } from './activity.queries'
-import { getDependencyMap } from './task-dependencies.queries'
+import { getDependencyMap, insertTaskDependency } from './task-dependencies.queries'
 
 const VALID_PROVIDERS = ['anthropic', 'ollama-local', 'ollama-cloud', 'openai-codex'] as const
 
@@ -120,6 +120,12 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const id = randomUUID()
   const now = new Date().toISOString()
 
+  // Normalize array fields → JSON strings (MCP callers may pass arrays, DB expects JSON strings)
+  const skillsJson = input.skillsJson ?? (input.skills ? JSON.stringify(input.skills) : null)
+  const targetFilesJson = input.targetFilesJson ?? (input.targetFiles ? JSON.stringify(input.targetFiles) : null)
+  const guardrailJson = input.guardrailJson ?? (input.guardrailOverrides ? JSON.stringify(input.guardrailOverrides) : null)
+  const riskFactorsJson = input.riskFactorsJson ?? (input.riskFactors ? JSON.stringify(input.riskFactors) : null)
+
   db.prepare(
     `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, model_override, provider_override, target_files_json, skills_json, guardrail_json, estimated_tokens, recommended_model, risk_score, risk_factors_json, created_by, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -139,19 +145,26 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.requiresApproval ? 1 : 0,
     input.modelOverride ?? null,
     input.providerOverride ?? null,
-    input.targetFilesJson ?? null,
-    input.skillsJson ?? null,
-    input.guardrailJson ?? null,
+    targetFilesJson ?? null,
+    skillsJson ?? null,
+    guardrailJson ?? null,
     input.estimatedTokens ?? null,
     input.recommendedModel ?? null,
     input.riskScore ?? null,
-    input.riskFactorsJson ?? null,
+    riskFactorsJson ?? null,
     input.createdBy ?? null,
     now,
     now
   )
 
-  log.info('Task inserted', { id, title: input.title })
+  // Wire dependsOn → task_dependencies table
+  if (input.dependsOn?.length) {
+    for (const depId of input.dependsOn) {
+      insertTaskDependency(db, id, depId)
+    }
+  }
+
+  log.info('Task inserted', { id, title: input.title, dependsOn: input.dependsOn ?? [] })
   insertActivityEvent(db, {
     eventType: 'task_created',
     entityType: 'task',
@@ -180,18 +193,18 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     providerOverride: input.providerOverride ?? null,
     dateTriggerFiredAt: null,
     blockedBy: [],
-    targetFilesJson: input.targetFilesJson ?? null,
-    skillsJson: input.skillsJson ?? null,
-    guardrailJson: input.guardrailJson ?? null,
+    targetFilesJson: targetFilesJson ?? null,
+    skillsJson: skillsJson ?? null,
+    guardrailJson: guardrailJson ?? null,
     estimatedTokens: input.estimatedTokens ?? null,
     recommendedModel: input.recommendedModel ?? null,
     riskScore: input.riskScore ?? null,
-    riskFactorsJson: input.riskFactorsJson ?? null,
+    riskFactorsJson: riskFactorsJson ?? null,
     createdBy: input.createdBy ?? null,
-    targetFiles: safeJsonParse<string[]>(input.targetFilesJson ?? null),
-    skills: safeJsonParse<string[]>(input.skillsJson ?? null),
-    guardrailOverrides: safeJsonParse<Record<string, unknown>>(input.guardrailJson ?? null),
-    riskFactors: safeJsonParse<string[]>(input.riskFactorsJson ?? null),
+    targetFiles: safeJsonParse<string[]>(targetFilesJson ?? null),
+    skills: safeJsonParse<string[]>(skillsJson ?? null),
+    guardrailOverrides: safeJsonParse<Record<string, unknown>>(guardrailJson ?? null),
+    riskFactors: safeJsonParse<string[]>(riskFactorsJson ?? null),
     createdAt: now,
     updatedAt: now
   }
@@ -273,17 +286,22 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
     sets.push('date_trigger_fired_at = ?')
     values.push(input.dateTriggerFiredAt)
   }
-  if (input.targetFilesJson !== undefined) {
+  // Normalize array fields → JSON strings (MCP callers may pass arrays)
+  const effectiveTargetFilesJson = input.targetFilesJson ?? (input.targetFiles ? JSON.stringify(input.targetFiles) : undefined)
+  const effectiveSkillsJson = input.skillsJson ?? (input.skills ? JSON.stringify(input.skills) : undefined)
+  const effectiveGuardrailJson = input.guardrailJson ?? (input.guardrailOverrides ? JSON.stringify(input.guardrailOverrides) : undefined)
+
+  if (effectiveTargetFilesJson !== undefined) {
     sets.push('target_files_json = ?')
-    values.push(input.targetFilesJson)
+    values.push(effectiveTargetFilesJson)
   }
-  if (input.skillsJson !== undefined) {
+  if (effectiveSkillsJson !== undefined) {
     sets.push('skills_json = ?')
-    values.push(input.skillsJson)
+    values.push(effectiveSkillsJson)
   }
-  if (input.guardrailJson !== undefined) {
+  if (effectiveGuardrailJson !== undefined) {
     sets.push('guardrail_json = ?')
-    values.push(input.guardrailJson)
+    values.push(effectiveGuardrailJson)
   }
   if (input.estimatedTokens !== undefined) {
     sets.push('estimated_tokens = ?')
@@ -297,9 +315,10 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
     sets.push('risk_score = ?')
     values.push(input.riskScore)
   }
-  if (input.riskFactorsJson !== undefined) {
+  const effectiveRiskFactorsJson = input.riskFactorsJson ?? (input.riskFactors ? JSON.stringify(input.riskFactors) : undefined)
+  if (effectiveRiskFactorsJson !== undefined) {
     sets.push('risk_factors_json = ?')
-    values.push(input.riskFactorsJson)
+    values.push(effectiveRiskFactorsJson)
   }
   if (input.createdBy !== undefined) {
     sets.push('created_by = ?')

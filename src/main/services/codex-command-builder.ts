@@ -17,7 +17,8 @@ export function buildCodexCommand(options: CodexCommandOptions): string {
       ? '\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
       : ''
     const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
-    return `clear; codex${modelFlag}${effortFlag}${fullAutoFlag} -- '${escapedTask}'\n`
+    // Use exec so the shell is replaced by codex — when codex exits, the PTY exits and onExit fires.
+    return `clear; exec codex${modelFlag}${effortFlag}${fullAutoFlag} -- '${escapedTask}'\n`
   }
 
   return `clear; codex${modelFlag}${effortFlag}${fullAutoFlag}\n`

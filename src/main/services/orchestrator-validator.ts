@@ -26,6 +26,8 @@ export interface ValidatorContext {
   runId: string
   /** Resolved agenthub root path (handles packaged vs dev builds). Use app.isPackaged ? join(app.getAppPath(), '..') : process.cwd() */
   agenthubPath: string
+  /** Provider for model validation (e.g. 'ollama-cloud', 'anthropic'). Null skips provider-specific model check. */
+  provider: string | null
 }
 
 export type ValidationOutcome = { valid: boolean; failures: string[] }
@@ -43,7 +45,7 @@ export class OrchestratorValidator {
       },
       {
         name: 'model-allowed',
-        check: () => this.checkModelAllowed(decision.model)
+        check: () => this.checkModelAllowed(decision.model, context.provider)
       },
       {
         name: 'budget-ok',
@@ -59,7 +61,11 @@ export class OrchestratorValidator {
       },
       {
         name: 'skill-exists',
-        check: () => this.checkSkillExists(decision.skill, context.agenthubPath)
+        check: () => {
+          const task = getTaskById(context.db, decision.taskId)
+          const repo = task ? getRepoById(context.db, task.repoId) : null
+          return this.checkSkillExists(decision.skill, context.agenthubPath, repo?.path)
+        }
       }
     ]
 
@@ -77,16 +83,15 @@ export class OrchestratorValidator {
     if (!task) {
       return `task not found: ${taskId}`
     }
-    if (task.status !== 'ready') {
-      return `task not in ready status: ${task.status}`
+    const dispatchable = new Set(['backlog', 'today', 'ready'])
+    if (!dispatchable.has(task.status)) {
+      return `task not in dispatchable status: ${task.status}`
     }
     return true
   }
 
-  private checkModelAllowed(model: string): boolean | string {
-    // model-validator returns null if allowed, or error string if not
-    // We pass provider=null since the validator can handle it (returns null for ollama-local)
-    const error = validateModelOverride(model, null)
+  private checkModelAllowed(model: string, provider: string | null): boolean | string {
+    const error = validateModelOverride(model, provider)
     if (error) {
       return `model not allowed: ${error}`
     }
@@ -122,22 +127,35 @@ export class OrchestratorValidator {
     return true
   }
 
-  private checkSkillExists(skill: string | null | undefined, agenthubPath: string): boolean | string {
+  private checkSkillExists(skill: string | null | undefined, agenthubPath: string, targetRepoPath?: string): boolean | string {
     // Null or empty skill is allowed (no skill requirement)
     if (!skill) {
       return true
     }
 
-    // Check .claude/skills/{skill}/SKILL.md
+    // Check agenthub .claude/skills/{skill}/SKILL.md
     const claudeSkillPath = join(agenthubPath, '.claude', 'skills', skill, 'SKILL.md')
     if (existsSync(claudeSkillPath)) {
       return true
     }
 
-    // Check plugin/skills/{skill}/SKILL.md
+    // Check agenthub plugin/skills/{skill}/SKILL.md
     const pluginSkillPath = join(agenthubPath, 'plugin', 'skills', skill, 'SKILL.md')
     if (existsSync(pluginSkillPath)) {
       return true
+    }
+
+    // Check target repo skill dirs (cross-repo dispatch)
+    if (targetRepoPath && existsSync(targetRepoPath)) {
+      const targetClaudeSkillPath = join(targetRepoPath, '.claude', 'skills', skill, 'SKILL.md')
+      if (existsSync(targetClaudeSkillPath)) {
+        return true
+      }
+
+      const targetPluginSkillPath = join(targetRepoPath, 'plugin', 'skills', skill, 'SKILL.md')
+      if (existsSync(targetPluginSkillPath)) {
+        return true
+      }
     }
 
     return `skill not found: ${skill}`

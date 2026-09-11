@@ -58,9 +58,9 @@ describe('Sound Alert Service', () => {
       expect(deps.playSound).toHaveBeenCalledWith('sounds/state-change.mp3', expect.any(Number))
     })
 
-    it('plays alert-yellow.wav for agent_completed', () => {
+    it('plays alert-yellow.mp3 for agent_completed', () => {
       playAgentSound('agent_completed', deps)
-      expect(deps.playSound).toHaveBeenCalledWith('sounds/alert-yellow.wav', expect.any(Number))
+      expect(deps.playSound).toHaveBeenCalledWith('sounds/alert-yellow.mp3', expect.any(Number))
     })
 
     it('plays user-approval.mp3 for user_approval', () => {

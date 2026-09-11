@@ -97,6 +97,7 @@ export class OrchestratorScheduler {
   private pausedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
   private pendingApproval = new Set<string>()
+  private approvedTasks = new Set<string>()
 
   // Bound handlers stored so we can remove them in stop()
   private readonly onCompleted: (e: OrchestratorAgentEvent) => void
@@ -136,7 +137,7 @@ export class OrchestratorScheduler {
   // Lifecycle — public API consumed by service-orchestrator.ts
   // -------------------------------------------------------------------------
 
-  start(input: { sprintName?: string; taskIds?: string[]; repoId?: string }): OrchestratorRun {
+  start(input: { sprintName?: string; taskIds?: string[]; repoId?: string; telegramNotify?: boolean }): OrchestratorRun {
     if (!this.isOrchestratorEnabled()) {
       throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
     }
@@ -144,7 +145,14 @@ export class OrchestratorScheduler {
     const existing = getActiveRun(this.db)
     if (existing) {
       log.warn('OrchestratorScheduler: start() called while run already active', { runId: existing.id })
-      return existing
+      if (input.telegramNotify && !existing.telegramNotify) {
+        this.db.prepare("UPDATE orchestrator_runs SET telegram_notify = 1 WHERE id = ?").run(existing.id)
+      }
+      if (!this.tickHandle) {
+        this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
+        setTimeout(() => this.tick(), 0)
+      }
+      return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
     }
 
     const run = insertRun(this.db, {
@@ -152,6 +160,7 @@ export class OrchestratorScheduler {
       repoId: input.repoId ?? 'default',
       taskIds: input.taskIds,
       triggerSource: 'manual',
+      telegramNotify: input.telegramNotify ?? false,
     })
 
     updateRunStatus(this.db, run.id, 'running')
@@ -159,6 +168,7 @@ export class OrchestratorScheduler {
 
     if (!this.tickHandle) {
       this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
+      setTimeout(() => this.tick(), 0)
     }
 
     log.info('OrchestratorScheduler: run started', { runId: run.id, sprintName: run.sprintName })
@@ -194,6 +204,7 @@ export class OrchestratorScheduler {
 
     if (!this.tickHandle) {
       this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
+      setTimeout(() => this.tick(), 0)
     }
 
     log.info('OrchestratorScheduler: single-task run started', { runId: run.id, taskId: input.taskId })
@@ -324,6 +335,7 @@ export class OrchestratorScheduler {
       return
     }
 
+    this.approvedTasks.add(taskId)
     log.info('OrchestratorScheduler: task dispatch approved, kicking tick', { runId, taskId })
     setTimeout(() => this.tick(), 0)
   }
@@ -357,12 +369,6 @@ export class OrchestratorScheduler {
     if (!run) return
 
     if (this.pausedRunIds.has(run.id) || run.status === 'paused') return
-
-    // Rate limiter gate
-    if (!this.rateLimiter.tryAcquire()) {
-      log.debug('OrchestratorScheduler: rate limiter blocked tick', { tick: currentTick, runId: run.id })
-      return
-    }
 
     // Budget gate
     const spawned = getAgentsSpawned(this.db, run.id)
@@ -400,88 +406,108 @@ export class OrchestratorScheduler {
     // This prevents a burst of tasks from overwhelming agent slots when a
     // sprint starts with many ready tasks.  The next tick will pick up the
     // next candidate.
-    // Ask brain for a decision on the first dispatchable task
-    const firstDispatchable = dispatchable[0]
-    const fullTask = candidateTasks.find(t => t.id === firstDispatchable.id)
-    if (!fullTask) return
+    // Iterate dispatchable list so an approval-gated task does not block the queue.
+    let dispatched = false
+    for (const candidate of dispatchable) {
+      const fullTask = candidateTasks.find(t => t.id === candidate.id)
+      if (!fullTask) continue
 
-    // Approval gate — hold task if requiresApproval and not yet acknowledged
-    if (fullTask.requiresApproval && !this.pendingApproval.has(fullTask.id)) {
-      this.pendingApproval.add(fullTask.id)
-      this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
-        runId: run.id,
-        taskId: fullTask.id,
-        title: fullTask.title,
-      })
-      if (run.telegramNotify) {
-        this.deps.notifyApproval?.(fullTask.id, run.id, fullTask.title, run.repoId)
+      // Approval gate — hold task if requiresApproval and not yet approved
+      if (fullTask.requiresApproval && !this.pendingApproval.has(fullTask.id) && !this.approvedTasks.has(fullTask.id)) {
+        this.pendingApproval.add(fullTask.id)
+        this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
+          runId: run.id,
+          taskId: fullTask.id,
+          title: fullTask.title,
+        })
+        if (run.telegramNotify) {
+          this.deps.notifyApproval?.(fullTask.id, run.id, fullTask.title, run.repoId)
+        }
+        log.info('OrchestratorScheduler: task gated on approval', { runId: run.id, taskId: fullTask.id })
+        continue // skip this task, try the next one
       }
-      log.info('OrchestratorScheduler: task gated on approval', { runId: run.id, taskId: fullTask.id })
-      return
+
+      // Still waiting for user to respond to the approval prompt
+      if (fullTask.requiresApproval && this.pendingApproval.has(fullTask.id)) {
+        continue
+      }
+
+      const context: SchedulerBrainContext = {
+        run,
+        candidateTasks: [fullTask],
+        activeLogs,
+        completedTaskIds: [...completedIds],
+        agentsSpawned: spawned,
+        maxAgents: this.deps.maxAgents,
+        tickCount: currentTick,
+      }
+
+      let decision: SchedulerBrainDecision | null = null
+      try {
+        decision = await Promise.race([
+          this.deps.brain.decide(context),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 30_000)),
+        ])
+      } catch (err) {
+        log.error('OrchestratorScheduler: brain.decide threw', { tick: currentTick, runId: run.id, err })
+        continue
+      }
+
+      if (!decision) {
+        log.info('OrchestratorScheduler: brain returned null decision', { tick: currentTick, runId: run.id })
+        continue
+      }
+
+      // Validate decision
+      const outcome = this.deps.validator.validate(decision, run)
+      if (!outcome.valid) {
+        log.warn('OrchestratorScheduler: validation failed', { tick: currentTick, runId: run.id, taskId: decision.taskId, failures: outcome.failures })
+        continue
+      }
+
+      // Rate limiter gate — consume token only after validation passes (FIX H4)
+      if (!this.rateLimiter.tryAcquire()) {
+        log.debug('OrchestratorScheduler: rate limiter blocked dispatch', { tick: currentTick, runId: run.id, taskId: decision.taskId })
+        break // no more capacity this window — stop trying
+      }
+
+      // Insert task log entry
+      const taskLog = insertTaskLog(this.db, { runId: run.id, taskId: decision.taskId, phase: 'dev' })
+
+      // Dispatch
+      const agentId = this.deps.dispatch.execute(decision.spawnOptions, decision.taskId, run.id)
+      if (!agentId) {
+        log.warn('OrchestratorScheduler: dispatch returned null agentId', { tick: currentTick, runId: run.id, taskId: decision.taskId })
+        updateTaskLogStatus(this.db, taskLog.id, 'failed')
+        continue
+      }
+
+      updateTaskLogStatus(this.db, taskLog.id, 'active', agentId)
+      incrementAgentsSpawned(this.db, run.id)
+      updateRunTimestamp(this.db, run.id)
+
+      log.info('OrchestratorScheduler: task dispatched', {
+        tick: currentTick,
+        runId: run.id,
+        taskId: decision.taskId,
+        agentId,
+        reason: decision.reason,
+      })
+
+      this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
+        runId: run.id,
+        taskId: decision.taskId,
+        phase: 'dev',
+        status: 'active',
+      })
+
+      dispatched = true
+      break // throughput ceiling: 1 dispatch per tick
     }
 
-    const context: SchedulerBrainContext = {
-      run,
-      candidateTasks: [fullTask],
-      activeLogs,
-      completedTaskIds: [...completedIds],
-      agentsSpawned: spawned,
-      maxAgents: this.deps.maxAgents,
-      tickCount: currentTick,
+    if (!dispatched) {
+      log.debug('OrchestratorScheduler: no task dispatched this tick', { tick: currentTick, runId: run.id })
     }
-
-    let decision: SchedulerBrainDecision | null = null
-    try {
-      decision = await Promise.race([
-        this.deps.brain.decide(context),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 30_000)),
-      ])
-    } catch (err) {
-      log.error('OrchestratorScheduler: brain.decide threw', { tick: currentTick, runId: run.id, err })
-      return
-    }
-
-    if (!decision) {
-      log.info('OrchestratorScheduler: brain returned null decision', { tick: currentTick, runId: run.id })
-      return
-    }
-
-    // Validate decision
-    const outcome = this.deps.validator.validate(decision, run)
-    if (!outcome.valid) {
-      log.warn('OrchestratorScheduler: validation failed', { tick: currentTick, runId: run.id, taskId: decision.taskId, failures: outcome.failures })
-      return
-    }
-
-    // Insert task log entry
-    const taskLog = insertTaskLog(this.db, { runId: run.id, taskId: decision.taskId, phase: 'dev' })
-
-    // Dispatch
-    const agentId = this.deps.dispatch.execute(decision.spawnOptions, decision.taskId, run.id)
-    if (!agentId) {
-      log.warn('OrchestratorScheduler: dispatch returned null agentId', { tick: currentTick, runId: run.id, taskId: decision.taskId })
-      updateTaskLogStatus(this.db, taskLog.id, 'failed')
-      return
-    }
-
-    updateTaskLogStatus(this.db, taskLog.id, 'active', agentId)
-    incrementAgentsSpawned(this.db, run.id)
-    updateRunTimestamp(this.db, run.id)
-
-    log.info('OrchestratorScheduler: task dispatched', {
-      tick: currentTick,
-      runId: run.id,
-      taskId: decision.taskId,
-      agentId,
-      reason: decision.reason,
-    })
-
-    this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
-      runId: run.id,
-      taskId: decision.taskId,
-      phase: 'dev',
-      status: 'active',
-    })
   }
 
   // -------------------------------------------------------------------------
