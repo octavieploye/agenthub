@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../db/migration-runner'
 import { OrchestratorMonitorService, MONITOR_LIMITS } from './orchestrator-monitor'
+import type { OrchestratorPhase } from '@shared/types/orchestrator.types'
 import { OPERATING_RULES } from './orchestrator-rules'
 import {
   insertRun,
@@ -35,7 +36,7 @@ function insertReviewFailure(runId: string, taskId: string): void {
   updateTaskLogStatus(db, log.id, 'failed')
 }
 
-function insertPhaseFailure(runId: string, taskId: string, phase: string): void {
+function insertPhaseFailure(runId: string, taskId: string, phase: OrchestratorPhase): void {
   const log = insertTaskLog(db, { runId, taskId, phase })
   updateTaskLogStatus(db, log.id, 'failed')
 }
