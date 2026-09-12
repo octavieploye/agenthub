@@ -55,24 +55,6 @@ export interface BrainConfig {
 // Internal types — raw LLM response shapes
 // ---------------------------------------------------------------------------
 
-interface OllamaMessage {
-  role: string
-  content: string
-}
-
-interface OllamaApiResponse {
-  message?: OllamaMessage
-  response?: string
-}
-
-interface OpenAIChoice {
-  message: { role: string; content: string }
-}
-
-interface OpenAIApiResponse {
-  choices?: OpenAIChoice[]
-}
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import {
   getActiveTaskLogs,
   getActiveTaskLogByAgentId,
 } from '../db/queries/orchestrator.queries'
-import { getTasksByRepo, getTasksByStatus, getTaskById } from '../db/queries/tasks.queries'
+import { getTasksByRepo, getTaskById } from '../db/queries/tasks.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type {
   OrchestratorRun,
@@ -176,7 +176,7 @@ export class OrchestratorScheduler {
     return { ...run, status: 'running' }
   }
 
-  startSingleTask(input: { taskId: string }): OrchestratorRun {
+  startSingleTask(input: { taskId: string; telegramNotify?: boolean }): OrchestratorRun {
     if (!this.isOrchestratorEnabled()) {
       throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
     }
@@ -184,7 +184,10 @@ export class OrchestratorScheduler {
     const existing = getActiveRun(this.db)
     if (existing) {
       log.warn('OrchestratorScheduler: startSingleTask() called while run already active', { runId: existing.id })
-      return existing
+      if (input.telegramNotify && !existing.telegramNotify) {
+        this.db.prepare("UPDATE orchestrator_runs SET telegram_notify = 1 WHERE id = ?").run(existing.id)
+      }
+      return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
     }
 
     const task = getTaskById(this.db, input.taskId)
@@ -198,6 +201,7 @@ export class OrchestratorScheduler {
       singleTaskId: input.taskId,
       taskIds: [input.taskId],
       triggerSource: 'single-task',
+      telegramNotify: input.telegramNotify ?? false,
     })
 
     updateRunStatus(this.db, run.id, 'running')

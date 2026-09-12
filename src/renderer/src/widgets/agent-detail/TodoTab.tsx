@@ -31,7 +31,8 @@ const STATUS_BADGE: Record<TaskStatus, string> = {
   backlog: 'badge-ghost',
   completed: 'badge-success',
   tested: 'badge-success',
-  interrupted: 'badge-warning'
+  interrupted: 'badge-warning',
+  archived: 'badge-ghost'
 }
 
 const STATUS_ORDER: Record<TaskStatus, number> = {
@@ -40,7 +41,8 @@ const STATUS_ORDER: Record<TaskStatus, number> = {
   backlog: 2,
   completed: 3,
   tested: 4,
-  interrupted: 5
+  interrupted: 5,
+  archived: 6
 }
 
 function groupAndSort(tasks: TaskItem[]): TaskItem[] {

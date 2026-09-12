@@ -4,7 +4,6 @@ import Database from 'better-sqlite3'
 import { OrchestratorScheduler } from './orchestrator-scheduler'
 import type { SchedulerDeps, SchedulerBrainDecision, ValidationOutcome } from './orchestrator-scheduler'
 import {
-  insertRun,
   getActiveRun,
   insertTaskLog,
   getTaskLogsByRun,

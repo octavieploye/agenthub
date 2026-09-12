@@ -1,4 +1,3 @@
-import type { TaskPriority, TaskStatus } from '@shared/types/task.types'
 import { CLOUD_MODEL_OPTIONS, ANTHROPIC_MODEL_OPTIONS, CODEX_MODEL_OPTIONS } from '@shared/constants/cloud-models'
 import type { ValidProvider } from '@shared/constants/cloud-models'
 

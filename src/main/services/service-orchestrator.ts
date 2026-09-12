@@ -39,7 +39,7 @@ import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, getAgentOutput, isAgentAlive, getAgentLastOutputTime, setMcpServerInfo } from './agent-manager'
+import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -190,7 +190,7 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
  * JSONL files live at ~/.claude/projects/{sanitised-repo-path}/*.jsonl
  * where the sanitised path replaces '/' with '-'.
  */
-function computeRunTokenUsage(db: Database.Database, runId: string): number {
+export function computeRunTokenUsage(db: Database.Database, runId: string): number {
   const run = getRun(db, runId)
   if (!run?.startedAt) return 0
 
@@ -533,6 +533,12 @@ export function initializeServices(db: Database.Database): void {
       handleTelegramCommand(db, msg)
     },
     onReady: () => {
+      // Re-send user info on every ready (including restarts) so allowedChatId is set
+      const savedUser = getTelegramAllowedUser(db)
+      if (savedUser) {
+        telegramSidecarService?.sendUser(savedUser.telegram_user_id, savedUser.chat_id)
+      }
+
       // Push current agent list as soon as sidecar is ready
       const agents = listAgents().map(a => ({
         id: a.id, name: a.name, status: a.status,
@@ -644,6 +650,7 @@ export function initializeServices(db: Database.Database): void {
               taskId: l.taskId,
               status: (l.status === 'done' ? 'completed' : 'failed') as 'completed' | 'failed',
               skill: null,
+              model: null,
             })),
         }
         const brainDecision = await brain.decide(brainContext)
@@ -666,6 +673,7 @@ export function initializeServices(db: Database.Database): void {
         const effectiveSkill = task.skills?.[0] ?? 'team-dev-loop'
 
         // FIX C2 — derive provider: task override → model-name heuristic → brain config
+        type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud' | 'openai-codex'
         let effectiveProvider: ModelProvider
         if (task.providerOverride) {
           effectiveProvider = task.providerOverride as ModelProvider
@@ -777,9 +785,11 @@ export function initializeServices(db: Database.Database): void {
         type: 'awaiting_approval',
         agentId: `orchestrator:approval:${taskId}`,
         agentName: 'Orchestrator',
+        summary: title,
         proposedAction: title,
         repo: repoName,
         requestId: `task:${taskId}:${runId}`,
+        timestamp: new Date().toISOString(),
       })
     },
     maxAgents: 50,
