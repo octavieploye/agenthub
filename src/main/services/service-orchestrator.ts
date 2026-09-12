@@ -525,6 +525,10 @@ export function initializeServices(db: Database.Database): void {
       emitToAllRenderers(IPC_EVENTS.TELEGRAM.FIRST_CONTACT_LINKED, {})
     },
     onCommand: (msg) => {
+      if (msg.type === 'error') {
+        log.error('telegram sidecar error', { message: msg.message })
+        return
+      }
       if (msg.type !== 'command') return
       handleTelegramCommand(db, msg)
     },
