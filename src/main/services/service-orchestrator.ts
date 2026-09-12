@@ -33,6 +33,7 @@ import { TelegramSidecarService } from './telegram-sidecar-service'
 import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { OrchestratorScheduler, type SchedulerDeps } from './orchestrator-scheduler'
+import { OrchestratorMonitorService } from './orchestrator-monitor'
 import { OrchestratorBrain, type BrainConfig } from './orchestrator-brain'
 import { OrchestratorValidator } from './orchestrator-validator'
 import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
@@ -76,6 +77,7 @@ let telegramSidecarService: TelegramSidecarService | null = null
 let telegramSocketServer: TelegramSocketServer | null = null
 let telegramQueueProcessor: TelegramQueueProcessor | null = null
 let orchestratorScheduler: OrchestratorScheduler | null = null
+let orchestratorMonitor: OrchestratorMonitorService | null = null
 let mcpBridgeHandler: McpBridgeHandler | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
 let intakeDir = ''
@@ -797,6 +799,12 @@ export function initializeServices(db: Database.Database): void {
 
   orchestratorScheduler = new OrchestratorScheduler(schedulerDeps)
 
+  // S6 — Deterministic safety monitor (rules-based, no LLM)
+  orchestratorMonitor = new OrchestratorMonitorService(db, {
+    pause: (runId: string) => orchestratorScheduler?.pause(runId),
+    sendTelegramNotification,
+  })
+
   // Startup recovery: fix orphaned tasks and stale runs from previous crashes
   const recovery = orchestratorScheduler.recoverOrphanedState()
   if (recovery.staleRuns > 0 || recovery.orphanedTasks > 0) {
@@ -830,6 +838,7 @@ export function startServices(): void {
   healthMonitor?.startWatchdog()
   autoPauseService?.startReminderTimer()
   quotaScrapeScheduler?.start()
+  orchestratorMonitor?.start()
   log.info('All periodic services started')
 }
 
@@ -853,6 +862,8 @@ export function stopServices(): void {
   telegramSidecarService?.stop()
   orchestratorScheduler?.stop()
   orchestratorScheduler = null
+  orchestratorMonitor?.stop()
+  orchestratorMonitor = null
   mcpBridgeHandler?.stop()
   mcpBridgeHandler = null
   setMcpServerInfo('', '')

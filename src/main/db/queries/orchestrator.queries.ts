@@ -385,6 +385,17 @@ export function wasFilesChangedReported(db: Database.Database, taskId: string): 
 }
 
 // ---------------------------------------------------------------------------
+// Cross-run dedup: tasks completed in ANY previous run
+// ---------------------------------------------------------------------------
+
+export function getCompletedTaskIdsFromAllRuns(db: Database.Database): Set<string> {
+  const rows = db
+    .prepare("SELECT DISTINCT task_id FROM orchestrator_task_log WHERE status = 'done'")
+    .all() as { task_id: string }[]
+  return new Set(rows.map(r => r.task_id))
+}
+
+// ---------------------------------------------------------------------------
 // Retry failures
 // ---------------------------------------------------------------------------
 

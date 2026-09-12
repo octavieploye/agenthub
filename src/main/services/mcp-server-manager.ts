@@ -1,0 +1,541 @@
+import { app } from 'electron'
+import log from 'electron-log/main'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
+import * as fs from 'node:fs'
+import * as net from 'node:net'
+import { tmpdir } from 'node:os'
+import { join, isAbsolute } from 'node:path'
+import type Database from 'better-sqlite3'
+import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
+import type { McpIpcRequest, McpIpcResponse, McpIpcRouteResult } from '../../shared/types/mcp-server.types'
+// NOTE: McpIpcFrame and McpIpcResponseFrame were previously imported from
+// '../mcp-server/ipc/ipc-protocol' — that module was deleted with the old mcp-server/
+// directory. The types now live in the shared types file alongside McpIpcRequest/Response.
+import type { McpIpcFrame, McpIpcResponseFrame } from '../../shared/types/mcp-server.types'
+import { getTaskById, insertTask, updateTask, getTasksByRepo } from '../db/queries/tasks.queries'
+import { insertTaskDependency } from '../db/queries/task-dependencies.queries'
+import { insertProject } from '../db/queries/projects.queries'
+import { linkRepoToProject, getProjectsByRepoId } from '../db/queries/project-repos.queries'
+import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types/task.types'
+import type {
+  OrchestratorStartInput,
+  OrchestratorStatusResponse
+} from '../../shared/types/orchestrator.types'
+import type { HealthAnomaly } from '../../shared/types/health.types'
+
+// NOTE: Overlap with McpBridgeHandler (src/main/services/mcp-bridge-handler.ts)
+// McpBridgeHandler owns the Unix-socket bridge that agents connect to via their
+// --mcp-config injection. It handles listTasks, getRepoById, getSetting, getQuota,
+// getSafeguards, getDependencyMap, getOrchestratorRun, getActiveRun, listRepos,
+// archiveTask, and reportFilesChanged — all using the newer camelCase method protocol.
+//
+// McpServerManager owns the child-process MCP server lifecycle (spawn, restart,
+// graceful shutdown), settings.json auto-patching for Claude CLI MCP discovery,
+// the secure socket token/auth layer, health-snapshot caching, and the typed
+// McpIpcRequest routing protocol used by the MCP server child process over IPC.
+// The two classes are complementary, not redundant.
+
+const MAX_FRAME_BYTES = 1024 * 1024
+const MAX_CONNECTIONS = 8
+const AUTH_TIMEOUT_MS = 5_000
+
+type OrchestratorRunLike = {
+  id: string
+  status: string
+  sprintName: string
+}
+
+export interface McpManagerDeps {
+  db: Database.Database
+  orchestrator: {
+    start: (input: OrchestratorStartInput) => OrchestratorRunLike
+    startSingleTask: (input: OrchestratorStartInput) => OrchestratorRunLike
+    getStatus?: () => OrchestratorStatusResponse
+    approveTaskDispatch: (runId: string, taskId: string, approved: boolean) => void
+  }
+  healthMonitor: {
+    getSnapshot: (agentId: string) => { anomalies: HealthAnomaly[] } | null
+  }
+  emitToRenderer: (channel: string, data: unknown) => void
+  listAgents: () => Array<{ id: string }>
+  spawnAgent: (...args: unknown[]) => unknown
+}
+
+/**
+ * Owns the main-process side of the AgentHub MCP server connection.
+ * The child process is read-only; all mutations cross this JSON-line socket.
+ */
+export class McpServerManager {
+  private child: ChildProcess | null = null
+  private socketServer: net.Server | null = null
+  private readonly socketPath = join(tmpdir(), `agenthub-mcp-${process.pid}.sock`)
+  private readonly liveConfigPath = join(tmpdir(), 'agenthub-mcp-live.json')
+  private readonly socketToken = randomUUID()
+  private readonly connections = new Set<net.Socket>()
+  private readonly unauthenticatedConnections = new Set<net.Socket>()
+  private readonly authenticationTimers = new WeakMap<net.Socket, ReturnType<typeof setTimeout>>()
+  private cleanupHooksInstalled = false
+  private dbPath = ''
+  /** TTL cache for health snapshots to avoid redundant queries in burst scenarios */
+  private healthSnapshotCache = new Map<string, { anomalies: unknown[]; cachedAt: number }>()
+  private static readonly HEALTH_CACHE_TTL_MS = 3000
+
+  start(db: Database.Database, deps: McpManagerDeps, onReady?: () => void): void {
+    if (this.socketServer) return
+
+    this.dbPath = this.getDatabasePath(db)
+    this.unlinkSocket()
+    const server = net.createServer((socket) => this.handleConnection(socket, db, deps))
+    server.on('error', (err) => {
+      // The caller owns service observability. Keeping this listener prevents an
+      // unexpected socket error from terminating the Electron main process.
+      log.warn('McpServerManager: socket server error', err)
+    })
+    this.socketServer = server
+    this.installCleanupHooks()
+    server.listen(this.socketPath, () => {
+      try {
+        fs.chmodSync(this.socketPath, 0o600)
+      } catch {
+        this.stop()
+        return
+      }
+
+      this.writeLiveConfig()
+      onReady?.()
+
+      if (this.socketServer !== server) return
+      const child = spawn(process.execPath, [this.getServerScriptPath()], {
+        cwd: process.cwd(),
+        env: {
+          AGENTHUB_DB_PATH: this.getDatabasePath(db),
+          AGENTHUB_SOCKET_PATH: this.socketPath,
+          AGENTHUB_SOCKET_TOKEN: this.socketToken,
+          ELECTRON_RUN_AS_NODE: '1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      this.child = child
+      child.once('exit', () => {
+        if (this.child !== child) return
+        this.child = null
+        this.stop()
+      })
+      child.once('error', () => {
+        if (this.child !== child) return
+        this.child = null
+        this.stop()
+      })
+    })
+  }
+
+  stop(): void {
+    const child = this.child
+    this.child = null
+    if (child && !child.killed) child.kill('SIGTERM')
+
+    for (const connection of this.connections) connection.destroy()
+    this.connections.clear()
+    this.unauthenticatedConnections.clear()
+
+    this.socketServer?.close()
+    this.socketServer = null
+    this.unlinkSocket()
+    this.unlinkLiveConfig()
+    this.unpatchSettingsJson()
+    this.removeCleanupHooks()
+  }
+
+  getSocketPath(): string {
+    return this.socketPath
+  }
+
+  getSocketToken(): string {
+    return this.socketToken
+  }
+
+  getLiveConfigPath(): string {
+    return this.liveConfigPath
+  }
+
+  private writeLiveConfig(): void {
+    try {
+      const config = {
+        mcpServers: {
+          'agenthub-kanban': {
+            type: 'stdio',
+            command: process.execPath,
+            args: [this.getServerScriptPath()],
+            env: {
+              AGENTHUB_DB_PATH: this.dbPath,
+              AGENTHUB_SOCKET_PATH: this.socketPath,
+              AGENTHUB_SOCKET_TOKEN: this.socketToken,
+              ELECTRON_RUN_AS_NODE: '1',
+            },
+          },
+        },
+      }
+      fs.writeFileSync(this.liveConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+      fs.chmodSync(this.liveConfigPath, 0o600)
+      this.patchSettingsJson()
+    } catch (err) {
+      log.warn('McpServerManager: writeLiveConfig failed', err)
+    }
+  }
+
+  private unlinkLiveConfig(): void {
+    try {
+      fs.unlinkSync(this.liveConfigPath)
+    } catch {
+      // ignore ENOENT and other errors — file may not exist
+    }
+  }
+
+  /**
+   * Inject agenthub-kanban MCP entry into .claude/settings.json so that
+   * user-started Claude CLI sessions auto-discover the kanban MCP server.
+   * Called alongside writeLiveConfig() in the onReady callback.
+   */
+  private patchSettingsJson(): void {
+    const settingsPath = app.isPackaged
+      ? join(process.resourcesPath, '.claude', 'settings.json')
+      : join(app.getAppPath(), '.claude', 'settings.json')
+    try {
+      const raw = fs.readFileSync(settingsPath, 'utf-8')
+      const settings = JSON.parse(raw) as Record<string, unknown>
+      const mcpServers = (settings.mcpServers ?? {}) as Record<string, unknown>
+      mcpServers['agenthub-kanban'] = {
+        command: process.execPath,
+        args: [this.getServerScriptPath()],
+        env: {
+          AGENTHUB_DB_PATH: this.dbPath,
+          AGENTHUB_SOCKET_PATH: this.socketPath,
+          AGENTHUB_SOCKET_TOKEN: this.socketToken,
+          ELECTRON_RUN_AS_NODE: '1',
+        },
+      }
+      settings.mcpServers = mcpServers
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+    } catch (err) {
+      log.warn('McpServerManager: patchSettingsJson failed', err)
+    }
+  }
+
+  /**
+   * Remove agenthub-kanban from .claude/settings.json on stop() so stale
+   * socket paths don't cause silent MCP connection failures.
+   */
+  private unpatchSettingsJson(): void {
+    const settingsPath = join(process.cwd(), '.claude', 'settings.json')
+    try {
+      const raw = fs.readFileSync(settingsPath, 'utf-8')
+      const settings = JSON.parse(raw) as Record<string, unknown>
+      const mcpServers = settings.mcpServers as Record<string, unknown> | undefined
+      if (mcpServers && 'agenthub-kanban' in mcpServers) {
+        delete mcpServers['agenthub-kanban']
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  getServerScriptPath(): string {
+    return app.isPackaged
+      ? join(process.resourcesPath, 'mcp-server', 'server.js')
+      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
+  }
+
+  private handleConnection(socket: net.Socket, db: Database.Database, deps: McpManagerDeps): void {
+    if (this.connections.size >= MAX_CONNECTIONS) {
+      socket.destroy()
+      return
+    }
+    this.connections.add(socket)
+    this.unauthenticatedConnections.add(socket)
+    const authenticationTimer = setTimeout(() => {
+      if (this.unauthenticatedConnections.has(socket)) socket.destroy()
+    }, AUTH_TIMEOUT_MS)
+    authenticationTimer.unref()
+    this.authenticationTimers.set(socket, authenticationTimer)
+
+    let buffer = ''
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk: string) => {
+      if (Buffer.byteLength(chunk, 'utf8') + Buffer.byteLength(buffer, 'utf8') > MAX_FRAME_BYTES) {
+        socket.destroy()
+        return
+      }
+      buffer += chunk
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (line.trim()) void this.handleLine(socket, line, db, deps)
+      }
+    })
+    const cleanup = (): void => {
+      this.connections.delete(socket)
+      this.unauthenticatedConnections.delete(socket)
+      const timer = this.authenticationTimers.get(socket)
+      if (timer) clearTimeout(timer)
+      this.authenticationTimers.delete(socket)
+    }
+    socket.once('close', cleanup)
+    socket.once('error', cleanup)
+  }
+
+  private async handleLine(
+    socket: net.Socket,
+    line: string,
+    db: Database.Database,
+    deps: McpManagerDeps
+  ): Promise<void> {
+    let correlationId = ''
+    let response: McpIpcResponse
+    let closeAfterResponse = false
+    try {
+      // Best-effort extraction of correlationId before full validation so that
+      // error responses always carry the original correlationId.
+      try {
+        const quick = JSON.parse(line) as Partial<McpIpcFrame>
+        if (typeof quick.correlationId === 'string') correlationId = quick.correlationId
+      } catch {
+        // best-effort — if parse fails here too, correlationId stays ''
+      }
+      const frame = JSON.parse(line) as Partial<McpIpcFrame>
+      const frameToken = String(frame.token ?? '')
+      const tokenMatch =
+        frameToken.length === this.socketToken.length &&
+        timingSafeEqual(Buffer.from(frameToken), Buffer.from(this.socketToken))
+      if (
+        typeof frame.correlationId !== 'string' ||
+        !tokenMatch ||
+        !frame.request
+      ) {
+        throw new Error('Invalid MCP IPC frame')
+      }
+      this.authenticateConnection(socket)
+      correlationId = frame.correlationId
+      response = { type: 'success', data: this.routeRequest(frame.request, db, deps) }
+    } catch (error) {
+      closeAfterResponse = this.unauthenticatedConnections.has(socket)
+      const code =
+        error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
+      response = {
+        type: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        ...(code !== undefined ? { code } : {})
+      }
+    }
+
+    const frame: McpIpcResponseFrame = { correlationId, response }
+    if (!socket.destroyed && socket.writable) socket.write(`${JSON.stringify(frame)}\n`)
+    if (closeAfterResponse) socket.destroy()
+  }
+
+  private authenticateConnection(socket: net.Socket): void {
+    if (!this.unauthenticatedConnections.delete(socket)) return
+    const timer = this.authenticationTimers.get(socket)
+    if (timer) clearTimeout(timer)
+    this.authenticationTimers.delete(socket)
+  }
+
+  private routeRequest(
+    request: McpIpcRequest,
+    db: Database.Database,
+    deps: McpManagerDeps
+  ): McpIpcRouteResult {
+    switch (request.type) {
+      case 'create_task': {
+        const payload = request.payload as CreateTaskInput & { dependsOn?: string[] }
+        const { dependsOn, ...createInput } = payload
+        const task = insertTask(db, createInput)
+        if (dependsOn?.length) {
+          for (const depId of dependsOn) {
+            insertTaskDependency(db, task.id, depId)
+          }
+        }
+        deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, task)
+        return task as unknown as McpIpcRouteResult
+      }
+      case 'update_task': {
+        updateTask(db, request.payload.taskId, request.payload.updates as UpdateTaskInput)
+        const task = getTaskById(db, request.payload.taskId)
+        if (!task) throw new Error(`Task not found: ${request.payload.taskId}`)
+        deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, task)
+        return task as unknown as McpIpcRouteResult
+      }
+      case 'dispatch_task': {
+        const task = getTaskById(db, request.payload.taskId)
+        if (!task) throw new Error(`Task not found: ${request.payload.taskId}`)
+        const run = deps.orchestrator.startSingleTask({
+          repoId: task.repoId,
+          sprintName: task.sprintName ?? `pipeline-${task.id.slice(0, 8)}`,
+          singleTaskId: request.payload.taskId,
+          telegramNotify: request.payload.telegramNotify,
+          confirmed: request.payload.confirmed,
+          triggerSource: 'single-task'
+        })
+        deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, {
+          runId: run.id,
+          status: run.status,
+          sprintName: run.sprintName
+        })
+        return { id: run.id }
+      }
+      case 'get_active_agents':
+        return deps.listAgents()
+      case 'get_orchestrator_status':
+        return (deps.orchestrator.getStatus?.() ?? null) as unknown as McpIpcRouteResult
+      case 'create_project': {
+        const { repoId, name, description } = request.payload
+        const existing = getProjectsByRepoId(db, repoId).find((p) => p.name === name)
+        if (existing) return { projectId: existing.id, name: existing.name, created: false }
+        const project = insertProject(db, { name, description })
+        linkRepoToProject(db, project.id, repoId)
+        deps.emitToRenderer(IPC_EVENTS.TASKS.UPDATED, project)
+        return { projectId: project.id, name: project.name, created: true }
+      }
+      case 'dispatch_sprint': {
+        const { sprintName, repoId, projectId, concurrencyCap, telegramNotify, confirmed } = request.payload
+        // Resolve task IDs for the sprint
+        const allTasks = getTasksByRepo(db, repoId)
+        const sprintTasks = allTasks.filter((t) => {
+          if (t.sprintName !== sprintName) return false
+          if (projectId && t.projectId !== projectId) return false
+          return true
+        })
+        if (sprintTasks.length === 0) {
+          throw new Error(`No tasks found for sprint "${sprintName}" in repo ${repoId}`)
+        }
+        const taskIds = sprintTasks.map((t) => t.id)
+        const run = deps.orchestrator.start({
+          sprintName,
+          repoId,
+          projectId,
+          concurrencyCap: concurrencyCap ?? 3,
+          telegramNotify: telegramNotify ?? false,
+          confirmed,
+          startedBy: 'mcp-agent',
+          triggerSource: 'manual',
+          taskIds,
+        })
+        return { id: run.id, taskCount: taskIds.length }
+      }
+      case 'approve_task': {
+        const { runId, taskId, approved } = request.payload
+        deps.orchestrator.approveTaskDispatch(runId, taskId, approved)
+        return { approved }
+      }
+      case 'get_health_anomalies': {
+        const agentIds = request.payload.agentId
+          ? [request.payload.agentId]
+          : deps.listAgents().map((agent) => agent.id)
+        const now = Date.now()
+        return agentIds.flatMap((agentId) => {
+          const cached = this.healthSnapshotCache.get(agentId)
+          if (cached && now - cached.cachedAt < McpServerManager.HEALTH_CACHE_TTL_MS) {
+            return cached.anomalies
+          }
+          const snapshot = deps.healthMonitor.getSnapshot(agentId)
+          const anomalies = snapshot?.anomalies ?? []
+          this.healthSnapshotCache.set(agentId, { anomalies, cachedAt: now })
+          return anomalies
+        })
+      }
+      case 'report_files_changed': {
+        const { taskId, files } = request.payload
+        if (typeof taskId !== 'string' || taskId.trim().length === 0) {
+          throw new Error('report_files_changed: taskId must be a non-empty string')
+        }
+        if (!Array.isArray(files)) {
+          throw new Error('report_files_changed: files must be an array')
+        }
+        if (files.length > 100) {
+          throw new Error('report_files_changed: files array must not exceed 100 entries')
+        }
+        for (const f of files) {
+          if (typeof f !== 'string') {
+            throw new Error('report_files_changed: each file path must be a string')
+          }
+          if (isAbsolute(f)) {
+            throw new Error(`report_files_changed: absolute paths are not allowed: ${f}`)
+          }
+          const segments = f.split(/[\\/]/)
+          if (segments.some((s) => s === '..')) {
+            throw new Error(`report_files_changed: paths with ".." segments are not allowed: ${f}`)
+          }
+          if (f.length > 260) {
+            throw new Error(`report_files_changed: path exceeds 260 characters: ${f.slice(0, 40)}...`)
+          }
+        }
+        const filesJson = JSON.stringify(files)
+        const now = new Date().toISOString()
+        const result = db.prepare(
+          `UPDATE orchestrator_task_log
+             SET files_changed_json = ?, updated_at = ?
+           WHERE id = (
+             SELECT id FROM orchestrator_task_log
+             WHERE task_id = ? AND phase = 'dev'
+             ORDER BY created_at DESC LIMIT 1
+           )`
+        ).run(filesJson, now, taskId)
+        if (result.changes === 0) {
+          throw Object.assign(
+            new Error(`report_files_changed: no dev-phase log found for task ${taskId}`),
+            { code: 'NO_DEV_LOG' }
+          )
+        }
+        return { ok: true, count: files.length }
+      }
+      default: {
+        // Exhaustiveness check: if McpIpcRequest union is fully covered above,
+        // TypeScript narrows `request` to `never` here.
+        const _exhaustive: never = request
+        throw Object.assign(
+          new Error(`Unknown MCP request type: ${(_exhaustive as { type: string }).type}`),
+          { code: 'UNKNOWN_REQUEST_TYPE' }
+        )
+      }
+    }
+  }
+
+  private getDatabasePath(db: Database.Database): string {
+    const name = (db as unknown as { name?: string }).name
+    return name && name !== ':memory:' ? name : join(process.cwd(), 'agenthub.db')
+  }
+
+  private unlinkSocket(): void {
+    try {
+      fs.unlinkSync(this.socketPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+
+  private installCleanupHooks(): void {
+    if (this.cleanupHooksInstalled) return
+    process.once('exit', this.cleanupOnExit)
+    process.once('SIGTERM', this.cleanupOnSigterm)
+    this.cleanupHooksInstalled = true
+  }
+
+  private removeCleanupHooks(): void {
+    if (!this.cleanupHooksInstalled) return
+    process.removeListener('exit', this.cleanupOnExit)
+    process.removeListener('SIGTERM', this.cleanupOnSigterm)
+    this.cleanupHooksInstalled = false
+  }
+
+  private cleanupOnExit = (): void => {
+    this.unlinkSocket()
+    this.unlinkLiveConfig()
+    this.unpatchSettingsJson()
+  }
+
+  private cleanupOnSigterm = (): void => {
+    this.stop()
+    process.kill(process.pid, 'SIGTERM')
+  }
+}

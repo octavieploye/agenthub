@@ -228,6 +228,8 @@ export const IPC_CHANNELS = {
     CANCEL:   'orchestrator:cancel',
     APPROVE_TASK: 'orchestrator:approve-task',
     START_SINGLE_TASK: 'orchestrator:start-single-task',
+    RETRY_FAILURES: 'orchestrator:retry-failures',
+    ACKNOWLEDGE_RETRY_FAILURES: 'orchestrator:acknowledge-retry-failures',
   },
   LIFECYCLE: {
     GET_METRICS:      'lifecycle:get-metrics',

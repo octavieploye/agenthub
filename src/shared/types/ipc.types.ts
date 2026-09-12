@@ -252,6 +252,8 @@ export interface AgentHubBridge {
     taskLog: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorTaskLog[]>>
     approveTask: (input: { runId: string; taskId: string; approved: boolean }) => Promise<IpcResponse<void>>
     startSingleTask: (input: { taskId: string }) => Promise<IpcResponse<import('./orchestrator.types').OrchestratorRun>>
+    getRetryFailures: () => Promise<IpcResponse<import('./orchestrator.types').RetryFailure[]>>
+    acknowledgeRetryFailures: () => Promise<IpcResponse<void>>
     onStatusChange: (callback: (payload: import('./orchestrator.types').OrchestratorStatusChangePayload) => void) => () => void
     onTaskPhaseChange: (callback: (payload: import('./orchestrator.types').OrchestratorTaskPhaseChangePayload) => void) => () => void
     onTaskApprovalNeeded: (callback: (payload: { runId: string; taskId: string; title: string; description: string }) => void) => () => void

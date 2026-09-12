@@ -5,7 +5,15 @@ import type {
   OrchestratorStatusChangePayload,
   OrchestratorTaskPhaseChangePayload,
   OrchestratorTaskLog,
+  RetryFailure,
 } from '@shared/types/orchestrator.types'
+
+interface PendingApproval {
+  runId: string
+  taskId: string
+  title: string
+  description: string
+}
 
 interface OrchestratorStore {
   // State
@@ -18,12 +26,16 @@ interface OrchestratorStore {
   failedCount: number
   taskLogs: Map<string, OrchestratorTaskLog[]>
   taskProgress: Map<string, { status: string; skill: string | null; model: string | null; startedAt: string | null }>
+  retryFailures: RetryFailure[]
+  pendingApproval: PendingApproval | null
   loading: boolean
   error: string | null
 
   // Actions
   fetchStatus: () => Promise<void>
   fetchTaskLogs: (taskId: string) => Promise<void>
+  fetchRetryFailures: () => Promise<void>
+  acknowledgeRetryFailures: () => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
   startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<boolean>
   cancel: () => Promise<void>
@@ -31,6 +43,9 @@ interface OrchestratorStore {
   resume: () => Promise<boolean>
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => void
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => void
+  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => void
+  approveTask: () => Promise<void>
+  denyTask: () => Promise<void>
   clearError: () => void
 }
 
@@ -44,8 +59,58 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   failedCount: 0,
   taskLogs: new Map(),
   taskProgress: new Map(),
+  retryFailures: [],
+  pendingApproval: null,
   loading: false,
   error: null,
+
+  fetchRetryFailures: async () => {
+    try {
+      const res = await window.agentHub.orchestrator.getRetryFailures()
+      if (res.success) {
+        set({ retryFailures: res.data })
+      }
+    } catch {
+      // silent — retry failures are non-critical
+    }
+  },
+
+  acknowledgeRetryFailures: async () => {
+    try {
+      const res = await window.agentHub.orchestrator.acknowledgeRetryFailures()
+      if (res.success) {
+        set({ retryFailures: [] })
+      }
+    } catch {
+      // silent
+    }
+  },
+
+  handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => {
+    set({ pendingApproval: { runId: payload.runId, taskId: payload.taskId, title: payload.title, description: payload.description } })
+  },
+
+  approveTask: async () => {
+    const { pendingApproval } = get()
+    if (!pendingApproval) return
+    set({ pendingApproval: null })
+    try {
+      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: true })
+    } catch {
+      // silent — backend will surface the error via status change
+    }
+  },
+
+  denyTask: async () => {
+    const { pendingApproval } = get()
+    if (!pendingApproval) return
+    set({ pendingApproval: null })
+    try {
+      await window.agentHub.orchestrator.approveTask({ runId: pendingApproval.runId, taskId: pendingApproval.taskId, approved: false })
+    } catch {
+      // silent
+    }
+  },
 
   fetchTaskLogs: async (taskId: string) => {
     if (get().taskLogs.has(taskId)) return

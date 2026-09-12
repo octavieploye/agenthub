@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getScheduler } from '../services/service-orchestrator'
 import { getDb } from '../db/connection'
 import { getTaskById } from '../db/queries/tasks.queries'
+import { getUnacknowledgedRetryFailures, acknowledgeRetryFailures } from '../db/queries/orchestrator.queries'
 import { success, error, validateInput } from './ipc-helpers'
 
 const startSchema = z.object({
@@ -121,6 +122,23 @@ export function registerOrchestratorHandlers(): void {
       return success(undefined)
     } catch (err) {
       return error('ORCHESTRATOR_APPROVE_TASK_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.RETRY_FAILURES, () => {
+    try {
+      return success(getUnacknowledgedRetryFailures(getDb()))
+    } catch (err) {
+      return error('ORCHESTRATOR_RETRY_FAILURES_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.ACKNOWLEDGE_RETRY_FAILURES, () => {
+    try {
+      acknowledgeRetryFailures(getDb())
+      return success(undefined)
+    } catch (err) {
+      return error('ORCHESTRATOR_ACKNOWLEDGE_RETRY_FAILURES_FAILED', err instanceof Error ? err.message : String(err))
     }
   })
 

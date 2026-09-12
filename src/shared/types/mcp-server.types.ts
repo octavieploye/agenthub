@@ -327,3 +327,21 @@ export type McpIpcResponse = McpIpcSuccessResponse | McpIpcErrorResponse
 // FCR-004: loosely typed return alias for routeRequest() — callers must narrow before use
 /** Loosely typed return for routeRequest — callers must narrow before use */
 export type McpIpcRouteResult = Record<string, unknown> | Array<unknown> | null
+
+// ─── Wire-level IPC frames (main process ↔ MCP server child) ────────────────
+// Previously lived in src/main/mcp-server/ipc/ipc-protocol.ts (deleted with
+// the old mcp-server/ directory). Kept here alongside McpIpcRequest/Response
+// so McpServerManager and its test have a stable import path.
+
+/** Wire-level request frame — wraps an IPC request with a correlation ID */
+export interface McpIpcFrame {
+  correlationId: string
+  token: string
+  request: McpIpcRequest
+}
+
+/** Wire-level response frame — echoes the correlation ID for async matching */
+export interface McpIpcResponseFrame {
+  correlationId: string
+  response: McpIpcResponse
+}

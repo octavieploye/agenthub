@@ -20,8 +20,11 @@ import {
   getTaskLogsByRun,
   getActiveTaskLogs,
   getActiveTaskLogByAgentId,
+  getTaskLogsByTask,
+  getCompletedTaskIdsFromAllRuns,
 } from '../db/queries/orchestrator.queries'
-import { getTasksByRepo, getTaskById } from '../db/queries/tasks.queries'
+import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
+import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type {
   OrchestratorRun,
@@ -167,6 +170,12 @@ export class OrchestratorScheduler {
     updateRunStatus(this.db, run.id, 'running')
     this.emitStatusChange(run.id, 'running', run.sprintName)
 
+    // M1: Validate that all blockedBy references point to tasks in the run's scope
+    this.validateDependencies(run)
+
+    // M4: Anamnesis sprint inventory check (non-blocking, fire-and-forget with 3s timeout)
+    this.checkSprintInventory(run.sprintName, run.repoId)
+
     if (!this.tickHandle) {
       this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
       setTimeout(() => this.tick(), 0)
@@ -239,6 +248,22 @@ export class OrchestratorScheduler {
   cancel(runId: string): void {
     this.pausedRunIds.delete(runId)
     updateRunStatus(this.db, runId, 'cancelled')
+
+    // Safeguard: sync kanban task statuses based on task log outcomes
+    const allLogs = getTaskLogsByRun(this.db, runId)
+    const processedTaskIds = new Set<string>()
+    for (const tl of allLogs) {
+      if (processedTaskIds.has(tl.taskId)) continue
+      processedTaskIds.add(tl.taskId)
+      if (tl.status === 'done') {
+        updateTask(this.db, tl.taskId, { status: 'completed' })
+        log.info('OrchestratorScheduler: cancel — marked done task as completed', { taskId: tl.taskId, runId })
+      } else if (tl.status === 'active') {
+        updateTask(this.db, tl.taskId, { status: 'backlog' })
+        log.info('OrchestratorScheduler: cancel — reset active task to backlog', { taskId: tl.taskId, runId })
+      }
+    }
+
     this.emitStatusChange(runId, 'cancelled', this.getSprintName(runId))
     log.info('OrchestratorScheduler: run cancelled', { runId })
   }
@@ -437,6 +462,12 @@ export class OrchestratorScheduler {
         continue
       }
 
+      // hasActiveLogForPhase guard: skip if task already has an active log in this run
+      if (this.hasActiveLogForPhase(run.id, fullTask.id, 'dev')) {
+        log.warn('OrchestratorScheduler: duplicate dispatch blocked — task already has active log', { runId: run.id, taskId: fullTask.id })
+        continue
+      }
+
       const context: SchedulerBrainContext = {
         run,
         candidateTasks: [fullTask],
@@ -488,10 +519,11 @@ export class OrchestratorScheduler {
       }
 
       updateTaskLogStatus(this.db, taskLog.id, 'active', agentId)
+      updateTask(this.db, decision.taskId, { status: 'in_progress' })
       incrementAgentsSpawned(this.db, run.id)
       updateRunTimestamp(this.db, run.id)
 
-      log.info('OrchestratorScheduler: task dispatched', {
+      log.info('OrchestratorScheduler: task dispatched — kanban task marked in_progress', {
         tick: currentTick,
         runId: run.id,
         taskId: decision.taskId,
@@ -531,8 +563,9 @@ export class OrchestratorScheduler {
 
     if (type === 'agent:completed') {
       updateTaskLogStatus(this.db, taskLog.id, 'done', agentId)
+      updateTask(this.db, taskLog.taskId, { status: 'completed' })
       this.retryMap.delete(taskLog.taskId)
-      log.info('OrchestratorScheduler: agent completed', { agentId, taskId: taskLog.taskId, runId: run.id })
+      log.info('OrchestratorScheduler: agent completed — kanban task marked completed', { agentId, taskId: taskLog.taskId, runId: run.id })
 
       this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
         runId: run.id,
@@ -559,8 +592,9 @@ export class OrchestratorScheduler {
         setTimeout(() => this.tick(), 0)
       } else {
         updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
+        updateTask(this.db, taskLog.taskId, { status: 'backlog' })
         this.retryMap.delete(taskLog.taskId)
-        log.error('OrchestratorScheduler: agent failed after retry, giving up', { agentId, taskId: taskLog.taskId })
+        log.error('OrchestratorScheduler: agent failed after retry, giving up — kanban task reset to backlog', { agentId, taskId: taskLog.taskId })
         this.maybeCompleteRun(run)
 
         this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
@@ -581,15 +615,30 @@ export class OrchestratorScheduler {
     const isDispatchable = (t: TaskItem | null): t is TaskItem =>
       t !== null && (t.status === 'backlog' || t.status === 'today')
 
+    let candidates: TaskItem[]
     if (run.taskIds && run.taskIds.length > 0) {
       // Scoped run: only the explicitly listed task IDs that are queued
-      return run.taskIds
+      candidates = run.taskIds
         .map(id => getTaskById(this.db, id))
         .filter(isDispatchable)
+    } else {
+      // Sprint-scoped run: all queued tasks for this repo
+      candidates = getTasksByRepo(this.db, run.repoId).filter(isDispatchable)
     }
 
-    // Sprint-scoped run: all queued tasks for this repo
-    return getTasksByRepo(this.db, run.repoId).filter(isDispatchable)
+    // Cross-run dedup: filter out tasks already completed in ANY previous run
+    const globallyDone = getCompletedTaskIdsFromAllRuns(this.db)
+    const before = candidates.length
+    candidates = candidates.filter(t => !globallyDone.has(t.id))
+    if (before !== candidates.length) {
+      log.info('OrchestratorScheduler: cross-run dedup removed candidates already done', {
+        runId: run.id,
+        removed: before - candidates.length,
+        remaining: candidates.length,
+      })
+    }
+
+    return candidates
   }
 
   private maybeCompleteRun(run: OrchestratorRun): void {
@@ -625,5 +674,100 @@ export class OrchestratorScheduler {
   private getSprintName(runId: string): string {
     const run = getRun(this.db, runId)
     return run?.sprintName ?? runId
+  }
+
+  /**
+   * Guard: returns true if there is already an active log for this task+phase in this run.
+   * Ported from old kanban-orchestrator.ts to prevent duplicate dispatches.
+   */
+  private hasActiveLogForPhase(runId: string, taskId: string, phase: string): boolean {
+    const logs = getTaskLogsByTask(this.db, taskId)
+    return logs.some(l => l.runId === runId && l.phase === phase && l.status === 'active')
+  }
+
+  /**
+   * M1: Validate that all blockedBy references in the run's tasks point to tasks
+   * that exist in the run's scope. Logs a warning (does not throw) if broken deps found.
+   * Ported from old kanban-orchestrator.ts validateDependencies.
+   */
+  private validateDependencies(run: OrchestratorRun): void {
+    try {
+      const tasks = this.fetchCandidateTasks(run)
+      const taskIds = new Set(tasks.map(t => t.id))
+      const depMap = getDependencyMap(this.db)
+
+      for (const [taskId, deps] of depMap) {
+        if (!taskIds.has(taskId)) continue
+        for (const depId of deps) {
+          if (!taskIds.has(depId)) {
+            log.warn('OrchestratorScheduler: M1 broken dependency detected', {
+              runId: run.id,
+              taskId,
+              missingDepId: depId,
+            })
+          }
+        }
+      }
+    } catch (err) {
+      log.warn('OrchestratorScheduler: M1 dependency validation failed', { runId: run.id, error: String(err) })
+    }
+  }
+
+  /**
+   * M4: Anamnesis sprint inventory check. Non-blocking fire-and-forget with 3s timeout.
+   * If the sprint is already done/in_progress in Anamnesis, logs a warning.
+   * Ported from old kanban-orchestrator.ts checkSprintInventory.
+   */
+  private checkSprintInventory(sprintName: string, repoId: string): void {
+    const doCheck = async (): Promise<void> => {
+      try {
+        const authSecret = process.env['ANAMNESIS_AUTH_SECRET']
+        if (!authSecret) {
+          log.debug('OrchestratorScheduler: M4 sprint inventory check skipped — no ANAMNESIS_AUTH_SECRET')
+          return
+        }
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 3000)
+        const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
+
+        const resp = await fetch(
+          `${anamnesisUrl}/api/v1/memory/procedural?domain=sprint_inventory&query=${encodeURIComponent(sprintName)}`,
+          {
+            headers: {
+              'X-Optimaeus-Caller': 'hephaestus',
+              'Authorization': `Bearer ${authSecret}`,
+            },
+            signal: controller.signal,
+          }
+        )
+        clearTimeout(timeout)
+
+        if (!resp.ok) return
+
+        const data = (await resp.json()) as {
+          memories?: Array<{ content?: { status?: string } }>
+        }
+        const doneMatch = data.memories?.find(
+          (m) => m.content?.status === 'done' || m.content?.status === 'in_progress'
+        )
+
+        if (doneMatch) {
+          const status = doneMatch.content?.status ?? 'unknown'
+          log.warn('OrchestratorScheduler: M4 sprint inventory found existing work', {
+            sprintName,
+            repoId,
+            existingStatus: status,
+          })
+        }
+      } catch (err) {
+        log.warn('OrchestratorScheduler: M4 sprint inventory check failed (non-blocking)', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    // Fire-and-forget
+    doCheck().catch(() => {})
   }
 }
