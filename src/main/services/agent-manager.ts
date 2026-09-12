@@ -268,8 +268,12 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   _telegramAgentSync?.()
 
   // Emit orchestrator bus event for kanban orchestrator to subscribe
+  // Orchestrator-spawned agents (name: 'orchestrator-*') finish at 'locked' state,
+  // not 'completed' — treat locked as task completion for these agents only.
+  const isOrchestratorAgent = triageEvent.agentName.startsWith('orchestrator-')
   const orchEventType: OrchestratorEventType | null =
-    triageEvent.isTaskCompleted ? 'agent:completed'
+    (triageEvent.isTaskCompleted || (isOrchestratorAgent && triageEvent.currentStatus === 'locked'))
+      ? 'agent:completed'
     : triageEvent.currentStatus === 'error' ? 'agent:failed'
     : 'agent:status-changed'
   emitOrchestratorEvent({ type: orchEventType, triageEvent })
@@ -297,6 +301,8 @@ function startSilentLockTimer(agentId: string): void {
     if (m.state.status !== 'locked') return
     if (m.lastMcpTelegramAt > Date.now() - 15_000) return
     if (!m.state.telegramNotify) return
+    // Orchestrator-spawned agents use the proper approval gate — skip silent_lock noise
+    if (m.state.name.startsWith('orchestrator-')) return
 
     const recentOutput = m.cleanTextBuffer
       ? m.cleanTextBuffer.slice(-500).trim()

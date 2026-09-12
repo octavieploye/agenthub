@@ -145,6 +145,17 @@ export class OrchestratorValidator {
       return true
     }
 
+    // Check agenthub commands dirs (agent role files are valid skill references)
+    const claudeCommandPath = join(agenthubPath, '.claude', 'commands', `${skill}.md`)
+    if (existsSync(claudeCommandPath)) {
+      return true
+    }
+
+    const pluginCommandPath = join(agenthubPath, 'plugin', 'commands', `${skill}.md`)
+    if (existsSync(pluginCommandPath)) {
+      return true
+    }
+
     // Check target repo skill dirs (cross-repo dispatch)
     if (targetRepoPath && existsSync(targetRepoPath)) {
       const targetClaudeSkillPath = join(targetRepoPath, '.claude', 'skills', skill, 'SKILL.md')

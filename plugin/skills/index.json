@@ -3,6 +3,14 @@
   "_description": "Central registry of all skills, teams, workflows, and commands. Agents read this for quick discovery instead of scanning the filesystem.",
   "skills": [
     {
+      "id": "orchestrator-coordinator",
+      "name": "orchestrator-coordinator",
+      "description": "A-to-Z sprint dispatcher — resolves live repo UUID, builds tasks with correct dependsOn chains, dispatches with telegramNotify, monitors approval gates. Encodes all orchestrator mechanics so setup is flowless.",
+      "category": "dev-skills",
+      "path": "plugin/skills/orchestrator-coordinator/SKILL.md",
+      "source": "plugin"
+    },
+    {
       "id": "voice-pipeline-coordinator",
       "name": "voice-pipeline-coordinator",
       "description": "Voice Pipeline Coordinator — orchestrates OPTimaeus voice layer build across 6 sprints (S0-S5) with TDD gates, security reviews, and parallel execution",
