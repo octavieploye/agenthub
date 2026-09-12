@@ -311,6 +311,17 @@ export class OrchestratorScheduler {
     return { staleRuns, orphanedTasks }
   }
 
+  resumeIfActive(): boolean {
+    const existing = getActiveRun(this.db)
+    if (!existing) return false
+    if (this.tickHandle) return true // already ticking
+
+    this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
+    setTimeout(() => this.tick(), 0)
+    log.info('OrchestratorScheduler: resumed active run on startup', { runId: existing.id, sprint: existing.sprintName })
+    return true
+  }
+
   // -------------------------------------------------------------------------
   // Status — public API consumed by IPC handlers
   // -------------------------------------------------------------------------

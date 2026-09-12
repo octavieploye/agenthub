@@ -839,6 +839,9 @@ export function startServices(): void {
   autoPauseService?.startReminderTimer()
   quotaScrapeScheduler?.start()
   orchestratorMonitor?.start()
+  if (orchestratorScheduler?.resumeIfActive()) {
+    log.info('Orchestrator scheduler resumed active run after restart')
+  }
   log.info('All periodic services started')
 }
 
