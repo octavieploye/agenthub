@@ -11,6 +11,8 @@ import CommandPalette from './widgets/command-palette/CommandPalette'
 import EvidencePanel from './widgets/evidence-panel/EvidencePanel'
 import CodeBluePanel from './widgets/code-blue/CodeBluePanel'
 import KillConfirmToast from './widgets/kill-confirm/KillConfirmToast'
+import { ApprovalGateToast } from './components/ApprovalGateToast'
+import { RetryFailureToast } from './components/RetryFailureToast'
 import { RecoveryScreen } from './widgets/recovery-screen/RecoveryScreen'
 import { ShutdownDialog } from './widgets/shutdown-dialog/ShutdownDialog'
 import GuardrailsPanel from './widgets/guardrails-panel/GuardrailsPanel'
@@ -1295,6 +1297,12 @@ function AppMain(): React.JSX.Element {
           />
         </div>
       )}
+
+      {/* Orchestrator approval gate */}
+      <ApprovalGateToast showRecovery={showRecovery} />
+
+      {/* Orchestrator retry failures */}
+      <RetryFailureToast showRecovery={showRecovery} />
 
       {/* Shutdown dialog */}
       {showShutdown && (

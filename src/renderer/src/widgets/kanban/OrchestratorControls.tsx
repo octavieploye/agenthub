@@ -36,6 +36,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     cancel,
     handleStatusChange,
     handleTaskPhaseChange,
+    handleApprovalNeeded,
     clearError,
   } = useOrchestratorStore()
 
@@ -67,11 +68,15 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
   useEffect(() => {
     const unsubStatus = window.agentHub.orchestrator.onStatusChange(handleStatusChange)
     const unsubPhase = window.agentHub.orchestrator.onTaskPhaseChange(handleTaskPhaseChange)
+    const unsubApproval = window.agentHub.orchestrator.onTaskApprovalNeeded(
+      (payload) => handleApprovalNeeded(payload as { runId: string; taskId: string; title: string; description: string })
+    )
     return () => {
       unsubStatus()
       unsubPhase()
+      unsubApproval()
     }
-  }, [handleStatusChange, handleTaskPhaseChange])
+  }, [handleStatusChange, handleTaskPhaseChange, handleApprovalNeeded])
 
   // Auto-start: triggered when a sprint JSON with autoConfirm + autoStart is imported
   useEffect(() => {
