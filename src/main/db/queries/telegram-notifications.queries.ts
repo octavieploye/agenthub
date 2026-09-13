@@ -102,6 +102,8 @@ export function isDuplicate(
 
 export function getExpiredNotifications(db: Database.Database): TelegramNotificationRow[] {
   return db.prepare(
-    `SELECT * FROM telegram_notifications WHERE status = 'expired' ORDER BY created_at DESC`
+    `SELECT * FROM telegram_notifications
+     WHERE status = 'expired' AND created_at > datetime('now', '-30 minutes')
+     ORDER BY created_at DESC`
   ).all() as TelegramNotificationRow[]
 }
