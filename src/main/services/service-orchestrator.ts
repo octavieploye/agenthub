@@ -844,13 +844,13 @@ export function initializeServices(db: Database.Database): void {
     },
     sendEscalation: (requestId: string, title: string) => {
       telegramQueueProcessor?.enqueue({
-        type: 'agent_message',
+        type: 'awaiting_approval',
         agentId: `orchestrator:escalation:${requestId}`,
         agentName: 'Orchestrator',
         summary: title,
-        message: `Approval still needed for "${title}".\n\nReply with:\n/approve ${requestId}`,
-        format: 'status',
+        proposedAction: `Approval still needed for "${title}"`,
         repo: '',
+        requestId,
         timestamp: new Date().toISOString(),
       })
     },
