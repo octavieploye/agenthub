@@ -709,11 +709,15 @@ describe('OrchestratorScheduler', () => {
       brain.decide.mockClear()
 
       scheduler.approveTaskDispatch(run.id, 'task-approve', true)
-      await vi.advanceTimersByTimeAsync(1)
 
+      // Approving writes the row synchronously (before the scheduled tick runs).
       const approval = getApproval(db, run.id, 'task-approve')
       expect(approval?.status).toBe('approved')
       expect(approval?.respondedAt).toBeTruthy()
+
+      // The scheduled tick then concludes the empty run and cleans up its approvals.
+      await vi.advanceTimersByTimeAsync(1)
+      expect(getApproval(db, run.id, 'task-approve')).toBeNull()
     })
 
     it('writes a denied row and skips pending logs on rejection', () => {
