@@ -749,7 +749,7 @@ export function initializeServices(db: Database.Database): void {
           taskId: brainDecision.taskId,
           spawnOptions: {
             repoId: taskRepoId,
-            name: `orchestrator-${brainDecision.taskId.slice(0, 8)}`,
+            name: `orchestrator-${brainDecision.taskId.slice(0, 8)} ${task.title}`,
             cwd: agenthubCwd,
             model: effectiveModel,
             provider: effectiveProvider,                // FIX C2
