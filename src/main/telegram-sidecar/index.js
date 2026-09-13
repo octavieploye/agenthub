@@ -11,6 +11,7 @@ let allowedChatId = null   // number | null — same as userId for private chats
 let agentCache = new Map() // name (lowercase) -> { id, name, status, repo }
 let repoCache = []         // { name, path }[]
 let pendingApprovals = new Map() // requestId -> { chatId, messageId, timerId }
+let approvalTokenMap = new Map() // short token -> full requestId (callback_data ≤ 64 bytes)
 let pendingSpawn = null    // { step: 1|2|3, chatId, repo?, task? } | null
 let pendingSendAgent = null // { chatId } | null — waiting for agent pick
 let messageToAgent = new Map() // telegram message_id -> agentId (for reply routing)
@@ -57,7 +58,7 @@ async function sendMessage(chatId, text, replyMarkup) {
   if (replyMarkup) params.reply_markup = replyMarkup
   const res = await telegramPost('sendMessage', params)
   if (!res.ok) {
-    sendToParent({ type: 'error', error: `sendMessage failed: ${res.description || JSON.stringify(res)}` })
+    sendToParent({ type: 'error', message: `sendMessage failed: ${res.description || JSON.stringify(res)}` })
   }
   return res
 }
@@ -276,9 +277,10 @@ async function handleCommand(chatId, text) {
       break
 
     case '/approve': {
-      const requestId = rest[0]
+      const raw = rest[0]
+      const requestId = approvalTokenMap.get(raw) || raw
       if (!requestId || !requestId.startsWith('task:')) {
-        await sendMessage(chatId, 'Usage: /approve task:<taskId>:<runId>\n\nThis is the id from the approval prompt.')
+        await sendMessage(chatId, 'Usage: /approve <code>\n\nThe code is in the approval prompt (e.g. /approve k3jf9x2a).')
         return
       }
       sendToParent({ type: 'command', command: 'approve', requestId })
@@ -353,13 +355,15 @@ async function handleCallback(cb) {
   await answerCallback(cb.id, '')
 
   if (data.startsWith('approve:')) {
-    const requestId = data.slice('approve:'.length)
+    const rawId = data.slice('approve:'.length)
+    const requestId = approvalTokenMap.get(rawId) || rawId
     sendToParent({ type: 'command', command: 'approve', requestId })
     await editMessageText(chatId, msgId, '\u2705 You approved this.')
     const pending = pendingApprovals.get(requestId)
     if (pending) { clearTimeout(pending.timerId); pendingApprovals.delete(requestId) }
   } else if (data.startsWith('deny:')) {
-    const requestId = data.slice('deny:'.length)
+    const rawId = data.slice('deny:'.length)
+    const requestId = approvalTokenMap.get(rawId) || rawId
     sendToParent({ type: 'command', command: 'deny', requestId })
     await editMessageText(chatId, msgId, '\u2717 You denied this.')
     const pending = pendingApprovals.get(requestId)
@@ -486,6 +490,12 @@ function formatChoiceBody(choices) {
   return choices.map(c => `${c.key} · ${c.label}`).join('\n')
 }
 
+// Telegram caps callback_data at 64 bytes; the composite `task:<taskId>:<runId>`
+// requestId exceeds that, so approval buttons carry a short token resolved here.
+function approvalToken() {
+  return Math.random().toString(36).slice(2, 10) // 8 chars
+}
+
 // ── Notification sender ────────────────────────────────────────────────────────
 async function sendNotification(payload) {
   if (!allowedChatId) return
@@ -519,14 +529,16 @@ async function sendNotification(payload) {
       ? (payload.proposedAction || '').slice(0, 297) + '\u2026'
       : (payload.proposedAction || '')
     const requestId = payload.requestId || payload.agentId
+    const token = approvalToken()
+    approvalTokenMap.set(token, requestId)
     const fallback = requestId.startsWith('task:')
-      ? `\n\nReply /approve ${requestId}`
+      ? `\n\nReply /approve ${token}`
       : ''
     text = `\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}${fallback}`
     replyMarkup = {
       inline_keyboard: [[
-        { text: '\u2713 Approve', callback_data: `approve:${requestId}` },
-        { text: '\u2717 Deny', callback_data: `deny:${requestId}` }
+        { text: '\u2713 Approve', callback_data: `approve:${token}` },
+        { text: '\u2717 Deny', callback_data: `deny:${token}` }
       ]]
     }
   } else if (payload.type === 'needs_input') {
