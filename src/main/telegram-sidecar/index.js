@@ -13,6 +13,7 @@ let repoCache = []         // { name, path }[]
 let pendingApprovals = new Map() // requestId -> { chatId, messageId, timerId }
 let pendingSpawn = null    // { step: 1|2|3, chatId, repo?, task? } | null
 let pendingSendAgent = null // { chatId } | null — waiting for agent pick
+let messageToAgent = new Map() // telegram message_id -> agentId (for reply routing)
 let mutedUntil = 0
 let notifyQueue = []       // pending notification messages
 let flushTimer = null
@@ -125,12 +126,17 @@ async function handleMessage(msg) {
     return // silent ignore — no reply to unknown sender
   }
 
-  // Check if this is a reply to a needs_input message
+  // Route replies to the agent that asked the question
   if (msg.reply_to_message) {
-    // Route reply to the agent that asked the question
-    // The original message text contains the agentId encoded via pendingApprovals lookup
-    // For Phase 1: send to the agent that last sent a needs_input notification
-    // Simple implementation: user must /send explicitly for now; reply routing is Phase 2
+    const origMsgId = msg.reply_to_message.message_id
+    const agentId = messageToAgent.get(origMsgId)
+    if (agentId && text) {
+      sendToParent({ type: 'command', command: 'send_task', agentId, message: text })
+      await sendMessage(chatId, `Sent to agent.`)
+      messageToAgent.delete(origMsgId)
+      return
+    }
+    // If no mapping found, fall through to normal message handling
   }
 
   // Muted check
@@ -404,17 +410,41 @@ async function handleCallback(cb) {
 // ── Choice detection ──────────────────────────────────────────────────────────
 function extractChoices(text) {
   if (!text) return null
-  const patterns = [
+
+  // Structured list patterns (numbered, lettered, bold)
+  const listPatterns = [
     /^\s*(\d+)[.)]\s+(.+)$/gm,                           // 1. Option or 1) Option
     /^\s*\(?([A-Za-z])[.)]\s+(.+)$/gm,                   // A. Option or (A) Option
     /^\s*\*\*(?:Option\s+)?([A-Za-z\d]+)[.:]\*\*\s*(.+)$/gm,  // **Option A:** desc
   ]
-  for (const pat of patterns) {
+  for (const pat of listPatterns) {
     const matches = [...text.matchAll(pat)]
     if (matches.length >= 2 && matches.length <= 6) {
       return matches.map(m => ({ key: m[1], label: m[2].trim() }))
     }
   }
+
+  // Yes/No detection — common agent question patterns
+  const yesNoSignals = [
+    /\byes\s*(?:\/|or)\s*no\b/i,
+    /\by\s*\/\s*n\b/i,
+    /\bshould\s+i\s+(?:proceed|continue|go ahead|start|do this|do that)\b/i,
+    /\bis\s+that\s+correct\b/i,
+    /\bis\s+this\s+correct\b/i,
+    /\bdo\s+you\s+(?:want|approve|confirm|agree)\b/i,
+    /\bshall\s+i\b/i,
+    /\bproceed\s*\?\s*$/i,
+    /\bcorrect\s*\?\s*$/i,
+    /\bconfirm\b.*\?/i,
+    /\bapprove\b.*\?/i,
+  ]
+  if (yesNoSignals.some(pat => pat.test(text))) {
+    return [
+      { key: 'Yes', label: 'Yes' },
+      { key: 'No', label: 'No' },
+    ]
+  }
+
   return null
 }
 
@@ -428,6 +458,17 @@ function buildChoiceMarkup(choices, agentId) {
     rows.push(buttons.slice(i, i + 4))
   }
   return { inline_keyboard: rows }
+}
+
+function buildFallbackMarkup(agentId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: 'Yes', callback_data: `reply:${agentId}:Yes` },
+        { text: 'No', callback_data: `reply:${agentId}:No` },
+      ],
+    ]
+  }
 }
 
 function formatChoiceBody(choices) {
@@ -490,8 +531,8 @@ async function sendNotification(payload) {
       text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
       replyMarkup = buildChoiceMarkup(choices, payload.agentId)
     } else {
-      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to answer`
-      replyMarkup = { force_reply: true, selective: true }
+      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to answer`
+      replyMarkup = buildFallbackMarkup(payload.agentId)
     }
 
   } else if (payload.type === 'silent_lock') {
@@ -503,8 +544,8 @@ async function sendNotification(payload) {
       text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
       replyMarkup = buildChoiceMarkup(choices, payload.agentId)
     } else {
-      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${body}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Reply to respond`
-      replyMarkup = { force_reply: true, selective: true }
+      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${body}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to respond`
+      replyMarkup = buildFallbackMarkup(payload.agentId)
     }
 
   } else if (payload.type === 'agent_message') {
@@ -523,13 +564,15 @@ async function sendNotification(payload) {
       text = `${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
       if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
       if (format === 'question') {
-        replyMarkup = { force_reply: true, selective: true }
+        replyMarkup = buildFallbackMarkup(payload.agentId)
       }
     }
   }
 
   if (!text) return
-  notifyQueue.push({ text, replyMarkup })
+  const isQuestion = payload.type === 'needs_input' || payload.type === 'silent_lock'
+    || (payload.type === 'agent_message' && payload.format === 'question')
+  notifyQueue.push({ text, replyMarkup, agentId: isQuestion ? payload.agentId : null })
   scheduleFlush()
 }
 
@@ -549,7 +592,15 @@ function scheduleFlush() {
       await sendMessage(allowedChatId, `\ud83d\udcca ${items.length} agents finished recently:\n\n${lines}\n\nType /status for details.`)
     } else {
       const item = notifyQueue.shift()
-      await sendMessage(allowedChatId, item.text, item.replyMarkup)
+      const res = await sendMessage(allowedChatId, item.text, item.replyMarkup)
+      if (item.agentId && res?.ok && res.result?.message_id) {
+        messageToAgent.set(res.result.message_id, item.agentId)
+        // Cap map size to prevent unbounded growth — keep last 200 question messages
+        if (messageToAgent.size > 200) {
+          const oldest = messageToAgent.keys().next().value
+          messageToAgent.delete(oldest)
+        }
+      }
       if (notifyQueue.length) {
         setTimeout(() => { flushTimer = null; scheduleFlush() }, 1000)
       }
