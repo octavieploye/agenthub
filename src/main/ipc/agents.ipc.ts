@@ -25,6 +25,7 @@ import {
 } from '../services/agent-manager'
 import { ModelProviderSchema, EffortLevelSchema } from '../../shared/schemas/agent.schemas'
 import { deleteAgentScratchNotes } from '../db/queries/notes.queries'
+import { getAllAgentsIncludingDead } from '../db/queries/agents.queries'
 import { getDb } from '../db/connection'
 import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { AgentState } from '../../shared/types/agent.types'
@@ -97,6 +98,17 @@ export function registerAgentHandlers(): void {
         return success(listAgents())
       } catch (err) {
         return error('LIST_ERROR', err instanceof Error ? err.message : String(err))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS.LIST_ALL,
+    async (): Promise<IpcResponse<AgentState[]>> => {
+      try {
+        return success(getAllAgentsIncludingDead(getDb()))
+      } catch (err) {
+        return error('LIST_ALL_ERROR', err instanceof Error ? err.message : String(err))
       }
     }
   )
