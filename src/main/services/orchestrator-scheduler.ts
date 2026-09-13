@@ -26,6 +26,7 @@ import {
   getApproval,
   updateApprovalStatus,
   resetApprovalToPending,
+  deleteApprovalsForRun,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
@@ -251,6 +252,7 @@ export class OrchestratorScheduler {
   cancel(runId: string): void {
     this.pausedRunIds.delete(runId)
     updateRunStatus(this.db, runId, 'cancelled')
+    deleteApprovalsForRun(this.db, runId)
 
     // Safeguard: sync kanban task statuses based on task log outcomes
     const allLogs = getTaskLogsByRun(this.db, runId)
@@ -685,6 +687,7 @@ export class OrchestratorScheduler {
       const hasFailed = allLogs.some(l => l.status === 'failed')
       const finalStatus: OrchestratorRunStatus = hasFailed ? 'failed' : 'completed'
       updateRunStatus(this.db, run.id, finalStatus)
+      deleteApprovalsForRun(this.db, run.id)
       this.emitStatusChange(run.id, finalStatus, run.sprintName)
       log.info('OrchestratorScheduler: run concluded', { runId: run.id, status: finalStatus })
     }

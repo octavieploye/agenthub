@@ -25,7 +25,8 @@ import {
   getPendingApprovalsForRun,
   updateApprovalStatus,
   extendApproval,
-  markApprovalExpired
+  markApprovalExpired,
+  deleteApprovalsForRun
 } from './orchestrator.queries'
 
 let db: Database.Database
@@ -652,6 +653,43 @@ describe('orchestrator.queries', () => {
       const updated = getApproval(db, runId, taskId)!
       expect(updated.status).toBe('expired')
       expect(updated.respondedAt).not.toBeNull()
+    })
+
+    it('deleteApprovalsForRun removes all approval rows for a run and returns the count', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'APS-cleanup', repoId })
+      const taskId1 = seedTask(repoId)
+      const taskId2 = seedTask(repoId)
+      insertApproval(db, { runId: run.id, taskId: taskId1, windowMinutes: 30 })
+      insertApproval(db, { runId: run.id, taskId: taskId2, windowMinutes: 30 })
+
+      const deleted = deleteApprovalsForRun(db, run.id)
+
+      expect(deleted).toBe(2)
+      expect(getApproval(db, run.id, taskId1)).toBeNull()
+      expect(getApproval(db, run.id, taskId2)).toBeNull()
+    })
+
+    it('deleteApprovalsForRun leaves approvals for other runs untouched', () => {
+      const repoId = seedRepo()
+      const run1 = insertRun(db, { sprintName: 'APS-cleanup-A', repoId })
+      const run2 = insertRun(db, { sprintName: 'APS-cleanup-B', repoId })
+      const taskId = seedTask(repoId)
+      const approval1 = insertApproval(db, { runId: run1.id, taskId, windowMinutes: 30 })
+      const approval2 = insertApproval(db, { runId: run2.id, taskId, windowMinutes: 30 })
+
+      deleteApprovalsForRun(db, run1.id)
+
+      expect(getApproval(db, run1.id, taskId)).toBeNull()
+      expect(getApproval(db, run2.id, taskId)!.id).toBe(approval2.id)
+      expect(getApproval(db, run2.id, taskId)!.id).not.toBe(approval1.id)
+    })
+
+    it('deleteApprovalsForRun returns 0 when the run has no approval rows', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'APS-cleanup-empty', repoId })
+
+      expect(deleteApprovalsForRun(db, run.id)).toBe(0)
     })
   })
 })

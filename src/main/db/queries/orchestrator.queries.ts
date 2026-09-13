@@ -608,3 +608,14 @@ export function escalateApproval(db: Database.Database, id: string): void {
     `UPDATE orchestrator_approvals SET reminder_count = reminder_count + 1 WHERE id = ?`
   ).run(id)
 }
+
+/**
+ * Deletes every approval row for a run. Approval gates are only meaningful
+ * while a run is active, so once a run reaches a terminal state (completed /
+ * failed / cancelled) its approval rows are removed rather than left as a
+ * permanent audit trail. Returns the number of rows deleted.
+ */
+export function deleteApprovalsForRun(db: Database.Database, runId: string): number {
+  const result = db.prepare('DELETE FROM orchestrator_approvals WHERE run_id = ?').run(runId)
+  return result.changes
+}
