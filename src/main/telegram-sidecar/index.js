@@ -353,13 +353,13 @@ async function handleCallback(cb) {
   await answerCallback(cb.id, '')
 
   if (data.startsWith('approve:')) {
-    const requestId = data.split(':')[1]
+    const requestId = data.slice('approve:'.length)
     sendToParent({ type: 'command', command: 'approve', requestId })
     await editMessageText(chatId, msgId, '\u2705 You approved this.')
     const pending = pendingApprovals.get(requestId)
     if (pending) { clearTimeout(pending.timerId); pendingApprovals.delete(requestId) }
   } else if (data.startsWith('deny:')) {
-    const requestId = data.split(':')[1]
+    const requestId = data.slice('deny:'.length)
     sendToParent({ type: 'command', command: 'deny', requestId })
     await editMessageText(chatId, msgId, '\u2717 You denied this.')
     const pending = pendingApprovals.get(requestId)
@@ -518,8 +518,11 @@ async function sendNotification(payload) {
     const action = (payload.proposedAction || '').length > 300
       ? (payload.proposedAction || '').slice(0, 297) + '\u2026'
       : (payload.proposedAction || '')
-    text = `\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}`
     const requestId = payload.requestId || payload.agentId
+    const fallback = requestId.startsWith('task:')
+      ? `\n\nReply /approve ${requestId}`
+      : ''
+    text = `\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}${fallback}`
     replyMarkup = {
       inline_keyboard: [[
         { text: '\u2713 Approve', callback_data: `approve:${requestId}` },
