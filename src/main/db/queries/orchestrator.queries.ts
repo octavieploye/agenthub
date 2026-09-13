@@ -464,3 +464,147 @@ export function cleanupOldRetryFailures(db: Database.Database): number {
   }
   return result.changes
 }
+
+// ---------------------------------------------------------------------------
+// Approval gates (orchestrator_approvals)
+// ---------------------------------------------------------------------------
+
+export interface OrchestratorApprovalRow {
+  id: string
+  runId: string
+  taskId: string
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  requestedAt: string
+  expiresAt: string
+  respondedAt: string | null
+  reminderCount: number
+}
+
+function mapApprovalRow(row: Record<string, unknown>): OrchestratorApprovalRow {
+  return {
+    id: row.id as string,
+    runId: row.run_id as string,
+    taskId: row.task_id as string,
+    status: row.status as OrchestratorApprovalRow['status'],
+    requestedAt: row.requested_at as string,
+    expiresAt: row.expires_at as string,
+    respondedAt: (row.responded_at as string) ?? null,
+    reminderCount: (row.reminder_count as number) ?? 0
+  }
+}
+
+export function insertApproval(
+  db: Database.Database,
+  input: { runId: string; taskId: string; windowMinutes: number }
+): OrchestratorApprovalRow {
+  const id = randomUUID()
+  db.prepare(
+    `INSERT OR IGNORE INTO orchestrator_approvals
+       (id, run_id, task_id, status, requested_at, expires_at)
+     VALUES (?, ?, ?, 'pending', datetime('now'), datetime('now', '+' || ? || ' minutes'))`
+  ).run(id, input.runId, input.taskId, input.windowMinutes)
+
+  // INSERT OR IGNORE respects UNIQUE(run_id, task_id): a duplicate request
+  // returns the already-existing row unchanged.
+  const row = getApproval(db, input.runId, input.taskId)
+  if (!row) {
+    throw new Error(`Failed to insert approval for run ${input.runId} task ${input.taskId}`)
+  }
+  return row
+}
+
+export function getApproval(
+  db: Database.Database,
+  runId: string,
+  taskId: string
+): OrchestratorApprovalRow | null {
+  const row = db
+    .prepare('SELECT * FROM orchestrator_approvals WHERE run_id = ? AND task_id = ?')
+    .get(runId, taskId) as Record<string, unknown> | undefined
+  return row ? mapApprovalRow(row) : null
+}
+
+export function getExpiredPendingApprovals(db: Database.Database): OrchestratorApprovalRow[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM orchestrator_approvals WHERE status = 'pending' AND expires_at < datetime('now')"
+    )
+    .all() as Record<string, unknown>[]
+  return rows.map(mapApprovalRow)
+}
+
+export function getPendingApprovalsForRun(
+  db: Database.Database,
+  runId: string
+): OrchestratorApprovalRow[] {
+  const rows = db
+    .prepare("SELECT * FROM orchestrator_approvals WHERE run_id = ? AND status = 'pending'")
+    .all(runId) as Record<string, unknown>[]
+  return rows.map(mapApprovalRow)
+}
+
+export function updateApprovalStatus(
+  db: Database.Database,
+  runId: string,
+  taskId: string,
+  status: OrchestratorApprovalRow['status'],
+  respondedAt?: string
+): void {
+  db.prepare(
+    `UPDATE orchestrator_approvals
+       SET status = ?, responded_at = COALESCE(?, datetime('now'))
+     WHERE run_id = ? AND task_id = ?`
+  ).run(status, respondedAt ?? null, runId, taskId)
+}
+
+export function extendApproval(db: Database.Database, id: string, windowMinutes: number): void {
+  db.prepare(
+    `UPDATE orchestrator_approvals
+       SET expires_at = datetime('now', '+' || ? || ' minutes'),
+           reminder_count = reminder_count + 1
+     WHERE id = ?`
+  ).run(windowMinutes, id)
+}
+
+export function markApprovalExpired(db: Database.Database, id: string): void {
+  db.prepare(
+    `UPDATE orchestrator_approvals
+       SET status = 'expired', responded_at = datetime('now')
+     WHERE id = ?`
+  ).run(id)
+}
+
+/**
+ * Resets an existing approval row back to a fresh pending request. Used when
+ * the supervisor's "never-ran" reset (B) marks an approval 'expired': the next
+ * tick re-arms the same (run, task) as a brand-new request with a full window
+ * and reminder_count back to 0 — it must NOT skip the task forever.
+ */
+export function resetApprovalToPending(
+  db: Database.Database,
+  runId: string,
+  taskId: string,
+  windowMinutes: number
+): void {
+  db.prepare(
+    `UPDATE orchestrator_approvals
+       SET status = 'pending',
+           requested_at = datetime('now'),
+           expires_at = datetime('now', '+' || ? || ' minutes'),
+           responded_at = NULL,
+           reminder_count = 0
+     WHERE run_id = ? AND task_id = ?`
+  ).run(windowMinutes, runId, taskId)
+}
+
+/**
+ * Marks an approval as escalated: bumps reminder_count 2 → 3 WITHOUT extending
+ * expires_at. This is distinct from extendApproval (which extends the window)
+ * so the B-fallback fires on the NEXT monitor tick (~30s) rather than a full
+ * window later.
+ */
+export function escalateApproval(db: Database.Database, id: string): void {
+  db.prepare(
+    `UPDATE orchestrator_approvals SET reminder_count = reminder_count + 1 WHERE id = ?`
+  ).run(id)
+}

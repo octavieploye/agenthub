@@ -142,6 +142,7 @@ export const GUARDRAIL_PROMPTS: Record<'dev' | 'review' | 'security' | 'simple',
 export const OPERATING_RULES = {
   phaseOrder: ['dev', 'review', 'security', 'commit', 'push'] as OrchestratorPhase[],
   maxPhaseRetries: 3,
+  approvalMaxReminders: 2,
   limits: {
     maxAgents: 50,
     maxWallClockMs: 4 * 60 * 60 * 1000, // 4h

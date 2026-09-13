@@ -10,8 +10,12 @@ import {
   updateRunStatus,
   insertTaskLog,
   updateTaskLogStatus,
-  getRun
+  getRun,
+  insertApproval,
+  getApproval
 } from '../db/queries/orchestrator.queries'
+import { insertTask, getTaskById } from '../db/queries/tasks.queries'
+import { insertNotification, markExpired } from '../db/queries/telegram-notifications.queries'
 
 vi.mock('electron-log/main', () => ({
   default: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }
@@ -39,6 +43,13 @@ function insertReviewFailure(runId: string, taskId: string): void {
 function insertPhaseFailure(runId: string, taskId: string, phase: OrchestratorPhase): void {
   const log = insertTaskLog(db, { runId, taskId, phase })
   updateTaskLogStatus(db, log.id, 'failed')
+}
+
+function createExpiredApproval(runId: string, taskId: string, reminderCount: number): void {
+  insertApproval(db, { runId, taskId, windowMinutes: 1 })
+  db.prepare(
+    `UPDATE orchestrator_approvals SET expires_at = datetime('now','-1 minute'), reminder_count = ? WHERE run_id = ? AND task_id = ?`
+  ).run(reminderCount, runId, taskId)
 }
 
 beforeEach(() => {
@@ -286,5 +297,168 @@ describe('OrchestratorMonitorService', () => {
     expect(pause).not.toHaveBeenCalled()
     expect(sendTelegramNotification).not.toHaveBeenCalled()
     expect(getRun(db, runId)!.status).toBe('running')
+  })
+
+  // -------------------------------------------------------------------------
+  // APS-4: Approval-stall supervisor (A→C→B state machine)
+  // -------------------------------------------------------------------------
+
+  it('A: re-notifies and extends the window when approval expires at reminder_count=0', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    const runId = createRunningRun()
+    const task = insertTask(db, { repoId: 'repo-1', title: 'Approve me' })
+    createExpiredApproval(runId, task.id, 0)
+
+    monitor.check()
+
+    expect(notifyApproval).toHaveBeenCalledTimes(1)
+    expect(notifyApproval).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Approve me')
+    expect(sendEscalation).not.toHaveBeenCalled()
+    expect(pause).not.toHaveBeenCalled()
+    const approval = getApproval(db, runId, task.id)!
+    expect(approval.reminderCount).toBe(1)
+    expect(approval.status).toBe('pending')
+  })
+
+  it('A again at reminder_count=1: re-notifies and bumps count to 2', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    const runId = createRunningRun()
+    const task = insertTask(db, { repoId: 'repo-1', title: 'Approve me again' })
+    createExpiredApproval(runId, task.id, 1)
+
+    monitor.check()
+
+    expect(notifyApproval).toHaveBeenCalledTimes(1)
+    expect(sendEscalation).not.toHaveBeenCalled()
+    const approval = getApproval(db, runId, task.id)!
+    expect(approval.reminderCount).toBe(2)
+    expect(approval.status).toBe('pending')
+  })
+
+  it('C: escalates via plain-text /approve at reminder_count=2 without resetting the task', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    const runId = createRunningRun()
+    const task = insertTask(db, { repoId: 'repo-1', title: 'Escalate me', status: 'in_progress' })
+    createExpiredApproval(runId, task.id, 2)
+
+    monitor.check()
+
+    expect(sendEscalation).toHaveBeenCalledTimes(1)
+    expect(sendEscalation).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Escalate me')
+    expect(notifyApproval).not.toHaveBeenCalled()
+    const approval = getApproval(db, runId, task.id)!
+    expect(approval.reminderCount).toBe(3)
+    expect(approval.status).toBe('pending')
+    expect(getTaskById(db, task.id)!.status).toBe('in_progress')
+  })
+
+  it('B: resets task to backlog when approval expired and the task never ran', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    const runId = createRunningRun()
+    const task = insertTask(db, { repoId: 'repo-1', title: 'Never ran', status: 'in_progress' })
+    createExpiredApproval(runId, task.id, 3)
+
+    monitor.check()
+
+    expect(getApproval(db, runId, task.id)!.status).toBe('expired')
+    expect(getTaskById(db, task.id)!.status).toBe('backlog')
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('backlog')
+    expect(notifyApproval).not.toHaveBeenCalled()
+    expect(sendEscalation).not.toHaveBeenCalled()
+  })
+
+  it('B: skips reset when the task already reported files_changed', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    const runId = createRunningRun()
+    const task = insertTask(db, { repoId: 'repo-1', title: 'Already worked', status: 'in_progress' })
+    const log = insertTaskLog(db, { runId, taskId: task.id, phase: 'dev' })
+    db.prepare(`UPDATE orchestrator_task_log SET files_changed_json = ? WHERE id = ?`).run('[]', log.id)
+    createExpiredApproval(runId, task.id, 3)
+
+    monitor.check()
+
+    expect(getApproval(db, runId, task.id)!.status).toBe('pending')
+    expect(getTaskById(db, task.id)!.status).toBe('in_progress')
+    expect(sendTelegramNotification).not.toHaveBeenCalled()
+  })
+
+  // -------------------------------------------------------------------------
+  // APS-5: Telegram delivery health check
+  // -------------------------------------------------------------------------
+
+  it('alerts once when notifications expired, throttled on immediate re-check', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    createRunningRun()
+    const notifId = insertNotification(db, {
+      type: 'completed',
+      agentId: 'agent-1',
+      agentName: 'Test Agent',
+      repo: 'repo-1',
+      summary: 'done',
+      timestamp: new Date().toISOString(),
+    })
+    markExpired(db, notifId)
+
+    monitor.check()
+
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('Telegram delivery')
+
+    monitor.check()
+
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing when no approvals and no expired notifications', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const notifyApproval = vi.fn()
+    const sendEscalation = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, notifyApproval, sendEscalation })
+    )
+    createRunningRun()
+
+    monitor.check()
+
+    expect(notifyApproval).not.toHaveBeenCalled()
+    expect(sendEscalation).not.toHaveBeenCalled()
+    expect(sendTelegramNotification).not.toHaveBeenCalled()
+    expect(pause).not.toHaveBeenCalled()
   })
 })

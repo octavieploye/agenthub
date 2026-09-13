@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../migration-runner'
@@ -17,7 +18,14 @@ import {
   getTaskLogsByTask,
   getActiveTaskLogs,
   incrementAgentsSpawned,
-  getAgentsSpawned
+  getAgentsSpawned,
+  insertApproval,
+  getApproval,
+  getExpiredPendingApprovals,
+  getPendingApprovalsForRun,
+  updateApprovalStatus,
+  extendApproval,
+  markApprovalExpired
 } from './orchestrator.queries'
 
 let db: Database.Database
@@ -530,6 +538,120 @@ describe('orchestrator.queries', () => {
       const activeLogs = getActiveTaskLogs(db, run.id)
       expect(activeLogs).toHaveLength(1)
       expect(activeLogs[0].id).toBe(log3.id)
+    })
+  })
+
+  describe('orchestrator approvals', () => {
+    function seedApproval(windowMinutes = 30): { runId: string; taskId: string; approval: ReturnType<typeof insertApproval> } {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'APS-1', repoId })
+      const taskId = seedTask(repoId)
+      const approval = insertApproval(db, { runId: run.id, taskId, windowMinutes })
+      return { runId: run.id, taskId, approval }
+    }
+
+    it('insertApproval creates a pending approval with the requested window', () => {
+      const { approval, runId, taskId } = seedApproval(30)
+
+      expect(approval.id).toBeDefined()
+      expect(approval.runId).toBe(runId)
+      expect(approval.taskId).toBe(taskId)
+      expect(approval.status).toBe('pending')
+      expect(approval.requestedAt).toBeDefined()
+      expect(approval.expiresAt).toBeDefined()
+      expect(approval.respondedAt).toBeNull()
+      expect(approval.reminderCount).toBe(0)
+    })
+
+    it('insertApproval respects UNIQUE(run_id, task_id) and returns the existing row', () => {
+      const { runId, taskId, approval: first } = seedApproval(30)
+
+      const second = insertApproval(db, { runId, taskId, windowMinutes: 60 })
+
+      expect(second.id).toBe(first.id)
+      expect(second.expiresAt).toBe(first.expiresAt)
+      expect(second.reminderCount).toBe(first.reminderCount)
+    })
+
+    it('getApproval returns null when absent', () => {
+      expect(getApproval(db, 'no-run', 'no-task')).toBeNull()
+    })
+
+    it('getApproval returns the persisted row', () => {
+      const { runId, taskId, approval } = seedApproval()
+
+      const found = getApproval(db, runId, taskId)
+      expect(found).not.toBeNull()
+      expect(found!.id).toBe(approval.id)
+    })
+
+    it('getExpiredPendingApprovals returns only pending rows past expiry', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'APS-1', repoId })
+      const expired = insertApproval(db, { runId: run.id, taskId: seedTask(repoId), windowMinutes: 30 })
+      // Force this approval into the past to simulate an elapsed window.
+      db.prepare(
+        "UPDATE orchestrator_approvals SET expires_at = datetime('now', '-1 minute') WHERE id = ?"
+      ).run(expired.id)
+
+      const fresh = insertApproval(db, { runId: run.id, taskId: seedTask(repoId), windowMinutes: 30 })
+
+      const result = getExpiredPendingApprovals(db)
+      const ids = result.map((r) => r.id)
+      expect(ids).toContain(expired.id)
+      expect(ids).not.toContain(fresh.id)
+    })
+
+    it('getExpiredPendingApprovals excludes non-pending rows even when expired', () => {
+      const { approval } = seedApproval(30)
+      db.prepare(
+        "UPDATE orchestrator_approvals SET expires_at = datetime('now', '-1 minute') WHERE id = ?"
+      ).run(approval.id)
+      updateApprovalStatus(db, approval.runId, approval.taskId, 'approved')
+
+      expect(getExpiredPendingApprovals(db)).toEqual([])
+    })
+
+    it('getPendingApprovalsForRun returns only pending approvals for the run', () => {
+      const { runId, approval } = seedApproval()
+
+      const result = getPendingApprovalsForRun(db, runId)
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe(approval.id)
+    })
+
+    it('updateApprovalStatus sets status and responded_at', () => {
+      const { runId, taskId, approval } = seedApproval()
+      expect(approval.respondedAt).toBeNull()
+
+      updateApprovalStatus(db, runId, taskId, 'approved')
+
+      const updated = getApproval(db, runId, taskId)!
+      expect(updated.status).toBe('approved')
+      expect(updated.respondedAt).not.toBeNull()
+    })
+
+    it('extendApproval increments reminder_count', () => {
+      const { runId, taskId, approval } = seedApproval()
+      expect(approval.reminderCount).toBe(0)
+
+      extendApproval(db, approval.id, 30)
+
+      const updated = getApproval(db, runId, taskId)!
+      expect(updated.reminderCount).toBe(1)
+
+      extendApproval(db, approval.id, 30)
+      expect(getApproval(db, runId, taskId)!.reminderCount).toBe(2)
+    })
+
+    it('markApprovalExpired sets status to expired with responded_at', () => {
+      const { runId, taskId, approval } = seedApproval()
+
+      markApprovalExpired(db, approval.id)
+
+      const updated = getApproval(db, runId, taskId)!
+      expect(updated.status).toBe('expired')
+      expect(updated.respondedAt).not.toBeNull()
     })
   })
 })

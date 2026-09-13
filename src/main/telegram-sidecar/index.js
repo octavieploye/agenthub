@@ -275,6 +275,17 @@ async function handleCommand(chatId, text) {
       await sendMessage(chatId, 'Notifications are back on.')
       break
 
+    case '/approve': {
+      const requestId = rest[0]
+      if (!requestId || !requestId.startsWith('task:')) {
+        await sendMessage(chatId, 'Usage: /approve task:<taskId>:<runId>\n\nThis is the id from the approval prompt.')
+        return
+      }
+      sendToParent({ type: 'command', command: 'approve', requestId })
+      await sendMessage(chatId, '\u2705 Approved \u2014 sending your answer.')
+      break
+    }
+
     default:
       await sendMessage(chatId, `I didn't quite understand that.\n\nTry /help to see what I can do, or just describe what you want and I'll do my best.`)
   }
@@ -515,13 +526,6 @@ async function sendNotification(payload) {
         { text: '\u2717 Deny', callback_data: `deny:${requestId}` }
       ]]
     }
-    // Set approval timeout (30 min)
-    const timerId = setTimeout(async () => {
-      pendingApprovals.delete(requestId)
-      await sendMessage(allowedChatId, `\u23f0 Approval expired \u2014 ${payload.agentName}\n\nGo to AgentHub to see status and decide what to do next.`)
-    }, 30 * 60 * 1000)
-    pendingApprovals.set(requestId, { chatId: allowedChatId, timerId })
-
   } else if (payload.type === 'needs_input') {
     const q = (payload.question || '').length > 200
       ? (payload.question || '').slice(0, 197) + '\u2026'
@@ -636,6 +640,9 @@ Example: /send frontend-agent Fix the login button
 /mute \u2014 Stop all notifications for 1 hour
 /unmute \u2014 Turn notifications back on
 
+\u2705 Approve a pending task
+/approve [id] \u2014 Approve the task using the id from the approval prompt
+
 Need help? Just type what you want to do and I'll try to help.`
 }
 
@@ -661,6 +668,7 @@ rl.on('line', async (line) => {
           { command: 'stop',        description: 'Stop an agent' },
           { command: 'mute',        description: 'Mute notifications for 1 hour' },
           { command: 'unmute',      description: 'Turn notifications back on' },
+          { command: 'approve',     description: 'Approve a pending task (id from prompt)' },
           { command: 'help',        description: 'Show all commands' },
         ]
       }).catch(() => {}) // non-blocking

@@ -7,6 +7,8 @@ import {
   getActiveRun,
   insertTaskLog,
   getTaskLogsByRun,
+  insertApproval,
+  getApproval,
 } from '../db/queries/orchestrator.queries'
 import {
   emitOrchestratorEvent,
@@ -112,6 +114,18 @@ function buildDb(): Database.Database {
       diagnostics     TEXT,
       acknowledged_at TEXT,
       created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS orchestrator_approvals (
+      id             TEXT PRIMARY KEY,
+      run_id         TEXT NOT NULL,
+      task_id        TEXT NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'pending',
+      requested_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at     TEXT NOT NULL,
+      responded_at   TEXT,
+      reminder_count INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(run_id, task_id)
     );
 
     INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.enabled', 'true');
@@ -683,6 +697,164 @@ describe('OrchestratorScheduler', () => {
       // No ready tasks, but brain is reached (empty candidateTasks returns before brain, that's OK)
       // The key assertion: tick was triggered (the scheduler did not error)
       expect(brain.decide).not.toHaveBeenCalled() // no ready tasks → returns before brain
+    })
+
+    it('writes an approved row to the DB and kicks a tick on approval', async () => {
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain, tickIntervalMs: 999_999 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+      insertApproval(db, { runId: run.id, taskId: 'task-approve', windowMinutes: 30 })
+      brain.decide.mockClear()
+
+      scheduler.approveTaskDispatch(run.id, 'task-approve', true)
+      await vi.advanceTimersByTimeAsync(1)
+
+      const approval = getApproval(db, run.id, 'task-approve')
+      expect(approval?.status).toBe('approved')
+      expect(approval?.respondedAt).toBeTruthy()
+    })
+
+    it('writes a denied row and skips pending logs on rejection', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+      insertApproval(db, { runId: run.id, taskId: 'task-deny', windowMinutes: 30 })
+      const taskLog = insertTaskLog(db, { runId: run.id, taskId: 'task-deny', phase: 'dev' })
+
+      scheduler.approveTaskDispatch(run.id, 'task-deny', false)
+
+      const approval = getApproval(db, run.id, 'task-deny')
+      expect(approval?.status).toBe('denied')
+      expect(approval?.respondedAt).toBeTruthy()
+
+      const logs = getTaskLogsByRun(db, run.id)
+      expect(logs.some(l => l.id === taskLog.id && l.status === 'skipped')).toBe(true)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Approval gate state machine (tickBody)
+  // -------------------------------------------------------------------------
+
+  describe('approval gate (tickBody)', () => {
+    function insertApprovalTask(db: Database.Database, id: string, title = 'Approval task'): void {
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, 'repo-1', title, 'desc', 1, 'today', 1, now, now)
+    }
+
+    it('inserts a pending row and notifies, without dispatching, when no row exists', async () => {
+      insertApprovalTask(db, 'gate-none')
+      const notifyApproval = vi.fn()
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain, dispatch, notifyApproval })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1', taskIds: ['gate-none'], telegramNotify: true })
+      await vi.advanceTimersByTimeAsync(1)
+
+      const approval = getApproval(db, run.id, 'gate-none')
+      expect(approval?.status).toBe('pending')
+      expect(notifyApproval).toHaveBeenCalledWith('gate-none', run.id, 'Approval task', 'repo-1')
+      expect(brain.decide).not.toHaveBeenCalled()
+      expect(dispatch.execute).not.toHaveBeenCalled()
+    })
+
+    it('skips dispatch while a pending row exists and does not re-prompt', async () => {
+      insertApprovalTask(db, 'gate-pending')
+      const notifyApproval = vi.fn()
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain, dispatch, notifyApproval })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1', taskIds: ['gate-pending'], telegramNotify: true })
+      insertApproval(db, { runId: run.id, taskId: 'gate-pending', windowMinutes: 30 })
+
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(notifyApproval).not.toHaveBeenCalled()
+      expect(brain.decide).not.toHaveBeenCalled()
+      expect(dispatch.execute).not.toHaveBeenCalled()
+    })
+
+    it('skips dispatch and does not re-insert/re-prompt when a denied row exists', async () => {
+      insertApprovalTask(db, 'gate-denied')
+      const notifyApproval = vi.fn()
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain, dispatch, notifyApproval })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1', taskIds: ['gate-denied'], telegramNotify: true })
+      db.prepare(
+        `INSERT INTO orchestrator_approvals (id, run_id, task_id, status, requested_at, expires_at, responded_at, reminder_count)
+         VALUES ('row-denied', ?, 'gate-denied', 'denied', datetime('now'), datetime('now', '+30 minutes'), datetime('now'), 0)`
+      ).run(run.id)
+
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(notifyApproval).not.toHaveBeenCalled()
+      expect(brain.decide).not.toHaveBeenCalled()
+      expect(dispatch.execute).not.toHaveBeenCalled()
+
+      const approval = getApproval(db, run.id, 'gate-denied')
+      expect(approval?.status).toBe('denied') // still denied — not re-inserted
+    })
+
+    it('re-requests a fresh pending row when an expired row exists', async () => {
+      insertApprovalTask(db, 'gate-expired')
+      const notifyApproval = vi.fn()
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain, dispatch, notifyApproval })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1', taskIds: ['gate-expired'], telegramNotify: true })
+      db.prepare(
+        `INSERT INTO orchestrator_approvals (id, run_id, task_id, status, requested_at, expires_at, responded_at, reminder_count)
+         VALUES ('row-expired', ?, 'gate-expired', 'expired', datetime('now', '-60 minutes'), datetime('now', '-30 minutes'), datetime('now', '-30 minutes'), 2)`
+      ).run(run.id)
+
+      await vi.advanceTimersByTimeAsync(1)
+
+      const approval = getApproval(db, run.id, 'gate-expired')
+      expect(approval?.status).toBe('pending')
+      expect(approval?.reminderCount).toBe(0)
+      expect(notifyApproval).toHaveBeenCalledWith('gate-expired', run.id, 'Approval task', 'repo-1')
+      expect(dispatch.execute).not.toHaveBeenCalled()
+    })
+
+    it('dispatches when an approved row exists', async () => {
+      insertApprovalTask(db, 'gate-approved')
+      const decision: SchedulerBrainDecision = {
+        taskId: 'gate-approved',
+        spawnOptions: { repoId: 'repo-1', name: 'agent-approved', cwd: '/tmp' },
+        reason: 'approved gate',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id-approved') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1', taskIds: ['gate-approved'] })
+      insertApproval(db, { runId: run.id, taskId: 'gate-approved', windowMinutes: 30 })
+      scheduler.approveTaskDispatch(run.id, 'gate-approved', true)
+
+      // Flush the setTimeout(0) tick kicked by the approval
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-1' }),
+        'gate-approved',
+        run.id
+      )
     })
   })
 

@@ -1,3 +1,8 @@
+// Force the React development bundle so `act` is available (React 19.2 removes
+// `act` from the production build, which breaks @testing-library/react's
+// renderer when NODE_ENV=production is inherited from the shell).
+process.env.NODE_ENV = 'test'
+
 import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
 

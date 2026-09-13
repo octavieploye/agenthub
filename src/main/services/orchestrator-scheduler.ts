@@ -22,9 +22,14 @@ import {
   getActiveTaskLogByAgentId,
   getTaskLogsByTask,
   getCompletedTaskIdsFromAllRuns,
+  insertApproval,
+  getApproval,
+  updateApprovalStatus,
+  resetApprovalToPending,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
+import { getApprovalWindowMinutes } from './orchestrator-settings'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type {
   OrchestratorRun,
@@ -99,8 +104,6 @@ export class OrchestratorScheduler {
   private tickInFlight = false
   private pausedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
-  private pendingApproval = new Set<string>()
-  private approvedTasks = new Set<string>()
 
   // Bound handlers stored so we can remove them in stop()
   private readonly onCompleted: (e: OrchestratorAgentEvent) => void
@@ -364,9 +367,8 @@ export class OrchestratorScheduler {
       return
     }
 
-    this.pendingApproval.delete(taskId)
-
     if (!approved) {
+      updateApprovalStatus(this.db, runId, taskId, 'denied')
       log.info('OrchestratorScheduler: task dispatch rejected', { runId, taskId })
       // Mark any pending log for this task as skipped
       const logs = getTaskLogsByRun(this.db, runId).filter(l => l.taskId === taskId && l.status === 'pending')
@@ -376,7 +378,7 @@ export class OrchestratorScheduler {
       return
     }
 
-    this.approvedTasks.add(taskId)
+    updateApprovalStatus(this.db, runId, taskId, 'approved')
     log.info('OrchestratorScheduler: task dispatch approved, kicking tick', { runId, taskId })
     setTimeout(() => this.tick(), 0)
   }
@@ -453,24 +455,35 @@ export class OrchestratorScheduler {
       const fullTask = candidateTasks.find(t => t.id === candidate.id)
       if (!fullTask) continue
 
-      // Approval gate — hold task if requiresApproval and not yet approved
-      if (fullTask.requiresApproval && !this.pendingApproval.has(fullTask.id) && !this.approvedTasks.has(fullTask.id)) {
-        this.pendingApproval.add(fullTask.id)
-        this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
-          runId: run.id,
-          taskId: fullTask.id,
-          title: fullTask.title,
-        })
-        if (run.telegramNotify) {
-          this.deps.notifyApproval?.(fullTask.id, run.id, fullTask.title, run.repoId)
+      // Approval gate — deterministic state machine backed by orchestrator_approvals.
+      if (fullTask.requiresApproval) {
+        const approval = getApproval(this.db, run.id, fullTask.id)
+        if (!approval || approval.status === 'expired') {
+          // First request, OR re-request after a never-ran B-reset (status 'expired').
+          if (approval) {
+            resetApprovalToPending(this.db, run.id, fullTask.id, getApprovalWindowMinutes(this.db))
+          } else {
+            insertApproval(this.db, {
+              runId: run.id,
+              taskId: fullTask.id,
+              windowMinutes: getApprovalWindowMinutes(this.db),
+            })
+          }
+          this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_APPROVAL_NEEDED, {
+            runId: run.id,
+            taskId: fullTask.id,
+            title: fullTask.title,
+          })
+          if (run.telegramNotify) {
+            this.deps.notifyApproval?.(fullTask.id, run.id, fullTask.title, run.repoId)
+          }
+          log.info('OrchestratorScheduler: task gated on approval', { runId: run.id, taskId: fullTask.id })
+          continue // skip this task, try the next one
         }
-        log.info('OrchestratorScheduler: task gated on approval', { runId: run.id, taskId: fullTask.id })
-        continue // skip this task, try the next one
-      }
-
-      // Still waiting for user to respond to the approval prompt
-      if (fullTask.requiresApproval && this.pendingApproval.has(fullTask.id)) {
-        continue
+        if (approval.status === 'pending' || approval.status === 'denied') {
+          continue // waiting on user, OR rejected — do NOT re-prompt
+        }
+        // approval.status === 'approved' → fall through to dispatch
       }
 
       // hasActiveLogForPhase guard: skip if task already has an active log in this run

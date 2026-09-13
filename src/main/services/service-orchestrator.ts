@@ -46,6 +46,7 @@ import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
 import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
+import { recommend } from './model-recommender'
 import { updateTask } from '../db/queries/tasks.queries'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
@@ -671,22 +672,48 @@ export function initializeServices(db: Database.Database): void {
         const agenthubCwd = app.isPackaged ? join(app.getAppPath(), '..') : process.cwd()
         const isTargetRepoExternal = taskRepo.path !== agenthubCwd
         // FIX H6+M1 — model and skill come from task metadata, never from brain LLM
-        const effectiveModel = task.modelOverride ?? task.recommendedModel ?? brainConfig.model
+        // FIX: When no model override or recommendation, use the model-recommender
+        // instead of falling back to the brain's own model (qwen3:8b).
         const effectiveSkill = task.skills?.[0] ?? 'team-dev-loop'
 
-        // FIX C2 — derive provider: task override → model-name heuristic → brain config
         type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud' | 'openai-codex'
-        let effectiveProvider: ModelProvider
+        let effectiveModel: string
+        let effectiveProvider: ModelProvider = 'anthropic'
+        let providerFromRecommender = false
+
+        if (task.modelOverride) {
+          effectiveModel = task.modelOverride
+        } else if (task.recommendedModel) {
+          effectiveModel = task.recommendedModel
+        } else {
+          // Use the recommender: quota-aware, complexity-aware model selection.
+          // Default quotaPercent=0 (healthy) → complex=Opus, else=Sonnet.
+          const taskDesc = task.description ?? task.title
+          const rec = recommend(0, taskDesc)
+          effectiveModel = rec.model
+          effectiveProvider = rec.provider as ModelProvider
+          providerFromRecommender = true
+          log.info('[orchestrator] model-recommender selected', {
+            taskId: task.id,
+            model: rec.model,
+            provider: rec.provider,
+            rationale: rec.rationale,
+          })
+        }
+
+        // Derive provider: task override → recommender result → model-name heuristic
         if (task.providerOverride) {
           effectiveProvider = task.providerOverride as ModelProvider
-        } else if (effectiveModel.includes(':cloud')) {
-          effectiveProvider = 'ollama-cloud'
-        } else if (/^[a-z][\w.-]*:\d|^(llama|qwen|gemma|mistral|phi|deepseek|codestral|devstral|granite|glm)/i.test(effectiveModel)) {
-          effectiveProvider = 'ollama-local'
-        } else if (/^claude/i.test(effectiveModel)) {
-          effectiveProvider = 'anthropic'
-        } else {
-          effectiveProvider = brainConfig.provider as ModelProvider
+        } else if (!providerFromRecommender) {
+          if (effectiveModel.includes(':cloud')) {
+            effectiveProvider = 'ollama-cloud'
+          } else if (/^[a-z][\w.-]*:\d|^(llama|qwen|gemma|mistral|phi|deepseek|codestral|devstral|granite|glm)/i.test(effectiveModel)) {
+            effectiveProvider = 'ollama-local'
+          } else if (/^claude/i.test(effectiveModel)) {
+            effectiveProvider = 'anthropic'
+          } else {
+            effectiveProvider = 'anthropic'
+          }
         }
 
         // FIX H3 — prepend skill instruction to task description so the agent executes it
@@ -803,6 +830,30 @@ export function initializeServices(db: Database.Database): void {
   orchestratorMonitor = new OrchestratorMonitorService(db, {
     pause: (runId: string) => orchestratorScheduler?.pause(runId),
     sendTelegramNotification,
+    notifyApproval: (requestId: string, title: string) => {
+      telegramQueueProcessor?.enqueue({
+        type: 'awaiting_approval',
+        agentId: `orchestrator:approval:${requestId}`,
+        agentName: 'Orchestrator',
+        summary: title,
+        proposedAction: title,
+        repo: '',
+        requestId,
+        timestamp: new Date().toISOString(),
+      })
+    },
+    sendEscalation: (requestId: string, title: string) => {
+      telegramQueueProcessor?.enqueue({
+        type: 'agent_message',
+        agentId: `orchestrator:escalation:${requestId}`,
+        agentName: 'Orchestrator',
+        summary: title,
+        message: `Approval still needed for "${title}".\n\nReply with:\n/approve ${requestId}`,
+        format: 'status',
+        repo: '',
+        timestamp: new Date().toISOString(),
+      })
+    },
   })
 
   // Startup recovery: fix orphaned tasks and stale runs from previous crashes

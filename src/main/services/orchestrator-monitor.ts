@@ -1,7 +1,19 @@
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
-import { getActiveRun, getActiveTaskLogs, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
+import {
+  getActiveRun,
+  getActiveTaskLogs,
+  getTaskLogsByRun,
+  getExpiredPendingApprovals,
+  extendApproval,
+  escalateApproval,
+  markApprovalExpired,
+  wasFilesChangedReported,
+} from '../db/queries/orchestrator.queries'
+import { getTaskById, updateTask } from '../db/queries/tasks.queries'
+import { getExpiredNotifications } from '../db/queries/telegram-notifications.queries'
 import { OPERATING_RULES } from './orchestrator-rules'
+import { getApprovalWindowMinutes } from './orchestrator-settings'
 import type { OrchestratorRun } from '../../shared/types/orchestrator.types'
 
 /**
@@ -24,6 +36,8 @@ export const MONITOR_LIMITS = {
   maxTokens: 2_000_000,
   /** Consecutive failures in any phase for a single task before flagging a stuck loop. */
   stuckLoopThreshold: 3,
+  /** Minimum interval between Telegram delivery health alerts. */
+  telegramHealthAlertCooldownMs: 10 * 60 * 1000,
 }
 
 export const MONITOR_INTERVAL_MS = 30_000
@@ -32,12 +46,15 @@ export interface OrchestratorMonitorDeps {
   pause: (runId: string) => void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
   getRunTokenUsage?: (runId: string) => number
+  notifyApproval?: (requestId: string, title: string) => void   // A — re-notify
+  sendEscalation?: (requestId: string, title: string) => void   // C — plain-text /approve
 }
 
 export class OrchestratorMonitorService {
   private db: Database.Database
   private deps: OrchestratorMonitorDeps
   private timer: ReturnType<typeof setInterval> | null = null
+  private lastTelegramHealthAlertAt = 0
 
   constructor(db: Database.Database, deps: OrchestratorMonitorDeps) {
     this.db = db
@@ -68,6 +85,8 @@ export class OrchestratorMonitorService {
     if (this.checkTokens(run)) return
     if (this.checkTotalRetries(run)) return
     this.checkStuckLoop(run)
+    this.checkApprovalStalls()
+    this.checkTelegramHealth()
   }
 
   private checkConcurrentAgents(run: OrchestratorRun): boolean {
@@ -132,6 +151,54 @@ export class OrchestratorMonitorService {
         return
       }
     }
+  }
+
+  private checkApprovalStalls(): void {
+    const approvals = getExpiredPendingApprovals(this.db)
+    if (approvals.length === 0) return
+    const window = getApprovalWindowMinutes(this.db)
+    for (const a of approvals) {
+      const task = getTaskById(this.db, a.taskId)
+      const title = task?.title ?? a.taskId
+      const requestId = `task:${a.taskId}:${a.runId}`
+
+      if (a.reminderCount < OPERATING_RULES.approvalMaxReminders) {
+        // A — re-notify + extend window
+        this.deps.notifyApproval?.(requestId, title)
+        extendApproval(this.db, a.id, window)
+      } else if (a.reminderCount === OPERATING_RULES.approvalMaxReminders) {
+        // C — escalate via plain-text /approve; stop auto-extending
+        this.deps.sendEscalation?.(requestId, title)
+        escalateApproval(this.db, a.id)  // count 2 → 3
+      } else {
+        // B — last resort: reset to backlog ONLY if the task never actually ran
+        if (!this.approvalNeverRan(a)) continue
+        markApprovalExpired(this.db, a.id)
+        updateTask(this.db, a.taskId, { status: 'backlog' })
+        this.deps.sendTelegramNotification?.(
+          `Task "${title}" reset to backlog — approval expired and it never started`,
+          'failed'
+        )
+      }
+    }
+  }
+
+  private approvalNeverRan(a: { runId: string; taskId: string }): boolean {
+    const hasActiveLog = getActiveTaskLogs(this.db, a.runId).some(l => l.taskId === a.taskId)
+    if (hasActiveLog) return false
+    return !wasFilesChangedReported(this.db, a.taskId)
+  }
+
+  private checkTelegramHealth(): void {
+    const expired = getExpiredNotifications(this.db)
+    if (expired.length === 0) return
+    const now = Date.now()
+    if (now - this.lastTelegramHealthAlertAt < MONITOR_LIMITS.telegramHealthAlertCooldownMs) return
+    this.lastTelegramHealthAlertAt = now
+    this.deps.sendTelegramNotification?.(
+      `Telegram delivery degraded: ${expired.length} notification(s) expired after retry budget`,
+      'failed'
+    )
   }
 
   private breach(run: OrchestratorRun, reason: string): void {

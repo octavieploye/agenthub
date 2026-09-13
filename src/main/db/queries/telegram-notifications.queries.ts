@@ -99,3 +99,9 @@ export function isDuplicate(
   ).get(agentId, type)
   return row !== undefined
 }
+
+export function getExpiredNotifications(db: Database.Database): TelegramNotificationRow[] {
+  return db.prepare(
+    `SELECT * FROM telegram_notifications WHERE status = 'expired' ORDER BY created_at DESC`
+  ).all() as TelegramNotificationRow[]
+}
