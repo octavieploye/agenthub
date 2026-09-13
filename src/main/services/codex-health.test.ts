@@ -179,7 +179,7 @@ describe('ensureCodexMcpServers', () => {
     expect(addArgs).toContain('--env')
     expect(addArgs).toContain('AGENTHUB_DB_PATH=/fake/db.db')
     expect(addArgs).toContain('AGENTHUB_SOCKET_PATH=/fake/socket.sock')
-    expect(addArgs).toContain('node')
+    expect(addArgs).toContain(process.execPath)
     expect(addArgs).toContain('/fake/kanban.js')
   })
 

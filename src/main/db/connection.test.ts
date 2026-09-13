@@ -1,10 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readdirSync } from 'fs'
+import { join } from 'path'
 
 vi.mock('electron-log/main', () => ({
   default: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() }
 }))
 
 import { getDb, closeDb, resetDb } from './connection'
+
+function latestMigrationVersion(): number {
+  const dir = join(__dirname, 'migrations')
+  const files = readdirSync(dir).filter((f) => f.endsWith('.sql'))
+  return files.reduce((max, f) => {
+    const m = f.match(/^(\d+)/)
+    return m ? Math.max(max, parseInt(m[1], 10)) : max
+  }, 0)
+}
 
 describe('Database Connection', () => {
   beforeEach(() => {
@@ -58,6 +69,6 @@ describe('Database Connection', () => {
   it('sets user_version after migration', () => {
     const db = getDb(':memory:')
     const version = db.pragma('user_version', { simple: true })
-    expect(version).toBe(50)
+    expect(version).toBe(latestMigrationVersion())
   })
 })

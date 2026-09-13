@@ -447,7 +447,7 @@ describe('ClaudeMonitor', () => {
         })
       ]
 
-      mockedReaddir.mockResolvedValue(['session1.jsonl'] as unknown as Awaited<ReturnType<typeof readdir>>)
+      mockedReaddir.mockResolvedValue([mockFileDirent('session1.jsonl')] as unknown as Awaited<ReturnType<typeof readdir>>)
       mockedReadFile.mockResolvedValue(lines.join('\n'))
 
       const monitor = new ClaudeMonitor({ claudeDir: '/tmp/test-claude' })
@@ -467,7 +467,7 @@ describe('ClaudeMonitor', () => {
 
   describe('refresh', () => {
     it('reads JSONL files from claudeDir', async () => {
-      mockedReaddir.mockResolvedValue(['a.jsonl', 'b.jsonl'] as unknown as Awaited<ReturnType<typeof readdir>>)
+      mockedReaddir.mockResolvedValue([mockFileDirent('a.jsonl'), mockFileDirent('b.jsonl')] as unknown as Awaited<ReturnType<typeof readdir>>)
       mockedReadFile.mockResolvedValue(sampleJsonlLine())
 
       const monitor = new ClaudeMonitor({ claudeDir: '/tmp/test-claude' })
@@ -485,7 +485,7 @@ describe('ClaudeMonitor', () => {
           usage: { input_tokens: 999, output_tokens: 444 }
         }
       })
-      mockedReaddir.mockResolvedValue(['s.jsonl'] as unknown as Awaited<ReturnType<typeof readdir>>)
+      mockedReaddir.mockResolvedValue([mockFileDirent('s.jsonl')] as unknown as Awaited<ReturnType<typeof readdir>>)
       mockedReadFile.mockResolvedValue(line)
 
       const monitor = new ClaudeMonitor({ claudeDir: '/tmp/test-claude' })

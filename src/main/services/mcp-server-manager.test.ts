@@ -273,7 +273,7 @@ describe('McpServerManager', () => {
     expect(response.response).toEqual({ type: 'success', data: { id: 'run-1' } })
     expect(deps.emitToRenderer).toHaveBeenCalledWith(
       IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE,
-      expect.objectContaining({ id: 'run-1' })
+      expect.objectContaining({ runId: 'run-1' })
     )
   })
 })

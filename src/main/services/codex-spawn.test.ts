@@ -11,7 +11,7 @@ describe('buildCodexCommand', () => {
     const cmd = buildCodexCommand({ task: 'Fix the login bug' })
     expect(cmd).toContain('codex')
     expect(cmd).toContain('Fix the login bug')
-    expect(cmd).toMatch(/^clear; codex -- '.*'\n$/)
+    expect(cmd).toMatch(/^clear; exec codex -- '.*'\n$/)
   })
 
   it('adds --dangerously-bypass-approvals-and-sandbox when skipPermissions is true', () => {
