@@ -250,6 +250,8 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           question: payloadType === 'needs_input' ? task : undefined,
           proposedAction: payloadType === 'awaiting_approval' ? `Agent needs permission to run a tool.\n\nTask: ${task}` : undefined,
           requestId: agent.id,
+          repoPath: agent.cwd,
+          commitable: payloadType === 'completed',
           timestamp: new Date().toISOString(),
         }
 
