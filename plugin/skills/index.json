@@ -5,7 +5,7 @@
     {
       "id": "orchestrator-coordinator",
       "name": "orchestrator-coordinator",
-      "description": "A-to-Z sprint dispatcher — resolves live repo UUID, builds tasks with correct dependsOn chains, dispatches with telegramNotify, monitors approval gates. Encodes all orchestrator mechanics so setup is flowless.",
+      "description": "A-to-Z sprint dispatcher and supervisor — resolves live repo UUID, builds tasks with correct dependsOn chains, dispatches with telegramNotify, then proactively monitors agents, approval gates, and sprint completion.",
       "category": "dev-skills",
       "path": "plugin/skills/orchestrator-coordinator/SKILL.md",
       "source": "plugin"

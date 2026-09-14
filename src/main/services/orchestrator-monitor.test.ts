@@ -67,6 +67,21 @@ afterEach(() => {
 })
 
 describe('OrchestratorMonitorService', () => {
+  it('runs active-agent reconciliation on every healthy-run monitor pass', () => {
+    const reconcileActiveAgents = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, {
+        pause: vi.fn(),
+        reconcileActiveAgents,
+      })
+    )
+    createRunningRun()
+
+    monitor.check()
+
+    expect(reconcileActiveAgents).toHaveBeenCalledTimes(1)
+  })
+
   it('detects stuck-loop (dev→review→fail repeated) and pauses + alerts', () => {
     const pause = vi.fn()
     const sendTelegramNotification = vi.fn()

@@ -40,7 +40,7 @@ import type {
   OrchestratorTaskLog,
   OrchestratorStatusChangePayload,
 } from '../../shared/types/orchestrator.types'
-import type { AgentSpawnOptions } from '../../shared/types/agent.types'
+import type { AgentLifecycleStatus, AgentSpawnOptions } from '../../shared/types/agent.types'
 import type { TaskItem } from '../../shared/types/task.types'
 
 // ---------------------------------------------------------------------------
@@ -80,6 +80,7 @@ export interface SchedulerDeps {
   emitToRenderer: (channel: string, ...args: unknown[]) => void
   maxAgents: number
   tickIntervalMs?: number
+  getAgentStatus?: (agentId: string) => AgentLifecycleStatus | null
   notifyApproval?: (taskId: string, runId: string, title: string, repoId: string) => void
   sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType, repoId?: string) => void
 }
@@ -103,8 +104,10 @@ export class OrchestratorScheduler {
   private readonly tickIntervalMs: number
 
   private tickHandle: ReturnType<typeof setInterval> | null = null
+  private immediateTickHandle: ReturnType<typeof setTimeout> | null = null
   private tickCount = 0
   private tickInFlight = false
+  private tickRequested = false
   private pausedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
 
@@ -157,10 +160,7 @@ export class OrchestratorScheduler {
       if (input.telegramNotify && !existing.telegramNotify) {
         this.db.prepare("UPDATE orchestrator_runs SET telegram_notify = 1 WHERE id = ?").run(existing.id)
       }
-      if (!this.tickHandle) {
-        this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
-        setTimeout(() => this.tick(), 0)
-      }
+      this.ensureTicking()
       return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
     }
 
@@ -182,10 +182,7 @@ export class OrchestratorScheduler {
     // M4: Anamnesis sprint inventory check (non-blocking, fire-and-forget with 3s timeout)
     this.checkSprintInventory(run.sprintName, run.repoId)
 
-    if (!this.tickHandle) {
-      this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
-      setTimeout(() => this.tick(), 0)
-    }
+    this.ensureTicking()
 
     log.info('OrchestratorScheduler: run started', { runId: run.id, sprintName: run.sprintName })
     return { ...run, status: 'running' }
@@ -202,6 +199,7 @@ export class OrchestratorScheduler {
       if (input.telegramNotify && !existing.telegramNotify) {
         this.db.prepare("UPDATE orchestrator_runs SET telegram_notify = 1 WHERE id = ?").run(existing.id)
       }
+      this.ensureTicking()
       return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
     }
 
@@ -222,10 +220,7 @@ export class OrchestratorScheduler {
     updateRunStatus(this.db, run.id, 'running')
     this.emitStatusChange(run.id, 'running', run.sprintName)
 
-    if (!this.tickHandle) {
-      this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
-      setTimeout(() => this.tick(), 0)
-    }
+    this.ensureTicking()
 
     log.info('OrchestratorScheduler: single-task run started', { runId: run.id, taskId: input.taskId })
     return { ...run, status: 'running' }
@@ -248,7 +243,7 @@ export class OrchestratorScheduler {
     log.info('OrchestratorScheduler: run resumed', { runId })
 
     // Kick off a tick soon so the run doesn't wait a full interval
-    setTimeout(() => this.tick(), 0)
+    this.requestTick()
   }
 
   cancel(runId: string): void {
@@ -276,13 +271,39 @@ export class OrchestratorScheduler {
   }
 
   stop(): void {
+    this.suspendScheduling()
+    offOrchestratorEvent('agent:completed', this.onCompleted)
+    offOrchestratorEvent('agent:failed', this.onFailed)
+    log.info('OrchestratorScheduler: stopped')
+  }
+
+  private suspendScheduling(): void {
     if (this.tickHandle) {
       clearInterval(this.tickHandle)
       this.tickHandle = null
     }
-    offOrchestratorEvent('agent:completed', this.onCompleted)
-    offOrchestratorEvent('agent:failed', this.onFailed)
-    log.info('OrchestratorScheduler: stopped')
+    if (this.immediateTickHandle) {
+      clearTimeout(this.immediateTickHandle)
+      this.immediateTickHandle = null
+    }
+    this.tickRequested = false
+  }
+
+  private ensureTicking(): void {
+    if (!this.tickHandle) {
+      this.tickHandle = setInterval(() => { void this.tick() }, this.tickIntervalMs)
+    }
+    this.requestTick()
+  }
+
+  private requestTick(): void {
+    this.tickRequested = true
+    if (this.tickInFlight || this.immediateTickHandle) return
+
+    this.immediateTickHandle = setTimeout(() => {
+      this.immediateTickHandle = null
+      void this.tick()
+    }, 0)
   }
 
   recoverOrphanedState(): { staleRuns: number; orphanedTasks: number } {
@@ -323,8 +344,7 @@ export class OrchestratorScheduler {
     if (!existing) return false
     if (this.tickHandle) return true // already ticking
 
-    this.tickHandle = setInterval(() => this.tick(), this.tickIntervalMs)
-    setTimeout(() => this.tick(), 0)
+    this.ensureTicking()
     log.info('OrchestratorScheduler: resumed active run on startup', { runId: existing.id, sprint: existing.sprintName })
     return true
   }
@@ -384,7 +404,7 @@ export class OrchestratorScheduler {
 
     updateApprovalStatus(this.db, runId, taskId, 'approved')
     log.info('OrchestratorScheduler: task dispatch approved, kicking tick', { runId, taskId })
-    setTimeout(() => this.tick(), 0)
+    this.requestTick()
   }
 
   // -------------------------------------------------------------------------
@@ -392,12 +412,17 @@ export class OrchestratorScheduler {
   // -------------------------------------------------------------------------
 
   private async tick(): Promise<void> {
-    if (this.tickInFlight) return
+    if (this.tickInFlight) {
+      this.tickRequested = true
+      return
+    }
     this.tickInFlight = true
+    this.tickRequested = false
     try {
       await this.tickBody()
     } finally {
       this.tickInFlight = false
+      if (this.tickRequested) this.requestTick()
     }
   }
 
@@ -408,14 +433,22 @@ export class OrchestratorScheduler {
     // Kill-switch: read from DB every tick
     if (!this.isOrchestratorEnabled()) {
       log.info('OrchestratorScheduler: kill-switch active — tick aborted', { tick: currentTick })
-      this.stop()
+      // Suspend timers but retain lifecycle listeners. Re-enabling the same
+      // scheduler instance must not silently lose completion events.
+      this.suspendScheduling()
       return
     }
 
-    const run = getActiveRun(this.db)
+    let run = getActiveRun(this.db)
     if (!run) return
 
     if (this.pausedRunIds.has(run.id) || run.status === 'paused') return
+
+    // Event delivery is the fast path. This DB-backed consistency pass is the
+    // safety path for parser races, process restarts, and other missed events.
+    this.reconcileActiveAgents()
+    run = getActiveRun(this.db)
+    if (!run || run.status !== 'running') return
 
     // Budget gate
     const spawned = getAgentsSpawned(this.db, run.id)
@@ -596,60 +629,136 @@ export class OrchestratorScheduler {
     if (!taskLog) return
 
     if (type === 'agent:completed') {
-      updateTaskLogStatus(this.db, taskLog.id, 'done', agentId)
-      updateTask(this.db, taskLog.taskId, { status: 'completed' })
-      this.retryMap.delete(taskLog.taskId)
-      log.info('OrchestratorScheduler: agent completed — kanban task marked completed', { agentId, taskId: taskLog.taskId, runId: run.id })
-
-      this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
-        runId: run.id,
-        taskId: taskLog.taskId,
-        phase: taskLog.phase,
-        status: 'done',
-      })
-
-      const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
-      this.notifyLifecycle(run, 'task_completed', `${taskTitle}\nSprint: ${run.sprintName}`)
-
-      this.maybeCompleteRun(run)
-      // Schedule next tick after completion without blocking current call stack
-      setTimeout(() => this.tick(), 0)
+      this.completeActiveTask(run, taskLog, agentId, 'event')
       return
     }
 
     if (type === 'agent:failed') {
-      const retryRecord = this.retryMap.get(taskLog.taskId) ?? { count: 0 }
-      const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
-      const willRetry = retryRecord.count < 1
+      this.failActiveTask(run, taskLog, agentId, 'event')
+    }
+  }
 
-      this.notifyLifecycle(
-        run,
-        'task_failed',
-        `${taskTitle}\n${willRetry ? 'Retry scheduled' : 'Retries exhausted'} · ${run.sprintName}`
-      )
+  /**
+   * Reconcile persisted agent state with active orchestrator logs.
+   * Safe to call from both the scheduler heartbeat and the independent monitor:
+   * each transition first re-reads the active log, so an event and a poll racing
+   * for the same agent can only apply the terminal transition once.
+   */
+  reconcileActiveAgents(): number {
+    if (!this.deps.getAgentStatus) return 0
+    const run = getActiveRun(this.db)
+    if (!run || run.status !== 'running') return 0
 
-      if (willRetry) {
-        retryRecord.count++
-        this.retryMap.set(taskLog.taskId, retryRecord)
-        // Mark current log failed, allow next tick to re-dispatch
-        updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
-        log.warn('OrchestratorScheduler: agent failed, will retry', { agentId, taskId: taskLog.taskId, attempt: retryRecord.count })
-        setTimeout(() => this.tick(), 0)
-      } else {
-        updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
-        updateTask(this.db, taskLog.taskId, { status: 'backlog' })
-        this.retryMap.delete(taskLog.taskId)
-        log.error('OrchestratorScheduler: agent failed after retry, giving up — kanban task reset to backlog', { agentId, taskId: taskLog.taskId })
-        this.maybeCompleteRun(run)
-
-        this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
+    let reconciled = 0
+    for (const snapshot of getActiveTaskLogs(this.db, run.id)) {
+      if (!snapshot.agentId) continue
+      let status: AgentLifecycleStatus | null
+      try {
+        status = this.deps.getAgentStatus(snapshot.agentId)
+      } catch (error) {
+        log.warn('OrchestratorScheduler: agent status reconciliation failed', {
           runId: run.id,
-          taskId: taskLog.taskId,
-          phase: taskLog.phase,
-          status: 'failed',
+          agentId: snapshot.agentId,
+          error: String(error),
         })
+        continue
+      }
+      const activeLog = getActiveTaskLogByAgentId(this.db, run.id, snapshot.agentId)
+      if (!activeLog) continue
+
+      if (status === 'completed' || status === 'locked') {
+        this.completeActiveTask(run, activeLog, snapshot.agentId, 'reconciliation')
+        reconciled++
+      } else if (status === 'error') {
+        this.failActiveTask(run, activeLog, snapshot.agentId, 'reconciliation')
+        reconciled++
       }
     }
+
+    if (reconciled > 0) {
+      log.info('OrchestratorScheduler: active-agent reconciliation applied', {
+        runId: run.id,
+        reconciled,
+      })
+    }
+    return reconciled
+  }
+
+  private completeActiveTask(
+    run: OrchestratorRun,
+    taskLog: OrchestratorTaskLog,
+    agentId: string,
+    source: 'event' | 'reconciliation'
+  ): void {
+    updateTaskLogStatus(this.db, taskLog.id, 'done', agentId)
+    updateTask(this.db, taskLog.taskId, { status: 'completed' })
+    this.retryMap.delete(taskLog.taskId)
+    log.info('OrchestratorScheduler: agent completed — kanban task marked completed', {
+      agentId,
+      taskId: taskLog.taskId,
+      runId: run.id,
+      source,
+    })
+
+    this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
+      runId: run.id,
+      taskId: taskLog.taskId,
+      phase: taskLog.phase,
+      status: 'done',
+    })
+
+    const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
+    this.notifyLifecycle(run, 'task_completed', `${taskTitle}\nSprint: ${run.sprintName}`)
+    this.maybeCompleteRun(run)
+    this.requestTick()
+  }
+
+  private failActiveTask(
+    run: OrchestratorRun,
+    taskLog: OrchestratorTaskLog,
+    agentId: string,
+    source: 'event' | 'reconciliation'
+  ): void {
+    const retryRecord = this.retryMap.get(taskLog.taskId) ?? { count: 0 }
+    const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
+    const willRetry = retryRecord.count < 1
+
+    this.notifyLifecycle(
+      run,
+      'task_failed',
+      `${taskTitle}\n${willRetry ? 'Retry scheduled' : 'Retries exhausted'} · ${run.sprintName}`
+    )
+
+    if (willRetry) {
+      retryRecord.count++
+      this.retryMap.set(taskLog.taskId, retryRecord)
+      updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
+      log.warn('OrchestratorScheduler: agent failed, will retry', {
+        agentId,
+        taskId: taskLog.taskId,
+        attempt: retryRecord.count,
+        source,
+      })
+      this.requestTick()
+      return
+    }
+
+    updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
+    updateTask(this.db, taskLog.taskId, { status: 'backlog' })
+    this.retryMap.delete(taskLog.taskId)
+    log.error('OrchestratorScheduler: agent failed after retry, giving up — kanban task reset to backlog', {
+      agentId,
+      taskId: taskLog.taskId,
+      source,
+    })
+    this.maybeCompleteRun(run)
+
+    this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.TASK_PHASE_CHANGE, {
+      runId: run.id,
+      taskId: taskLog.taskId,
+      phase: taskLog.phase,
+      status: 'failed',
+    })
   }
 
   // -------------------------------------------------------------------------

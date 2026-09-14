@@ -44,7 +44,7 @@ import {
   routeTelegramNotification,
   type TelegramNotificationType,
 } from '../db/queries/telegram-notifications.queries'
-import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, setMcpServerInfo } from './agent-manager'
+import { listAgents, getAgentState, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
@@ -816,6 +816,7 @@ export function initializeServices(db: Database.Database): void {
         }
       },
     },
+    getAgentStatus: (agentId) => getAgentState(agentId)?.status ?? null,
     emitToRenderer: emitToAllRenderers,
     sendTelegramNotification,
     notifyApproval: (taskId, runId, title, repoId) => {
@@ -839,6 +840,7 @@ export function initializeServices(db: Database.Database): void {
   // S6 — Deterministic safety monitor (rules-based, no LLM)
   orchestratorMonitor = new OrchestratorMonitorService(db, {
     pause: (runId: string) => orchestratorScheduler?.pause(runId),
+    reconcileActiveAgents: () => orchestratorScheduler?.reconcileActiveAgents(),
     sendTelegramNotification,
     notifyApproval: (requestId: string, title: string) => {
       telegramQueueProcessor?.enqueue({

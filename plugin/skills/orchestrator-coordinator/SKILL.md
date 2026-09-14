@@ -1,6 +1,6 @@
 ---
 name: orchestrator-coordinator
-description: A-to-Z sprint dispatcher — resolves repo UUID, builds tasks with correct dependsOn chains, dispatches with telegramNotify, monitors approval gates. Encodes all orchestrator mechanics so setup is flowless.
+description: A-to-Z sprint dispatcher and supervisor — resolves repo UUID, builds tasks with correct dependsOn chains, dispatches with telegramNotify, then proactively monitors agents, approval gates, and sprint completion. Encodes all orchestrator mechanics so setup is flowless.
 category: dev-skills
 ---
 
@@ -224,6 +224,16 @@ Task chain:
 
 ## Phase 5 — Post-Dispatch Monitoring
 
+### Mandatory supervision loop
+Dispatch is not completion. After dispatch, keep the coordinator turn alive and supervise the run without waiting for the user to prompt again:
+
+1. Fetch `list_tasks` immediately and record the task statuses.
+2. While any task is `in_progress`, or runnable work remains in `backlog`, wait 30 seconds using the runtime's non-busy wait facility and fetch `list_tasks` again.
+3. Report meaningful transitions (started, completed, failed, approval required), not an unchanged status dump on every poll.
+4. Exit the loop only when the sprint is terminal, explicit user input/approval is required, or status retrieval repeatedly fails and no safe recovery remains.
+
+For agents spawned directly by the current session, prefer the native agent mailbox/wait primitive and re-check all child states after every wake-up. A timeout means “check again,” not “finish the coordinator turn.” Never require the user to notice that agents have finished.
+
 ### Check status
 ```
 mcp__agenthub-kanban__list_tasks(sprintName: "<sprint-name>")
@@ -233,6 +243,12 @@ Check `status` field per task. Expected progression:
 - `in_progress` (via agent_id set) → running
 - `completed` / `tested` → done
 - Task with requiresApproval stuck in `backlog` after T0 completes → awaiting approval
+
+Terminal classification:
+- **completed** — every scoped task is `completed` or `tested`
+- **failed/cancelled** — the run or any required task reports that terminal outcome
+- **waiting for user** — an approval or missing decision genuinely requires user action
+- **running** — anything else; remain in the supervision loop
 
 ### Approval monitoring
 When a `requiresApproval` task is ready but not dispatching after ~60s:

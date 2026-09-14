@@ -44,6 +44,8 @@ export const MONITOR_INTERVAL_MS = 30_000
 
 export interface OrchestratorMonitorDeps {
   pause: (runId: string) => void
+  /** Reconcile persisted task logs with the live agent registry before safety checks. */
+  reconcileActiveAgents?: () => number | void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
   getRunTokenUsage?: (runId: string) => number
   notifyApproval?: (requestId: string, title: string) => void   // A — re-notify
@@ -77,6 +79,12 @@ export class OrchestratorMonitorService {
 
   /** Single rules pass. Public so tests can drive it deterministically. */
   check(): void {
+    const initialRun = getActiveRun(this.db)
+    if (!initialRun || initialRun.status === 'paused') return
+
+    this.deps.reconcileActiveAgents?.()
+
+    // Reconciliation can complete the final task and close the run.
     const run = getActiveRun(this.db)
     if (!run || run.status === 'paused') return
 

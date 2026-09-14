@@ -14,6 +14,7 @@ import {
   emitOrchestratorEvent,
   type OrchestratorAgentEvent,
 } from './agent-lifecycle-bus'
+import type { AgentLifecycleStatus } from '../../shared/types/agent.types'
 
 // ---------------------------------------------------------------------------
 // In-memory DB with minimum required tables
@@ -619,6 +620,91 @@ describe('OrchestratorScheduler', () => {
       const logs = getTaskLogsByRun(db, run.id)
       const failedLogs = logs.filter(l => l.taskId === taskId && l.status === 'failed')
       expect(failedLogs.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reconciles a completed agent on the heartbeat when its lifecycle event was missed', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      let agentStatus: AgentLifecycleStatus = 'busy'
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-heartbeat', cwd: '/tmp' },
+        reason: 'test heartbeat reconciliation',
+      }
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-heartbeat') },
+        getAgentStatus: vi.fn(() => agentStatus),
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1)
+      expect(getTaskLogsByRun(db, run.id).some(l => l.status === 'active')).toBe(true)
+
+      // Simulate persistence seeing completion while the in-process event was lost.
+      agentStatus = 'completed'
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      const logs = getTaskLogsByRun(db, run.id)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(true)
+    })
+
+    it('coalesces an immediate tick requested while another tick is in flight', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      let resolveFirst!: (value: SchedulerBrainDecision | null) => void
+      const firstDecision = new Promise<SchedulerBrainDecision | null>((resolve) => {
+        resolveFirst = resolve
+      })
+      const brain = {
+        decide: vi.fn()
+          .mockImplementationOnce(() => firstDecision)
+          .mockResolvedValue(null),
+      }
+      scheduler = new OrchestratorScheduler(buildDeps(db, { brain }))
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+
+      // Drive the first tick directly so it remains blocked inside brain.decide().
+      ;(scheduler as unknown as { suspendScheduling(): void }).suspendScheduling()
+      const firstTick = (scheduler as unknown as { tick(): Promise<void> }).tick()
+      await Promise.resolve()
+      expect(brain.decide).toHaveBeenCalledTimes(1)
+
+      scheduler.resume(run.id)
+      await vi.advanceTimersByTimeAsync(1)
+      resolveFirst(null)
+      await firstTick
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(brain.decide).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps lifecycle listeners registered across kill-switch suspension and restart', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-reenabled', cwd: '/tmp' },
+        reason: 'test listener reactivation',
+      }
+      scheduler = new OrchestratorScheduler(buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-reenabled') },
+      }))
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1)
+
+      db.prepare("UPDATE settings SET value = 'false' WHERE key = 'orchestrator.enabled'").run()
+      await vi.advanceTimersByTimeAsync(60_000)
+      db.prepare("UPDATE settings SET value = 'true' WHERE key = 'orchestrator.enabled'").run()
+      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-reenabled', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(getTaskLogsByRun(db, run.id).some(l => l.status === 'done')).toBe(true)
     })
   })
 
