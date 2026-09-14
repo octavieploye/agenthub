@@ -58,6 +58,94 @@ describe('TelegramSocketServer', () => {
     }))
   })
 
+  it('attaches trusted repo metadata to an explicit completion', async () => {
+    const onMcpMessage = vi.fn()
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      resolveRepo: vi.fn(() => ({ name: 'target-repo', path: '/workspace/target-repo' })),
+      onMcpMessage,
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+    })
+    await server.start(sockPath)
+
+    const res = await sendToSocket(sockPath, {
+      agentId: 'agent-1',
+      agentName: 'test-agent',
+      repo: 'wrong-cwd-repo',
+      message: 'Task completed successfully',
+      format: 'completed',
+    })
+
+    expect(res).toEqual({ ok: true })
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'agent_message',
+      format: 'completed',
+      repo: 'target-repo',
+      repoPath: '/workspace/target-repo',
+      commitable: true,
+      commitAgentId: 'agent-1',
+    }))
+    expect(onMcpMessage).toHaveBeenCalledWith('agent-1', 'completed')
+  })
+
+  it('keeps nonterminal status messages non-commitable', async () => {
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      resolveRepo: vi.fn(() => ({ name: 'target-repo', path: '/workspace/target-repo' })),
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+    })
+    await server.start(sockPath)
+
+    await sendToSocket(sockPath, {
+      agentId: 'agent-1',
+      agentName: 'test-agent',
+      repo: 'cwd-repo',
+      message: 'Still working',
+      format: 'status',
+    })
+
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      format: 'status',
+      repo: 'target-repo',
+      commitable: false,
+    }))
+  })
+
+  it('acknowledges delivery when optional completion hooks fail', async () => {
+    const logError = vi.fn()
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      resolveRepo: vi.fn(() => { throw new Error('database closing') }),
+      onMcpMessage: vi.fn(() => { throw new Error('lifecycle unavailable') }),
+      logInfo: vi.fn(),
+      logError,
+    })
+    await server.start(sockPath)
+
+    const res = await sendToSocket(sockPath, {
+      agentId: 'agent-1',
+      agentName: 'test-agent',
+      repo: 'fallback-repo',
+      message: 'Task completed successfully',
+      format: 'completed',
+    })
+
+    expect(res).toEqual({ ok: true })
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      repo: 'fallback-repo',
+      commitable: false,
+    }))
+    expect(logError).toHaveBeenCalledWith('telegram MCP repo resolution failed', expect.objectContaining({
+      agentId: 'agent-1',
+    }))
+    expect(logError).toHaveBeenCalledWith('telegram MCP lifecycle callback failed', expect.objectContaining({
+      agentId: 'agent-1',
+      format: 'completed',
+    }))
+  })
+
   it('rejects payload with missing message', async () => {
     await server.start(sockPath)
     const res = await sendToSocket(sockPath, {

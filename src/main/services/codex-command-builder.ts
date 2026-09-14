@@ -14,7 +14,7 @@ export function buildCodexCommand(options: CodexCommandOptions): string {
 
   if (task) {
     const telegramSuffix = telegramNotify
-      ? '\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
+      ? "\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). Use format 'status' only for nonterminal milestones. When the task is fully done, call send_telegram exactly once with a short bullet-point summary and format 'completed'. If you need approval or have a question, use format 'question'."
       : ''
     const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")
     // Use exec so the shell is replaced by codex — when codex exits, the PTY exits and onExit fires.

@@ -447,10 +447,11 @@ async function handleCallback(cb) {
     const info = commitTokenMap.get(token)
     commitTokenMap.delete(token)
     if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
+    const task = `Run /git-commit for the target repository at ${info.repoPath}. Commit the completed changes locally only — do NOT push.`
     if (info.agentId) {
-      sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: 'Run /git-commit to commit the completed changes in this repo. Local commit only — do NOT push.' })
+      sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: task })
     } else {
-      sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task: 'Run /git-commit to commit the completed changes in this repo. Local commit only — do NOT push.' })
+      sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task })
     }
     await editMessageText(chatId, msgId, cb.message.text + '\n\n\u2705 Committing locally\u2026')
   } else if (data.startsWith('commitpush:')) {
@@ -458,10 +459,11 @@ async function handleCallback(cb) {
     const info = commitTokenMap.get(token)
     commitTokenMap.delete(token)
     if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
+    const task = `Run /git-commit for the target repository at ${info.repoPath}. Commit the completed changes, then push to origin. The human explicitly requested push.`
     if (info.agentId) {
-      sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: 'Run /git-commit to commit the completed changes in this repo, then push to origin. The human explicitly requested push.' })
+      sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: task })
     } else {
-      sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task: 'Run /git-commit to commit the completed changes in this repo, then push to origin. The human explicitly requested push.' })
+      sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task })
     }
     await editMessageText(chatId, msgId, cb.message.text + '\n\n\u2705 Committing & pushing\u2026')
   } else if (data.startsWith('commitpick:')) {
@@ -555,6 +557,21 @@ function commitToken() {
   return Math.random().toString(36).slice(2, 10) // 8 chars
 }
 
+function buildCommitMarkup(payload) {
+  if (!payload.commitable || !payload.repoPath) return null
+  const commitT = commitToken()
+  commitTokenMap.set(commitT, { repoPath: payload.repoPath, push: false, agentId: payload.commitAgentId })
+  const pushT = commitToken()
+  commitTokenMap.set(pushT, { repoPath: payload.repoPath, push: true, agentId: payload.commitAgentId })
+  return {
+    inline_keyboard: [[
+      { text: '\u2705 Commit', callback_data: `commit:${commitT}` },
+      { text: '\u2b06 Commit & push', callback_data: `commitpush:${pushT}` },
+      { text: '\u2717 Skip', callback_data: 'dismiss' }
+    ]]
+  }
+}
+
 async function confirmCommit(chatId, repo) {
   const commitT = commitToken()
   commitTokenMap.set(commitT, { repoPath: repo.path, push: false })
@@ -582,21 +599,8 @@ async function sendNotification(payload) {
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
     text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
-    if (payload.commitable && payload.repoPath) {
-      const commitT = commitToken()
-      commitTokenMap.set(commitT, { repoPath: payload.repoPath, push: false, agentId: payload.agentId })
-      const pushT = commitToken()
-      commitTokenMap.set(pushT, { repoPath: payload.repoPath, push: true, agentId: payload.agentId })
-      replyMarkup = {
-        inline_keyboard: [[
-          { text: '\u2705 Commit', callback_data: `commit:${commitT}` },
-          { text: '\u2b06 Commit & push', callback_data: `commitpush:${pushT}` },
-          { text: '\u2717 Skip', callback_data: 'dismiss' }
-        ]]
-      }
-    } else {
-      replyMarkup = { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
-    }
+    replyMarkup = buildCommitMarkup(payload)
+      ?? { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
 
   } else if (payload.type === 'failed') {
     const summary = payload.summary.length > 200
@@ -670,6 +674,8 @@ async function sendNotification(payload) {
       if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
       if (format === 'question') {
         replyMarkup = buildFallbackMarkup(payload.agentId)
+      } else if (format === 'completed') {
+        replyMarkup = buildCommitMarkup(payload) ?? undefined
       }
     }
   }

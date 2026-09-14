@@ -59,6 +59,8 @@ describe('buildCodexCommand', () => {
   it('adds Telegram suffix when telegramNotify is true', () => {
     const cmd = buildCodexCommand({ task: 'Fix bug', telegramNotify: true })
     expect(cmd).toContain('Telegram is ON')
+    expect(cmd).toContain("format '\\''completed'\\''")
+    expect(cmd).toContain("format '\\''status'\\'' only for nonterminal milestones")
   })
 
   it('does not add Telegram suffix when telegramNotify is false', () => {

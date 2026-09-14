@@ -18,7 +18,8 @@ You have a `send_telegram` tool available. Use it to message the user on their p
 
 ## Format parameter
 
-- `status` — task done, milestones, informational updates
+- `status` — nonterminal milestones and informational updates
+- `completed` — final task completion; use exactly once after all work and verification are done
 - `question` — you need input to proceed
 - `error` — failures, blockers, unrecoverable issues
 
@@ -26,7 +27,7 @@ You have a `send_telegram` tool available. Use it to message the user on their p
 
 Task completed:
 ```
-send_telegram(message: "Fixed the login bug. The issue was a stale session token — I added a refresh check before each API call. 3 tests added, all passing.", format: "status")
+send_telegram(message: "Fixed the login bug. The issue was a stale session token — I added a refresh check before each API call. 3 tests added, all passing.", format: "completed")
 ```
 
 Need input:
