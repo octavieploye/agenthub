@@ -12,6 +12,7 @@ let agentCache = new Map() // name (lowercase) -> { id, name, status, repo }
 let repoCache = []         // { name, path }[]
 let pendingApprovals = new Map() // requestId -> { chatId, messageId, timerId }
 let approvalTokenMap = new Map() // short token -> full requestId (callback_data ≤ 64 bytes)
+let commitTokenMap = new Map() // short token -> { repoPath, push } (callback_data ≤ 64 bytes)
 let pendingSpawn = null    // { step: 1|2|3, chatId, repo?, task? } | null
 let pendingSendAgent = null // { chatId } | null — waiting for agent pick
 let messageToAgent = new Map() // telegram message_id -> agentId (for reply routing)
@@ -212,10 +213,11 @@ async function handleCommand(chatId, text) {
         sendToParent({ type: 'command', command: 'send_task', agentId: agent.id, message })
         await sendMessage(chatId, `Sent to ${agent.name}.`)
       } else {
-        // Multiple agents — show pick list
+        // Multiple agents — show pick list. Keep callback_data short (≤64 bytes)
+        // by storing the message locally instead of embedding it in the callback.
         const agents = [...agentCache.values()]
-        const buttons = agents.map(a => [{ text: a.name, callback_data: `pick_agent:${a.id}:${parts}` }])
-        pendingSendAgent = { chatId }
+        pendingSendAgent = { chatId, message: parts }
+        const buttons = agents.map(a => [{ text: a.name, callback_data: `pick_agent:${a.id}` }])
         await sendMessage(chatId, 'Which agent should receive this?', { inline_keyboard: buttons })
       }
       break
@@ -288,6 +290,25 @@ async function handleCommand(chatId, text) {
       break
     }
 
+    case '/commit': {
+      const query = rest.join(' ').toLowerCase().trim()
+      if (query) {
+        const repo = repoCache.find(r => r.name.toLowerCase() === query || r.path.toLowerCase() === query || r.path.toLowerCase().endsWith('/' + query))
+        if (!repo) { await sendMessage(chatId, `I couldn't find a repo matching "${rest.join(' ')}".`); break }
+        await confirmCommit(chatId, repo)
+        break
+      }
+      if (repoCache.length === 0) {
+        await sendMessage(chatId, 'No repos are registered. Add a project in AgentHub first, or use /start_agent to launch an agent.')
+      } else if (repoCache.length === 1) {
+        await confirmCommit(chatId, repoCache[0])
+      } else {
+        const buttons = repoCache.slice(0, 10).map((r, i) => [{ text: r.name, callback_data: `commitpick:${i}` }])
+        await sendMessage(chatId, 'Which repo should I commit?', { inline_keyboard: buttons })
+      }
+      break
+    }
+
     default:
       await sendMessage(chatId, `I didn't quite understand that.\n\nTry /help to see what I can do, or just describe what you want and I'll do my best.`)
   }
@@ -336,8 +357,15 @@ async function handleSendAgentPick(chatId, text) {
     await sendMessage(chatId, `I don't recognise "${text}". Type /status to see available agents.`)
     return
   }
-  pendingSendAgent = { chatId, agentId: agent.id, awaitingMessage: true }
-  await sendMessage(chatId, `What do you want to send to ${agent.name}?`)
+  if (pendingSendAgent?.message) {
+    const message = pendingSendAgent.message
+    pendingSendAgent = null
+    sendToParent({ type: 'command', command: 'send_task', agentId: agent.id, message })
+    await sendMessage(chatId, `Sent to ${agent.name}.`)
+  } else {
+    pendingSendAgent = { chatId, agentId: agent.id, awaitingMessage: true }
+    await sendMessage(chatId, `What do you want to send to ${agent.name}?`)
+  }
 }
 
 // ── Callback handler (button presses) ─────────────────────────────────────────
@@ -382,12 +410,12 @@ async function handleCallback(cb) {
     sendToParent({ type: 'command', command: 'send_task', agentId, message: key })
     await editMessageText(chatId, msgId, cb.message.text + `\n\n\u2705 Sent "${key}"`)
   } else if (data.startsWith('pick_agent:')) {
-    const [, agentId, ...msgParts] = data.split(':')
-    const message = msgParts.join(':')
+    const agentId = data.slice('pick_agent:'.length)
+    const message = pendingSendAgent?.message || ''
+    pendingSendAgent = null
     sendToParent({ type: 'command', command: 'send_task', agentId, message })
     const agent = [...agentCache.values()].find(a => a.id === agentId)
     await sendMessage(chatId, `Sent to ${agent?.name ?? agentId}.`)
-    pendingSendAgent = null
   } else if (data.startsWith('spawn_repo:')) {
     const repoPath = data.slice('spawn_repo:'.length)
     if (pendingSpawn) {
@@ -414,6 +442,25 @@ async function handleCallback(cb) {
   } else if (data === 'try_again') {
     sendToParent({ type: 'command', command: 'get_status' })
     await sendMessage(chatId, 'Checking\u2026')
+  } else if (data.startsWith('commit:')) {
+    const token = data.slice('commit:'.length)
+    const info = commitTokenMap.get(token)
+    commitTokenMap.delete(token)
+    if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
+    sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task: 'Run /git-commit to commit the completed changes in this repo. Local commit only — do NOT push.' })
+    await editMessageText(chatId, msgId, cb.message.text + '\n\n\u2705 Committing locally\u2026')
+  } else if (data.startsWith('commitpush:')) {
+    const token = data.slice('commitpush:'.length)
+    const info = commitTokenMap.get(token)
+    commitTokenMap.delete(token)
+    if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
+    sendToParent({ type: 'command', command: 'spawn_agent', repo: info.repoPath, name: 'git-ops', task: 'Run /git-commit to commit the completed changes in this repo, then push to origin. The human explicitly requested push.' })
+    await editMessageText(chatId, msgId, cb.message.text + '\n\n\u2705 Committing & pushing\u2026')
+  } else if (data.startsWith('commitpick:')) {
+    const idx = parseInt(data.slice('commitpick:'.length), 10)
+    const repo = repoCache[idx]
+    if (!repo) { await sendMessage(chatId, 'That repo is no longer available.'); return }
+    await confirmCommit(chatId, repo)
   } else if (data.startsWith('send_to:')) {
     const agentId = data.slice('send_to:'.length)
     const agent = [...agentCache.values()].find(a => a.id === agentId)
@@ -496,6 +543,23 @@ function approvalToken() {
   return Math.random().toString(36).slice(2, 10) // 8 chars
 }
 
+function commitToken() {
+  return Math.random().toString(36).slice(2, 10) // 8 chars
+}
+
+async function confirmCommit(chatId, repo) {
+  const commitT = commitToken()
+  commitTokenMap.set(commitT, { repoPath: repo.path, push: false })
+  const pushT = commitToken()
+  commitTokenMap.set(pushT, { repoPath: repo.path, push: true })
+  await sendMessage(chatId, `Commit in ${repo.name}?\n\n${repo.path}`, {
+    inline_keyboard: [[
+      { text: '\u2705 Commit', callback_data: `commit:${commitT}` },
+      { text: '\u2b06 Commit & push', callback_data: `commitpush:${pushT}` },
+    ]]
+  })
+}
+
 // ── Notification sender ────────────────────────────────────────────────────────
 async function sendNotification(payload) {
   if (!allowedChatId) return
@@ -510,7 +574,21 @@ async function sendNotification(payload) {
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
     text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
-    replyMarkup = { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
+    if (payload.commitable && payload.repoPath) {
+      const commitT = commitToken()
+      commitTokenMap.set(commitT, { repoPath: payload.repoPath, push: false })
+      const pushT = commitToken()
+      commitTokenMap.set(pushT, { repoPath: payload.repoPath, push: true })
+      replyMarkup = {
+        inline_keyboard: [[
+          { text: '\u2705 Commit', callback_data: `commit:${commitT}` },
+          { text: '\u2b06 Commit & push', callback_data: `commitpush:${pushT}` },
+          { text: '\u2717 Skip', callback_data: 'dismiss' }
+        ]]
+      }
+    } else {
+      replyMarkup = { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
+    }
 
   } else if (payload.type === 'failed') {
     const summary = payload.summary.length > 200
@@ -658,6 +736,9 @@ Example: /send frontend-agent Fix the login button
 \u2705 Approve a pending task
 /approve [id] \u2014 Approve the task using the id from the approval prompt
 
+\u2705 Commit work
+/commit [repo] \u2014 Commit changes in a repo (or the last completed run)
+
 Need help? Just type what you want to do and I'll try to help.`
 }
 
@@ -684,6 +765,7 @@ rl.on('line', async (line) => {
           { command: 'mute',        description: 'Mute notifications for 1 hour' },
           { command: 'unmute',      description: 'Turn notifications back on' },
           { command: 'approve',     description: 'Approve a pending task (id from prompt)' },
+          { command: 'commit',      description: 'Commit changes in a repo' },
           { command: 'help',        description: 'Show all commands' },
         ]
       }).catch(() => {}) // non-blocking

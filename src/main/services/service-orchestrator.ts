@@ -612,15 +612,19 @@ export function initializeServices(db: Database.Database): void {
   }
 
   // 18. OrchestratorScheduler — new modular sprint execution engine
-  const sendTelegramNotification = (summary: string, type: TelegramNotificationType): void => {
+  const sendTelegramNotification = (summary: string, type: TelegramNotificationType, repoId?: string): void => {
     const routed = routeTelegramNotification(summary, type)
     const msgKey = `orchestrator:${type}:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
+    const repoRecord = repoId ? getRepoById(db, repoId) : null
+    const repoPath = repoRecord?.path ?? ''
     telegramQueueProcessor?.enqueue({
       type: routed.type,
       agentId: msgKey,
       agentName: 'Orchestrator',
-      repo: '',
+      repo: repoRecord?.name ?? '',
       summary: routed.summary,
+      repoPath: repoPath || undefined,
+      commitable: type === 'run_completed' && Boolean(repoPath),
       timestamp: new Date().toISOString(),
     })
   }

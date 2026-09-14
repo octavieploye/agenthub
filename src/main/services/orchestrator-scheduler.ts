@@ -81,7 +81,7 @@ export interface SchedulerDeps {
   maxAgents: number
   tickIntervalMs?: number
   notifyApproval?: (taskId: string, runId: string, title: string, repoId: string) => void
-  sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType) => void
+  sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType, repoId?: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -729,7 +729,7 @@ export class OrchestratorScheduler {
   ): void {
     if (!run.telegramNotify) return
     try {
-      this.deps.sendTelegramNotification?.(summary, type)
+      this.deps.sendTelegramNotification?.(summary, type, run.repoId)
     } catch (err) {
       log.warn('OrchestratorScheduler: lifecycle Telegram notification failed', {
         runId: run.id,

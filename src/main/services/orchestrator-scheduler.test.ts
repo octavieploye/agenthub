@@ -652,7 +652,8 @@ describe('OrchestratorScheduler', () => {
 
       expect(sendTelegramNotification).toHaveBeenCalledWith(
         expect.stringContaining('Launch task'),
-        'task_launched'
+        'task_launched',
+        'repo-1'
       )
 
       scheduler.stop()
@@ -697,11 +698,13 @@ describe('OrchestratorScheduler', () => {
 
       expect(sendTelegramNotification).toHaveBeenCalledWith(
         expect.stringContaining('Complete task'),
-        'task_completed'
+        'task_completed',
+        'repo-1'
       )
       expect(sendTelegramNotification).toHaveBeenCalledWith(
         expect.stringContaining('notify-sprint'),
-        'run_completed'
+        'run_completed',
+        'repo-1'
       )
     })
 
@@ -741,7 +744,8 @@ describe('OrchestratorScheduler', () => {
       expect(sendTelegramNotification.mock.calls.filter(([, type]) => type === 'task_failed')).toHaveLength(1)
       expect(sendTelegramNotification).toHaveBeenCalledWith(
         expect.stringContaining('notify-sprint'),
-        'run_failed'
+        'run_failed',
+        'repo-1'
       )
     })
 

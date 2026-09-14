@@ -18,6 +18,8 @@ export interface TelegramNotificationPayload {
   message?: string        // agent_message only — the composed message (max 4000 chars)
   format?: 'status' | 'question' | 'error'  // agent_message only
   requestId?: string      // for approval correlation (use agentId in Phase 1)
+  repoPath?: string       // filesystem path of the target repo (used by commit buttons)
+  commitable?: boolean    // when true, the completed notification renders Commit buttons
   timestamp: string       // ISO 8601
 }
 
