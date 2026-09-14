@@ -2,6 +2,49 @@ import type Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
 import type { TelegramNotificationPayload } from '../../../shared/types/telegram.types'
 
+export type OrchestratorLifecycleNotificationType =
+  | 'task_launched'
+  | 'task_completed'
+  | 'task_failed'
+  | 'run_completed'
+  | 'run_failed'
+
+export type TelegramNotificationType =
+  | Extract<TelegramNotificationPayload['type'], 'completed' | 'failed'>
+  | OrchestratorLifecycleNotificationType
+
+const ORCHESTRATOR_NOTIFICATION_ROUTES: Record<
+  OrchestratorLifecycleNotificationType,
+  { type: Extract<TelegramNotificationPayload['type'], 'completed' | 'failed'>; label: string }
+> = {
+  task_launched: { type: 'completed', label: '🚀 Task launched' },
+  task_completed: { type: 'completed', label: '✅ Task completed' },
+  task_failed: { type: 'failed', label: '❌ Task failed' },
+  run_completed: { type: 'completed', label: '🏁 Run completed' },
+  run_failed: { type: 'failed', label: '🚨 Run failed' },
+}
+
+/**
+ * Lifecycle events use the existing completed/failed delivery preferences and
+ * payload schema. Prefixing the compact summary keeps each event readable on
+ * a phone without requiring sidecar or schema changes.
+ */
+export function routeTelegramNotification(
+  summary: string,
+  type: TelegramNotificationType
+): Pick<TelegramNotificationPayload, 'type' | 'summary'> {
+  if (type === 'completed' || type === 'failed') {
+    return { type, summary: summary.slice(0, 200) }
+  }
+
+  const route = ORCHESTRATOR_NOTIFICATION_ROUTES[type]
+  const availableSummaryLength = 200 - route.label.length - 1
+  return {
+    type: route.type,
+    summary: `${route.label}\n${summary.slice(0, availableSummaryLength)}`,
+  }
+}
+
 export interface TelegramNotificationRow {
   id: string
   agent_id: string

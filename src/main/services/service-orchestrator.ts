@@ -40,6 +40,10 @@ import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
 import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
+import {
+  routeTelegramNotification,
+  type TelegramNotificationType,
+} from '../db/queries/telegram-notifications.queries'
 import { listAgents, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
@@ -608,14 +612,15 @@ export function initializeServices(db: Database.Database): void {
   }
 
   // 18. OrchestratorScheduler — new modular sprint execution engine
-  const sendTelegramNotification = (summary: string, type: 'completed' | 'failed'): void => {
-    const msgKey = `orchestrator:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
+  const sendTelegramNotification = (summary: string, type: TelegramNotificationType): void => {
+    const routed = routeTelegramNotification(summary, type)
+    const msgKey = `orchestrator:${type}:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
     telegramQueueProcessor?.enqueue({
-      type,
+      type: routed.type,
       agentId: msgKey,
       agentName: 'Orchestrator',
       repo: '',
-      summary: summary.slice(0, 200),
+      summary: routed.summary,
       timestamp: new Date().toISOString(),
     })
   }
@@ -808,6 +813,7 @@ export function initializeServices(db: Database.Database): void {
       },
     },
     emitToRenderer: emitToAllRenderers,
+    sendTelegramNotification,
     notifyApproval: (taskId, runId, title, repoId) => {
       const repoName = getRepoById(db, repoId)?.name ?? repoId
       telegramQueueProcessor?.enqueue({

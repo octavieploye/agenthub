@@ -12,6 +12,7 @@ import {
   getByAgent,
   getStats,
   isDuplicate,
+  routeTelegramNotification,
 } from './telegram-notifications.queries'
 import type { TelegramNotificationPayload } from '../../../shared/types/telegram.types'
 
@@ -147,5 +148,24 @@ describe('telegram-notifications queries', () => {
     // newest first
     expect(new Date(rows[0].created_at).getTime())
       .toBeGreaterThanOrEqual(new Date(rows[1].created_at).getTime())
+  })
+
+  it.each([
+    ['task_launched', 'completed', '🚀 Task launched'],
+    ['task_completed', 'completed', '✅ Task completed'],
+    ['task_failed', 'failed', '❌ Task failed'],
+    ['run_completed', 'completed', '🏁 Run completed'],
+    ['run_failed', 'failed', '🚨 Run failed'],
+  ] as const)('routes %s to a phone-friendly %s payload', (eventType, payloadType, label) => {
+    const routed = routeTelegramNotification('Lifecycle details', eventType)
+
+    expect(routed.type).toBe(payloadType)
+    expect(routed.summary).toBe(`${label}\nLifecycle details`)
+  })
+
+  it('keeps routed lifecycle summaries within the payload limit', () => {
+    const routed = routeTelegramNotification('x'.repeat(300), 'task_launched')
+
+    expect(routed.summary).toHaveLength(200)
   })
 })

@@ -31,6 +31,7 @@ import {
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { getApprovalWindowMinutes } from './orchestrator-settings'
+import type { OrchestratorLifecycleNotificationType } from '../db/queries/telegram-notifications.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import type {
   OrchestratorRun,
@@ -80,6 +81,7 @@ export interface SchedulerDeps {
   maxAgents: number
   tickIntervalMs?: number
   notifyApproval?: (taskId: string, runId: string, title: string, repoId: string) => void
+  sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -564,6 +566,12 @@ export class OrchestratorScheduler {
         status: 'active',
       })
 
+      this.notifyLifecycle(
+        run,
+        'task_launched',
+        `${fullTask.title}\nSprint: ${run.sprintName}`
+      )
+
       dispatched = true
       break // throughput ceiling: 1 dispatch per tick
     }
@@ -600,6 +608,9 @@ export class OrchestratorScheduler {
         status: 'done',
       })
 
+      const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
+      this.notifyLifecycle(run, 'task_completed', `${taskTitle}\nSprint: ${run.sprintName}`)
+
       this.maybeCompleteRun(run)
       // Schedule next tick after completion without blocking current call stack
       setTimeout(() => this.tick(), 0)
@@ -608,8 +619,16 @@ export class OrchestratorScheduler {
 
     if (type === 'agent:failed') {
       const retryRecord = this.retryMap.get(taskLog.taskId) ?? { count: 0 }
+      const taskTitle = getTaskById(this.db, taskLog.taskId)?.title ?? taskLog.taskId
+      const willRetry = retryRecord.count < 1
 
-      if (retryRecord.count < 1) {
+      this.notifyLifecycle(
+        run,
+        'task_failed',
+        `${taskTitle}\n${willRetry ? 'Retry scheduled' : 'Retries exhausted'} · ${run.sprintName}`
+      )
+
+      if (willRetry) {
         retryRecord.count++
         this.retryMap.set(taskLog.taskId, retryRecord)
         // Mark current log failed, allow next tick to re-dispatch
@@ -689,6 +708,11 @@ export class OrchestratorScheduler {
       updateRunStatus(this.db, run.id, finalStatus)
       deleteApprovalsForRun(this.db, run.id)
       this.emitStatusChange(run.id, finalStatus, run.sprintName)
+      this.notifyLifecycle(
+        run,
+        finalStatus === 'failed' ? 'run_failed' : 'run_completed',
+        `${run.sprintName}\n${completedIds.size} completed · ${failedIds.size} failed`
+      )
       log.info('OrchestratorScheduler: run concluded', { runId: run.id, status: finalStatus })
     }
   }
@@ -696,6 +720,23 @@ export class OrchestratorScheduler {
   private emitStatusChange(runId: string, status: OrchestratorRunStatus, sprintName: string): void {
     const payload: OrchestratorStatusChangePayload = { runId, status, sprintName }
     this.deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, payload)
+  }
+
+  private notifyLifecycle(
+    run: OrchestratorRun,
+    type: OrchestratorLifecycleNotificationType,
+    summary: string
+  ): void {
+    if (!run.telegramNotify) return
+    try {
+      this.deps.sendTelegramNotification?.(summary, type)
+    } catch (err) {
+      log.warn('OrchestratorScheduler: lifecycle Telegram notification failed', {
+        runId: run.id,
+        type,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 
   private getSprintName(runId: string): string {

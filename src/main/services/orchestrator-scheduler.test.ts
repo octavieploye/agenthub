@@ -623,6 +623,159 @@ describe('OrchestratorScheduler', () => {
   })
 
   // -------------------------------------------------------------------------
+  // Telegram lifecycle notifications
+  // -------------------------------------------------------------------------
+
+  describe('Telegram lifecycle notifications', () => {
+    it('notifies when a task launches only when telegramNotify is enabled', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Launch task' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-launch') },
+        sendTelegramNotification,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({
+        sprintName: 'notify-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Launch task'),
+        'task_launched'
+      )
+
+      scheduler.stop()
+      sendTelegramNotification.mockClear()
+      db.prepare('UPDATE orchestrator_runs SET status = ?').run('cancelled')
+      db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('today', taskId)
+      vi.mocked(deps.brain.decide).mockResolvedValueOnce(decision).mockResolvedValue(null)
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'silent-sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(deps.dispatch.execute).toHaveBeenCalledTimes(2)
+      expect(sendTelegramNotification).not.toHaveBeenCalled()
+    })
+
+    it('notifies task and run completion', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Complete task' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-complete') },
+        sendTelegramNotification,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({
+        sprintName: 'notify-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-complete', 'completed'),
+      })
+
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Complete task'),
+        'task_completed'
+      )
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        expect.stringContaining('notify-sprint'),
+        'run_completed'
+      )
+    })
+
+    it('notifies task failure and the final failed run without changing retry behavior', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Fail task' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-fail') }
+      const deps = buildDeps(db, {
+        brain: {
+          decide: vi.fn()
+            .mockResolvedValueOnce(decision)
+            .mockResolvedValueOnce(decision)
+            .mockResolvedValue(null),
+        },
+        dispatch,
+        sendTelegramNotification,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({
+        sprintName: 'notify-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      emitOrchestratorEvent({ type: 'agent:failed', triageEvent: fakeTriageEvent('agent-fail', 'error') })
+      await vi.advanceTimersByTimeAsync(1)
+      emitOrchestratorEvent({ type: 'agent:failed', triageEvent: fakeTriageEvent('agent-fail', 'error') })
+
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(sendTelegramNotification.mock.calls.filter(([, type]) => type === 'task_failed')).toHaveLength(1)
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        expect.stringContaining('notify-sprint'),
+        'run_failed'
+      )
+    })
+
+    it('does not interrupt task dispatch when notification delivery throws', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-resilient') },
+        sendTelegramNotification: vi.fn(() => {
+          throw new Error('Telegram unavailable')
+        }),
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      const run = scheduler.start({
+        sprintName: 'notify-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(getTaskLogsByRun(db, run.id)).toEqual([
+        expect.objectContaining({ taskId, status: 'active', agentId: 'agent-resilient' }),
+      ])
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // getStatus()
   // -------------------------------------------------------------------------
 
