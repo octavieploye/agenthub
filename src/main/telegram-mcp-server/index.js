@@ -53,8 +53,8 @@ const TOOL_DEF = {
       },
       format: {
         type: 'string',
-        enum: ['status', 'question', 'error'],
-        description: 'Message type: status (completion/milestone), question (need user input), error (failure/blocker). Default: status',
+        enum: ['status', 'completed', 'question', 'error'],
+        description: 'Message type: status (nonterminal milestone), completed (final task completion), question (need user input), error (failure/blocker). Default: status',
         default: 'status'
       }
     },

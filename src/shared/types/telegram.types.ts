@@ -16,12 +16,15 @@ export interface TelegramNotificationPayload {
   proposedAction?: string // awaiting_approval only — max 300 chars
   question?: string       // needs_input only — max 300 chars
   message?: string        // agent_message only — the composed message (max 4000 chars)
-  format?: 'status' | 'question' | 'error'  // agent_message only
+  format?: TelegramAgentMessageFormat  // agent_message only
   requestId?: string      // for approval correlation (use agentId in Phase 1)
   repoPath?: string       // filesystem path of the target repo (used by commit buttons)
   commitable?: boolean    // when true, the completed notification renders Commit buttons
+  commitAgentId?: string  // real agent to continue; absent means spawn a dedicated git-ops agent
   timestamp: string       // ISO 8601
 }
+
+export type TelegramAgentMessageFormat = 'status' | 'completed' | 'question' | 'error'
 
 export interface TelegramAgentEntry {
   id: string

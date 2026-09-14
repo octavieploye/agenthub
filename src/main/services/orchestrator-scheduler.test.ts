@@ -649,6 +649,30 @@ describe('OrchestratorScheduler', () => {
       expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(true)
     })
 
+    it('does not treat a temporary locked prompt as task completion', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-temporarily-locked', cwd: '/tmp' },
+        reason: 'test temporary prompt',
+      }
+      const agentStatus: AgentLifecycleStatus = 'locked'
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-temporarily-locked') },
+        getAgentStatus: vi.fn(() => agentStatus),
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      const logs = getTaskLogsByRun(db, run.id)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'active')).toBe(true)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(false)
+    })
+
     it('coalesces an immediate tick requested while another tick is in flight', async () => {
       const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
       let resolveFirst!: (value: SchedulerBrainDecision | null) => void

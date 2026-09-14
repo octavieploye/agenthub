@@ -166,6 +166,47 @@ export function setLastMcpTelegramAt(agentId: string): void {
   if (managed) managed.lastMcpTelegramAt = Date.now()
 }
 
+/**
+ * Accept an explicit final-completion signal from this agent's trusted local
+ * Telegram MCP connection. Interactive Claude processes remain open at their
+ * prompt, so PTY exit cannot be the only completion contract.
+ */
+export function completeAgentFromTelegram(agentId: string): boolean {
+  const managed = agents.get(agentId)
+  if (!managed) {
+    log.warn('Telegram completion ignored: agent not found', { agentId })
+    return false
+  }
+  if (managed.state.status === 'completed') return true
+
+  const debounce = statusDebounceTimers.get(agentId)
+  if (debounce) {
+    clearTimeout(debounce)
+    statusDebounceTimers.delete(agentId)
+  }
+  cancelSilentLockTimer(agentId)
+
+  const previousStatus = managed.state.status
+  const db = getDb()
+  managed.state.status = 'completed'
+  managed.state.confidence = 'confirmed'
+  managed.ttsStatus = 'completed'
+  updateAgentStatus(db, agentId, 'completed', 'confirmed')
+  emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentId, 'completed', 'confirmed')
+  insertActivityEvent(db, {
+    eventType: 'agent_completed',
+    entityType: 'agent',
+    entityId: agentId,
+    repoId: managed.state.repoId,
+    agentId,
+    details: { source: 'telegram-mcp' },
+  })
+  emitTriageResult(managed.state, previousStatus)
+  syncKanbanCard(db, agentId, 'completed')
+  log.info('Agent completed via explicit Telegram MCP signal', { agentId })
+  return true
+}
+
 function getNotificationConfig(): NotificationRouterConfig {
   let telegramEnabled = false
   try {
@@ -252,6 +293,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           requestId: agent.id,
           repoPath: agent.cwd,
           commitable: payloadType === 'completed',
+          commitAgentId: payloadType === 'completed' ? agent.id : undefined,
           timestamp: new Date().toISOString(),
         }
 
@@ -269,13 +311,11 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
   // Keep sidecar agent cache in sync on every status change
   _telegramAgentSync?.()
 
-  // Emit orchestrator bus event for kanban orchestrator to subscribe
-  // Orchestrator-spawned agents (name: 'orchestrator-*') finish at 'locked' state,
-  // not 'completed' — treat locked as task completion for these agents only.
-  const isOrchestratorAgent = triageEvent.agentName.startsWith('orchestrator-')
+  // Emit orchestrator bus event for kanban orchestrator to subscribe. A generic
+  // locked prompt is nonterminal; orchestrated agents explicitly report final
+  // completion through the Telegram MCP contract.
   const orchEventType: OrchestratorEventType | null =
-    (triageEvent.isTaskCompleted || (isOrchestratorAgent && triageEvent.currentStatus === 'locked'))
-      ? 'agent:completed'
+    triageEvent.isTaskCompleted ? 'agent:completed'
     : triageEvent.currentStatus === 'error' ? 'agent:failed'
     : 'agent:status-changed'
   emitOrchestratorEvent({ type: orchEventType, triageEvent })
@@ -1174,7 +1214,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
       // Append Telegram instruction when telegramNotify is enabled
       const telegramSuffix = agentState.telegramNotify
-        ? '\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). When done, send_telegram a short bullet-point summary. If you need approval or have a question, also send_telegram.'
+        ? "\n\nTelegram is ON — communicate via send_telegram only. Do NOT write status updates or summaries to the terminal. Keep terminal output to essential work artifacts only (code, diffs, errors). Use format 'status' only for nonterminal milestones. When the task is fully done, call send_telegram exactly once with a short bullet-point summary and format 'completed'. If you need approval or have a question, use format 'question'."
         : ''
       // Escape for single quotes to prevent shell metacharacter injection (backticks, $(), etc.)
       const escapedTask = (task + telegramSuffix).replace(/'/g, "'\\''")

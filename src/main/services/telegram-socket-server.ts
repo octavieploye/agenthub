@@ -1,6 +1,7 @@
 import * as net from 'net'
 import * as fs from 'fs'
 import type {
+  TelegramAgentMessageFormat,
   TelegramNotificationPayload,
   TelegramSocketState,
   TelegramSocketStatus,
@@ -9,7 +10,8 @@ import type {
 export interface TelegramSocketServerDeps {
   notify: (payload: TelegramNotificationPayload) => void
   queueFallback?: (payload: TelegramNotificationPayload) => void
-  onMcpMessage?: (agentId: string) => void
+  onMcpMessage?: (agentId: string, format: TelegramAgentMessageFormat) => void
+  resolveRepo?: (agentId: string) => { name: string; path: string } | null
   logInfo: (msg: string, meta?: Record<string, unknown>) => void
   logError: (msg: string, meta?: Record<string, unknown>) => void
   createServer?: (connectionListener: (socket: net.Socket) => void) => net.Server
@@ -17,7 +19,7 @@ export interface TelegramSocketServerDeps {
   probeTimeoutMs?: number
 }
 
-const VALID_FORMATS = ['status', 'question', 'error'] as const
+const VALID_FORMATS = ['status', 'completed', 'question', 'error'] as const
 
 export class TelegramSocketServer {
   private server: net.Server | null = null
@@ -289,22 +291,33 @@ export class TelegramSocketServer {
       return { ok: false, error: 'Missing required field: agentName' }
     }
 
-    const format = (typeof msg.format === 'string' && VALID_FORMATS.includes(msg.format as typeof VALID_FORMATS[number]))
-      ? msg.format as 'status' | 'question' | 'error'
+    const format: TelegramAgentMessageFormat =
+      (typeof msg.format === 'string' && VALID_FORMATS.includes(msg.format as typeof VALID_FORMATS[number]))
+      ? msg.format as TelegramAgentMessageFormat
       : 'status'
+    let trustedRepo: { name: string; path: string } | null = null
+    try {
+      trustedRepo = this.deps.resolveRepo?.(msg.agentId as string) ?? null
+    } catch (err) {
+      this.deps.logError('telegram MCP repo resolution failed', {
+        agentId: msg.agentId as string,
+        error: String(err),
+      })
+    }
 
     const payload: TelegramNotificationPayload = {
       type: 'agent_message',
       agentId: msg.agentId as string,
       agentName: msg.agentName as string,
-      repo: (msg.repo as string) || '',
+      repo: trustedRepo?.name ?? (msg.repo as string) ?? '',
       summary: '',
       message: msg.message as string,
       format,
+      repoPath: format === 'completed' ? trustedRepo?.path : undefined,
+      commitable: format === 'completed' && Boolean(trustedRepo?.path),
+      commitAgentId: format === 'completed' ? msg.agentId as string : undefined,
       timestamp: new Date().toISOString(),
     }
-
-    this.deps.onMcpMessage?.(msg.agentId as string)
 
     try {
       this.deps.notify(payload)
@@ -316,6 +329,16 @@ export class TelegramSocketServer {
       }
       this.deps.logError('telegram socket notify failed, no queue fallback', { error: String(err) })
       return { ok: false, error: 'Delivery failed' }
+    } finally {
+      try {
+        this.deps.onMcpMessage?.(msg.agentId as string, format)
+      } catch (err) {
+        this.deps.logError('telegram MCP lifecycle callback failed', {
+          agentId: msg.agentId as string,
+          format,
+          error: String(err),
+        })
+      }
     }
   }
 }

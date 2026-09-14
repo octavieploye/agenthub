@@ -44,14 +44,14 @@ import {
   routeTelegramNotification,
   type TelegramNotificationType,
 } from '../db/queries/telegram-notifications.queries'
-import { listAgents, getAgentState, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, setMcpServerInfo } from './agent-manager'
+import { listAgents, getAgentState, pauseAgent, killAgent, cleanupAllAgents, setPtyOwner, clearPtyOwner, sendInput, setTelegramNotifier, setTelegramAgentSync, spawnAgent, resumeAgent, respawnAgent, setLastMcpTelegramAt, completeAgentFromTelegram, setMcpServerInfo } from './agent-manager'
 import { installClaudePlugin } from './plugin-installer'
 import { setShutdownReason } from '../shutdown-reason'
 import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents.queries'
 import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
 import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
 import { recommend } from './model-recommender'
-import { updateTask } from '../db/queries/tasks.queries'
+import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -557,7 +557,21 @@ export function initializeServices(db: Database.Database): void {
         telegramSocketServer = new TelegramSocketServer({
           notify: (payload) => telegramSidecarService?.notify(payload),
           queueFallback: (payload) => telegramQueueProcessor?.enqueue(payload),
-          onMcpMessage: (agentId) => setLastMcpTelegramAt(agentId),
+          resolveRepo: (agentId) => {
+            const task = getTaskByAgentId(db, agentId)
+            if (task) {
+              const taskRepo = getRepoById(db, task.repoId)
+              if (taskRepo) return { name: taskRepo.name, path: taskRepo.path }
+            }
+            const agent = getAgentState(agentId)
+            if (!agent) return null
+            const repo = getRepoById(db, agent.repoId)
+            return repo ? { name: repo.name, path: repo.path } : null
+          },
+          onMcpMessage: (agentId, format) => {
+            setLastMcpTelegramAt(agentId)
+            if (format === 'completed') completeAgentFromTelegram(agentId)
+          },
           logInfo: (msg, meta) => log.info(msg, meta),
           logError: (msg, meta) => log.error(msg, meta),
         })

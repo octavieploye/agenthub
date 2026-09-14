@@ -666,7 +666,7 @@ export class OrchestratorScheduler {
       const activeLog = getActiveTaskLogByAgentId(this.db, run.id, snapshot.agentId)
       if (!activeLog) continue
 
-      if (status === 'completed' || status === 'locked') {
+      if (status === 'completed') {
         this.completeActiveTask(run, activeLog, snapshot.agentId, 'reconciliation')
         reconciled++
       } else if (status === 'error') {
