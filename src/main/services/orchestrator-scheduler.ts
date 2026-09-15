@@ -470,14 +470,19 @@ export class OrchestratorScheduler {
     const activeIds = new Set(activeLogs.map(l => l.taskId))
     const completedIds = new Set(allLogs.filter(l => l.status === 'done').map(l => l.taskId))
 
-    const slotsAvailable = this.deps.maxAgents - activeIds.size
-    if (slotsAvailable <= 0) return
+    // Concurrency gate — use the run's concurrencyCap (NOT the global
+    // deps.maxAgents budget). The monitor enforces the same cap, so using
+    // maxAgents here lets the scheduler spawn in parallel while the monitor
+    // flags a false-positive breach and pauses the run. getDispatchableTasks
+    // subtracts activeIds.size internally, so pass the raw cap.
+    const concurrencyCap = run.concurrencyCap ?? this.deps.maxAgents
+    if (activeIds.size >= concurrencyCap) return
 
     const dispatchable = getDispatchableTasks(
       candidateTasks.map(t => ({ id: t.id, priority: t.priority, blockedBy: t.blockedBy })),
       activeIds,
       completedIds,
-      slotsAvailable
+      concurrencyCap
     )
 
     if (dispatchable.length === 0) return

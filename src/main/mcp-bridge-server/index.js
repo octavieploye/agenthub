@@ -265,6 +265,7 @@ const TOOL_DEFS = [
         projectId: { type: 'string', description: 'Project UUID' },
         note: { type: 'string', description: 'Additional note for the agent' },
         requiresApproval: { type: 'boolean', description: 'Require human approval before dispatch' },
+        complex: { type: 'boolean', description: 'Mark task as a commit/push boundary — the orchestrator only offers git-ops commit controls when a completed task is flagged complex' },
         modelOverride: { type: 'string', description: 'LLM model override (e.g. deepseek-v4-pro:0813:cloud)' },
         providerOverride: { type: 'string', description: 'Provider override: anthropic | ollama-local | ollama-cloud | openai-codex' },
         dependsOn: { type: 'array', items: { type: 'string' }, description: 'Task IDs this task depends on (blocked until those complete)' },

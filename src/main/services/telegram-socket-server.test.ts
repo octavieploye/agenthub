@@ -63,6 +63,7 @@ describe('TelegramSocketServer', () => {
     server = new TelegramSocketServer({
       notify: mockNotify,
       resolveRepo: vi.fn(() => ({ name: 'target-repo', path: '/workspace/target-repo' })),
+      isTaskComplex: vi.fn(() => true),
       onMcpMessage,
       logInfo: vi.fn(),
       logError: vi.fn(),
@@ -87,6 +88,38 @@ describe('TelegramSocketServer', () => {
       commitAgentId: 'agent-1',
     }))
     expect(onMcpMessage).toHaveBeenCalledWith('agent-1', 'completed')
+  })
+
+  it('does not offer commit controls for non-complex task completions', async () => {
+    const onMcpMessage = vi.fn()
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      resolveRepo: vi.fn(() => ({ name: 'target-repo', path: '/workspace/target-repo' })),
+      isTaskComplex: vi.fn(() => false),
+      onMcpMessage,
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+    })
+    await server.start(sockPath)
+
+    const res = await sendToSocket(sockPath, {
+      agentId: 'agent-2',
+      agentName: 'test-agent',
+      repo: 'wrong-cwd-repo',
+      message: 'Task completed successfully',
+      format: 'completed',
+    })
+
+    expect(res).toEqual({ ok: true })
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'agent_message',
+      format: 'completed',
+      repo: 'target-repo',
+      repoPath: '/workspace/target-repo',
+      commitable: false,
+      commitAgentId: 'agent-2',
+    }))
+    expect(onMcpMessage).toHaveBeenCalledWith('agent-2', 'completed')
   })
 
   it('keeps nonterminal status messages non-commitable', async () => {

@@ -476,6 +476,40 @@ describe('OrchestratorScheduler', () => {
       expect(dispatch.execute).not.toHaveBeenCalled()
     })
 
+    it('respects run concurrencyCap instead of global maxAgents budget', async () => {
+      const taskA = insertTestTask(db, { id: 'task-a', repoId: 'repo-1', status: 'today' })
+      const taskB = insertTestTask(db, { id: 'task-b', repoId: 'repo-1', status: 'today' })
+
+      const decisionA: SchedulerBrainDecision = {
+        taskId: taskA,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-a', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-b', cwd: '/tmp' },
+        reason: 'test',
+      }
+      // High global budget (50) but per-run concurrencyCap=1. The scheduler must
+      // NOT dispatch taskB while taskA is still active, or the monitor flags a
+      // false-positive breach and pauses the run.
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decisionA).mockResolvedValueOnce(decisionB).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const deps = buildDeps(db, { brain, dispatch, maxAgents: 50 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskA, taskB], concurrencyCap: 1 })
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(brain.decide).toHaveBeenCalledTimes(1)
+
+      // Second tick: active (1) >= concurrencyCap (1) → must not dispatch taskB.
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(brain.decide).toHaveBeenCalledTimes(1)
+    })
+
     it('does not call brain when no dispatchable tasks exist', async () => {
       insertTestTask(db, { repoId: 'repo-1', status: 'in_progress' })
 

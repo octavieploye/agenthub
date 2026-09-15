@@ -568,6 +568,7 @@ export function initializeServices(db: Database.Database): void {
             const repo = getRepoById(db, agent.repoId)
             return repo ? { name: repo.name, path: repo.path } : null
           },
+          isTaskComplex: (agentId) => Boolean(getTaskByAgentId(db, agentId)?.complex),
           onMcpMessage: (agentId, format) => {
             setLastMcpTelegramAt(agentId)
             if (format === 'completed') completeAgentFromTelegram(agentId)

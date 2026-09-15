@@ -39,7 +39,7 @@ sqlite3 "/Users/octaviesmacpro/Library/Application Support/agenthub/agenthub.db"
 create_task returns `result.id` (a UUID like `cc682d44-...`). The `dependsOn` parameter takes this UUID, not the localId from the sprint plan (like `VP2P7-T0`). Tasks must be created sequentially: T0 first → capture UUID → T1 with `dependsOn: ["<T0-uuid>"]`.
 
 ### R3 — telegramNotify: true is mandatory when any task has requiresApproval: true
-Source-verified (orchestrator-scheduler.ts line 424): Telegram notification only fires if `run.telegramNotify === true`. There is NO approval button in the AgentHub UI. If `telegramNotify: false`, tasks with `requiresApproval: true` deadlock silently — no notification fires anywhere.
+Source-verified (scheduler tick approval gate + `notifyApproval`): Telegram notification only fires if `run.telegramNotify === true`. There is NO approval button in the AgentHub UI. If `telegramNotify: false`, tasks with `requiresApproval: true` deadlock silently — no notification fires anywhere.
 
 Rule: if ANY task in the sprint has `requiresApproval: true`, dispatch with `telegramNotify: true`.
 
@@ -63,6 +63,23 @@ When approval is needed and Telegram isn't responding: use `mcp__agenthub-kanban
 
 ### R7 — Only backlog/today tasks get dispatched
 Tasks with status `in_progress`, `completed`, `tested`, or `interrupted` are skipped by the scheduler. Sprint tasks must have status `backlog` (default on create) to be picked up.
+
+### R8 — concurrencyCap is enforced per-run (not the global maxAgents)
+The scheduler now honors `run.concurrencyCap` for the number of *concurrently active* agents. `maxAgents` (50) is only the cumulative spawn budget for the whole run. Consequences:
+
+- **Sequential dependency chain** → `concurrencyCap: 1`. A dependent task will NOT dispatch while its prerequisite is still active, even if it would otherwise be dispatchable.
+- **Independent tasks** → set `concurrencyCap` to the number you want running in parallel (max 10 per the IPC schema).
+- `dependsOn` (the dependency solver) is a *hard* ordering guarantee independent of concurrency; `concurrencyCap` is the *parallelism* limit. Use both: `dependsOn` for "B must follow A", `concurrencyCap` for "how many at once".
+
+### R9 — Commit/push controls are gated by the `complex` flag
+The Telegram sidecar renders Commit / Commit & push / Skip buttons **only** on a `format: completed` message from a task flagged `complex: true`. Non-complex tasks complete normally but offer no git-ops controls.
+
+- Set `complex: true` ONLY for tasks that represent a commit/push boundary (e.g. a feature milestone, a completed task series).
+- Do NOT set `complex: true` on every task — that reproduces the "commit at every task" noise this flag removes.
+- The run-level `run_completed` notification still offers commit controls for the whole sprint, independent of this flag.
+
+### R10 — Pausing/resuming a run is UI-only
+The scheduler has `resumeIfActive()` but there is NO MCP `reset_task`/`cancel_run`/`resume` tool. A run paused by the monitor (or a false-positive breach) can only be resumed from the AgentHub UI, or by re-dispatching with `dispatch_sprint` (which updates the existing run). Do not tell the user to resume via MCP.
 
 ---
 
@@ -116,9 +133,9 @@ Parse tasks array. Map `localId` → task object. Build the dependency chain as 
 ### Output
 Produce an internal task list:
 ```
-T0: <title> | deps: [] | approval: false | model: claude-sonnet-4-6
-T1: <title> | deps: [T0] | approval: true  | model: claude-sonnet-4-6
-T2: <title> | deps: [T1] | approval: false | model: claude-sonnet-4-6
+T0: <title> | deps: [] | approval: false | complex: false | model: claude-sonnet-4-6
+T1: <title> | deps: [T0] | approval: true  | complex: false | model: claude-sonnet-4-6
+T2: <title> | deps: [T1] | approval: false | complex: true  | model: claude-sonnet-4-6
 ```
 Present to user before creating tasks. Wait for confirmation.
 
@@ -152,6 +169,7 @@ T2_id = create_task({..., requiresApproval: false, dependsOn: [T1_id]})
 | `modelOverride` | `claude-sonnet-4-6` default; `gemma4:31b-cloud` for complex multi-file |
 | `targetFiles` | Full relative paths from repo root |
 | `requiresApproval` | Follow Phase 1 rules |
+| `complex` | `true` only at commit/push boundaries (see R9) — default `false` |
 | `dependsOn` | Actual DB UUIDs from previous create_task results |
 | `description` | Agent's full prompt — include repo path, exact files, verification commands, commit rules |
 
@@ -194,7 +212,7 @@ mcp__agenthub-kanban__dispatch_sprint({
   sprintName: "<sprint-name>",
   repoId: "<live-uuid>",
   confirmed: true,
-  concurrencyCap: 1,       ← 1 for sequential chains; 3 for parallel tasks
+  concurrencyCap: 1,       ← 1 for sequential chains (R8); 3+ for independent tasks
   telegramNotify: true/false
 })
 ```
@@ -287,6 +305,8 @@ Run concludes automatically when:
 - Never tell user to "find the approval button in AgentHub" — it does not exist (R5)
 - Never create tasks in parallel when they have sequential dependencies
 - Never skip repo gate confirmation — always confirm full path before creating any task
+- Never set `complex: true` on every task — only commit/push boundaries (R9)
+- Never tell the user to resume a paused run via MCP — resume is UI-only (R10)
 
 ## Common Mistakes
 
@@ -298,7 +318,8 @@ Run concludes automatically when:
 | Sprint name collision (already in Kanban) | list_tasks first; rename or sprint-reset |
 | File drop to target repo → nothing happens | Use create_task + dispatch_sprint (Path B) |
 | Approval task stuck, user never got Telegram | Use mcp__agenthub-kanban__approve_task fallback |
-| Single concurrencyCap but tasks are parallel | Use concurrencyCap: 3 for independent tasks |
+| Dependent task dispatches while prerequisite still running | Set `concurrencyCap: 1` AND `dependsOn` on the dependent task (R8) |
+| Commit buttons appear on every task | Only flag commit/push boundaries `complex: true` (R9) |
 | Empty description → agent hallucinates scope | Description IS the prompt — be explicit and complete |
 
 ## Orchestrator Mechanics Reference
@@ -310,5 +331,6 @@ Key numbers:
 - Throughput ceiling: **1 task per tick**
 - Retry on failure: **1 automatic retry**
 - Stale run recovery: **2 hours** of inactivity → auto-failed
-- maxAgents: **50** (hardcoded in scheduler deps)
+- maxAgents: **50** (cumulative spawn budget for a run — NOT the concurrency limit)
+- concurrencyCap: **per-run concurrent-agent limit** (default 3, max 10) — the scheduler and monitor both enforce it
 - Status for dispatch eligibility: **backlog** or **today** only

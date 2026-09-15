@@ -51,6 +51,7 @@ export interface TaskItem {
   sectionTargetDate: string | null
   note: string | null
   requiresApproval: boolean
+  complex: boolean
   modelOverride: string | null
   providerOverride: string | null
   dateTriggerFiredAt: string | null
@@ -84,6 +85,7 @@ export interface CreateTaskInput {
   sectionTargetDate?: string | null
   note?: string | null
   requiresApproval?: boolean
+  complex?: boolean
   modelOverride?: string
   providerOverride?: string
   localId?: string
@@ -117,6 +119,7 @@ export interface UpdateTaskInput {
   sectionTargetDate?: string | null
   note?: string | null
   requiresApproval?: boolean
+  complex?: boolean
   modelOverride?: string | null
   providerOverride?: string | null
   dateTriggerFiredAt?: string | null

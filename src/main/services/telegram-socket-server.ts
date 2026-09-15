@@ -12,6 +12,7 @@ export interface TelegramSocketServerDeps {
   queueFallback?: (payload: TelegramNotificationPayload) => void
   onMcpMessage?: (agentId: string, format: TelegramAgentMessageFormat) => void
   resolveRepo?: (agentId: string) => { name: string; path: string } | null
+  isTaskComplex?: (agentId: string) => boolean
   logInfo: (msg: string, meta?: Record<string, unknown>) => void
   logError: (msg: string, meta?: Record<string, unknown>) => void
   createServer?: (connectionListener: (socket: net.Socket) => void) => net.Server
@@ -305,6 +306,20 @@ export class TelegramSocketServer {
       })
     }
 
+    // Commit controls only render for explicit completions of complex tasks.
+    // Non-complex tasks complete normally but must not prompt for git-ops.
+    let isComplex = false
+    if (format === 'completed') {
+      try {
+        isComplex = this.deps.isTaskComplex?.(msg.agentId as string) ?? false
+      } catch (err) {
+        this.deps.logError('telegram MCP task-complexity lookup failed', {
+          agentId: msg.agentId as string,
+          error: String(err),
+        })
+      }
+    }
+
     const payload: TelegramNotificationPayload = {
       type: 'agent_message',
       agentId: msg.agentId as string,
@@ -314,7 +329,7 @@ export class TelegramSocketServer {
       message: msg.message as string,
       format,
       repoPath: format === 'completed' ? trustedRepo?.path : undefined,
-      commitable: format === 'completed' && Boolean(trustedRepo?.path),
+      commitable: format === 'completed' && Boolean(trustedRepo?.path) && isComplex,
       commitAgentId: format === 'completed' ? msg.agentId as string : undefined,
       timestamp: new Date().toISOString(),
     }

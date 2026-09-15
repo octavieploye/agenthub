@@ -37,6 +37,7 @@ function mapRow(row: Record<string, unknown>, depMap?: Map<string, string[]>): T
     sectionTargetDate: (row.section_target_date as string) ?? null,
     note: (row.note as string) ?? null,
     requiresApproval: Boolean(row.requires_approval),
+    complex: Boolean(row.complex),
     modelOverride: (row.model_override as string) ?? null,
     providerOverride: (row.provider_override as string) ?? null,
     dateTriggerFiredAt: (row.date_trigger_fired_at as string) ?? null,
@@ -127,8 +128,8 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
   const riskFactorsJson = input.riskFactorsJson ?? (input.riskFactors ? JSON.stringify(input.riskFactors) : null)
 
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, model_override, provider_override, target_files_json, skills_json, guardrail_json, estimated_tokens, recommended_model, risk_score, risk_factors_json, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, category, sprint_name, epic_name, project_id, section_target_date, note, requires_approval, complex, model_override, provider_override, target_files_json, skills_json, guardrail_json, estimated_tokens, recommended_model, risk_score, risk_factors_json, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.repoId,
@@ -143,6 +144,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     input.sectionTargetDate ?? null,
     input.note ?? null,
     input.requiresApproval ? 1 : 0,
+    input.complex ? 1 : 0,
     input.modelOverride ?? null,
     input.providerOverride ?? null,
     targetFilesJson ?? null,
@@ -189,6 +191,7 @@ export function insertTask(db: Database.Database, input: CreateTaskInput): TaskI
     sectionTargetDate: input.sectionTargetDate ?? null,
     note: input.note ?? null,
     requiresApproval: input.requiresApproval ?? false,
+    complex: input.complex ?? false,
     modelOverride: input.modelOverride ?? null,
     providerOverride: input.providerOverride ?? null,
     dateTriggerFiredAt: null,
@@ -273,6 +276,10 @@ export function updateTask(db: Database.Database, id: string, input: UpdateTaskI
   if (input.requiresApproval !== undefined) {
     sets.push('requires_approval = ?')
     values.push(input.requiresApproval ? 1 : 0)
+  }
+  if (input.complex !== undefined) {
+    sets.push('complex = ?')
+    values.push(input.complex ? 1 : 0)
   }
   if (input.modelOverride !== undefined) {
     sets.push('model_override = ?')
