@@ -3,6 +3,7 @@
 
 const https = require('https')
 const readline = require('readline')
+const { buildGitOpsTask } = require('./git-ops-task')
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let botToken = null
@@ -384,14 +385,22 @@ async function handleCallback(cb) {
 
   if (data.startsWith('approve:')) {
     const rawId = data.slice('approve:'.length)
-    const requestId = approvalTokenMap.get(rawId) || rawId
+    const requestId = approvalTokenMap.get(rawId)
+    if (!requestId || !requestId.startsWith('task:')) {
+      await sendMessage(chatId, 'This approval prompt is no longer active \u2014 it may have expired or already been handled. Use /status to see current tasks.')
+      return
+    }
     sendToParent({ type: 'command', command: 'approve', requestId })
     await editMessageText(chatId, msgId, '\u2705 You approved this.')
     const pending = pendingApprovals.get(requestId)
     if (pending) { clearTimeout(pending.timerId); pendingApprovals.delete(requestId) }
   } else if (data.startsWith('deny:')) {
     const rawId = data.slice('deny:'.length)
-    const requestId = approvalTokenMap.get(rawId) || rawId
+    const requestId = approvalTokenMap.get(rawId)
+    if (!requestId || !requestId.startsWith('task:')) {
+      await sendMessage(chatId, 'This approval prompt is no longer active.')
+      return
+    }
     sendToParent({ type: 'command', command: 'deny', requestId })
     await editMessageText(chatId, msgId, '\u2717 You denied this.')
     const pending = pendingApprovals.get(requestId)
@@ -447,7 +456,7 @@ async function handleCallback(cb) {
     const info = commitTokenMap.get(token)
     commitTokenMap.delete(token)
     if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
-    const task = `Run /git-commit for the target repository at ${info.repoPath}. Commit the completed changes locally only — do NOT push.`
+    const task = buildGitOpsTask(info.repoPath, false)
     if (info.agentId) {
       sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: task })
     } else {
@@ -459,7 +468,7 @@ async function handleCallback(cb) {
     const info = commitTokenMap.get(token)
     commitTokenMap.delete(token)
     if (!info) { await sendMessage(chatId, 'That commit request is no longer valid.'); return }
-    const task = `Run /git-commit for the target repository at ${info.repoPath}. Commit the completed changes, then push to origin. The human explicitly requested push.`
+    const task = buildGitOpsTask(info.repoPath, true)
     if (info.agentId) {
       sendToParent({ type: 'command', command: 'send_task', agentId: info.agentId, message: task })
     } else {
@@ -802,6 +811,9 @@ rl.on('line', async (line) => {
         if (pending) {
           clearTimeout(pending.timerId)
           pendingApprovals.delete(msg.requestId)
+        }
+        if (msg.decision === 'failed' && allowedChatId) {
+          await sendMessage(allowedChatId, '\u26a0\ufe0f That approval couldn\u2019t be applied \u2014 the task or its run is no longer active. Check /status.')
         }
       }
       break

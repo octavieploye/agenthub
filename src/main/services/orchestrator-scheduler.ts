@@ -384,11 +384,16 @@ export class OrchestratorScheduler {
   // Approval — public API consumed by IPC handler
   // -------------------------------------------------------------------------
 
-  approveTaskDispatch(runId: string, taskId: string, approved: boolean): void {
+  approveTaskDispatch(runId: string, taskId: string, approved: boolean): boolean {
     const run = getRun(this.db, runId)
     if (!run) {
       log.warn('OrchestratorScheduler: approveTaskDispatch — run not found', { runId })
-      return
+      return false
+    }
+
+    if (run.status !== 'running' && run.status !== 'paused') {
+      log.warn('OrchestratorScheduler: approveTaskDispatch — run not active', { runId, status: run.status })
+      return false
     }
 
     if (!approved) {
@@ -399,12 +404,13 @@ export class OrchestratorScheduler {
       for (const tl of logs) {
         updateTaskLogStatus(this.db, tl.id, 'skipped')
       }
-      return
+      return true
     }
 
     updateApprovalStatus(this.db, runId, taskId, 'approved')
     log.info('OrchestratorScheduler: task dispatch approved, kicking tick', { runId, taskId })
     this.requestTick()
+    return true
   }
 
   // -------------------------------------------------------------------------

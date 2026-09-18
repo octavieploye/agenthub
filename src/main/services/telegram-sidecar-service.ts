@@ -181,7 +181,7 @@ export class TelegramSidecarService {
     this.send({ type: 'repo_list', repos })
   }
 
-  sendApprovalResult(requestId: string, decision: 'approved' | 'denied'): void {
+  sendApprovalResult(requestId: string, decision: 'approved' | 'denied' | 'failed'): void {
     try {
       this.send({ type: 'approval_result', requestId, decision })
     } catch {

@@ -66,7 +66,7 @@ export type TelegramToSidecarMsg =
   | { type: 'config'; botToken: string }
   | { type: 'set_user'; telegramUserId: number; chatId: number }
   | { type: 'notify'; payload: TelegramNotificationPayload }
-  | { type: 'approval_result'; requestId: string; decision: 'approved' | 'denied' }
+  | { type: 'approval_result'; requestId: string; decision: 'approved' | 'denied' | 'failed' }
   | { type: 'agent_list'; agents: TelegramAgentEntry[] }
   | { type: 'repo_list'; repos: TelegramRepoEntry[] }
   | { type: 'shutdown' }

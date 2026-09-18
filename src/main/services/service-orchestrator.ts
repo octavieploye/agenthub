@@ -131,10 +131,11 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       if (msg.requestId.startsWith('task:')) {
         const parts = msg.requestId.split(':')
         try {
-          orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], true)
-          telegramSidecarService?.sendApprovalResult(msg.requestId, 'approved')
+          const ok = orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], true)
+          telegramSidecarService?.sendApprovalResult(msg.requestId, ok === false ? 'failed' : 'approved')
         } catch (err) {
           log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
+          telegramSidecarService?.sendApprovalResult(msg.requestId, 'failed')
         }
       } else {
         sendInput(msg.requestId, 'y\r', { isSystemAction: true })
@@ -144,10 +145,11 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
       if (msg.requestId.startsWith('task:')) {
         const parts = msg.requestId.split(':')
         try {
-          orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], false)
-          telegramSidecarService?.sendApprovalResult(msg.requestId, 'denied')
+          const ok = orchestratorScheduler?.approveTaskDispatch(parts[2], parts[1], false)
+          telegramSidecarService?.sendApprovalResult(msg.requestId, ok === false ? 'failed' : 'denied')
         } catch (err) {
           log.warn('handleTelegramCommand: approveTaskDispatch failed', { requestId: msg.requestId, err: String(err) })
+          telegramSidecarService?.sendApprovalResult(msg.requestId, 'failed')
         }
       } else {
         sendInput(msg.requestId, 'n\r', { isSystemAction: true })
@@ -755,6 +757,13 @@ export function initializeServices(db: Database.Database): void {
         if (task.note) {
           metadataParts.push(`Note: ${task.note}`)
         }
+        // Commit boundary: only `complex` tasks get git-ops commit controls on completion.
+        // Instruct the agent deterministically so it never asks to commit when no button will appear.
+        metadataParts.push(
+          task.complex
+            ? 'Commit boundary: true — commit controls (Commit / Commit & push) appear in your completion message; the user commits via those buttons, not via your prompt.'
+            : 'Commit boundary: false — do NOT ask the user to commit or push; git operations are handled by the orchestrator.',
+        )
         const metadataBlock = metadataParts.length > 0 ? `\n\n${metadataParts.join('\n')}` : ''
 
         const taskDescription = effectiveSkill
