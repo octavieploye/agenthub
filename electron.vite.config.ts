@@ -4,14 +4,22 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cpSync, mkdirSync } from 'fs'
 
-function copyMigrations() {
+function copyMainRuntimeAssets() {
   return {
-    name: 'copy-migrations',
+    name: 'copy-main-runtime-assets',
     closeBundle() {
-      const src = resolve('src/main/db/migrations')
-      const dest = resolve('out/main/migrations')
-      mkdirSync(dest, { recursive: true })
-      cpSync(src, dest, { recursive: true })
+      const assets = [
+        ['src/main/db/migrations', 'out/main/migrations'],
+        ['src/main/mcp-bridge-server', 'out/main/mcp-bridge-server'],
+        ['src/main/mcp-helpers', 'out/main/mcp-helpers'],
+        ['src/main/telegram-sidecar', 'out/main/telegram-sidecar'],
+      ]
+
+      for (const [source, destination] of assets) {
+        const dest = resolve(destination)
+        mkdirSync(dest, { recursive: true })
+        cpSync(resolve(source), dest, { recursive: true })
+      }
     }
   }
 }
@@ -28,7 +36,7 @@ export default defineConfig({
         external: ['node-pty', 'better-sqlite3']
       }
     },
-    plugins: [copyMigrations()]
+    plugins: [copyMainRuntimeAssets()]
   },
   preload: {
     resolve: {

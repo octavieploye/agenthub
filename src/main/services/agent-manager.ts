@@ -282,6 +282,11 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           .replace(/(CLAUDE\.md|SYSTEM PROMPT|You are the|Session Policy)/gi, '[REDACTED]')
         const task = recentOutput || (agent.taskDescription ?? '').slice(0, 200) || agent.name
 
+        // Commit controls only render for explicit completions of commit-boundary (complex) tasks.
+        // Manual agents (no linked kanban task) keep the commit button on completion.
+        const linkedTask = getTaskByAgentId(db, agent.id)
+        const isCommitBoundary = !linkedTask || linkedTask.complex === true
+
         const payload: TelegramNotificationPayload = {
           type: payloadType as TelegramNotificationPayload['type'],
           agentId: agent.id,
@@ -292,7 +297,7 @@ function emitTriageResult(agent: AgentState, previousStatus: AgentLifecycleStatu
           proposedAction: payloadType === 'awaiting_approval' ? `Agent needs permission to run a tool.\n\nTask: ${task}` : undefined,
           requestId: agent.id,
           repoPath: agent.cwd,
-          commitable: payloadType === 'completed',
+          commitable: payloadType === 'completed' && isCommitBoundary,
           commitAgentId: payloadType === 'completed' ? agent.id : undefined,
           timestamp: new Date().toISOString(),
         }
@@ -1121,19 +1126,22 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
       : join(process.cwd(), 'src', 'main', 'telegram-mcp-server', 'index.js')
 
-    const kanbanScriptPath = app.isPackaged
-      ? join(process.resourcesPath, 'mcp-server', 'server.js')
-      : join(process.cwd(), 'out', 'main', 'mcp-server', 'server.js')
+    const kanbanBridgeScriptPath = app.isPackaged
+      ? join(process.resourcesPath, 'mcp-bridge-server', 'index.js')
+      : join(process.cwd(), 'src', 'main', 'mcp-bridge-server', 'index.js')
 
     const mcpJsonPath = app.isPackaged
       ? join(process.resourcesPath, '.mcp.json')
       : join(app.getAppPath(), '.mcp.json')
 
-    const kanbanDb = getDb()
-    const kanbanDbPath = ((kanbanDb as unknown as { name?: string }).name ?? '') || join(process.cwd(), 'agenthub.db')
-
     if (_mcpServerSocketPath && _mcpServerSocketToken) {
-      ensureCodexMcpServers(mcpJsonPath, scriptPath, kanbanScriptPath, kanbanDbPath, _mcpServerSocketPath, undefined, _mcpServerSocketToken).catch(() => {
+      ensureCodexMcpServers(
+        mcpJsonPath,
+        scriptPath,
+        kanbanBridgeScriptPath,
+        _mcpServerSocketPath,
+        _mcpServerSocketToken,
+      ).catch(() => {
         // ensureCodexMcpServers is non-throwing by design — safety catch
       })
     }

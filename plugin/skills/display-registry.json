@@ -72,6 +72,7 @@
 
     "_build": "── Build & Engineering ─────────────────────────────────────────────────",
     "skill-creator":               { "displayName": "Create New Skill",                 "category": "build" },
+    "wired-duf":                   { "displayName": "DUF Audit — Data + UX + Wiring",   "category": "build" },
     "sprint-reset":                { "displayName": "Reset / Archive Sprint",            "category": "build" },
     "sprint-to-orchestrator":      { "displayName": "Launch Sprint to Orchestrator",      "category": "build" },
     "sprint-json-builder":         { "displayName": "Build Sprint JSON",                 "category": "build" },

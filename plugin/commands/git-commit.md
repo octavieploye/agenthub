@@ -1,9 +1,3 @@
-# Git Commit Format
-
-**NEVER sign commits with Claude, Anthropic, or Co-Authored-By.**
-**NEVER GIT COMMIT BMAD FILES OR OUTPUTS  UNLESS USER REFERES TO IT**
-**NEVER GIT COMMIT >GITIGNORE**
-
 ---
 description: "Create local git commits for this repo following project conventions"
 allowed-tools:
@@ -16,8 +10,14 @@ allowed-tools:
     "Bash(git log:*)",
     "Bash(npx vitest run*)",
     "Bash(npx tsc --noEmit*)"
-  ]
+]
 ---
+
+# Git Commit Format
+
+**NEVER sign commits with Claude, Anthropic, or Co-Authored-By.**
+**NEVER GIT COMMIT BMAD FILES OR OUTPUTS UNLESS THE USER REFERS TO THEM.**
+**NEVER COMMIT IGNORED FILES.**
 
 # Command: git-commit
 

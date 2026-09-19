@@ -17,10 +17,19 @@ extraResources:
     to: plugin/
     filter:
       - "**/*"
-  - from: out/main/mcp-server/
-    to: mcp-server/
+  - from: out/main/mcp-bridge-server/
+    to: mcp-bridge-server/
     filter:
       - "**/*"
+  - from: out/main/mcp-helpers/
+    to: mcp-helpers/
+    filter:
+      - "**/*"
+  - from: out/main/telegram-sidecar/
+    to: telegram-sidecar/
+    filter:
+      - "**/*"
+      - "!**/*.test.js"
 win:
   executableName: agenthub
   icon: build/icon.ico

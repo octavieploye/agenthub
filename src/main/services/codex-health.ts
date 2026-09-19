@@ -57,11 +57,10 @@ export async function checkCodexHealth(): Promise<CodexHealthStatus> {
 export async function ensureCodexMcpServers(
   mcpJsonPath: string,
   telegramScriptPath: string,
-  kanbanScriptPath: string,
-  dbPath: string,
+  kanbanBridgeScriptPath: string,
   socketPath: string,
+  socketToken: string,
   _exec: CodexExecFn = execFileAsync as CodexExecFn,
-  socketToken = ''
 ): Promise<void> {
   if (codexMcpEnsured && socketPath === codexMcpLastSocketPath) return
   codexMcpEnsured = true
@@ -126,9 +125,9 @@ export async function ensureCodexMcpServers(
     }
 
     // agenthub-kanban: always remove the existing entry and re-add with the current
-    // socket path and token. Both values are regenerated on every Electron restart
-    // (pid-based socket path + randomUUID token), so a "skip if already listed" check
-    // leaves stale values in ~/.codex/config.toml → `connection closed: initialize response`.
+    // bridge socket path and token. Both values are regenerated on every Electron
+    // restart, so a "skip if already listed" check leaves stale values in
+    // ~/.codex/config.toml → `connection closed: initialize response`.
     try {
       await _exec('codex', ['mcp', 'remove', 'agenthub-kanban'], { timeout: 10000 })
     } catch {
@@ -139,10 +138,10 @@ export async function ensureCodexMcpServers(
         'codex',
         [
           'mcp', 'add', 'agenthub-kanban',
-          '--env', `AGENTHUB_DB_PATH=${dbPath}`,
-          '--env', `AGENTHUB_SOCKET_PATH=${socketPath}`,
-          '--env', `AGENTHUB_SOCKET_TOKEN=${socketToken}`,
-          '--', process.execPath, kanbanScriptPath,
+          '--env', `AGENTHUB_MCP_BRIDGE_SOCK=${socketPath}`,
+          '--env', `AGENTHUB_MCP_BRIDGE_TOKEN=${socketToken}`,
+          '--env', `AGENTHUB_REPO_ROOT=${process.cwd()}`,
+          '--', 'node', kanbanBridgeScriptPath,
         ],
         { timeout: 10000 }
       )
