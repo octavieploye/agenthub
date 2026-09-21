@@ -57,6 +57,7 @@ import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
+import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 import { loadAnamnesisSecret } from './secret-store'
 import { registerWindowManager, registerAnamnesisWriter, registerTelegramSocketPathFn, registerCurrentSessionId } from './service-registry'
 
@@ -478,7 +479,7 @@ export function initializeServices(db: Database.Database): void {
 
   // 15. Anamnesis + Forgejo adapters — null in standalone, real in system mode
   const appMode = resolveAppMode()
-  const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
+  const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
   anamnesisWriter = createAnamnesisAdapter(appMode, db, { anamnesisUrl })
   registerAnamnesisWriter(anamnesisWriter)
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))

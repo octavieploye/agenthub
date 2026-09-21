@@ -36,6 +36,7 @@ import { getDependencyMap } from '../db/queries/task-dependencies.queries'
 import { isOrchestratorEnabled, getApprovalWindowMinutes, getMaxConcurrentRuns } from './orchestrator-settings'
 import type { OrchestratorLifecycleNotificationType } from '../db/queries/telegram-notifications.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
+import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 import type {
   OrchestratorRun,
   OrchestratorRunStatus,
@@ -159,6 +160,13 @@ export class OrchestratorScheduler {
       throw new Error('ORCHESTRATOR_DISABLED: orchestrator.enabled is not set to true')
     }
 
+    // M-4: a run must never silently fall back to a fake 'default' repo. Require a
+    // real repoId up front rather than persisting a run that matches no repository.
+    if (!input.repoId || input.repoId.trim() === '') {
+      throw new Error('ORCHESTRATOR_START_REQUIRES_REPO_ID: repoId is required')
+    }
+    const repoId = input.repoId
+
     // Slot-aware admission: queue when active-run count reaches maxConcurrentRuns
     const activeRuns = getActiveRuns(this.db)
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
@@ -171,13 +179,16 @@ export class OrchestratorScheduler {
         updateRunTelegramNotify(this.db, existing.id, true)
       }
       this.ensureTicking()
-      return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
+      // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
+      // so the effective value is `existing || input`. `??` would wrongly report false
+      // when input is explicitly false while the persisted run still notifies.
+      return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
     }
 
     if (activeRuns.length >= maxConcurrentRuns) {
       const run = insertRun(this.db, {
         sprintName: input.sprintName ?? 'manual',
-        repoId: input.repoId ?? 'default',
+        repoId,
         projectId: input.projectId,
         taskIds: input.taskIds,
         triggerSource: input.triggerSource ?? 'manual',
@@ -248,7 +259,10 @@ export class OrchestratorScheduler {
         updateRunTelegramNotify(this.db, existing.id, true)
       }
       this.ensureTicking()
-      return { ...existing, telegramNotify: input.telegramNotify ?? existing.telegramNotify }
+      // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
+      // so the effective value is `existing || input`. `??` would wrongly report false
+      // when input is explicitly false while the persisted run still notifies.
+      return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
     }
 
     if (activeRuns.length >= maxConcurrentRuns) {
@@ -1062,7 +1076,7 @@ export class OrchestratorScheduler {
 
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 3000)
-        const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? 'http://localhost:9300'
+        const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
 
         const resp = await fetch(
           `${anamnesisUrl}/api/v1/memory/procedural?domain=sprint_inventory&query=${encodeURIComponent(sprintName)}`,

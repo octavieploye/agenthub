@@ -464,7 +464,23 @@ describe('orchestrator-store — R-015: foreign-run fetchStatus deduplication', 
     vi.restoreAllMocks()
   })
 
-  it('does NOT call fetchStatus again when loading=true (overlapping fetch guard)', async () => {
+  it('does NOT call fetchStatus again when fetchingStatus=true (overlapping fetch guard)', async () => {
+    const { statusMock } = stubOrchestrator()
+    useOrchestratorStore.setState({ runId: 'run-active', fetchingStatus: true })
+
+    useOrchestratorStore.getState().handleStatusChange({
+      runId: 'run-foreign',
+      status: 'completed',
+      sprintName: 'sprint-foreign',
+      repoId: 'repo-1',
+    } as OrchestratorStatusChangePayload)
+
+    await Promise.resolve()
+
+    expect(statusMock).not.toHaveBeenCalled()
+  })
+
+  it('L-4: calls fetchStatus when loading=true but fetchingStatus=false (loading no longer blocks)', async () => {
     const { statusMock } = stubOrchestrator()
     useOrchestratorStore.setState({ runId: 'run-active', loading: true })
 
@@ -477,6 +493,6 @@ describe('orchestrator-store — R-015: foreign-run fetchStatus deduplication', 
 
     await Promise.resolve()
 
-    expect(statusMock).not.toHaveBeenCalled()
+    expect(statusMock).toHaveBeenCalled()
   })
 })

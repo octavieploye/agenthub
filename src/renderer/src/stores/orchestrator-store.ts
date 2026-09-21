@@ -33,6 +33,7 @@ interface OrchestratorStore {
   retryFailures: RetryFailure[]
   pendingApproval: PendingApproval | null
   loading: boolean
+  fetchingStatus: boolean
   error: string | null
 
   // Actions
@@ -68,6 +69,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   retryFailures: [],
   pendingApproval: null,
   loading: false,
+  fetchingStatus: false,
   error: null,
 
   fetchRetryFailures: async () => {
@@ -136,7 +138,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
 
   fetchStatus: async () => {
-    set({ loading: true, error: null })
+    set({ loading: true, fetchingStatus: true, error: null })
     try {
       const res = await window.agentHub.orchestrator.status()
       if (res.success) {
@@ -152,12 +154,13 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
           activeRuns: activeRuns ?? [],
           queuedRuns: queuedRuns ?? [],
           loading: false,
+          fetchingStatus: false,
         })
       } else {
-        set({ error: res.error.message, loading: false })
+        set({ error: res.error.message, loading: false, fetchingStatus: false })
       }
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err), loading: false })
+      set({ error: err instanceof Error ? err.message : String(err), loading: false, fetchingStatus: false })
     }
   },
 
@@ -296,7 +299,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     // No focused run OR event is for a different run — refresh arrays, never touch singleton.
     // Guard against overlapping fetches: skip if one is already in flight.
     if (!activeRunId || payload.runId !== activeRunId) {
-      if (!get().loading) {
+      if (!get().fetchingStatus) {
         void get().fetchStatus()
       }
       return

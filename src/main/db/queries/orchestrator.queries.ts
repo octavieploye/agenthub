@@ -384,7 +384,7 @@ export function getActiveTaskLogByAgentIdAnyRun(
 ): OrchestratorTaskLog | null {
   const row = db
     .prepare(
-      "SELECT * FROM orchestrator_task_log WHERE agent_id = ? AND status = 'active' LIMIT 1"
+      "SELECT * FROM orchestrator_task_log WHERE agent_id = ? AND status = 'active' ORDER BY started_at DESC LIMIT 1"
     )
     .get(agentId) as Record<string, unknown> | undefined
   return row ? mapTaskLogRow(row) : null

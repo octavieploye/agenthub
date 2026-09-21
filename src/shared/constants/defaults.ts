@@ -8,6 +8,8 @@ export const APP_DEFAULTS = {
   MAX_TERMINAL_BUFFER_LINES: 5000
 } as const
 
+export const DEFAULT_ANAMNESIS_URL = 'http://localhost:9300' as const
+
 export const AGENT_COLOR_PALETTE = [
   '#3B82F6',  // Blue
   '#EF4444',  // Red

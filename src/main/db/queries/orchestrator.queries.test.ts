@@ -18,6 +18,7 @@ import {
   getTaskLogsByRun,
   getTaskLogsByTask,
   getActiveTaskLogs,
+  getActiveTaskLogByAgentIdAnyRun,
   incrementAgentsSpawned,
   getAgentsSpawned,
   insertApproval,
@@ -876,6 +877,29 @@ describe('orchestrator.queries', () => {
 
       const failures: RetryFailure[] = getUnacknowledgedRetryFailures(db)
       expect(failures).toHaveLength(0)
+    })
+  })
+
+  describe('L-1: getActiveTaskLogByAgentIdAnyRun', () => {
+    it('returns the most recently started active log for an agent', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'L-1-A', repoId })
+      const taskId1 = seedTask(repoId)
+      const taskId2 = seedTask(repoId)
+
+      const log1 = insertTaskLog(db, { runId: run.id, taskId: taskId1, phase: 'dev' })
+      const log2 = insertTaskLog(db, { runId: run.id, taskId: taskId2, phase: 'dev' })
+
+      updateTaskLogStatus(db, log1.id, 'active', 'agent-001')
+      updateTaskLogStatus(db, log2.id, 'active', 'agent-001')
+
+      // Force distinct started_at so the latest-started log is unambiguous.
+      db.prepare('UPDATE orchestrator_task_log SET started_at = ? WHERE id = ?').run('2026-01-01T00:00:00.000Z', log1.id)
+      db.prepare('UPDATE orchestrator_task_log SET started_at = ? WHERE id = ?').run('2026-01-02T00:00:00.000Z', log2.id)
+
+      const result = getActiveTaskLogByAgentIdAnyRun(db, 'agent-001')
+
+      expect(result?.id).toBe(log2.id)
     })
   })
 })

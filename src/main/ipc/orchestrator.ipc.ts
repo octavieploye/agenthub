@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels'
 import { getScheduler } from '../services/service-orchestrator'
 import { getDb } from '../db/connection'
-import { getTaskById } from '../db/queries/tasks.queries'
 import { getUnacknowledgedRetryFailures, acknowledgeRetryFailures } from '../db/queries/orchestrator.queries'
 import { success, error, validateInput } from './ipc-helpers'
 
@@ -158,9 +157,8 @@ export function registerOrchestratorHandlers(): void {
     const v = validateInput(schema, input)
     if (!v.valid) return v.response
     try {
-      const db = getDb()
-      const task = getTaskById(db, v.data.taskId)
-      if (!task) return error('TASK_NOT_FOUND', `Task not found: ${v.data.taskId}`)
+      // M-3: scheduler.startSingleTask already validates task existence and throws
+      // 'Task not found' — the redundant pre-check here is removed.
       const run = getOrchestrator().startSingleTask({
         taskId: v.data.taskId,
         telegramNotify: v.data.telegramNotify,

@@ -240,6 +240,18 @@ describe('OrchestratorScheduler', () => {
       expect(second.id).toBe(first.id)
     })
 
+    it('M-1: reuse preserves telegramNotify when input is explicitly false (promote-only)', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', telegramNotify: true })
+      expect(first.telegramNotify).toBe(true)
+
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1', telegramNotify: false })
+      expect(second.id).toBe(first.id)
+      expect(second.telegramNotify).toBe(true)
+    })
+
     it('queues a new run when maxConcurrentRuns > 1 and slots are full', () => {
       db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
       const deps = buildDeps(db)
@@ -262,6 +274,20 @@ describe('OrchestratorScheduler', () => {
       scheduler = new OrchestratorScheduler(deps)
 
       expect(() => scheduler.start({ sprintName: 'x', repoId: 'repo-1' })).toThrow('ORCHESTRATOR_DISABLED')
+    })
+
+    it('M-4: throws when repoId is missing', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'x' })).toThrow('ORCHESTRATOR_START_REQUIRES_REPO_ID')
+    })
+
+    it('M-4: throws when repoId is whitespace-only', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'x', repoId: '   ' })).toThrow('ORCHESTRATOR_START_REQUIRES_REPO_ID')
     })
 
     it('emits STATUS_CHANGE running to renderer on start', () => {
