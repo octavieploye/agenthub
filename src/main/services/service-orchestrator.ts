@@ -775,11 +775,16 @@ export function initializeServices(db: Database.Database): void {
           })
         }
 
+        // Structured agent name: <repo> / <sprint> - <task> - session #N
+        // N = per-run counter (increments within a sprint, resets each new run)
+        const sprintLabel = context.run.triggerSource === 'single-task' ? 'single' : context.run.sprintName
+        const sessionNumber = context.agentsSpawned + 1
+
         return {
           taskId: brainDecision.taskId,
           spawnOptions: {
             repoId: taskRepoId,
-            name: `orchestrator-${brainDecision.taskId.slice(0, 8)} ${task.title}`,
+            name: `${taskRepo.name} / ${sprintLabel} - ${task.title} - session #${sessionNumber}`,
             cwd: agenthubCwd,
             model: effectiveModel,
             provider: effectiveProvider,                // FIX C2
@@ -787,6 +792,7 @@ export function initializeServices(db: Database.Database): void {
             telegramNotify: true,                       // FIX L3
             taskDescription,
             projectId: task.projectId ?? undefined,
+            isOrchestrator: true,
           },
           reason: brainDecision.reason,
         }

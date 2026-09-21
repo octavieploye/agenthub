@@ -46,6 +46,7 @@ export interface AgentState {
   claudeMdHash?: string | null
   claudeSessionId?: string | null
   sessionId?: string | null
+  isOrchestrator?: boolean
 }
 
 export interface AgentSpawnOptions {
@@ -66,4 +67,5 @@ export interface AgentSpawnOptions {
   projectId?: string        // triggers workspace_memory.md injection at spawn
   telegramNotify?: boolean  // when true, appends send_telegram instruction to prompt
   resumeSessionId?: string  // when set, passes --resume <uuid> to Claude CLI
+  isOrchestrator?: boolean  // orchestrator-spawned agents skip silent_lock Telegram noise
 }

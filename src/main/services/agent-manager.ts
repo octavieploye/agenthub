@@ -349,7 +349,7 @@ function startSilentLockTimer(agentId: string): void {
     if (m.lastMcpTelegramAt > Date.now() - 15_000) return
     if (!m.state.telegramNotify) return
     // Orchestrator-spawned agents use the proper approval gate — skip silent_lock noise
-    if (m.state.name.startsWith('orchestrator-')) return
+    if (m.state.isOrchestrator) return
 
     const recentOutput = m.cleanTextBuffer
       ? m.cleanTextBuffer.slice(-500).trim()
@@ -561,6 +561,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     claudeMdHash,
     sessionId: getCurrentSessionId()
   })
+  agentState.isOrchestrator = options.isOrchestrator ?? false
 
   // Build provider-specific env vars (Ollama needs ANTHROPIC_BASE_URL, AUTH_TOKEN, empty API_KEY)
   const spawnEnv = buildSpawnEnv(
