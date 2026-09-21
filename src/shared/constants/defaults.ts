@@ -22,3 +22,11 @@ export const AGENT_COLOR_PALETTE = [
   '#6366F1',  // Indigo
   '#14B8A6',  // Teal
 ] as const
+
+// Colors assigned to orchestrator-spawned agents, mapped deterministically from the
+// repo/sprint NAME (trailing integer → index). Same name always yields the same color.
+export const SPRINT_COLOR_PALETTE = [
+  '#8EAFB9',  // Sprint 1 — muted blue-gray
+  '#B9B88E',  // Sprint 2 — muted olive
+  '#EFC1DF',  // Sprint 3 — muted pink
+] as const

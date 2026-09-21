@@ -57,7 +57,7 @@ import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
-import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
+import { DEFAULT_ANAMNESIS_URL, SPRINT_COLOR_PALETTE } from '../../shared/constants/defaults'
 import { loadAnamnesisSecret } from './secret-store'
 import { registerWindowManager, registerAnamnesisWriter, registerTelegramSocketPathFn, registerCurrentSessionId } from './service-registry'
 
@@ -88,6 +88,24 @@ let mcpBridgeHandler: McpBridgeHandler | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
 let intakeDir = ''
 let currentSessionId: string | null = null
+
+// Deterministic sprint color: same repo/sprint name → same palette color,
+// independent of dispatch order or restart. Prefers the trailing integer in the
+// sprint name (then repo name), falling back to a stable hash of both.
+function pickSprintColor(repoName: string, sprintName: string): string {
+  for (const name of [sprintName, repoName]) {
+    const trailing = name.match(/(\d+)\s*$/)
+    if (trailing) {
+      const n = parseInt(trailing[1], 10)
+      const idx = ((n - 1) % SPRINT_COLOR_PALETTE.length + SPRINT_COLOR_PALETTE.length) % SPRINT_COLOR_PALETTE.length
+      return SPRINT_COLOR_PALETTE[idx]
+    }
+  }
+  const key = `${repoName}:${sprintName}`
+  let hash = 0
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  return SPRINT_COLOR_PALETTE[hash % SPRINT_COLOR_PALETTE.length]
+}
 
 export function getCurrentSessionId(): string | null {
   return currentSessionId
@@ -780,6 +798,9 @@ export function initializeServices(db: Database.Database): void {
         const sprintLabel = context.run.triggerSource === 'single-task' ? 'single' : context.run.sprintName
         const sessionNumber = context.agentsSpawned + 1
 
+        // Same repo+sprint name → same color, deterministic (see pickSprintColor)
+        const color = pickSprintColor(taskRepo.name, sprintLabel)
+
         return {
           taskId: brainDecision.taskId,
           spawnOptions: {
@@ -792,6 +813,7 @@ export function initializeServices(db: Database.Database): void {
             telegramNotify: true,                       // FIX L3
             taskDescription,
             projectId: task.projectId ?? undefined,
+            color,
             isOrchestrator: true,
           },
           reason: brainDecision.reason,
