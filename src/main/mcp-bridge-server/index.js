@@ -46,20 +46,28 @@ async function callBridge(method, params) {
 async function getContext(args) {
   const [activeRun, tasks, safeguards, quota, repos] = await Promise.all([
     callBridge('getActiveRun', {}).catch(() => null),
-    callBridge('listTasks', { limit: 100 }).catch(() => ({ tasks: [] })),
+    callBridge('listTasks', { limit: 100 }).catch(() => []),
     callBridge('getSafeguards', {}).catch(() => null),
     callBridge('getQuota', {}).catch(() => null),
-    callBridge('listRepos', {}).catch(() => ({ repos: [] }))
+    callBridge('listRepos', {}).catch(() => [])
   ])
 
+  // callBridge returns the raw socket envelope { id, result } (not the unwrapped
+  // value). Unwrap it here so repos/activeAgents/quota/safeguards/runStatus carry
+  // the actual payload instead of leaking the envelope (which is why repos and
+  // activeAgents were always empty before).
+  const unwrap = (r) => (r && typeof r === 'object' && 'result' in r) ? r.result : r
+  const taskList = unwrap(tasks)
+  const repoList = unwrap(repos)
+
   return {
-    runStatus: activeRun || null,
-    activeAgents: (tasks && tasks.tasks)
-      ? tasks.tasks.filter((t) => t.status === 'in_progress')
+    runStatus: unwrap(activeRun),
+    activeAgents: Array.isArray(taskList)
+      ? taskList.filter((t) => t.status === 'in_progress')
       : [],
-    repos: (repos && repos.repos) ? repos.repos : [],
-    quota: quota || null,
-    safeguards: safeguards || null,
+    repos: Array.isArray(repoList) ? repoList : [],
+    quota: unwrap(quota),
+    safeguards: unwrap(safeguards),
     health: 'ok'
   }
 }
