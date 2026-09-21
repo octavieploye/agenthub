@@ -1,6 +1,6 @@
 import type { GuardrailConfig } from './config.types'
 import type { SkillItem } from './skills.types'
-import type { TaskItem, TaskStatus, TaskCategory, TaskPriority, CreateTaskInput, UpdateTaskInput } from './task.types'
+import type { TaskItem, TaskStatus, TaskCategory, TaskPriority } from './task.types'
 import type { ModelProvider, CapabilityTier, ModelCatalogEntry } from './model.types'
 import type { AgentLifecycleStatus } from './agent.types'
 import type { OrchestratorRunStatus } from './orchestrator.types'
@@ -294,7 +294,7 @@ export interface ArchiveTaskToolOutput {
   message: string
 }
 
-// ─── IPC message protocol (main process ↔ MCP server child) ────────────────
+// ─── Tool 15: report_files_changed ───────────────────────────────────────────
 
 export interface ReportFilesChangedToolInput {
   taskId: string
@@ -304,44 +304,4 @@ export interface ReportFilesChangedToolInput {
 export interface ReportFilesChangedToolOutput {
   ok: boolean
   count: number
-}
-
-export type McpIpcRequest =
-  | { type: 'create_task'; payload: CreateTaskInput }
-  | { type: 'update_task'; payload: { taskId: string; updates: UpdateTaskInput } }
-  | { type: 'dispatch_task'; payload: { taskId: string; telegramNotify: boolean; confirmed: boolean } }
-  | { type: 'get_active_agents'; payload: Record<string, never> }
-  | { type: 'get_orchestrator_status'; payload: Record<string, never> }
-  | { type: 'get_health_anomalies'; payload: { agentId?: string } }
-  | { type: 'create_project'; payload: CreateProjectMcpInput }
-  | { type: 'dispatch_sprint'; payload: { sprintName: string; repoId: string; projectId?: string; concurrencyCap?: number; telegramNotify?: boolean; confirmed: boolean } }
-  | { type: 'approve_task'; payload: ApproveTaskToolInput }
-  | { type: 'report_files_changed'; payload: ReportFilesChangedToolInput }
-
-// FCR-007: typed generic variants — backward compatible (T defaults to unknown)
-export type McpIpcSuccessResponse<T = unknown> = { type: 'success'; data: T }
-export type McpIpcErrorResponse = { type: 'error'; message: string; code?: string }
-
-export type McpIpcResponse = McpIpcSuccessResponse | McpIpcErrorResponse
-
-// FCR-004: loosely typed return alias for routeRequest() — callers must narrow before use
-/** Loosely typed return for routeRequest — callers must narrow before use */
-export type McpIpcRouteResult = Record<string, unknown> | Array<unknown> | null
-
-// ─── Wire-level IPC frames (main process ↔ MCP server child) ────────────────
-// Previously lived in src/main/mcp-server/ipc/ipc-protocol.ts (deleted with
-// the old mcp-server/ directory). Kept here alongside McpIpcRequest/Response
-// so McpServerManager and its test have a stable import path.
-
-/** Wire-level request frame — wraps an IPC request with a correlation ID */
-export interface McpIpcFrame {
-  correlationId: string
-  token: string
-  request: McpIpcRequest
-}
-
-/** Wire-level response frame — echoes the correlation ID for async matching */
-export interface McpIpcResponseFrame {
-  correlationId: string
-  response: McpIpcResponse
 }
