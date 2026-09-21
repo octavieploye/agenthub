@@ -152,7 +152,7 @@ export function setTelegramAgentSync(fn: TelegramAgentSync | null): void {
   _telegramAgentSync = fn
 }
 
-// Kanban MCP server info — set by service-orchestrator after McpServerManager.start()
+// Kanban MCP server info — set by service-orchestrator after the MCP bridge starts
 let _mcpServerSocketPath: string | null = null
 let _mcpServerSocketToken: string | null = null
 
@@ -474,7 +474,7 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
     }
   }
 
-  // Add agenthub-kanban when McpServerManager is running (socket + token available)
+  // Add agenthub-kanban when the MCP bridge socket is available (socket + token)
   if (_mcpServerSocketPath && _mcpServerSocketToken) {
     const bridgeScriptPath = app.isPackaged
       ? join(process.resourcesPath, 'mcp-bridge-server', 'index.js')
