@@ -33,12 +33,23 @@ if (!BRIDGE_TOKEN) {
 // ── Bridge helper ─────────────────────────────────────────────────────────────
 
 async function callBridge(method, params) {
-  return socketRequest(BRIDGE_SOCK, {
+  const envelope = await socketRequest(BRIDGE_SOCK, {
     id: Date.now().toString(),
     token: BRIDGE_TOKEN,
     method,
     params: params || {}
   })
+
+  // The bridge replies with a socket envelope { id, result } on success or
+  // { id, error: string } on failure. Unwrap here so every tool returns the
+  // actual payload (and failures surface as thrown Errors) instead of leaking
+  // the envelope to the LLM.
+  if (envelope && typeof envelope === 'object' && 'error' in envelope) {
+    throw new Error(typeof envelope.error === 'string' ? envelope.error : 'bridge error')
+  }
+  return (envelope && typeof envelope === 'object' && 'result' in envelope)
+    ? envelope.result
+    : envelope
 }
 
 // ── Tool implementations ──────────────────────────────────────────────────────
@@ -52,22 +63,14 @@ async function getContext(args) {
     callBridge('listRepos', {}).catch(() => [])
   ])
 
-  // callBridge returns the raw socket envelope { id, result } (not the unwrapped
-  // value). Unwrap it here so repos/activeAgents/quota/safeguards/runStatus carry
-  // the actual payload instead of leaking the envelope (which is why repos and
-  // activeAgents were always empty before).
-  const unwrap = (r) => (r && typeof r === 'object' && 'result' in r) ? r.result : r
-  const taskList = unwrap(tasks)
-  const repoList = unwrap(repos)
-
   return {
-    runStatus: unwrap(activeRun),
-    activeAgents: Array.isArray(taskList)
-      ? taskList.filter((t) => t.status === 'in_progress')
+    runStatus: activeRun,
+    activeAgents: Array.isArray(tasks)
+      ? tasks.filter((t) => t.status === 'in_progress')
       : [],
-    repos: Array.isArray(repoList) ? repoList : [],
-    quota: unwrap(quota),
-    safeguards: unwrap(safeguards),
+    repos: Array.isArray(repos) ? repos : [],
+    quota,
+    safeguards,
     health: 'ok'
   }
 }
