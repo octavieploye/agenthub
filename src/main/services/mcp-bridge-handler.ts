@@ -235,6 +235,13 @@ export class McpBridgeHandler {
       // ── Write: tasks ─────────────────────────────────────────────────────────
       case 'createTask': {
         const input = params as unknown as CreateTaskInput
+        // Guard: reject tasks bound to a repo that isn't registered. A phantom
+        // repoId would otherwise create an orphaned task that the orchestrator
+        // can never dispatch (brain bridge drops it when getRepoById returns null).
+        const repo = getRepoById(db, input.repoId)
+        if (!repo) {
+          throw new Error(`create_task: repo not found for repoId "${input.repoId}". Register the repo before creating tasks.`)
+        }
         return insertTask(db, input)
       }
 

@@ -265,7 +265,7 @@ const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        repoId: { type: 'string', description: 'Repository UUID (always use agenthub repo ID)' },
+        repoId: { type: 'string', description: 'Repository UUID — must be an existing registered repo (resolve via get_context repos, not a guess)' },
         title: { type: 'string', description: 'Task title' },
         description: { type: 'string', description: 'Full task description — include target repo path here' },
         priority: { type: 'number', description: 'Priority 1-5 (1=highest)' },
