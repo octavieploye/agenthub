@@ -5,6 +5,9 @@ import { OrchestratorScheduler } from './orchestrator-scheduler'
 import type { SchedulerDeps, SchedulerBrainDecision, ValidationOutcome } from './orchestrator-scheduler'
 import {
   getActiveRun,
+  getActiveRuns,
+  getQueuedRuns,
+  getRun,
   insertTaskLog,
   getTaskLogsByRun,
   insertApproval,
@@ -40,6 +43,7 @@ function buildDb(): Database.Database {
       concurrency_cap  INTEGER NOT NULL DEFAULT 3,
       telegram_notify  INTEGER NOT NULL DEFAULT 0,
       agents_spawned   INTEGER NOT NULL DEFAULT 0,
+      agent_lifetime_cap INTEGER NOT NULL DEFAULT 50,
       single_task_id   TEXT,
       started_by       TEXT,
       trigger_source   TEXT,
@@ -225,14 +229,31 @@ describe('OrchestratorScheduler', () => {
       expect(run.sprintName).toBe('sprint-1')
     })
 
-    it('returns existing active run when one is already running', () => {
+    it('returns existing active run at default maxConcurrentRuns=1', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
-      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(first.status).toBe('running')
 
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
       expect(second.id).toBe(first.id)
+    })
+
+    it('queues a new run when maxConcurrentRuns > 1 and slots are full', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      expect(first.status).toBe('running')
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(second.status).toBe('running')
+
+      const third = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-1' })
+      expect(third.id).not.toBe(first.id)
+      expect(third.id).not.toBe(second.id)
+      expect(third.status).toBe('queued')
     })
 
     it('throws when orchestrator is disabled', () => {
@@ -254,6 +275,54 @@ describe('OrchestratorScheduler', () => {
         'on-orchestrator:status-change',
         expect.objectContaining({ status: 'running' })
       )
+    })
+
+    it('stores agentLifetimeCap when passed to start()', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', agentLifetimeCap: 7 })
+
+      expect(getRun(db, run.id)!.agentLifetimeCap).toBe(7)
+    })
+
+    it('stores projectId when passed to start()', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', projectId: 'proj-9' })
+
+      expect(getRun(db, run.id)!.projectId).toBe('proj-9')
+    })
+
+    it('R-005: persists startedBy and triggerSource when provided to start()', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({
+        sprintName: 'sprint-1',
+        repoId: 'repo-1',
+        startedBy: 'operator',
+        triggerSource: 'sprint-watcher',
+      })
+
+      const persisted = getRun(db, run.id)!
+      expect(persisted.startedBy).toBe('operator')
+      expect(persisted.triggerSource).toBe('sprint-watcher')
+    })
+
+    it('R-005: persists singleTaskId when provided to start()', () => {
+      const taskId = insertTestTask(db, { id: 'st-task', repoId: 'repo-1' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({
+        sprintName: 'sprint-1',
+        repoId: 'repo-1',
+        singleTaskId: taskId,
+      })
+
+      expect(getRun(db, run.id)!.singleTaskId).toBe(taskId)
     })
   })
 
@@ -279,6 +348,98 @@ describe('OrchestratorScheduler', () => {
       scheduler = new OrchestratorScheduler(deps)
 
       expect(() => scheduler.startSingleTask({ taskId: 'no-such-task' })).toThrow('Task not found')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Slot-aware run admission
+  // -------------------------------------------------------------------------
+
+  describe('slot-aware run admission', () => {
+    it('allows multiple concurrent runs when maxConcurrentRuns is raised', () => {
+      // Set maxConcurrentRuns to 3
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      insertTestTask(db, { id: 'task-a', repoId: 'repo-1' })
+      insertTestTask(db, { id: 'task-b', repoId: 'repo-2' })
+      insertTestTask(db, { id: 'task-c', repoId: 'repo-3' })
+
+      const run1 = scheduler.start({ sprintName: 's1', repoId: 'repo-1' })
+      const run2 = scheduler.start({ sprintName: 's2', repoId: 'repo-2' })
+      const run3 = scheduler.start({ sprintName: 's3', repoId: 'repo-3' })
+
+      expect(run1.status).toBe('running')
+      expect(run2.status).toBe('running')
+      expect(run3.status).toBe('running')
+
+      // 4th run should be queued
+      const run4 = scheduler.start({ sprintName: 's4', repoId: 'repo-4' })
+      expect(run4.status).toBe('queued')
+    })
+
+    it('queues startSingleTask when slots are full (maxConcurrentRuns > 1)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const taskId = insertTestTask(db, { repoId: 'repo-1' })
+
+      // Fill both slots
+      scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+
+      // Single-task run should be queued
+      const run = scheduler.startSingleTask({ taskId })
+      expect(run.status).toBe('queued')
+      expect(run.singleTaskId).toBe(taskId)
+    })
+
+    it('starts normally when a slot is available after previous run completes', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      expect(first.status).toBe('running')
+
+      // Complete the first run
+      scheduler.cancel(first.id)
+
+      // Now a new run should start, not queue
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(second.status).toBe('running')
+    })
+
+    it('counts paused runs as active for slot calculation (maxConcurrentRuns > 1)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      scheduler.pause(run1.id)
+      expect(getRun(db, run1.id)!.status).toBe('paused')
+
+      // Paused run still occupies a slot — 3rd run should queue
+      const run3 = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      expect(run3.status).toBe('queued')
+    })
+
+    it('queued run is persisted in the database with correct status (maxConcurrentRuns > 1)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+
+      const found = getRun(db, queued.id)
+      expect(found).not.toBeNull()
+      expect(found!.status).toBe('queued')
+      expect(found!.sprintName).toBe('sprint-3')
     })
   })
 
@@ -366,6 +527,49 @@ describe('OrchestratorScheduler', () => {
       expect(getActiveRun(db)).toBeNull()
     })
 
+    it('syncs task status using newest log per task (done wins over older active)', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+      const taskId = insertTestTask(db, { id: 'multi-log-task', repoId: 'repo-1', status: 'in_progress' })
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
+
+      // Insert two logs for the same task: first active (older), then done (newer)
+      const older = new Date('2026-01-01T00:00:00Z').toISOString()
+      const newer = new Date('2026-01-01T01:00:00Z').toISOString()
+      db.prepare(
+        `INSERT INTO orchestrator_task_log (id, run_id, task_id, phase, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'dev', 'active', ?, ?)`
+      ).run('log-older', run.id, taskId, older, older)
+      db.prepare(
+        `INSERT INTO orchestrator_task_log (id, run_id, task_id, phase, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'dev', 'done', ?, ?)`
+      ).run('log-newer', run.id, taskId, newer, newer)
+
+      scheduler.cancel(run.id)
+
+      // Newest log is 'done' → task should be marked 'completed', not reset to 'backlog'
+      const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string }
+      expect(task.status).toBe('completed')
+    })
+
+    it('marks in-flight active task logs as skipped on cancel (M-2)', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+      const taskId = insertTestTask(db, { id: 'm2-active-task', repoId: 'repo-1', status: 'in_progress' })
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
+
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO orchestrator_task_log (id, run_id, task_id, phase, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'dev', 'active', ?, ?)`
+      ).run('log-m2-active', run.id, taskId, now, now)
+
+      scheduler.cancel(run.id)
+
+      const log = db.prepare('SELECT status FROM orchestrator_task_log WHERE id = ?').get('log-m2-active') as { status: string }
+      expect(log.status).toBe('skipped')
+    })
+
     it('emits STATUS_CHANGE cancelled to renderer', () => {
       const emitToRenderer = vi.fn()
       const deps = buildDeps(db, { emitToRenderer })
@@ -387,6 +591,28 @@ describe('OrchestratorScheduler', () => {
   // -------------------------------------------------------------------------
 
   describe('kill-switch', () => {
+    it('throws on start() when orchestrator.enabled key is absent (default = disabled)', () => {
+      db.prepare("DELETE FROM settings WHERE key = 'orchestrator.enabled'").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'x', repoId: 'repo-1' })).toThrow('ORCHESTRATOR_DISABLED')
+    })
+
+    it('aborts tick when orchestrator.enabled key is absent (default = disabled)', async () => {
+      // Start with enabled, then delete the key before the tick fires
+      const brain = { decide: vi.fn().mockResolvedValue(null) }
+      const deps = buildDeps(db, { brain })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 's', repoId: 'repo-1' })
+      db.prepare("DELETE FROM settings WHERE key = 'orchestrator.enabled'").run()
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(brain.decide).not.toHaveBeenCalled()
+    })
+
     it('aborts tick and stops scheduler when orchestrator.enabled is false', async () => {
       const brain = { decide: vi.fn().mockResolvedValue(null) }
       const deps = buildDeps(db, { brain })
@@ -683,6 +909,65 @@ describe('OrchestratorScheduler', () => {
       expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(true)
     })
 
+    it('reconciles completed agents across multiple active runs (P3-3)', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-recon-a', repoId: 'repo-a', status: 'today', title: 'Recon A' })
+      const taskB = insertTestTask(db, { id: 'mr-recon-b', repoId: 'repo-b', status: 'today', title: 'Recon B' })
+
+      const decisionA: SchedulerBrainDecision = {
+        taskId: taskA,
+        spawnOptions: { repoId: 'repo-a', name: 'agent-recon-a', cwd: '/tmp' },
+        reason: 'test multi-run reconciliation run-a',
+      }
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-b', name: 'agent-recon-b', cwd: '/tmp' },
+        reason: 'test multi-run reconciliation run-b',
+      }
+
+      const agentStatuses: Record<string, AgentLifecycleStatus> = {
+        'agent-recon-a': 'busy',
+        'agent-recon-b': 'busy',
+      }
+
+      const brain = {
+        decide: vi.fn()
+          .mockResolvedValueOnce(decisionA)
+          .mockResolvedValue(null),
+      }
+      const dispatch = { execute: vi.fn().mockImplementation((spawn) => spawn.name) }
+      const deps = buildDeps(db, {
+        brain,
+        dispatch,
+        getAgentStatus: vi.fn((id: string) => agentStatuses[id] ?? null),
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      // Start run-a (sprint-a), dispatch one task via tick
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      await vi.advanceTimersByTimeAsync(60_000) // tick 1: dispatches taskA into runA
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // Start run-b (sprint-b), wire brain to dispatch decisionB on next tick
+      brain.decide.mockResolvedValueOnce(decisionB).mockResolvedValue(null)
+      const runB = scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+      await vi.advanceTimersByTimeAsync(60_000) // tick 2: dispatches taskB into runB
+      expect(dispatch.execute).toHaveBeenCalledTimes(2)
+
+      // Both agents now show as completed in persistence
+      agentStatuses['agent-recon-a'] = 'completed'
+      agentStatuses['agent-recon-b'] = 'completed'
+
+      // Advance one tick — reconciliation should pick up BOTH
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      const logsA = getTaskLogsByRun(db, runA.id)
+      const logsB = getTaskLogsByRun(db, runB.id)
+      expect(logsA.some(l => l.taskId === taskA && l.status === 'done')).toBe(true)
+      expect(logsB.some(l => l.taskId === taskB && l.status === 'done')).toBe(true)
+    })
+
     it('does not treat a temporary locked prompt as task completion', async () => {
       const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
       const decision: SchedulerBrainDecision = {
@@ -924,6 +1209,71 @@ describe('OrchestratorScheduler', () => {
   })
 
   // -------------------------------------------------------------------------
+  // Retry state isolation per run
+  // -------------------------------------------------------------------------
+
+  describe('retry state isolation per run', () => {
+    it('retry state from run1 does not leak into run2 for the same taskId', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-r1', cwd: '/tmp' },
+        reason: 'test retry isolation',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-r1') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      // --- Run 1: dispatch, fail once (retry bumps count to 1), then cancel ---
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1) // immediate tick dispatches
+
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // First failure in run1 → retry allowed (count 0 → 1)
+      emitOrchestratorEvent({ type: 'agent:failed', triageEvent: fakeTriageEvent('agent-r1', 'error') })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // Task is still in_progress (dispatch set it; retry branch does not reset)
+      const afterRun1Fail = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string }
+      expect(afterRun1Fail.status).toBe('in_progress')
+
+      // Cancel run1 — retryMap entry (count=1) is NOT cleaned up
+      scheduler.cancel(run1.id)
+
+      // Reset task to dispatchable so run2 can pick it up
+      db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run('today', taskId)
+
+      // --- Run 2: dispatch same task ---
+      const decision2: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-r2', cwd: '/tmp' },
+        reason: 'test retry isolation run2',
+      }
+      vi.mocked(brain.decide).mockResolvedValueOnce(decision2).mockResolvedValue(null)
+      vi.mocked(dispatch.execute).mockReturnValue('agent-r2')
+
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1) // immediate tick dispatches
+
+      expect(dispatch.execute).toHaveBeenCalledTimes(2)
+
+      // First failure in run2 — must allow retry (fresh run, count should be 0)
+      // BUG: with taskId-only key, retryMap sees count=1 from run1 → exhausted → backlog
+      // FIX: with runId:taskId key, retryMap sees no entry for run2 → retry allowed
+      emitOrchestratorEvent({ type: 'agent:failed', triageEvent: fakeTriageEvent('agent-r2', 'error') })
+      await vi.advanceTimersByTimeAsync(1)
+
+      const afterRun2Fail = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string }
+      // With fix: retry allowed → task stays in_progress (not reset to backlog)
+      // With bug: retry exhausted → task reset to backlog
+      expect(afterRun2Fail.status).toBe('in_progress')
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // getStatus()
   // -------------------------------------------------------------------------
 
@@ -960,6 +1310,83 @@ describe('OrchestratorScheduler', () => {
       // After dispatch, task log is active
       expect(status.activeTasks.length).toBeGreaterThanOrEqual(1)
       expect(status.totalCount).toBeGreaterThanOrEqual(1)
+      expect(status.completedCount).toBe(0)
+    })
+
+    it('returns activeRuns and queuedRuns alongside run field', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      const run2 = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      expect(queued.status).toBe('queued')
+
+      const status = scheduler.getStatus()
+
+      // backward-compat: run === activeRuns[0]
+      expect(status.run).not.toBeNull()
+      expect(status.run!.id).toBe(status.activeRuns[0].id)
+
+      // new fields
+      expect(status.activeRuns).toHaveLength(2)
+      expect(status.activeRuns.map(r => r.id)).toContain(run1.id)
+      expect(status.activeRuns.map(r => r.id)).toContain(run2.id)
+      expect(status.queuedRuns).toHaveLength(1)
+      expect(status.queuedRuns[0].id).toBe(queued.id)
+    })
+
+    it('returns empty activeRuns and queuedRuns when no run exists', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const status = scheduler.getStatus()
+
+      expect(status.run).toBeNull()
+      expect(status.activeRuns).toHaveLength(0)
+      expect(status.queuedRuns).toHaveLength(0)
+    })
+
+    it('R-004: aggregates metrics across all active runs', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskId1 = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const taskId2 = insertTestTask(db, { repoId: 'repo-2', status: 'today' })
+
+      const decision1: SchedulerBrainDecision = {
+        taskId: taskId1,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-r1', cwd: '/tmp' },
+        reason: 'test-r1',
+      }
+      const decision2: SchedulerBrainDecision = {
+        taskId: taskId2,
+        spawnOptions: { repoId: 'repo-2', name: 'agent-r2', cwd: '/tmp' },
+        reason: 'test-r2',
+      }
+
+      const brain = {
+        decide: vi.fn()
+          .mockResolvedValueOnce(decision1)
+          .mockResolvedValueOnce(decision2)
+          .mockResolvedValue(null),
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-multi-test') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      // Two active runs, each scoped to one task in a different repo.
+      scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId1] })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2', taskIds: [taskId2] })
+
+      // Tick 1 (immediate at 0 ms): dispatches task1 from run1 (dispatched=true breaks the run loop).
+      // Tick 2 (interval at 60 000 ms): dispatches task2 from run2.
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      const status = scheduler.getStatus()
+      // Pre-fix: totalCount === 1 (only run1 logs). Post-fix: totalCount === 2.
+      expect(status.totalCount).toBe(2)
+      expect(status.activeTasks).toHaveLength(2)
       expect(status.completedCount).toBe(0)
     })
   })
@@ -1066,7 +1493,7 @@ describe('OrchestratorScheduler', () => {
 
       const approval = getApproval(db, run.id, 'gate-none')
       expect(approval?.status).toBe('pending')
-      expect(notifyApproval).toHaveBeenCalledWith('gate-none', run.id, 'Approval task', 'repo-1')
+      expect(notifyApproval).toHaveBeenCalledWith('gate-none', run.id, 'Approval task', 'repo-1', 's', 'desc')
       expect(brain.decide).not.toHaveBeenCalled()
       expect(dispatch.execute).not.toHaveBeenCalled()
     })
@@ -1132,7 +1559,7 @@ describe('OrchestratorScheduler', () => {
       const approval = getApproval(db, run.id, 'gate-expired')
       expect(approval?.status).toBe('pending')
       expect(approval?.reminderCount).toBe(0)
-      expect(notifyApproval).toHaveBeenCalledWith('gate-expired', run.id, 'Approval task', 'repo-1')
+      expect(notifyApproval).toHaveBeenCalledWith('gate-expired', run.id, 'Approval task', 'repo-1', 's', 'desc')
       expect(dispatch.execute).not.toHaveBeenCalled()
     })
 
@@ -1360,6 +1787,605 @@ describe('OrchestratorScheduler', () => {
       const logs = scheduler.getTaskLog('task-log-test')
       expect(logs).toHaveLength(1)
       expect(logs[0].taskId).toBe('task-log-test')
+    })
+
+    it('returns logs for a task whose run is not the most-recent active run (multi-run)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a' })
+      // runB is the "newer" active run — old code's getActiveRun() (ORDER BY updated_at DESC LIMIT 1) returns runB,
+      // so any task belonging to runA would be invisible to the old getTaskLog() implementation
+      const runB = scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b' })
+      expect(runB.status).toBe('running')
+
+      // Force runA to appear older so getActiveRun() always returns runB
+      db.prepare("UPDATE orchestrator_runs SET updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(runA.id)
+
+      insertTaskLog(db, { runId: runA.id, taskId: 'multi-run-task', phase: 'dev' })
+
+      // Old code: getActiveRun() → runB → getTaskLogsByRun(runB.id).filter(taskId='multi-run-task') = []
+      // New code: getTaskLogsByTask(db, 'multi-run-task') → [log in runA]
+      const logs = scheduler.getTaskLog('multi-run-task')
+      expect(logs).toHaveLength(1)
+      expect(logs[0].taskId).toBe('multi-run-task')
+      expect(logs[0].runId).toBe(runA.id)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Multi-run tickBody() — P3-1
+  // -------------------------------------------------------------------------
+
+  describe('multi-run tickBody()', () => {
+    it('dispatches tasks from 2+ active runs across consecutive ticks', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-task-a', repoId: 'repo-a', status: 'today', title: 'Task A' })
+      const taskB = insertTestTask(db, { id: 'mr-task-b', repoId: 'repo-b', status: 'today', title: 'Task B' })
+
+      const decisionA: SchedulerBrainDecision = {
+        taskId: taskA,
+        spawnOptions: { repoId: 'repo-a', name: 'agent-a', cwd: '/tmp' },
+        reason: 'run-a task',
+      }
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-b', name: 'agent-b', cwd: '/tmp' },
+        reason: 'run-b task',
+      }
+
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionA)
+        .mockResolvedValueOnce(decisionB)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      const runB = scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+      expect(runA.status).toBe('running')
+      expect(runB.status).toBe('running')
+
+      // Tick 1: dispatches from the oldest run
+      await vi.advanceTimersByTimeAsync(1)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // Tick 2: dispatches from the second run
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(2)
+
+      // Verify both runs got a dispatch
+      const callArgs = dispatch.execute.mock.calls
+      const dispatchedRunIds = callArgs.map((args: unknown[]) => args[2])
+      expect(dispatchedRunIds).toContain(runA.id)
+      expect(dispatchedRunIds).toContain(runB.id)
+    })
+
+    it('dispatches from oldest-first (FIFO by createdAt)', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskOld = insertTestTask(db, { id: 'mr-task-old', repoId: 'repo-old', status: 'today', title: 'Old Task' })
+      const taskNew = insertTestTask(db, { id: 'mr-task-new', repoId: 'repo-new', status: 'today', title: 'New Task' })
+
+      const decisionOld: SchedulerBrainDecision = {
+        taskId: taskOld,
+        spawnOptions: { repoId: 'repo-old', name: 'agent-old', cwd: '/tmp' },
+        reason: 'oldest run',
+      }
+      const decisionNew: SchedulerBrainDecision = {
+        taskId: taskNew,
+        spawnOptions: { repoId: 'repo-new', name: 'agent-new', cwd: '/tmp' },
+        reason: 'newest run',
+      }
+
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionOld)
+        .mockResolvedValueOnce(decisionNew)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-fifo') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      // Start runs in order — runOld is created first (older createdAt)
+      const runOld = scheduler.start({ sprintName: 'sprint-old', repoId: 'repo-old', taskIds: [taskOld] })
+      const runNew = scheduler.start({ sprintName: 'sprint-new', repoId: 'repo-new', taskIds: [taskNew] })
+
+      // Tick 1: the OLDEST run (by createdAt) must dispatch first
+      await vi.advanceTimersByTimeAsync(1)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-old' }),
+        taskOld,
+        runOld.id
+      )
+
+      // Tick 2: now the newer run dispatches
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(2)
+      expect(dispatch.execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({ repoId: 'repo-new' }),
+        taskNew,
+        runNew.id
+      )
+    })
+
+    it('dispatches at most 1 task per tick across all active runs', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-throughput-a', repoId: 'repo-a', status: 'today' })
+      const taskB = insertTestTask(db, { id: 'mr-throughput-b', repoId: 'repo-b', status: 'today' })
+      const taskC = insertTestTask(db, { id: 'mr-throughput-c', repoId: 'repo-c', status: 'today' })
+
+      const brain = { decide: vi.fn().mockImplementation(
+        (ctx: { run: { repoId: string }; candidateTasks: Array<{ id: string }> }) => {
+          const task = ctx.candidateTasks[0]
+          if (!task) return Promise.resolve(null)
+          return Promise.resolve({
+            taskId: task.id,
+            spawnOptions: { repoId: ctx.run.repoId, name: `agent-${task.id}`, cwd: '/tmp' },
+            reason: 'throughput test',
+          })
+        }
+      )}
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-throughput') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+      scheduler.start({ sprintName: 'sprint-c', repoId: 'repo-c', taskIds: [taskC] })
+
+      // Single tick: must dispatch exactly 1 task, not 3
+      await vi.advanceTimersByTimeAsync(1)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips a paused run and dispatches from the next active run', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-paused-a', repoId: 'repo-a', status: 'today' })
+      const taskB = insertTestTask(db, { id: 'mr-paused-b', repoId: 'repo-b', status: 'today' })
+
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-b', name: 'agent-b', cwd: '/tmp' },
+        reason: 'non-paused run',
+      }
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionB)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-skip-paused') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+
+      // Pause the oldest run
+      scheduler.pause(runA.id)
+
+      // Tick: should skip paused runA and dispatch from runB
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-b' }),
+        taskB,
+        expect.any(String)
+      )
+    })
+
+    it('budget exhaustion on one run does not block dispatch from another run', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-budget-a', repoId: 'repo-a', status: 'today' })
+      const taskB = insertTestTask(db, { id: 'mr-budget-b', repoId: 'repo-b', status: 'today' })
+
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-b', name: 'agent-b', cwd: '/tmp' },
+        reason: 'budget test',
+      }
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionB)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-budget') }
+      const deps = buildDeps(db, { brain, dispatch, maxAgents: 50 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+
+      // Exhaust budget on runA by setting agents_spawned to maxAgents
+      db.prepare('UPDATE orchestrator_runs SET agents_spawned = 50 WHERE id = ?').run(runA.id)
+
+      // Tick: runA budget exhausted → continue to runB → dispatch
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-b' }),
+        taskB,
+        expect.any(String)
+      )
+    })
+
+    it('agent:completed correlates to the correct run, not the most-recently-updated one (P3-2)', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+
+      const taskA = insertTestTask(db, { id: 'mr-corr-a', repoId: 'repo-a', status: 'today', title: 'Corr A' })
+      const taskB = insertTestTask(db, { id: 'mr-corr-b', repoId: 'repo-b', status: 'today', title: 'Corr B' })
+
+      const decisionA: SchedulerBrainDecision = {
+        taskId: taskA,
+        spawnOptions: { repoId: 'repo-a', name: 'agent-a', cwd: '/tmp' },
+        reason: 'run-a corr',
+      }
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-b', name: 'agent-b', cwd: '/tmp' },
+        reason: 'run-b corr',
+      }
+
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionA)
+        .mockResolvedValueOnce(decisionB)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn()
+        .mockReturnValueOnce('agent-corr-a')
+        .mockReturnValueOnce('agent-corr-b')
+      }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a', taskIds: [taskA] })
+      const runB = scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b', taskIds: [taskB] })
+
+      // Tick 1: FIFO → dispatches from run-a (oldest), agent_id = 'agent-corr-a'
+      await vi.advanceTimersByTimeAsync(1)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // Tick 2: dispatches from run-b, agent_id = 'agent-corr-b'
+      // After this, run-b's updated_at > run-a's updated_at
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(2)
+
+      // Emit completion for run-a's agent.
+      // BUG (pre-fix): getActiveRun() returns run-b (most recently updated),
+      // getActiveTaskLogByAgentId(runB.id, 'agent-corr-a') → null → event dropped.
+      // FIX: run-agnostic lookup finds the task log in run-a directly.
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-corr-a', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      const logsA = getTaskLogsByRun(db, runA.id)
+      expect(logsA.some(l => l.taskId === taskA && l.status === 'done')).toBe(true)
+
+      // run-b's task should still be active (not affected by run-a's completion)
+      const logsB = getTaskLogsByRun(db, runB.id)
+      expect(logsB.some(l => l.taskId === taskB && l.status === 'active')).toBe(true)
+    })
+
+    it('budget gate uses run.agentLifetimeCap, not deps.maxAgents (P3-6 enforcement)', async () => {
+      const taskA = insertTestTask(db, { id: 'alc-task-a', repoId: 'repo-1', status: 'today' })
+      const taskB = insertTestTask(db, { id: 'alc-task-b', repoId: 'repo-1', status: 'today' })
+
+      const decisionA: SchedulerBrainDecision = {
+        taskId: taskA,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-alc-a', cwd: '/tmp' },
+        reason: 'lifetime cap test',
+      }
+      const decisionB: SchedulerBrainDecision = {
+        taskId: taskB,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-alc-b', cwd: '/tmp' },
+        reason: 'lifetime cap test',
+      }
+      // Low per-run cap (1) but high global budget (50). Pre-fix, the gate checks
+      // maxAgents=50 and would dispatch taskB on tick 2; with fix it checks
+      // agentLifetimeCap=1 and blocks the second dispatch.
+      const brain = { decide: vi.fn()
+        .mockResolvedValueOnce(decisionA)
+        .mockResolvedValueOnce(decisionB)
+        .mockResolvedValue(null)
+      }
+      const dispatch = { execute: vi.fn()
+        .mockReturnValueOnce('agent-alc-1')
+        .mockReturnValueOnce('agent-alc-2')
+      }
+      const deps = buildDeps(db, { brain, dispatch, maxAgents: 50 })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-alc', repoId: 'repo-1', agentLifetimeCap: 1, taskIds: [taskA, taskB] })
+
+      // Tick 1: dispatches taskA → agents_spawned reaches 1 (= agentLifetimeCap)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // Tick 2: budget gate fires at agentLifetimeCap=1 — must NOT dispatch taskB
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // promoteNextQueued()
+  // -------------------------------------------------------------------------
+
+  describe('promoteNextQueued()', () => {
+    it('promotes a queued run to running when a slot frees on cancel', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      expect(queued.status).toBe('queued')
+
+      scheduler.cancel(run1.id)
+
+      const promoted = getRun(db, queued.id)
+      expect(promoted!.status).toBe('running')
+    })
+
+    it('promotes a queued run to running when a slot frees on completion', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const taskId = insertTestTask(db, { id: 'complete-task', repoId: 'repo-1', status: 'today' })
+      // Add a task for repo-3 so the promoted run doesn't immediately complete
+      const taskForQueued = insertTestTask(db, { id: 'queued-task', repoId: 'repo-3', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-complete', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-complete-id') },
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId] })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3', taskIds: [taskForQueued] })
+      expect(queued.status).toBe('queued')
+
+      // Dispatch the task in sprint-1
+      await vi.advanceTimersByTimeAsync(1)
+
+      // Complete the agent — triggers maybeCompleteRun
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-complete-id', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      const promoted = getRun(db, queued.id)
+      expect(promoted!.status).toBe('running')
+    })
+
+    it('promotes queued runs in FIFO order (created_at ASC)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queuedFirst = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      const queuedSecond = scheduler.start({ sprintName: 'sprint-4', repoId: 'repo-4' })
+      expect(queuedFirst.status).toBe('queued')
+      expect(queuedSecond.status).toBe('queued')
+
+      // Cancel run1 — should promote sprint-3 (first queued), NOT sprint-4
+      scheduler.cancel(run1.id)
+
+      expect(getRun(db, queuedFirst.id)!.status).toBe('running')
+      expect(getRun(db, queuedSecond.id)!.status).toBe('queued')
+    })
+
+    it('does not promote when there are no queued runs', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+
+      // Cancel run1 — no queued runs exist, should not throw or error
+      scheduler.cancel(run1.id)
+
+      const active = getActiveRuns(db)
+      expect(active).toHaveLength(1)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+    })
+
+    it('does not promote when maxConcurrentRuns is 1 (legacy mode)', () => {
+      // Default maxConcurrentRuns=1 — legacy mode never queues
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+
+      // Manually insert a queued run to simulate edge case
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO orchestrator_runs
+           (id, sprint_name, repo_id, status, concurrency_cap, agents_spawned, created_at, updated_at)
+         VALUES ('manual-queued', 'sprint-q', 'repo-q', 'queued', 3, 0, ?, ?)`
+      ).run(now, now)
+
+      scheduler.cancel(run1.id)
+
+      // The manually-inserted queued run should NOT be promoted
+      expect(getRun(db, 'manual-queued')!.status).toBe('queued')
+    })
+
+    it('does not over-promote past the concurrency cap', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      const queued1 = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      const queued2 = scheduler.start({ sprintName: 'sprint-4', repoId: 'repo-4' })
+
+      // Cancel only 1 run — should promote exactly 1 queued run, not both
+      scheduler.cancel(run1.id)
+
+      const activeAfter = getActiveRuns(db)
+      expect(activeAfter).toHaveLength(2)  // sprint-2 + sprint-3
+
+      expect(getRun(db, queued1.id)!.status).toBe('running')
+      expect(getRun(db, queued2.id)!.status).toBe('queued')
+    })
+
+    it('promotes queued runs after recoverOrphanedState fails stale runs', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      // Insert a stale run (>2h old, running, no active logs)
+      db.prepare(
+        `INSERT INTO orchestrator_runs
+           (id, sprint_name, repo_id, status, concurrency_cap, agents_spawned, created_at, updated_at)
+         VALUES ('stale-run-promote', 'old-sprint', 'repo-1', 'running', 3, 0,
+                 datetime('now', '-3 hours'), datetime('now', '-3 hours'))`
+      ).run()
+
+      // Insert a healthy running run
+      scheduler.start({ sprintName: 'healthy', repoId: 'repo-2' })
+
+      // Insert a queued run
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO orchestrator_runs
+           (id, sprint_name, repo_id, status, concurrency_cap, agents_spawned, created_at, updated_at)
+         VALUES ('queued-for-promote', 'waiting-sprint', 'repo-3', 'queued', 3, 0, ?, ?)`
+      ).run(now, now)
+
+      scheduler.recoverOrphanedState()
+
+      // The stale run should be failed, and the queued run should be promoted
+      expect(getRun(db, 'stale-run-promote')!.status).toBe('failed')
+      expect(getRun(db, 'queued-for-promote')!.status).toBe('running')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // cancel-then-complete race (H-1)
+  // -------------------------------------------------------------------------
+
+  describe('cancel-then-complete race (H-1)', () => {
+    it('ignores agent:completed after run is cancelled', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-race', cwd: '/tmp' },
+        reason: 'race test',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-race-1') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'race-sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(60_000) // dispatch tick
+      expect(dispatch.execute).toHaveBeenCalledTimes(1)
+
+      // Cancel the run while the agent is still active
+      scheduler.cancel(run.id)
+      expect(getRun(db, run.id)!.status).toBe('cancelled')
+
+      // Late agent:completed arrives after cancel
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-race-1', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // The task log should NOT have been marked 'done' by the event handler —
+      // cancel() already reset active logs to backlog via its own safeguard.
+      const logs = getTaskLogsByRun(db, run.id)
+      const doneLogs = logs.filter(l => l.taskId === taskId && l.status === 'done')
+      expect(doneLogs.length).toBe(0)
+    })
+
+    it('ignores agent:failed after run is cancelled', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-race-f', cwd: '/tmp' },
+        reason: 'race test fail',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-race-f1') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'race-sprint-f', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      scheduler.cancel(run.id)
+
+      // Late agent:failed arrives after cancel
+      emitOrchestratorEvent({
+        type: 'agent:failed',
+        triageEvent: fakeTriageEvent('agent-race-f1', 'error'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // No retry should have been scheduled — the event was dropped
+      const logs = getTaskLogsByRun(db, run.id)
+      const failedByEvent = logs.filter(l => l.taskId === taskId && l.status === 'failed')
+      // The late event must not create a 'failed' phase log (H-1 guard drops it),
+      // and no retry dispatch should occur.
+      expect(failedByEvent.length).toBe(0)
+      expect(dispatch.execute).toHaveBeenCalledTimes(1) // no retry dispatch
+    })
+
+    it('ignores agent:completed after run has already completed', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-done', cwd: '/tmp' },
+        reason: 'completion race test',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-done-1') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'done-sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // Complete the task normally
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-done-1', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // Run should now be completed (single task, all done)
+      const runAfter = getRun(db, run.id)!
+      expect(runAfter.status).toBe('completed')
+
+      // Duplicate agent:completed arrives (e.g. reconciliation + event race)
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-done-1', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // Run should still be completed, no crash or state corruption
+      expect(getRun(db, run.id)!.status).toBe('completed')
     })
   })
 })

@@ -1,10 +1,11 @@
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import {
-  getActiveRun,
+  getActiveRuns,
   getActiveTaskLogs,
   getTaskLogsByRun,
   getExpiredPendingApprovals,
+  getRun,
   extendApproval,
   escalateApproval,
   markApprovalExpired,
@@ -48,8 +49,8 @@ export interface OrchestratorMonitorDeps {
   reconcileActiveAgents?: () => number | void
   sendTelegramNotification?: (summary: string, type: 'completed' | 'failed') => void
   getRunTokenUsage?: (runId: string) => number
-  notifyApproval?: (requestId: string, title: string) => void   // A — re-notify
-  sendEscalation?: (requestId: string, title: string) => void   // C — plain-text /approve
+  notifyApproval?: (requestId: string, title: string, repoId: string, sprintName?: string, description?: string) => void   // A — re-notify
+  sendEscalation?: (requestId: string, title: string, repoId: string, sprintName?: string, description?: string) => void   // C — plain-text /approve
 }
 
 export class OrchestratorMonitorService {
@@ -79,20 +80,23 @@ export class OrchestratorMonitorService {
 
   /** Single rules pass. Public so tests can drive it deterministically. */
   check(): void {
-    const initialRun = getActiveRun(this.db)
-    if (!initialRun || initialRun.status === 'paused') return
+    const initialRuns = getActiveRuns(this.db).filter(r => r.status === 'running')
+    if (initialRuns.length === 0) return
 
     this.deps.reconcileActiveAgents?.()
 
-    // Reconciliation can complete the final task and close the run.
-    const run = getActiveRun(this.db)
-    if (!run || run.status === 'paused') return
+    // Reconciliation can complete the final task and close runs.
+    const activeRuns = getActiveRuns(this.db).filter(r => r.status === 'running')
+    if (activeRuns.length === 0) return
 
-    if (this.checkConcurrentAgents(run)) return
-    if (this.checkDuration(run)) return
-    if (this.checkTokens(run)) return
-    if (this.checkTotalRetries(run)) return
-    this.checkStuckLoop(run)
+    for (const run of activeRuns) {
+      if (run.status !== 'running') continue
+      if (this.checkConcurrentAgents(run)) continue
+      if (this.checkDuration(run)) continue
+      if (this.checkTokens(run)) continue
+      if (this.checkTotalRetries(run)) continue
+      this.checkStuckLoop(run)
+    }
     this.checkApprovalStalls()
     this.checkTelegramHealth()
   }
@@ -126,7 +130,15 @@ export class OrchestratorMonitorService {
   }
 
   private checkTokens(run: OrchestratorRun): boolean {
-    const tokens = this.deps.getRunTokenUsage?.(run.id) ?? 0
+    let tokens: number
+    try {
+      tokens = this.deps.getRunTokenUsage?.(run.id) ?? 0
+    } catch (err) {
+      // Fail-safe: if token counting errors, assume the cap is breached.
+      // Returning 0 would be fail-open — the safeguard would silently stop working.
+      this.breach(run, `token usage check failed (${err instanceof Error ? err.message : String(err)}) — fail-safe pause`)
+      return true
+    }
     if (tokens > MONITOR_LIMITS.maxTokens) {
       this.breach(run, `token cost exceeded (${tokens}/${MONITOR_LIMITS.maxTokens})`)
       return true
@@ -167,16 +179,20 @@ export class OrchestratorMonitorService {
     const window = getApprovalWindowMinutes(this.db)
     for (const a of approvals) {
       const task = getTaskById(this.db, a.taskId)
+      const run = getRun(this.db, a.runId)
       const title = task?.title ?? a.taskId
       const requestId = `task:${a.taskId}:${a.runId}`
+      const repoId = run?.repoId ?? ''
+      const sprintName = run?.sprintName
+      const description = task?.description
 
       if (a.reminderCount < OPERATING_RULES.approvalMaxReminders) {
         // A — re-notify + extend window
-        this.deps.notifyApproval?.(requestId, title)
+        this.deps.notifyApproval?.(requestId, title, repoId, sprintName, description)
         extendApproval(this.db, a.id, window)
       } else if (a.reminderCount === OPERATING_RULES.approvalMaxReminders) {
         // C — escalate via plain-text /approve; stop auto-extending
-        this.deps.sendEscalation?.(requestId, title)
+        this.deps.sendEscalation?.(requestId, title, repoId, sprintName, description)
         escalateApproval(this.db, a.id)  // count 2 → 3
       } else {
         // B — last resort: reset to backlog ONLY if the task never actually ran
@@ -194,7 +210,7 @@ export class OrchestratorMonitorService {
   private approvalNeverRan(a: { runId: string; taskId: string }): boolean {
     const hasActiveLog = getActiveTaskLogs(this.db, a.runId).some(l => l.taskId === a.taskId)
     if (hasActiveLog) return false
-    return !wasFilesChangedReported(this.db, a.taskId)
+    return !wasFilesChangedReported(this.db, a.runId, a.taskId)
   }
 
   private checkTelegramHealth(): void {

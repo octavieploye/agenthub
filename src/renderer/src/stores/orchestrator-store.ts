@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type {
+  OrchestratorPhase,
+  OrchestratorRun,
   OrchestratorRunStatus,
   OrchestratorStartInput,
   OrchestratorStatusChangePayload,
@@ -24,8 +26,10 @@ interface OrchestratorStore {
   completedCount: number
   totalCount: number
   failedCount: number
+  activeRuns: OrchestratorRun[]
+  queuedRuns: OrchestratorRun[]
   taskLogs: Map<string, OrchestratorTaskLog[]>
-  taskProgress: Map<string, { status: string; skill: string | null; model: string | null; startedAt: string | null }>
+  taskProgress: Map<string, { status: string; phase: OrchestratorPhase | null; skill: string | null; model: string | null; startedAt: string | null }>
   retryFailures: RetryFailure[]
   pendingApproval: PendingApproval | null
   loading: boolean
@@ -37,10 +41,10 @@ interface OrchestratorStore {
   fetchRetryFailures: () => Promise<void>
   acknowledgeRetryFailures: () => Promise<void>
   start: (input: OrchestratorStartInput) => Promise<boolean>
-  startSingleTask: (taskId: string, repoId: string, sprintName?: string | null, projectId?: string) => Promise<boolean>
-  cancel: () => Promise<void>
-  pause: () => Promise<boolean>
-  resume: () => Promise<boolean>
+  startSingleTask: (taskId: string, repoId?: string, sprintName?: string | null, projectId?: string) => Promise<boolean>
+  cancel: (explicitRunId?: string) => Promise<void>
+  pause: (runId?: string) => Promise<boolean>
+  resume: (runId?: string) => Promise<boolean>
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => void
   handleTaskPhaseChange: (payload: OrchestratorTaskPhaseChangePayload) => void
   handleApprovalNeeded: (payload: { runId: string; taskId: string; title: string; description: string }) => void
@@ -57,6 +61,8 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
   completedCount: 0,
   totalCount: 0,
   failedCount: 0,
+  activeRuns: [],
+  queuedRuns: [],
   taskLogs: new Map(),
   taskProgress: new Map(),
   retryFailures: [],
@@ -134,7 +140,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     try {
       const res = await window.agentHub.orchestrator.status()
       if (res.success) {
-        const { run, completedCount, totalCount, failedCount } = res.data
+        const { run, completedCount, totalCount, failedCount, activeRuns, queuedRuns } = res.data
         set({
           runStatus: run?.status ?? null,
           sprintName: run?.sprintName ?? null,
@@ -143,6 +149,8 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
           completedCount,
           totalCount,
           failedCount,
+          activeRuns: activeRuns ?? [],
+          queuedRuns: queuedRuns ?? [],
           loading: false,
         })
       } else {
@@ -158,12 +166,19 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     try {
       const res = await window.agentHub.orchestrator.start(input)
       if (res.success) {
-        set({
-          runId: res.data.id,
-          runStatus: res.data.status,
-          sprintName: res.data.sprintName,
-          loading: false,
-        })
+        if (res.data.status === 'queued') {
+          // Queued run — do NOT write singleton; the active run is unchanged.
+          // Refresh arrays so queuedRuns reflects the new entry.
+          await get().fetchStatus()
+        } else {
+          // running / paused — this becomes the focused active run
+          set({
+            runId: res.data.id,
+            runStatus: res.data.status,
+            sprintName: res.data.sprintName,
+            loading: false,
+          })
+        }
         return true
       } else {
         set({ error: res.error.message, loading: false })
@@ -175,14 +190,19 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
-  pause: async () => {
-    const { runId } = get()
-    if (!runId) return false
+  pause: async (runId?: string) => {
+    const targetId = typeof runId === 'string' ? runId : get().runId
+    if (!targetId) return false
+    const isFocusedRun = targetId === get().runId
     set({ loading: true, error: null })
     try {
-      const res = await window.agentHub.orchestrator.pause({ runId })
+      const res = await window.agentHub.orchestrator.pause({ runId: targetId })
       if (res.success) {
-        set({ runStatus: 'paused', loading: false })
+        if (isFocusedRun) {
+          set({ runStatus: 'paused', loading: false })
+        } else {
+          set({ loading: false })
+        }
         return true
       } else {
         set({ error: res.error.message, loading: false })
@@ -194,14 +214,19 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
-  resume: async () => {
-    const { runId } = get()
-    if (!runId) return false
+  resume: async (runId?: string) => {
+    const targetId = typeof runId === 'string' ? runId : get().runId
+    if (!targetId) return false
+    const isFocusedRun = targetId === get().runId
     set({ loading: true, error: null })
     try {
-      const res = await window.agentHub.orchestrator.resume({ runId })
+      const res = await window.agentHub.orchestrator.resume({ runId: targetId })
       if (res.success) {
-        set({ runStatus: 'running', loading: false })
+        if (isFocusedRun) {
+          set({ runStatus: 'running', loading: false })
+        } else {
+          set({ loading: false })
+        }
         return true
       } else {
         set({ error: res.error.message, loading: false })
@@ -213,7 +238,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     }
   },
 
-  startSingleTask: async (taskId: string, _repoId: string, _sprintName?: string | null, _projectId?: string) => {
+  startSingleTask: async (taskId: string, _repoId?: string, _sprintName?: string | null, _projectId?: string) => {
     set({ loading: true, error: null })
     try {
       const res = await window.agentHub.orchestrator.startSingleTask({ taskId })
@@ -233,31 +258,51 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
         set({ error: res.error.message, loading: false })
         return false
       }
-    } catch (e) {
-      set({ error: (e as Error).message, loading: false })
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err), loading: false })
       return false
     }
   },
 
-  cancel: async () => {
-    const runId = get().runId
-    if (!runId) return
+  cancel: async (explicitRunId?: string) => {
+    const targetId = explicitRunId ?? get().runId
+    if (!targetId) return
+    const isActiveRun = targetId === get().runId
     set({ loading: true, error: null })
     try {
-      const res = await window.agentHub.orchestrator.cancel({ runId })
+      const res = await window.agentHub.orchestrator.cancel({ runId: targetId })
       if (res.success) {
-        set({ runStatus: 'cancelled', singleTaskId: null, taskProgress: new Map() })
+        if (isActiveRun) {
+          set({ runStatus: 'cancelled', singleTaskId: null, taskProgress: new Map() })
+        } else {
+          // Queued run cancelled — remove from queuedRuns, leave active run untouched
+          set((state) => ({
+            queuedRuns: state.queuedRuns.filter((r) => r.id !== targetId),
+          }))
+        }
       } else {
         set({ error: res.error.message })
       }
-    } catch (e) {
-      set({ error: (e as Error).message })
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
     } finally {
       set({ loading: false })
     }
   },
 
   handleStatusChange: (payload: OrchestratorStatusChangePayload) => {
+    const { runId: activeRunId } = get()
+
+    // No focused run OR event is for a different run — refresh arrays, never touch singleton.
+    // Guard against overlapping fetches: skip if one is already in flight.
+    if (!activeRunId || payload.runId !== activeRunId) {
+      if (!get().loading) {
+        void get().fetchStatus()
+      }
+      return
+    }
+
+    // Status change for the focused active run — update singleton fields
     if (payload.status === 'completed' || payload.status === 'failed' || payload.status === 'cancelled') {
       set({
         runStatus: payload.status,
@@ -282,9 +327,9 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
       const next = new Map(state.taskProgress)
       const existing = next.get(payload.taskId)
       next.set(payload.taskId, {
-        // payload.phase maps to the displayed skill label (e.g. 'dev', 'review', 'security')
         status: payload.status,
-        skill: payload.phase ?? existing?.skill ?? null,
+        phase: payload.phase ?? existing?.phase ?? null,
+        skill: existing?.skill ?? null,
         model: existing?.model ?? null,
         startedAt: existing?.startedAt ?? new Date().toISOString(),
       })

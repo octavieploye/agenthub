@@ -4,11 +4,12 @@ import Database from 'better-sqlite3'
 import { runMigrations } from '../migration-runner'
 import { insertRepo } from './repos.queries'
 import { insertTask } from './tasks.queries'
-import type { OrchestratorTriggerSource } from '../../../shared/types/orchestrator.types'
+import type { OrchestratorTriggerSource, OrchestratorStartInput, RetryFailure } from '../../../shared/types/orchestrator.types'
 import {
   insertRun,
   getRun,
   getActiveRun,
+  getActiveRuns,
   updateRunStatus,
   updateRunTimestamp,
   insertTaskLog,
@@ -26,7 +27,13 @@ import {
   updateApprovalStatus,
   extendApproval,
   markApprovalExpired,
-  deleteApprovalsForRun
+  deleteApprovalsForRun,
+  insertRetryFailure,
+  getUnacknowledgedRetryFailures,
+  acknowledgeRetryFailures,
+  getFilesChangedForTask,
+  wasFilesChangedReported,
+  updateRunTelegramNotify,
 } from './orchestrator.queries'
 
 let db: Database.Database
@@ -122,6 +129,24 @@ describe('orchestrator.queries', () => {
         })
       ).toThrow()
     })
+
+    it('accepts an explicit initial status', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'queued-sprint', repoId, status: 'queued' })
+
+      expect(run.status).toBe('queued')
+
+      const found = getRun(db, run.id)
+      expect(found).not.toBeNull()
+      expect(found!.status).toBe('queued')
+    })
+
+    it('defaults status to idle when not provided', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'default-status', repoId })
+
+      expect(run.status).toBe('idle')
+    })
   })
 
   describe('getRun', () => {
@@ -156,6 +181,44 @@ describe('orchestrator.queries', () => {
       expect(active).not.toBeNull()
       expect(active!.id).toBe(run.id)
       expect(active!.status).toBe('running')
+    })
+  })
+
+  describe('getActiveRuns', () => {
+    it('returns empty array when no active runs exist', () => {
+      const repoId = seedRepo()
+      insertRun(db, { sprintName: 'idle-run', repoId })
+      expect(getActiveRuns(db)).toEqual([])
+    })
+
+    it('returns all running and paused runs', () => {
+      const repoId = seedRepo()
+      const run1 = insertRun(db, { sprintName: 'run-1', repoId })
+      const run2 = insertRun(db, { sprintName: 'run-2', repoId })
+      const run3 = insertRun(db, { sprintName: 'run-3', repoId })
+      updateRunStatus(db, run1.id, 'running')
+      updateRunStatus(db, run2.id, 'running')
+      updateRunStatus(db, run2.id, 'paused')
+      updateRunStatus(db, run3.id, 'running')
+      updateRunStatus(db, run3.id, 'completed')
+
+      const active = getActiveRuns(db)
+      expect(active).toHaveLength(2)
+      const ids = active.map(r => r.id)
+      expect(ids).toContain(run1.id)
+      expect(ids).toContain(run2.id)
+      expect(ids).not.toContain(run3.id)
+    })
+
+    it('excludes queued, idle, failed, and cancelled runs', () => {
+      const repoId = seedRepo()
+      insertRun(db, { sprintName: 'queued', repoId, status: 'queued' })
+      insertRun(db, { sprintName: 'idle', repoId })
+      const failed = insertRun(db, { sprintName: 'failed', repoId })
+      updateRunStatus(db, failed.id, 'running')
+      updateRunStatus(db, failed.id, 'failed')
+
+      expect(getActiveRuns(db)).toEqual([])
     })
   })
 
@@ -690,6 +753,129 @@ describe('orchestrator.queries', () => {
       const run = insertRun(db, { sprintName: 'APS-cleanup-empty', repoId })
 
       expect(deleteApprovalsForRun(db, run.id)).toBe(0)
+    })
+  })
+
+  describe('R-006: agentLifetimeCap in OrchestratorStartInput', () => {
+    it('insertRun accepts and persists agentLifetimeCap from OrchestratorStartInput', () => {
+      const repoId = seedRepo()
+      const input: OrchestratorStartInput = {
+        sprintName: 'alc-test',
+        repoId,
+        agentLifetimeCap: 12
+      }
+      const run = insertRun(db, input)
+      expect(run.agentLifetimeCap).toBe(12)
+      const found = getRun(db, run.id)
+      expect(found!.agentLifetimeCap).toBe(12)
+    })
+
+    it('insertRun defaults agentLifetimeCap to 50 when omitted from OrchestratorStartInput', () => {
+      const repoId = seedRepo()
+      const input: OrchestratorStartInput = { sprintName: 'alc-default', repoId }
+      const run = insertRun(db, input)
+      expect(run.agentLifetimeCap).toBe(50)
+    })
+  })
+
+  describe('R-003: getFilesChangedForTask / wasFilesChangedReported scoped by run_id', () => {
+    it('getFilesChangedForTask returns files only for the specific run', () => {
+      const repoId = seedRepo()
+      const run1 = insertRun(db, { sprintName: 'R-003-A', repoId })
+      const run2 = insertRun(db, { sprintName: 'R-003-B', repoId })
+      const taskId = seedTask(repoId)
+
+      const log1 = insertTaskLog(db, { runId: run1.id, taskId, phase: 'dev' })
+      db.prepare('UPDATE orchestrator_task_log SET files_changed_json = ? WHERE id = ?').run(
+        JSON.stringify(['src/a.ts']), log1.id
+      )
+      const log2 = insertTaskLog(db, { runId: run2.id, taskId, phase: 'dev' })
+      db.prepare('UPDATE orchestrator_task_log SET files_changed_json = ? WHERE id = ?').run(
+        JSON.stringify(['src/b.ts']), log2.id
+      )
+
+      expect(getFilesChangedForTask(db, run1.id, taskId)).toEqual(['src/a.ts'])
+      expect(getFilesChangedForTask(db, run2.id, taskId)).toEqual(['src/b.ts'])
+    })
+
+    it('getFilesChangedForTask returns empty array when no dev log exists for that run', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'R-003-empty', repoId })
+      const taskId = seedTask(repoId)
+
+      expect(getFilesChangedForTask(db, run.id, taskId)).toEqual([])
+    })
+
+    it('wasFilesChangedReported returns true only for the run that reported', () => {
+      const repoId = seedRepo()
+      const run1 = insertRun(db, { sprintName: 'R-003-C', repoId })
+      const run2 = insertRun(db, { sprintName: 'R-003-D', repoId })
+      const taskId = seedTask(repoId)
+
+      const log1 = insertTaskLog(db, { runId: run1.id, taskId, phase: 'dev' })
+      db.prepare('UPDATE orchestrator_task_log SET files_changed_json = ? WHERE id = ?').run(
+        JSON.stringify([]), log1.id
+      )
+
+      expect(wasFilesChangedReported(db, run1.id, taskId)).toBe(true)
+      expect(wasFilesChangedReported(db, run2.id, taskId)).toBe(false)
+    })
+  })
+
+  describe('R-008: updateRunTelegramNotify', () => {
+    it('sets telegram_notify to true in the database', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'R-008-A', repoId, telegramNotify: false })
+      expect(getRun(db, run.id)!.telegramNotify).toBe(false)
+
+      updateRunTelegramNotify(db, run.id, true)
+
+      expect(getRun(db, run.id)!.telegramNotify).toBe(true)
+    })
+
+    it('sets telegram_notify to false in the database', () => {
+      const repoId = seedRepo()
+      const run = insertRun(db, { sprintName: 'R-008-B', repoId, telegramNotify: true })
+      expect(getRun(db, run.id)!.telegramNotify).toBe(true)
+
+      updateRunTelegramNotify(db, run.id, false)
+
+      expect(getRun(db, run.id)!.telegramNotify).toBe(false)
+    })
+  })
+
+  describe('R-007: RetryFailure is the canonical type for retry failure rows', () => {
+    it('getUnacknowledgedRetryFailures returns RetryFailure[] with correct shape', () => {
+      const repoId = seedRepo()
+      const taskId = seedTask(repoId)
+
+      insertRetryFailure(db, {
+        taskId,
+        provider: 'anthropic',
+        attempts: 3,
+        lastError: 'Connection timeout',
+        diagnostics: '{"code":"ECONNREFUSED"}'
+      })
+
+      const failures: RetryFailure[] = getUnacknowledgedRetryFailures(db)
+      expect(failures).toHaveLength(1)
+      expect(failures[0].taskId).toBe(taskId)
+      expect(failures[0].provider).toBe('anthropic')
+      expect(failures[0].attempts).toBe(3)
+      expect(failures[0].lastError).toBe('Connection timeout')
+      expect(failures[0].diagnostics).toBe('{"code":"ECONNREFUSED"}')
+      expect(failures[0].createdAt).toBeDefined()
+    })
+
+    it('getUnacknowledgedRetryFailures excludes acknowledged failures', () => {
+      const repoId = seedRepo()
+      const taskId = seedTask(repoId)
+
+      insertRetryFailure(db, { taskId, provider: 'anthropic', attempts: 1 })
+      acknowledgeRetryFailures(db)
+
+      const failures: RetryFailure[] = getUnacknowledgedRetryFailures(db)
+      expect(failures).toHaveLength(0)
     })
   })
 })

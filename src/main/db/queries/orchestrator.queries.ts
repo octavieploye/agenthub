@@ -7,7 +7,8 @@ import type {
   OrchestratorPhase,
   OrchestratorPhaseStatus,
   OrchestratorTaskLog,
-  OrchestratorTriggerSource
+  OrchestratorTriggerSource,
+  RetryFailure
 } from '../../../shared/types/orchestrator.types'
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,8 @@ function mapRunRow(row: Record<string, unknown>): OrchestratorRun {
     startedBy: (row.started_by as string) ?? null,
     triggerSource: (row.trigger_source as OrchestratorTriggerSource) ?? null,
     taskIds: parseTaskIds(row.task_ids_json),
-    agentsSpawned: (row.agents_spawned as number) ?? 0
+    agentsSpawned: (row.agents_spawned as number) ?? 0,
+    agentLifetimeCap: (row.agent_lifetime_cap as number) ?? 50
   }
 }
 
@@ -81,39 +83,44 @@ export function insertRun(
     startedBy?: string
     triggerSource?: OrchestratorTriggerSource
     taskIds?: string[]
+    agentLifetimeCap?: number
+    status?: OrchestratorRunStatus
   }
 ): OrchestratorRun {
   const id = randomUUID()
   const now = new Date().toISOString()
   const taskIdsJson = input.taskIds && input.taskIds.length > 0 ? JSON.stringify(input.taskIds) : null
+  const status = input.status ?? 'idle'
 
   db.prepare(
     `INSERT INTO orchestrator_runs
-       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, single_task_id, started_by, trigger_source, task_ids_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, sprint_name, project_id, repo_id, status, concurrency_cap, telegram_notify, single_task_id, started_by, trigger_source, task_ids_json, agent_lifetime_cap, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.sprintName,
     input.projectId ?? null,
     input.repoId,
+    status,
     input.concurrencyCap ?? 3,
     input.telegramNotify ? 1 : 0,
     input.singleTaskId ?? null,
     input.startedBy ?? null,
     input.triggerSource ?? null,
     taskIdsJson,
+    input.agentLifetimeCap ?? 50,
     now,
     now
   )
 
-  log.info('Orchestrator run inserted', { id, sprintName: input.sprintName })
+  log.info('Orchestrator run inserted', { id, sprintName: input.sprintName, status })
 
   return {
     id,
     sprintName: input.sprintName,
     projectId: input.projectId ?? null,
     repoId: input.repoId,
-    status: 'idle',
+    status,
     concurrencyCap: input.concurrencyCap ?? 3,
     telegramNotify: input.telegramNotify ?? false,
     createdAt: now,
@@ -124,7 +131,8 @@ export function insertRun(
     startedBy: input.startedBy ?? null,
     triggerSource: input.triggerSource ?? null,
     taskIds: input.taskIds ?? null,
-    agentsSpawned: 0
+    agentsSpawned: 0,
+    agentLifetimeCap: input.agentLifetimeCap ?? 50
   }
 }
 
@@ -140,6 +148,20 @@ export function getActiveRun(db: Database.Database): OrchestratorRun | null {
     .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') ORDER BY updated_at DESC LIMIT 1")
     .get() as Record<string, unknown> | undefined
   return row ? mapRunRow(row) : null
+}
+
+export function getActiveRuns(db: Database.Database): OrchestratorRun[] {
+  const rows = db
+    .prepare("SELECT * FROM orchestrator_runs WHERE status IN ('running', 'paused') ORDER BY updated_at DESC")
+    .all() as Record<string, unknown>[]
+  return rows.map(mapRunRow)
+}
+
+export function getQueuedRuns(db: Database.Database): OrchestratorRun[] {
+  const rows = db
+    .prepare("SELECT * FROM orchestrator_runs WHERE status = 'queued' ORDER BY created_at ASC")
+    .all() as Record<string, unknown>[]
+  return rows.map(mapRunRow)
 }
 
 export function updateRunStatus(
@@ -351,14 +373,31 @@ export function getActiveTaskLogByAgentId(
   return row ? mapTaskLogRow(row) : null
 }
 
-export function getFilesChangedForTask(db: Database.Database, taskId: string): string[] {
+/**
+ * Run-agnostic agent→task-log lookup. Finds the active task log for an agent
+ * across ALL runs. Used by handleAgentEvent() for multi-run correlation.
+ * Backed by idx_orch_task_log_agent on orchestrator_task_log(agent_id).
+ */
+export function getActiveTaskLogByAgentIdAnyRun(
+  db: Database.Database,
+  agentId: string
+): OrchestratorTaskLog | null {
+  const row = db
+    .prepare(
+      "SELECT * FROM orchestrator_task_log WHERE agent_id = ? AND status = 'active' LIMIT 1"
+    )
+    .get(agentId) as Record<string, unknown> | undefined
+  return row ? mapTaskLogRow(row) : null
+}
+
+export function getFilesChangedForTask(db: Database.Database, runId: string, taskId: string): string[] {
   const row = db
     .prepare(
       `SELECT files_changed_json FROM orchestrator_task_log
-       WHERE task_id = ? AND phase = 'dev'
+       WHERE run_id = ? AND task_id = ? AND phase = 'dev'
        ORDER BY created_at DESC LIMIT 1`
     )
-    .get(taskId) as { files_changed_json: string | null } | undefined
+    .get(runId, taskId) as { files_changed_json: string | null } | undefined
   if (!row?.files_changed_json) return []
   try {
     const parsed = JSON.parse(row.files_changed_json)
@@ -373,41 +412,46 @@ export function getFilesChangedForTask(db: Database.Database, taskId: string): s
  * (files_changed_json is NOT NULL), even when no files were changed (empty array).
  * NULL means the tool was never called — agent is still working or asking a question.
  */
-export function wasFilesChangedReported(db: Database.Database, taskId: string): boolean {
+export function wasFilesChangedReported(db: Database.Database, runId: string, taskId: string): boolean {
   const row = db
     .prepare(
       `SELECT files_changed_json FROM orchestrator_task_log
-       WHERE task_id = ? AND phase = 'dev'
+       WHERE run_id = ? AND task_id = ? AND phase = 'dev'
        ORDER BY created_at DESC LIMIT 1`
     )
-    .get(taskId) as { files_changed_json: string | null } | undefined
+    .get(runId, taskId) as { files_changed_json: string | null } | undefined
   return row !== undefined && row.files_changed_json !== null
 }
 
+export function updateRunTelegramNotify(db: Database.Database, runId: string, value: boolean): void {
+  const now = new Date().toISOString()
+  db.prepare(
+    'UPDATE orchestrator_runs SET telegram_notify = ?, updated_at = ? WHERE id = ?'
+  ).run(value ? 1 : 0, now, runId)
+}
+
 // ---------------------------------------------------------------------------
-// Cross-run dedup: tasks completed in ANY previous run
+// Cross-run dedup: tasks completed in a previous run of the SAME repo+sprint
 // ---------------------------------------------------------------------------
 
-export function getCompletedTaskIdsFromAllRuns(db: Database.Database): Set<string> {
+export function getCompletedTaskIds(
+  db: Database.Database,
+  scope: { repoId: string; sprintName: string }
+): Set<string> {
   const rows = db
-    .prepare("SELECT DISTINCT task_id FROM orchestrator_task_log WHERE status = 'done'")
-    .all() as { task_id: string }[]
+    .prepare(
+      `SELECT DISTINCT tl.task_id
+       FROM orchestrator_task_log tl
+       JOIN orchestrator_runs r ON r.id = tl.run_id
+       WHERE tl.status = 'done' AND r.repo_id = ? AND r.sprint_name = ?`
+    )
+    .all(scope.repoId, scope.sprintName) as { task_id: string }[]
   return new Set(rows.map(r => r.task_id))
 }
 
 // ---------------------------------------------------------------------------
 // Retry failures
 // ---------------------------------------------------------------------------
-
-export interface RetryFailureRow {
-  id: string
-  taskId: string
-  provider: string
-  attempts: number
-  lastError: string | null
-  diagnostics: string | null
-  createdAt: string
-}
 
 export function insertRetryFailure(
   db: Database.Database,
@@ -427,7 +471,7 @@ export function insertRetryFailure(
   log.info('Retry failure recorded', { id, taskId: input.taskId, provider: input.provider })
 }
 
-export function getUnacknowledgedRetryFailures(db: Database.Database): RetryFailureRow[] {
+export function getUnacknowledgedRetryFailures(db: Database.Database): RetryFailure[] {
   const rows = db.prepare(
     `SELECT id, task_id, provider, attempts, last_error, diagnostics, created_at
      FROM retry_failures

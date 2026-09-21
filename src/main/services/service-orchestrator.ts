@@ -215,25 +215,21 @@ export function computeRunTokenUsage(db: Database.Database, runId: string): numb
   const endMs = run.completedAt ? new Date(run.completedAt).getTime() : Date.now()
   let total = 0
 
-  try {
-    for (const name of readdirSync(projectDir)) {
-      if (!name.endsWith('.jsonl')) continue
-      try {
-        const content = readFileSync(join(projectDir, name), 'utf-8')
-        for (const entry of extractUsageEntries(parseJsonlContent(content))) {
-          const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
-          if (isNaN(t) || t < startMs || t > endMs) continue
-          const u = entry.message.usage
-          // Count only output_tokens — input_tokens grow with conversation history
-          // (bash tool results like npm install stdout inflate input_tokens per turn)
-          if (u) total += u.output_tokens
-        }
-      } catch {
-        // Skip unreadable file — non-fatal
+  for (const name of readdirSync(projectDir)) {
+    if (!name.endsWith('.jsonl')) continue
+    try {
+      const content = readFileSync(join(projectDir, name), 'utf-8')
+      for (const entry of extractUsageEntries(parseJsonlContent(content))) {
+        const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
+        if (isNaN(t) || t < startMs || t > endMs) continue
+        const u = entry.message.usage
+        // Count only output_tokens — input_tokens grow with conversation history
+        // (bash tool results like npm install stdout inflate input_tokens per turn)
+        if (u) total += u.output_tokens
       }
+    } catch {
+      // Skip unreadable file — non-fatal
     }
-  } catch {
-    return 0
   }
 
   return total
@@ -843,13 +839,14 @@ export function initializeServices(db: Database.Database): void {
     getAgentStatus: (agentId) => getAgentState(agentId)?.status ?? null,
     emitToRenderer: emitToAllRenderers,
     sendTelegramNotification,
-    notifyApproval: (taskId, runId, title, repoId) => {
+    notifyApproval: (taskId, runId, title, repoId, sprintName?, description?) => {
       const repoName = getRepoById(db, repoId)?.name ?? repoId
+      const summary = [title, sprintName ? `sprint: ${sprintName}` : '', description?.trim()].filter(Boolean).join('\n')
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:approval:${taskId}`,
         agentName: 'Orchestrator',
-        summary: title,
+        summary,
         proposedAction: title,
         repo: repoName,
         requestId: `task:${taskId}:${runId}`,
@@ -866,26 +863,31 @@ export function initializeServices(db: Database.Database): void {
     pause: (runId: string) => orchestratorScheduler?.pause(runId),
     reconcileActiveAgents: () => orchestratorScheduler?.reconcileActiveAgents(),
     sendTelegramNotification,
-    notifyApproval: (requestId: string, title: string) => {
+    getRunTokenUsage: (runId: string) => computeRunTokenUsage(db, runId),
+    notifyApproval: (requestId, title, repoId, sprintName?, description?) => {
+      const repoName = repoId ? getRepoById(db, repoId)?.name ?? repoId : ''
+      const summary = [title, sprintName ? `sprint: ${sprintName}` : '', description?.trim()].filter(Boolean).join('\n')
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:approval:${requestId}`,
         agentName: 'Orchestrator',
-        summary: title,
+        summary,
         proposedAction: title,
-        repo: '',
+        repo: repoName,
         requestId,
         timestamp: new Date().toISOString(),
       })
     },
-    sendEscalation: (requestId: string, title: string) => {
+    sendEscalation: (requestId, title, repoId, sprintName?, description?) => {
+      const repoName = repoId ? getRepoById(db, repoId)?.name ?? repoId : ''
+      const summary = [title, sprintName ? `sprint: ${sprintName}` : '', description?.trim()].filter(Boolean).join('\n')
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:escalation:${requestId}`,
         agentName: 'Orchestrator',
-        summary: title,
+        summary,
         proposedAction: `Approval still needed for "${title}"`,
-        repo: '',
+        repo: repoName,
         requestId,
         timestamp: new Date().toISOString(),
       })

@@ -12,6 +12,7 @@ const startSchema = z.object({
   repoId: z.string().min(1),
   projectId: z.string().optional(),
   concurrencyCap: z.number().int().min(1).max(10).optional(),
+  agentLifetimeCap: z.number().int().min(1).optional(),
   telegramNotify: z.boolean().optional(),
   singleTaskId: z.string().optional(),
   confirmed: z.boolean().optional(),
@@ -49,7 +50,14 @@ export function registerOrchestratorHandlers(): void {
       const run = getOrchestrator().start({
         sprintName: sanitized.sprintName,
         repoId: sanitized.repoId,
+        projectId: sanitized.projectId,
+        concurrencyCap: sanitized.concurrencyCap,
+        telegramNotify: sanitized.telegramNotify,
         taskIds: sanitized.taskIds,
+        agentLifetimeCap: sanitized.agentLifetimeCap,
+        startedBy: sanitized.startedBy,
+        singleTaskId: sanitized.singleTaskId,
+        triggerSource: sanitized.triggerSource,
       })
       return success(run)
     } catch (err) {
@@ -143,7 +151,10 @@ export function registerOrchestratorHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.ORCHESTRATOR.START_SINGLE_TASK, (_event, input: unknown) => {
-    const schema = z.object({ taskId: z.string().min(1) })
+    const schema = z.object({
+      taskId: z.string().min(1),
+      telegramNotify: z.boolean().optional(),
+    })
     const v = validateInput(schema, input)
     if (!v.valid) return v.response
     try {
@@ -152,6 +163,7 @@ export function registerOrchestratorHandlers(): void {
       if (!task) return error('TASK_NOT_FOUND', `Task not found: ${v.data.taskId}`)
       const run = getOrchestrator().startSingleTask({
         taskId: v.data.taskId,
+        telegramNotify: v.data.telegramNotify,
       })
       return success(run)
     } catch (err) {

@@ -333,7 +333,7 @@ describe('OrchestratorMonitorService', () => {
     monitor.check()
 
     expect(notifyApproval).toHaveBeenCalledTimes(1)
-    expect(notifyApproval).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Approve me')
+    expect(notifyApproval).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Approve me', 'repo-1', 'S6-run', '')
     expect(sendEscalation).not.toHaveBeenCalled()
     expect(pause).not.toHaveBeenCalled()
     const approval = getApproval(db, runId, task.id)!
@@ -377,7 +377,7 @@ describe('OrchestratorMonitorService', () => {
     monitor.check()
 
     expect(sendEscalation).toHaveBeenCalledTimes(1)
-    expect(sendEscalation).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Escalate me')
+    expect(sendEscalation).toHaveBeenCalledWith(`task:${task.id}:${runId}`, 'Escalate me', 'repo-1', 'S6-run', '')
     expect(notifyApproval).not.toHaveBeenCalled()
     const approval = getApproval(db, runId, task.id)!
     expect(approval.reminderCount).toBe(3)
@@ -457,6 +457,46 @@ describe('OrchestratorMonitorService', () => {
     monitor.check()
 
     expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('enforces limits across ALL active runs (two running runs both breached)', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runIdA = createRunningRun('S6-run-A')
+    const runIdB = createRunningRun('S6-run-B')
+
+    // 3 review failures on a distinct task per run = stuck loop in each
+    for (let i = 0; i < MONITOR_LIMITS.stuckLoopThreshold; i++) {
+      insertReviewFailure(runIdA, 'task-a-1')
+      insertReviewFailure(runIdB, 'task-b-1')
+    }
+
+    monitor.check()
+
+    expect(pause).toHaveBeenCalledWith(runIdA)
+    expect(pause).toHaveBeenCalledWith(runIdB)
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(2)
+  })
+
+  it('R-004: pauses run (fail-safe) when getRunTokenUsage throws', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const getRunTokenUsage = vi.fn(() => { throw new Error('JSONL dir unreadable') })
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification, getRunTokenUsage })
+    )
+    const runId = createRunningRun()
+
+    // Must NOT crash — must pause the run fail-safe
+    monitor.check()
+
+    expect(getRunTokenUsage).toHaveBeenCalledWith(runId)
+    expect(pause).toHaveBeenCalledWith(runId)
+    expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    expect(sendTelegramNotification.mock.calls[0][0]).toContain('token')
   })
 
   it('does nothing when no approvals and no expired notifications', () => {

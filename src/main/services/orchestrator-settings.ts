@@ -4,6 +4,8 @@ export const ORCHESTRATOR_ENABLED_KEY = 'orchestrator.enabled'
 
 export const APPROVAL_WINDOW_MINUTES_KEY = 'orchestrator.approvalWindowMinutes'
 
+export const MAX_CONCURRENT_RUNS_KEY = 'orchestrator.maxConcurrentRuns'
+
 /**
  * Returns true only when the persisted `orchestrator.enabled` setting is
  * explicitly set to the string 'true'. Defaults to false (orchestrator
@@ -29,5 +31,22 @@ export function getApprovalWindowMinutes(db: Database.Database): number {
   if (!row?.value) return 30
   const parsed = Number.parseInt(row.value, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) return 30
+  return parsed
+}
+
+/**
+ * Returns the maximum number of orchestrator runs that may be active
+ * simultaneously. Reads the persisted `orchestrator.maxConcurrentRuns`
+ * setting; parses it to a positive integer. Falls back to 1 (sequential
+ * mode) when the key is absent or the value is not a positive integer.
+ * Never throws.
+ */
+export function getMaxConcurrentRuns(db: Database.Database): number {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(MAX_CONCURRENT_RUNS_KEY) as
+    | { value: string }
+    | undefined
+  if (!row?.value) return 1
+  const parsed = Number.parseInt(row.value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1
   return parsed
 }

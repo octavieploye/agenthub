@@ -1,4 +1,4 @@
-export type OrchestratorRunStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+export type OrchestratorRunStatus = 'idle' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
 export type OrchestratorTriggerSource = 'manual' | 'date-watcher' | 'sprint-watcher' | 'single-task'
 
@@ -27,6 +27,7 @@ export interface OrchestratorRun {
   triggerSource: OrchestratorTriggerSource | null
   taskIds: string[] | null
   agentsSpawned: number
+  agentLifetimeCap: number
 }
 
 export interface OrchestratorTaskLog {
@@ -83,6 +84,7 @@ export interface OrchestratorStartInput {
   repoId: string
   projectId?: string
   concurrencyCap?: number
+  agentLifetimeCap?: number
   telegramNotify?: boolean
   singleTaskId?: string
   startedBy?: string
@@ -98,12 +100,16 @@ export interface OrchestratorStatusResponse {
   totalCount: number
   failedCount: number
   singleTaskId: string | null
+  activeRuns: OrchestratorRun[]
+  queuedRuns: OrchestratorRun[]
 }
 
 export interface OrchestratorStatusChangePayload {
   runId: string
   status: OrchestratorRunStatus
   sprintName: string
+  repoId: string
+  description?: string
 }
 
 export interface OrchestratorTaskPhaseChangePayload {

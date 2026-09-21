@@ -11,6 +11,7 @@ interface OrchestratorControlsProps {
 
 const STATUS_BADGE: Record<OrchestratorRunStatus, string> = {
   idle: 'badge-ghost',
+  queued: 'badge-ghost',
   running: 'badge-success',
   paused: 'badge-warning',
   completed: 'badge-info',
@@ -21,12 +22,11 @@ const STATUS_BADGE: Record<OrchestratorRunStatus, string> = {
 export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorControlsProps) {
   const {
     runStatus,
-    sprintName,
-    runId,
-    singleTaskId,
+    activeRuns,
     completedCount,
     totalCount,
     failedCount,
+    queuedRuns,
     loading,
     error,
     fetchStatus,
@@ -69,7 +69,7 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     const unsubStatus = window.agentHub.orchestrator.onStatusChange(handleStatusChange)
     const unsubPhase = window.agentHub.orchestrator.onTaskPhaseChange(handleTaskPhaseChange)
     const unsubApproval = window.agentHub.orchestrator.onTaskApprovalNeeded(
-      (payload) => handleApprovalNeeded(payload as { runId: string; taskId: string; title: string; description: string })
+      (payload) => handleApprovalNeeded(payload)
     )
     return () => {
       unsubStatus()
@@ -113,25 +113,65 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
     }
   }
 
+  // Preserve existing isIdle logic exactly — used to gate the start button.
   const isIdle = !runStatus || runStatus === 'idle' || runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled'
-  const isRunning = runStatus === 'running'
-  const isPaused = runStatus === 'paused'
+  const isTerminal = runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled'
 
   return (
     <div className="flex items-center gap-2">
-      {/* Status badge */}
-      {runStatus && (
+      {/* Per-run controls for each active run (running | paused) */}
+      {activeRuns.map((run) => (
+        <div key={run.id} className="flex items-center gap-1.5">
+          <span className={`badge badge-sm ${STATUS_BADGE[run.status]}`}>
+            {run.status}
+          </span>
+          <span className="text-[10px] text-base-content/70 max-w-[120px] truncate" title={run.sprintName}>
+            {run.sprintName}
+          </span>
+          {run.status === 'running' && (
+            <button
+              data-testid={`pause-run-${run.id}`}
+              className="btn btn-sm btn-warning"
+              onClick={() => pause(run.id)}
+              disabled={loading}
+              title="Pause orchestrator"
+            >
+              <Pause size={14} />
+            </button>
+          )}
+          {run.status === 'paused' && (
+            <button
+              data-testid={`resume-run-${run.id}`}
+              className="btn btn-sm btn-success"
+              onClick={() => resume(run.id)}
+              disabled={loading}
+              title="Resume orchestrator"
+            >
+              <Play size={14} />
+            </button>
+          )}
+          <button
+            data-testid={`cancel-run-${run.id}`}
+            className="btn btn-sm btn-error btn-outline"
+            onClick={() => cancel(run.id)}
+            disabled={loading}
+            title={run.singleTaskId ? 'Cancel single-task pipeline' : 'Cancel sprint run'}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+
+      {/* Terminal badge — shown whenever singleton reached a terminal state */}
+      {isTerminal && runStatus && (
         <span className={`badge badge-sm ${STATUS_BADGE[runStatus]}`}>
           {runStatus}
         </span>
       )}
 
-      {/* Sprint name + progress when active */}
-      {runId && sprintName && !isIdle && (
+      {/* Global progress counters — rendered once, not per-run (backend provides no per-run counts) */}
+      {totalCount > 0 && !isIdle && (
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-base-content/70 max-w-[120px] truncate" title={sprintName}>
-            {sprintName}
-          </span>
           <span className="text-[10px] text-base-content/70">
             {completedCount}/{totalCount}
           </span>
@@ -141,8 +181,8 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
         </div>
       )}
 
-      {/* Start button / inline form */}
-      {isIdle && !showStartForm && (
+      {/* Start button — only when no active runs and singleton is idle/terminal */}
+      {activeRuns.length === 0 && isIdle && !showStartForm && (
         <button
           className="btn btn-sm btn-ghost"
           onClick={() => { setShowStartForm(true); setShowCustomSprint(false); setFormSprintName('') }}
@@ -153,7 +193,8 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
         </button>
       )}
 
-      {isIdle && showStartForm && (
+      {/* Inline start form — same gate as the start button */}
+      {activeRuns.length === 0 && isIdle && showStartForm && (
         <div className="flex items-center gap-1.5">
           {showCustomSprint ? (
             <input
@@ -213,39 +254,29 @@ export function OrchestratorControls({ repos, selectedProjectId }: OrchestratorC
         </div>
       )}
 
-      {/* Pause / Resume toggle */}
-      {isRunning && (
-        <button
-          className="btn btn-sm btn-warning"
-          onClick={pause}
-          disabled={loading}
-          title="Pause orchestrator"
-        >
-          <Pause size={14} />
-        </button>
-      )}
-
-      {isPaused && (
-        <button
-          className="btn btn-sm btn-success"
-          onClick={resume}
-          disabled={loading}
-          title="Resume orchestrator"
-        >
-          <Play size={14} />
-        </button>
-      )}
-
-      {/* Cancel button — available for all active runs */}
-      {(isRunning || isPaused) && (
-        <button
-          className="btn btn-sm btn-error btn-outline"
-          onClick={cancel}
-          disabled={loading}
-          title={singleTaskId ? 'Cancel single-task pipeline' : 'Cancel sprint run'}
-        >
-          <X size={14} />
-        </button>
+      {/* Queued runs indicator + list — unchanged */}
+      {queuedRuns.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <span data-testid="queue-indicator" className="badge badge-sm badge-ghost">
+            {queuedRuns.length} queued
+          </span>
+          {queuedRuns.map((qr) => (
+            <div key={qr.id} className="flex items-center gap-0.5">
+              <span className="text-[10px] text-base-content/60 max-w-[100px] truncate" title={qr.sprintName}>
+                {qr.sprintName}
+              </span>
+              <button
+                data-testid={`cancel-queued-${qr.id}`}
+                className="btn btn-xs btn-ghost text-error"
+                onClick={() => cancel(qr.id)}
+                disabled={loading}
+                title={`Cancel queued run: ${qr.sprintName}`}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Error tooltip */}

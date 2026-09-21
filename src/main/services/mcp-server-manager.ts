@@ -380,7 +380,8 @@ export class McpServerManager {
         deps.emitToRenderer(IPC_EVENTS.ORCHESTRATOR.STATUS_CHANGE, {
           runId: run.id,
           status: run.status,
-          sprintName: run.sprintName
+          sprintName: run.sprintName,
+          repoId: task.repoId
         })
         return { id: run.id }
       }
