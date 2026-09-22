@@ -93,7 +93,11 @@ let currentSessionId: string | null = null
 // independent of dispatch order or restart. Prefers the trailing integer in the
 // sprint name (then repo name), falling back to a stable hash of both.
 function pickSprintColorIndex(repoName: string, sprintName: string): number {
-  for (const name of [sprintName, repoName]) {
+  for (const raw of [sprintName, repoName]) {
+    // Strip a version suffix (-v2, _v2, -V2) so it doesn't shadow the identity
+    // integer. "landing-hephaestus-v2" ends in "-v2"; without this, its version
+    // "2" matches first and every repo collapses to the same color.
+    const name = raw.replace(/[-_]v\d+$/i, '')
     const trailing = name.match(/(\d+)\s*$/)
     if (trailing) {
       const n = parseInt(trailing[1], 10)
@@ -185,11 +189,24 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
         break
       }
       try {
+        // git-ops is a dedicated commit agent: it must run without permission
+        // prompts, carry the repo's deterministic color, and be distinguishable
+        // from other repos' git-ops agents. The manual Telegram spawn flow
+        // (spawn_confirm) uses a user-chosen name, so only special-case the
+        // literal 'git-ops' name and leave every other spawn unchanged.
+        const isGitOps = msg.name === 'git-ops'
+        const repoLabel = repo.name ?? repo.path.split('/').pop() ?? 'repo'
         spawnAgent({
           repoId: repo.id,
-          name: msg.name,
+          name: isGitOps ? `git-ops / ${repoLabel}` : msg.name,
           cwd: repo.path,
           taskDescription: msg.task,
+          ...(isGitOps
+            ? {
+                skipPermissions: true,
+                color: pickSprintColor(repoLabel, 'git-ops'),
+              }
+            : {}),
         })
       } catch (err) {
         log.error('Telegram spawn_agent failed', { err })

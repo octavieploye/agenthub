@@ -14,6 +14,7 @@ function buildGitOpsTask(repoPath, push) {
     `Act as the git-ops agent for the target repository at ${repoPath}.`,
     'Before taking any Git action, read and follow $AGENTHUB_HOME/plugin/commands/git-commit.md.',
     'Do not invoke /git-commit as a shell or slash command; follow the file as provider-neutral instructions.',
+    'First run `git status` and `git diff` to inspect the actual uncommitted changes, stage only the source/config files that belong to this change, respect `.gitignore`, and derive the commit message from what actually changed.',
     action,
   ].join(' ')
 }
