@@ -21,6 +21,7 @@ export interface TelegramNotificationPayload {
   repoPath?: string       // filesystem path of the target repo (used by commit buttons)
   commitable?: boolean    // when true, the completed notification renders Commit buttons
   commitAgentId?: string  // real agent to continue; absent means spawn a dedicated git-ops agent
+  colorIndex?: number     // index into SPRINT_COLOR_PALETTE — maps to a circle-emoji badge
   timestamp: string       // ISO 8601
 }
 

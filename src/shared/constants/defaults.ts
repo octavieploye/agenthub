@@ -25,8 +25,9 @@ export const AGENT_COLOR_PALETTE = [
 
 // Colors assigned to orchestrator-spawned agents, mapped deterministically from the
 // repo/sprint NAME (trailing integer → index). Same name always yields the same color.
+// Each index maps 1:1 to a Telegram circle-emoji badge (see telegram-sidecar COLOR_EMOJI).
 export const SPRINT_COLOR_PALETTE = [
-  '#8EAFB9',  // Sprint 1 — muted blue-gray
-  '#B9B88E',  // Sprint 2 — muted olive
-  '#EFC1DF',  // Sprint 3 — muted pink
+  '#8D6E63',  // 🟤 brown
+  '#455A64',  // ⚫ near-black (readable on the dark "void" palette)
+  '#ECEFF1',  // ⚪ near-white
 ] as const

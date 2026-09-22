@@ -595,6 +595,16 @@ async function confirmCommit(chatId, repo) {
 }
 
 // ── Notification sender ────────────────────────────────────────────────────────
+// Per-repo/sprint color badge, matching AgentHub's SPRINT_COLOR_PALETTE order:
+// 0 = 🟤 brown, 1 = ⚫ black, 2 = ⚪ white.
+const COLOR_EMOJI = ['\ud83d\udfe4', '\u26ab', '\u26aa']
+
+function colorBadge(payload) {
+  const i = payload.colorIndex
+  if (Number.isInteger(i) && i >= 0 && i < COLOR_EMOJI.length) return `${COLOR_EMOJI[i]} `
+  return ''
+}
+
 async function sendNotification(payload) {
   if (!allowedChatId) return
   if (Date.now() < mutedUntil) return
@@ -602,12 +612,13 @@ async function sendNotification(payload) {
   let text, replyMarkup
 
   const time = new Date(payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const badge = colorBadge(payload)
 
   if (payload.type === 'completed') {
     const summary = payload.summary.length > 200
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
-    text = `\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
+    text = `${badge}\u2705 Done \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
     replyMarkup = buildCommitMarkup(payload)
       ?? { inline_keyboard: [[{ text: 'View details', callback_data: 'view_noop' }]] }
 
@@ -615,7 +626,7 @@ async function sendNotification(payload) {
     const summary = payload.summary.length > 200
       ? payload.summary.slice(0, 197) + '\u2026'
       : payload.summary
-    text = `\u274c Failed \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
+    text = `${badge}\u274c Failed \u2014 ${payload.agentName}\n\n${summary}\n\n${payload.repo} \u00b7 ${time}`
     replyMarkup = {
       inline_keyboard: [[
         { text: 'Retry', callback_data: `retry:${payload.agentId}` },
@@ -633,7 +644,7 @@ async function sendNotification(payload) {
     const fallback = requestId.startsWith('task:')
       ? `\n\nReply /approve ${token}`
       : ''
-    text = `\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}${fallback}`
+    text = `${badge}\u23f8 Approval needed \u2014 ${payload.agentName}\n\n${action}\n\n${payload.repo} \u00b7 ${time}${fallback}`
     replyMarkup = {
       inline_keyboard: [[
         { text: '\u2713 Approve', callback_data: `approve:${token}` },
@@ -646,10 +657,10 @@ async function sendNotification(payload) {
       : (payload.question || '')
     const choices = extractChoices(q)
     if (choices) {
-      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      text = `${badge}\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
       replyMarkup = buildChoiceMarkup(choices, payload.agentId)
     } else {
-      text = `\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to answer`
+      text = `${badge}\ud83d\udcac Question \u2014 ${payload.agentName}\n\n${q}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to answer`
       replyMarkup = buildFallbackMarkup(payload.agentId)
     }
 
@@ -659,10 +670,10 @@ async function sendNotification(payload) {
       : (payload.message || payload.summary || '')
     const choices = extractChoices(body)
     if (choices) {
-      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      text = `${badge}\u23f8 Waiting \u2014 ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
       replyMarkup = buildChoiceMarkup(choices, payload.agentId)
     } else {
-      text = `\u23f8 Waiting \u2014 ${payload.agentName}\n\n${body}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to respond`
+      text = `${badge}\u23f8 Waiting \u2014 ${payload.agentName}\n\n${body}\n\n${payload.repo} \u00b7 ${time}\n\u21b3 Tap a button or reply to respond`
       replyMarkup = buildFallbackMarkup(payload.agentId)
     }
 
@@ -676,10 +687,10 @@ async function sendNotification(payload) {
       : (payload.message || '')
     const choices = format === 'question' ? extractChoices(msg) : null
     if (choices) {
-      text = `${emoji} ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
+      text = `${badge}${emoji} ${payload.agentName}\n\n${formatChoiceBody(choices)}\n\n${payload.repo} \u00b7 ${time}`
       replyMarkup = buildChoiceMarkup(choices, payload.agentId)
     } else {
-      text = `${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
+      text = `${badge}${emoji} ${payload.agentName}\n\n${msg}\n\n${payload.repo} \u00b7 ${time}`
       if (text.length > 4000) text = text.slice(0, 3997) + '\u2026'
       if (format === 'question') {
         replyMarkup = buildFallbackMarkup(payload.agentId)

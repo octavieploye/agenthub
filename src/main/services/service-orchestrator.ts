@@ -92,19 +92,22 @@ let currentSessionId: string | null = null
 // Deterministic sprint color: same repo/sprint name → same palette color,
 // independent of dispatch order or restart. Prefers the trailing integer in the
 // sprint name (then repo name), falling back to a stable hash of both.
-function pickSprintColor(repoName: string, sprintName: string): string {
+function pickSprintColorIndex(repoName: string, sprintName: string): number {
   for (const name of [sprintName, repoName]) {
     const trailing = name.match(/(\d+)\s*$/)
     if (trailing) {
       const n = parseInt(trailing[1], 10)
-      const idx = ((n - 1) % SPRINT_COLOR_PALETTE.length + SPRINT_COLOR_PALETTE.length) % SPRINT_COLOR_PALETTE.length
-      return SPRINT_COLOR_PALETTE[idx]
+      return ((n - 1) % SPRINT_COLOR_PALETTE.length + SPRINT_COLOR_PALETTE.length) % SPRINT_COLOR_PALETTE.length
     }
   }
   const key = `${repoName}:${sprintName}`
   let hash = 0
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
-  return SPRINT_COLOR_PALETTE[hash % SPRINT_COLOR_PALETTE.length]
+  return hash % SPRINT_COLOR_PALETTE.length
+}
+
+function pickSprintColor(repoName: string, sprintName: string): string {
+  return SPRINT_COLOR_PALETTE[pickSprintColorIndex(repoName, sprintName)]
 }
 
 export function getCurrentSessionId(): string | null {
@@ -644,19 +647,22 @@ export function initializeServices(db: Database.Database): void {
   }
 
   // 18. OrchestratorScheduler — new modular sprint execution engine
-  const sendTelegramNotification = (summary: string, type: TelegramNotificationType, repoId?: string): void => {
+  const sendTelegramNotification = (summary: string, type: TelegramNotificationType, repoId?: string, agentId?: string): void => {
     const routed = routeTelegramNotification(summary, type)
     const msgKey = `orchestrator:${type}:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
     const repoRecord = repoId ? getRepoById(db, repoId) : null
     const repoPath = repoRecord?.path ?? ''
+    const agent = agentId ? getAgentState(agentId) : null
+    const colorIdx = agent?.color ? (SPRINT_COLOR_PALETTE as readonly string[]).indexOf(agent.color) : -1
     telegramQueueProcessor?.enqueue({
       type: routed.type,
       agentId: msgKey,
-      agentName: 'Orchestrator',
+      agentName: agent?.name ?? 'Orchestrator',
       repo: repoRecord?.name ?? '',
       summary: routed.summary,
       repoPath: repoPath || undefined,
       commitable: type === 'run_completed' && Boolean(repoPath),
+      colorIndex: colorIdx >= 0 ? colorIdx : undefined,
       timestamp: new Date().toISOString(),
     })
   }
@@ -874,11 +880,12 @@ export function initializeServices(db: Database.Database): void {
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:approval:${taskId}`,
-        agentName: 'Orchestrator',
+        agentName: sprintName ? `${repoName} / ${sprintName}` : repoName,
         summary,
         proposedAction: title,
         repo: repoName,
         requestId: `task:${taskId}:${runId}`,
+        colorIndex: pickSprintColorIndex(repoName, sprintName ?? ''),
         timestamp: new Date().toISOString(),
       })
     },
@@ -899,11 +906,12 @@ export function initializeServices(db: Database.Database): void {
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:approval:${requestId}`,
-        agentName: 'Orchestrator',
+        agentName: sprintName ? `${repoName} / ${sprintName}` : repoName,
         summary,
         proposedAction: title,
         repo: repoName,
         requestId,
+        colorIndex: pickSprintColorIndex(repoName, sprintName ?? ''),
         timestamp: new Date().toISOString(),
       })
     },
@@ -913,11 +921,12 @@ export function initializeServices(db: Database.Database): void {
       telegramQueueProcessor?.enqueue({
         type: 'awaiting_approval',
         agentId: `orchestrator:escalation:${requestId}`,
-        agentName: 'Orchestrator',
+        agentName: sprintName ? `${repoName} / ${sprintName}` : repoName,
         summary,
         proposedAction: `Approval still needed for "${title}"`,
         repo: repoName,
         requestId,
+        colorIndex: pickSprintColorIndex(repoName, sprintName ?? ''),
         timestamp: new Date().toISOString(),
       })
     },
