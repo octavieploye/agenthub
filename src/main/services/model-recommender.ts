@@ -358,3 +358,28 @@ export async function checkOllamaCloudHealth(model: string): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Fetches the real context window (tokens) for an Ollama model from `/api/show`.
+ * Returns null on failure so callers fall back to Claude Code's default behavior
+ * (the unknown-model warning + 200k auto-compact assumption).
+ */
+export async function getOllamaContextLength(ollamaTag: string): Promise<number | null> {
+  try {
+    const response = await fetch(`${OLLAMA_LOCAL_URL}/api/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: ollamaTag }),
+    })
+    if (!response.ok) return null
+    const data = await response.json() as { model_info?: Record<string, unknown> }
+    // Key name is architecture-dependent (e.g. "deepseek4.context_length", "mistral3.context_length")
+    const key = Object.keys(data.model_info ?? {}).find((k) => k.endsWith('.context_length'))
+    if (!key) return null
+    const raw = data.model_info![key]
+    const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+    return Number.isFinite(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}

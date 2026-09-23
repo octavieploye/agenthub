@@ -23,7 +23,7 @@ import { join } from 'path'
 import { tmpdir, homedir } from 'os'
 import { createHash } from 'crypto'
 import { app, webContents } from 'electron'
-import { buildSpawnEnv } from './model-recommender'
+import { buildSpawnEnv, getOllamaContextLength } from './model-recommender'
 import { triageAgentEvent } from './auto-triage'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
@@ -1215,8 +1215,16 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       : `clear; ${ollamaBin} launch claude -y${modelFlag}\n`
 
     setTimeout(() => {
-      ptyProcess.write(cmd)
-      log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider })
+      // Fetch the model's real context window and inject it before launch so
+      // Claude Code 2.1.267+ does not auto-compact unknown Ollama models at 200k.
+      // On failure (Ollama down), no export is written and Claude falls back to its default.
+      void getOllamaContextLength(modelName).then((contextLength) => {
+        const exportPrefix = contextLength
+          ? `export CLAUDE_CODE_MAX_CONTEXT_TOKENS=${contextLength}; `
+          : ''
+        ptyProcess.write(`${exportPrefix}${cmd}`)
+        log.info('Sent command to PTY', { id: agentState.id, cmd: cmd.trim(), model: modelName, rawModel, provider: agentState.provider, contextLength })
+      })
 
       // Send task once Claude REPL is ready — detect via PTY output rather than blind delay.
       // Claude CLI emits BEL (\x07) or shows a `>` prompt when ready for input.
