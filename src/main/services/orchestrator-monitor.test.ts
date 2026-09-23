@@ -220,6 +220,26 @@ describe('OrchestratorMonitorService', () => {
     expect(sendTelegramNotification.mock.calls[0][0]).toContain('duration')
   })
 
+  it('includes extend command with run id in duration breach message', () => {
+    const pause = vi.fn()
+    const sendTelegramNotification = vi.fn()
+    const monitor = trackMonitor(
+      new OrchestratorMonitorService(db, { pause, sendTelegramNotification })
+    )
+    const runId = createRunningRun()
+
+    const past = new Date(
+      Date.now() - OPERATING_RULES.limits.maxWallClockMs - 60_000
+    ).toISOString()
+    db.prepare('UPDATE orchestrator_runs SET started_at = ? WHERE id = ?').run(past, runId)
+
+    monitor.check()
+
+    const msg: string = sendTelegramNotification.mock.calls[0][0]
+    expect(msg).toContain('extend')
+    expect(msg).toContain(runId)
+  })
+
   it('pauses when token usage exceeds the token cap', () => {
     const pause = vi.fn()
     const sendTelegramNotification = vi.fn()

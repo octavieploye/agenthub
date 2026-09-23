@@ -86,5 +86,6 @@ export type TelegramFromSidecarMsg =
   | { type: 'command'; command: 'respawn'; agentId: string }
   | { type: 'command'; command: 'get_status' }
   | { type: 'command'; command: 'get_repos' }
+  | { type: 'command'; command: 'extend'; runId: string }
   | { type: 'blocked_sender'; telegramUserId: number }
   | { type: 'error'; message: string }

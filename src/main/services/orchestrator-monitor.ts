@@ -122,7 +122,7 @@ export class OrchestratorMonitorService {
         run,
         `run duration exceeded (${Math.round(elapsed / 60_000)}min > ${Math.round(
           OPERATING_RULES.limits.maxWallClockMs / 60_000
-        )}min)`
+        )}min) — reply /extend ${run.id} to add 4h and resume`
       )
       return true
     }

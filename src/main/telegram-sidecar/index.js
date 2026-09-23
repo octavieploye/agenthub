@@ -310,6 +310,17 @@ async function handleCommand(chatId, text) {
       break
     }
 
+    case '/extend': {
+      const runId = rest[0]
+      if (!runId) {
+        await sendMessage(chatId, 'Usage: /extend <runId>\n\nThe runId is in the 4h auto-pause alert.')
+        break
+      }
+      sendToParent({ type: 'command', command: 'extend', runId })
+      await sendMessage(chatId, '\u2705 Extending run \u2014 adding 4h and resuming.')
+      break
+    }
+
     default:
       await sendMessage(chatId, `I didn't quite understand that.\n\nTry /help to see what I can do, or just describe what you want and I'll do my best.`)
   }
@@ -773,6 +784,9 @@ Example: /send frontend-agent Fix the login button
 \u2705 Commit work
 /commit [repo] \u2014 Commit changes in a repo (or the last completed run)
 
+\u23f1\ufe0f Extend a paused run
+/extend [runId] \u2014 Extend a paused run by 4h
+
 Need help? Just type what you want to do and I'll try to help.`
 }
 
@@ -800,6 +814,7 @@ rl.on('line', async (line) => {
           { command: 'unmute',      description: 'Turn notifications back on' },
           { command: 'approve',     description: 'Approve a pending task (id from prompt)' },
           { command: 'commit',      description: 'Commit changes in a repo' },
+          { command: 'extend',      description: 'Extend a paused run by 4h (id from pause alert)' },
           { command: 'help',        description: 'Show all commands' },
         ]
       }).catch(() => {}) // non-blocking

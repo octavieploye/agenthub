@@ -30,6 +30,7 @@ import {
   resetApprovalToPending,
   deleteApprovalsForRun,
   updateRunTelegramNotify,
+  resetRunStartedAt,
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
@@ -321,6 +322,27 @@ export class OrchestratorScheduler {
 
     // Kick off a tick soon so the run doesn't wait a full interval
     this.requestTick()
+  }
+
+  extendRunWallClock(runId: string): boolean {
+    const run = getRun(this.db, runId)
+    if (!run) {
+      log.warn('OrchestratorScheduler: extendRunWallClock — run not found', { runId })
+      return false
+    }
+    if (run.status !== 'paused') {
+      log.warn('OrchestratorScheduler: extendRunWallClock — run is not paused', { runId, status: run.status })
+      return false
+    }
+    resetRunStartedAt(this.db, runId)
+    try {
+      this.resume(runId)
+    } catch (err) {
+      log.error('OrchestratorScheduler: extendRunWallClock — resume failed', { runId, err })
+      return false
+    }
+    log.info('OrchestratorScheduler: run wall-clock extended', { runId })
+    return true
   }
 
   cancel(runId: string): void {

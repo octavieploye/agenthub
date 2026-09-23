@@ -197,6 +197,11 @@ export function updateRunTimestamp(db: Database.Database, id: string): void {
   db.prepare('UPDATE orchestrator_runs SET updated_at = ? WHERE id = ?').run(now, id)
 }
 
+export function resetRunStartedAt(db: Database.Database, id: string): void {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE orchestrator_runs SET started_at = ?, updated_at = ? WHERE id = ?').run(now, now, id)
+}
+
 export function incrementAgentsSpawned(db: Database.Database, runId: string): void {
   db.prepare(
     'UPDATE orchestrator_runs SET agents_spawned = agents_spawned + 1 WHERE id = ?'

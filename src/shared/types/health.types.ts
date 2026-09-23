@@ -26,6 +26,8 @@ export interface AgentHealthSnapshot {
 
 export interface HealthMonitorCallbacks {
   onAnomaly: (anomaly: HealthAnomaly) => void
+  /** Fired instead of onAnomaly when an overtime anomaly reaches the red (kill) tier. */
+  onHardTimeout?: (anomaly: HealthAnomaly) => void
   getGuardrails: (agentId: string) => GuardrailConfig
   logWarning: (message: string, meta?: Record<string, unknown>) => void
 }

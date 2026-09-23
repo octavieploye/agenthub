@@ -539,6 +539,62 @@ describe('OrchestratorScheduler', () => {
   })
 
   // -------------------------------------------------------------------------
+  // extendRunWallClock()
+  // -------------------------------------------------------------------------
+
+  describe('extendRunWallClock()', () => {
+    it('resets started_at and resumes a paused run', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'wc-sprint', repoId: 'repo-1' })
+      const originalStartedAt = getRun(db, run.id)!.startedAt!
+
+      // Advance fake time so the reset timestamp will be strictly later
+      vi.advanceTimersByTime(5_000)
+
+      scheduler.pause(run.id)
+      expect(getRun(db, run.id)!.status).toBe('paused')
+
+      const result = scheduler.extendRunWallClock(run.id)
+      expect(result).toBe(true)
+
+      const afterRun = getRun(db, run.id)!
+      expect(afterRun.status).toBe('running')
+      expect(afterRun.startedAt).not.toBeNull()
+      // started_at must be strictly later (wall-clock was reset, not preserved by COALESCE)
+      expect(new Date(afterRun.startedAt!).getTime()).toBeGreaterThan(
+        new Date(originalStartedAt).getTime()
+      )
+      // fresh: within 10 seconds of now
+      expect(new Date(afterRun.startedAt!).getTime()).toBeGreaterThanOrEqual(
+        Date.now() - 10_000
+      )
+    })
+
+    it('returns false and does not change status for a running run', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'wc-running', repoId: 'repo-1' })
+      expect(getRun(db, run.id)!.status).toBe('running')
+
+      const result = scheduler.extendRunWallClock(run.id)
+      expect(result).toBe(false)
+
+      expect(getRun(db, run.id)!.status).toBe('running')
+    })
+
+    it('returns false for a missing runId', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const result = scheduler.extendRunWallClock('non-existent-run-id')
+      expect(result).toBe(false)
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // cancel()
   // -------------------------------------------------------------------------
 

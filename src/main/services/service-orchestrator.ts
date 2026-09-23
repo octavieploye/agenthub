@@ -34,6 +34,7 @@ import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { OrchestratorScheduler, type SchedulerDeps } from './orchestrator-scheduler'
 import { OrchestratorMonitorService } from './orchestrator-monitor'
+import { GUARDRAIL_PROMPTS } from './orchestrator-rules'
 import { OrchestratorBrain, type BrainConfig } from './orchestrator-brain'
 import { OrchestratorValidator } from './orchestrator-validator'
 import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
@@ -123,7 +124,7 @@ function getMainWindow(): BrowserWindow | null {
   return windows[0] ?? null
 }
 
-function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMsg): void {
+export function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMsg): void {
   if (msg.type !== 'command') return
   switch (msg.command) {
     case 'get_status': {
@@ -227,6 +228,17 @@ function handleTelegramCommand(db: Database.Database, msg: TelegramFromSidecarMs
         log.error('Telegram respawn failed', { agentId: msg.agentId, err })
       }
       break
+    case 'extend': {
+      const runId = msg.runId
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!runId || !uuidRe.test(runId)) {
+        log.warn('handleTelegramCommand: extend — invalid runId', { runId })
+        break
+      }
+      const ok = orchestratorScheduler?.extendRunWallClock(runId)
+      log.info('handleTelegramCommand: extend', { runId, ok })
+      break
+    }
   }
 }
 
@@ -334,12 +346,31 @@ export function initializeServices(db: Database.Database): void {
 
   // 3. HealthMonitor — depends on GuardrailsManager + AutoPauseService
   healthMonitor = new HealthMonitor({
-    getGuardrails: (_agentId: string): GuardrailConfig => {
-      // TODO: map agentId to repoPath once agent→repo mapping is richer
-      return guardrailsManager?.getGuardrails('.') ?? { ...DEFAULT_GUARDRAILS }
+    getGuardrails: (agentId: string): GuardrailConfig => {
+      try {
+        const agent = getAgentState(agentId)
+        const repo = agent?.repoId ? getRepoById(db, agent.repoId) : null
+        const repoPath = repo?.path
+        if (repoPath && existsSync(repoPath)) {
+          return guardrailsManager?.getGuardrails(repoPath) ?? { ...DEFAULT_GUARDRAILS }
+        }
+      } catch (err) {
+        log.warn('HealthMonitor: failed to resolve guardrails for agent', { agentId, err })
+      }
+      return { ...DEFAULT_GUARDRAILS }
     },
     onAnomaly: (anomaly) => {
       autoPauseService?.handleAnomaly(anomaly)
+    },
+    onHardTimeout: (anomaly) => {
+      const { agentId } = anomaly
+      log.warn('HealthMonitor: hard timeout — killing agent', { agentId, message: anomaly.message })
+      try {
+        killAgent(agentId)
+      } catch (err) {
+        log.warn('HealthMonitor: killAgent failed (agent may already be gone)', { agentId, err })
+      }
+      healthMonitor?.unregisterAgent(agentId)
     },
     logWarning: (message: string, meta?: Record<string, unknown>) => {
       log.warn(message, meta)
@@ -805,8 +836,8 @@ export function initializeServices(db: Database.Database): void {
         const metadataBlock = metadataParts.length > 0 ? `\n\n${metadataParts.join('\n')}` : ''
 
         const taskDescription = effectiveSkill
-          ? `Use skill: /${effectiveSkill}\n\n${baseDescription}${metadataBlock}`
-          : `${baseDescription}${metadataBlock}`
+          ? `${GUARDRAIL_PROMPTS.dev}\n\nUse skill: /${effectiveSkill}\n\n${baseDescription}${metadataBlock}`
+          : `${GUARDRAIL_PROMPTS.dev}\n\n${baseDescription}${metadataBlock}`
 
         if (task.estimatedTokens || task.riskScore) {
           log.info('[orchestrator] task metadata', {
@@ -875,6 +906,7 @@ export function initializeServices(db: Database.Database): void {
         // Spawn only — the scheduler inserts task log + emits TASK_PHASE_CHANGE itself.
         try {
           const agentState = spawnAgent(spawnOptions)
+          healthMonitor?.registerAgent(agentState.id)
           // FIX H1 — link agent_id to the kanban task so syncKanbanCard / getTaskByAgentId works
           try {
             updateTask(db, taskId, { agentId: agentState.id, status: 'in_progress' })
@@ -1093,6 +1125,11 @@ export function getTelegramQueueProcessor(): TelegramQueueProcessor | null {
 
 export function getScheduler(): OrchestratorScheduler | null {
   return orchestratorScheduler
+}
+
+/** Test-only: inject a mock scheduler without running initializeServices. */
+export function _setOrchestratorSchedulerForTest(s: OrchestratorScheduler | null): void {
+  orchestratorScheduler = s
 }
 
 export function getMcpBridgeHandler(): McpBridgeHandler | null {
