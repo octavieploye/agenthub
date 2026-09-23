@@ -165,7 +165,13 @@ export class HealthMonitor {
       const key = `${anomaly.type}:${anomaly.tier}`
       if (!reported.has(key)) {
         reported.add(key)
-        this.callbacks.onAnomaly(anomaly)
+        const isHardTimeout =
+          anomaly.type === 'overtime' && anomaly.tier === 'red' && this.callbacks.onHardTimeout
+        if (isHardTimeout) {
+          this.callbacks.onHardTimeout!(anomaly)
+        } else {
+          this.callbacks.onAnomaly(anomaly)
+        }
         this.callbacks.logWarning(anomaly.message, { agentId, type: anomaly.type, tier: anomaly.tier })
       }
     }

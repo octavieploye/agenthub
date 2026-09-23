@@ -414,6 +414,37 @@ describe('HealthMonitor', () => {
 
       expect(callbacks.logWarning).toHaveBeenCalled()
     })
+
+    it('routes red overtime to onHardTimeout instead of onAnomaly', () => {
+      const onHardTimeout = vi.fn()
+      callbacks = createCallbacks({ onHardTimeout })
+      monitor = new HealthMonitor(callbacks)
+      monitor.registerAgent('agent-1')
+
+      // 60 min = 200% of the default 30 min limit → red overtime
+      vi.advanceTimersByTime(60 * 60 * 1000)
+      monitor.checkAgent('agent-1')
+
+      expect(onHardTimeout).toHaveBeenCalledTimes(1)
+      const hardAnomaly = onHardTimeout.mock.calls[0][0] as HealthAnomaly
+      expect(hardAnomaly.type).toBe('overtime')
+      expect(hardAnomaly.tier).toBe('red')
+      expect(callbacks.onAnomaly).not.toHaveBeenCalled()
+    })
+
+    it('routes non-red overtime to onAnomaly, not onHardTimeout', () => {
+      const onHardTimeout = vi.fn()
+      callbacks = createCallbacks({ onHardTimeout })
+      monitor = new HealthMonitor(callbacks)
+      monitor.registerAgent('agent-1')
+
+      // 30 min = 100% of default → yellow overtime
+      vi.advanceTimersByTime(30 * 60 * 1000)
+      monitor.checkAgent('agent-1')
+
+      expect(onHardTimeout).not.toHaveBeenCalled()
+      expect(callbacks.onAnomaly).toHaveBeenCalled()
+    })
   })
 
   // ─── watchdog ────────────────────────────────────────────────────
