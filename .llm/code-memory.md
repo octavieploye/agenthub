@@ -1,9 +1,14 @@
 # Code Memory — agenthub
 
-> Last sync: 34fb64e | 2026-09-23 | coordinator
+> Last sync: 30fb95b | 2026-09-23 | coordinator
 > Commits since last sync: 0
 
-## Sync window — 2026-09-21 to 2026-09-23 (`1100fff..34fb64e`)
+## Sync window — 2026-09-23 (`34fb64e..30fb95b`)
+
+- Preserve uncommitted work + expand `.gitignore` (`80446c3`): commit the legitimate uncommitted tree — plugin skills/commands, packages (market-modeling, market-sim-pkg, package-factory, package-ts-factory), `agenthub_orchestrator/`, `commercial/`, LICENSE/EULA — plus tracked config drift (`.claude/*`, `.llm/code-memory.md`, `docs/superpowers/*`); `.gitignore` expanded to hide scratch/derived artifacts (`docs/`, `screenshots/`, `*.png`, `logs/`, `test-sound/`, `resources/sounds/`, `agenthub.db`, `.claire/`, `.llm/`, `workflow-team-library/`, `memory/records/`, and root research notes).
+- Remove leftover `file:` dependency (`30fb95b`): drop `anamnesis-landing-page` (`file:../multi-orch-test-3`) from package.json + lockfile — a real test artifact from the orchestrator multi-run build, not a real dependency.
+
+## Previous sync window — 2026-09-21 to 2026-09-23 (`1100fff..34fb64e`)
 
 - Per-repo/sprint Telegram notifications (`d432ba1`): spawned agents' structured name (`<repo> / <sprint> - <task> - session #N`) and sprint color index are threaded through `sendTelegramNotification`; the sidecar maps the palette index to a circle-emoji badge so concurrent multi-run sprints are visually distinguishable. `SPRINT_COLOR_PALETTE` → `#8D6E63 / #455A64 / #ECEFF1`; `TelegramNotificationPayload` gains `colorIndex`; approval notifications now labeled `<repo> / <sprint>` instead of a flat "Orchestrator".
 - Distinct sprint colors + git-ops spawn permissions (`6a802d4`): `pickSprintColorIndex` strips a `-vN`/`_vN` version suffix before matching the identity integer (so `landing-{entity}-v2` sprints no longer collapse to one color); Telegram `spawn_agent` special-cases the literal `git-ops` name to run with `skipPermissions: true`, inherit the repo color, and use a disambiguated `git-ops / <repo>` name; `git-ops-task.js` commit prompt instructs the agent to run `git status`/`git diff`, stage only relevant source/config files, respect `.gitignore`, and derive the message from actual changes.
