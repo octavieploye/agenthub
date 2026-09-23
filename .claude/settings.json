@@ -86,7 +86,6 @@
       "command": "/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/anamnesis-mcp/.venv/bin/anamnesis-mcp",
       "env": {
         "ANAMNESIS_URL": "http://localhost:9300",
-        "AUTH_SECRET": "f8751b2ec895015bae7e1989f5424c71e6108c18dc6024fc3ac168294cef9743",
         "OPTIMAEUS_CALLER": "hephaestus"
       }
     }
@@ -99,6 +98,14 @@
     "pkg-docs-check": {
       "description": "Check official docs URL and current version for a package/library/framework before writing code. Use before any new import or install.",
       "prompt": "Read .claude/skills/pkg-docs-check/SKILL.md for the full workflow, then .claude/skills/pkg-docs-check/url-registry.md for official URLs. Execute the pkg-docs-check workflow for: "
+    },
+    "prompt-ready": {
+      "description": "Generate a ready-to-paste execution prompt with repo path, skill, scope, constraints, and model recommendation — for dispatching work to a new session.",
+      "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/plugin/skills/prompt-ready/SKILL.md and execute the prompt-ready workflow for: "
+    },
+    "wired-duf": {
+      "description": "Data-UX-Functionality audit — verifies all user-facing data is relevant, UI elements are functional, and frontend-backend wiring is complete.",
+      "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/plugin/skills/wired-duf/SKILL.md and the criteria at /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/plugin/skills/wired-duf/criteria.md. Execute the wired-duf audit workflow for: "
     }
   },
   "hooks": {

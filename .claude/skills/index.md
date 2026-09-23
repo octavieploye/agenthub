@@ -4,7 +4,7 @@ Skills specific to the agenthub codebase. Machine-readable registry: [index.json
 
 Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use it`
 
-## Frontend Engineering
+## Code Development
 
 - [team-frontend](../../plugin/skills/team-frontend/SKILL.md) — **Full pipeline**: audit → triage → TDD gate → dev-stack fix → architect + sr-frontend review → test integrity → final log + recommendations
 - [frontend-code-review](../../plugin/skills/frontend-code-review/SKILL.md) — Senior frontend review for any stack (React/Vue/Angular/Svelte/vanilla JS) — framework patterns, TS strict, dead UI, wiring, test gaps — adapts to detected stack
@@ -12,43 +12,47 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [test-first-enforcer](../../plugin/skills/test-first-enforcer/SKILL.md) — TDD gate for any language/runner — forces red test before any implementation, gates: understand → red → implement → full suite → refactor
 - [chaos-modeling](../../plugin/skills/chaos-modeling/SKILL.md) — Chaos engineering for any project type — 8-domain failure scenarios + real outcome logging + resilience hardening plan
 
-## DevOps
+## DevOps & Production
 
+- [orchestrator-coordinator](orchestrator-coordinator/SKILL.md) — A-to-Z sprint dispatcher: resolves live repo UUID → creates tasks with dependsOn chains → dispatches with telegramNotify → monitors approval gates. No friction, no silent failures.
 - [team-backend-hardening](team-backend-hardening/SKILL.md) — Meta-orchestrator: sequences full-code-review → production-readiness → sec-devops → threat-defense → insider-threat, with dev-loop fix cycles + architect/sr-backend validation gates + human approval between each phase — outputs Production-Ready Clearance Report
 - [team-production-readiness](team-production-readiness/SKILL.md) — Full production readiness audit: DB architecture, auth security, infra/DevOps, payments, scale performance (0→10k users) — outputs Production Readiness Report with CRITICAL/HIGH/MEDIUM/LOW findings + P0/P1/P2 remediation plan
-- [full-code-review](full-code-review/SKILL.md) — Full multi-agent codebase audit + fix + verify cycle
+- [full-code-review](full-code-review/SKILL.md) — Review-only audit: architect + sr-backend + sr-frontend in parallel. Produces master issue list (CRITICAL/HIGH/MEDIUM/LOW). Scope-aware — inherits from parent orchestrator or asks user in standalone mode
 - [sec-insider-threat](sec-insider-threat/SKILL.md) — Insider threat & IP protection audit — unauthorized access, IP exfiltration, AI prompt injection, reverse-engineering. Outputs prevention report + hardening policy.
 - [team-threat-defense](team-threat-defense/SKILL.md) — Threat Defense: outside attacks, stealth/AI threats, injection vectors, secrets exposure, high-speed anomalies — outputs TIP + Hardening Plan
 - [sec-devops](.claude/commands/sec-devops.md) — Multi-mode security and DevOps auditor: OWASP Top 10, data leakage, dependency risks, infrastructure conflicts — outputs per-scan report + security-log update
 
-## Anamnesis Memory
+## Memory & Knowledge
 
-- [anamnesis-write](anamnesis-write/SKILL.md) — Write findings to Anamnesis memory system: auto-detects important discoveries, evaluates via memory-write-gate, surfaces to user, POSTs to Anamnesis API on approval. Never deletes, only archives.
+- [anamnesis-write](anamnesis-write/SKILL.md) — Write findings to Anamnesis memory system via MCP tools: surfaces to user, writes on approval. Gate runs server-side (gate.py). Never deletes, only archives.
 - [anamnesis-expert](anamnesis-expert/SKILL.md) — Anamnesis system oracle: DB schemas, memory layers, API contracts, entity connections, build state, competitive positioning, integration status
-- [memory-write-gate](memory-write-gate/SKILL.md) — Quality gate for Anamnesis entries: 5W1H evaluation, substantiveness scoring, trust scoring, security screening. Called by anamnesis-write before every write.
+- [memory-write-gate](memory-write-gate/SKILL.md) — **DEPRECATED** — gate now machine-enforced in MCP server (`gate.py`). See `anamnesis-write`. Legacy skill retained for reference only.
 
-## Dev Skills
+## Code Quality
 
 - [app-scenario-modeler](app-scenario-modeler/SKILL.md) — Model all scenarios for a software feature or app: discovery, classification, cascade analysis, constraints, risk/probability, CORE optimisation, EDGE cost decisions — outputs 6 docs per feature to optimaeus-architecture/docs/app-modeler/
 - [skill-creator](skill-creator/SKILL.md) — Create new skills, teams, workflows, commands — reverse-engineer tasks into reusable artifacts
+- [wired-duf](wired-duf/SKILL.md) — Data-UX-Functionality audit: traces every view from component to data source, flags broken controls, irrelevant data, silent failures, and unwired endpoints
+- [pkg-docs-check](pkg-docs-check/SKILL.md) — Verify official docs URL + current version for any package/library/framework before writing code. Auto-triggered by hook on install commands; call manually before new imports.
 - [test-integrity-review](test-integrity-review/SKILL.md) — Check code changes for "test changed to pass" patterns during review or before commits
 - [team-dev-loop](team-dev-loop/SKILL.md) — Agentic coding loop: review → fix → test, iterates until tests pass and frontend/backend are wired. Stall detection + configurable max iterations (default 5).
 - [brainstorm-to-sprint](brainstorm-to-sprint/SKILL.md) — Post-brainstorm meta-orchestrator: sprint planning → dev loop → senior review gate (architect + sr-frontend + sr-backend) with fix loop until clean
 - [team-impl-review](team-impl-review/SKILL.md) — Post-sprint audit: plan vs git vs code vs integration. Codebase is ground truth. DONE/PARTIAL/MISSING/CONFLICT verdicts with file:line evidence. Loops with team-dev-loop for fixes.
 - [team-command-tester](../../plugin/skills/team-command-tester/SKILL.md) — Stress-test and validate output quality of any skill, team, or workflow: real SkillsService integration tests, headless xterm capture, token measurement (TES), LLM-as-judge scoring (OQS), rendering stress (RRS). 6 modes: QUICK/FULL/STRESS/COMPARE/TIERED/BATCH. Reports to Notion + Anamnesis.
 - [token-optimizer](token-optimizer/SKILL.md) — Audit AI instruction files for token waste and rewrite safely via 5-gate pipeline
+- [prompt-ready](prompt-ready/SKILL.md) — Generate a ready-to-paste execution prompt with repo, skill, scope, constraints, and model recommendation for dispatching to a new session
 - [google-oauth-expert](google-oauth-expert/SKILL.md) — Google OAuth 2.0 implementation + security hardening for web server and desktop/installed apps (PKCE, scopes, token lifecycle, production readiness)
 - [apple-oauth-expert](apple-oauth-expert/SKILL.md) — Apple OAuth & Authentication expert: Sign in with Apple (native + web JS SDK + portal config), private email relay, ASWebAuthenticationSession, MDM Account-Driven Enrollment OAuth2, Platform SSO
 
-## Notion Integration
+## AI Engineering
 
 - [notion-skills-tree](notion-skills-tree/SKILL.md) — Notion workspace orchestrator: organizes projects, business intel, entity status via MCP bridge. On-demand, CEO-level, autonomous with strict modification protocol.
 
-## Voice & Articulation
+## Content & Voice
 
 - [language-articulation](language-articulation/SKILL.md) — Pragmatic structuralist voice profile: structural framing, concrete numbers, named actors, sovereignty as leverage — for drafting content, responding to questions, or articulating positions
 
-## Business Analysis
+## Business Research
 
 - [external-source-to-strategy](external-source-to-strategy/SKILL.md) — Turn a transcript, article, or framework into a competitive brief, priority todos, and memory reference scoped to AgentHub/Optimaeus
 - [trustworthy-sources](trustworthy-sources/SKILL.md) — Evaluate whether a source is credible enough to cite as evidence for a factual, design, or business decision (5-source convergence rule, corporate ≠ trustworthy)
@@ -62,7 +66,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [pitch-proof](pitch-proof/SKILL.md) — Stress-test your pitch before the meeting — champion + skeptic simulation, readiness score 1-10, top 3 changes, go/prep-more verdict
 - [team-before-the-meeting](team-before-the-meeting/SKILL.md) — Sequential bundle: Price Proof → Proposal Proof → Pitch Proof → Synthesis — each step feeds into the next, produces single Meeting Readiness Brief with go/fix/hold verdict
 
-## Business Strategy Destructuring
+## Market Intelligence
 
 - [destructuring-full](../commands/destructuring-full.md) — Run the full destructuring pipeline: competitor (micro) → business (internal) → market entry → dynamics → patterns synthesis
 - [destructuring-business](../commands/destructuring-business.md) — Destructure business strategy: positioning, pricing, acquisition, monetization. Phase 5 of market-sim pipeline
@@ -77,7 +81,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [upgrade-sprint](../../plugin/workflows/upgrade-sprint/manifest.md) — Safe major dependency upgrade: audit (scout-frontend) → upgrade + fix (dev-frontend) → visual regression (tester-frontend) → senior validation (sr-frontend)
 - [ux-challenge](../workflow-team-library/ux-challenge/manifest.md) — Adversarial UX↔UI design workflow: WEBSITE | APPLICATION modes, 8 stages from research to sprint handoff
 
-## Team Orchestrators
+## Teams
 
 - [team-design-research](team-design-research/SKILL.md) — Landing page trends, emotional UX patterns, Tailwind animations, event-triggered interactions — outputs Design Research Brief
 - [team-ui-builder](team-ui-builder/SKILL.md) — End-to-end UI build: UX architecture + emotional design + Tailwind/CSS implementation + micro-interactions + non-tech validation — outputs UI Build Summary + code
@@ -99,7 +103,7 @@ Format: `- [skill-name](<name>/SKILL.md) — one-line description of when to use
 - [team-legal-guardian](team-legal-guardian/SKILL.md) — Legal scan (7 domains), risk classification CRITICAL→INFO with financial exposure + insurance mapping, policy/contract drafting, adversarial counter-review for litigation triggers — user approval gate before drafting
 - [team-jailbreak-red-team](team-jailbreak-red-team/SKILL.md) — Generates, classifies, validates, and logs adversarial deception scenarios (T1–T7) across 8 protected assets — per-run log + master jailbreak log for LLM safety grounding
 - [team-onboarding-engine](team-onboarding-engine/SKILL.md) — Apple-style onboarding for marketplace clients, affiliates, and creators — experience architecture, Stripe Connect deferred payments, automation blueprint, risk assessment, copy pack, full Onboarding Playbook
-- [team-impl-lead](team-impl-lead/SKILL.md) — Full project audit from scratch: stack, product, content, legal, processes — discovery report + prioritized implementation plan + conformance check
+- [team-impl-lead](team-impl-lead/SKILL.md) — Scope-aware project audit with 3 modes: light (< 5 files, inline plan), dev (stack + product scouts), full (all scouts). Chained/standalone scope detection. Produces discovery report + implementation plan
 - [team-sprint-planner](team-sprint-planner/SKILL.md) — Intake → codebase mapping → sprint design with full ownership matrix → 6-gate orchestration validation → approved sprint plan ready for implementation team
 - [voice-pipeline-coordinator](voice-pipeline-coordinator/SKILL.md) — Orchestrates OPTimaeus voice pipeline build across 6 sprints (S0-S5) with TDD gates, security reviews, and parallel execution — dispatches team-dev-loop, sec-devops, git-ops
 - [team-notification-layer](team-notification-layer/SKILL.md) — Sound alerts (Howler.js) + color/glow (CSS + useSettledStatus) + TTS voice (Piper + AudioContext) — two-path architecture specialist team
@@ -126,4 +130,4 @@ This file drives the AgentHub UI skills dropdown. Format:
 "skill-id": { "displayName": "Human Readable Name", "category": "category-key" }
 ```
 
-Category keys: `code-quality`, `ai-config`, `market-intel`, `competitor-analysis`, `content-voice`, `workflows`, `teams`, `utilities`.
+Category keys: `code-dev`, `code-quality`, `devops`, `security`, `business-research`, `business-venture`, `market-intel`, `content-voice`, `ai-engineering`, `memory`, `teams`, `workflows`.

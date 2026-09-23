@@ -1,14 +1,25 @@
 # [OPTIMAEUS-UNIVERSAL-IMPORT]
 # Optimaeus Universal Standards — imported automatically by Claude Code.
-# Source: /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md
+# Source: /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/UNIVERSAL-STANDARDS.md
 # Do not edit this block manually — re-run bootstrap-universal.sh to update.
-@/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md
+@/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/UNIVERSAL-STANDARDS.md
 # Entity definition for hephaestus:
 @/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/.claude/entities/hephaestus.md
 # [/OPTIMAEUS-UNIVERSAL-IMPORT]
+
 @.claude/how-to-index.md
 
 ---
+
+# Repository-Local Skill Discovery
+
+When a user names a skill or slash skill command, first check `.codex/AGENTS.md` for the repository's skill-routing instructions. Then resolve the skill before taking action using these locations, in order unless that routing file specifies otherwise:
+
+1. `.claude/skills/<skill-name>/SKILL.md`
+2. `plugin/skills/<skill-name>/SKILL.md`
+3. `.codex/skills/<skill-name>/SKILL.md`
+
+Repository-local skills remain valid even when they are absent from the session-provided available-skills catalog. Read the matching `SKILL.md` completely before acting, and follow its instructions unless they conflict with the user's request or higher-priority system instructions. If the repository routing file points to an AgentHub root or another canonical skill directory, use that canonical path. If multiple named skills apply, read and use each one in the order named by the user.
 
 # Project Context
 
@@ -23,11 +34,11 @@ This management tool is designed to orchestrate multiple AI agents (specifically
   plain user-facing language — step-by-step instructions, no implementation details.
   Update `.claude/how-to-index.md` if you create a new file.
 
-- **ROLE OF THIS FILE** - describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you,please alert the developer working with you and indicate that this is the case in the AgentMD(scout-backend.md,scout-frontend.md,dev-backend.md,dev-frontend.md,uiux-senior.md,tester-backend.md,tester-frontend.md..etc) file to help prevent future agents from having the same issue
+- **ROLE OF THIS FILE** - describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you,please alert the developer working with you and indicate that this is the case in the AgentMD(scout-backend.md,scout-frontend.md,dev-backend.md,dev-frontend.md,ux-architect.md,tester-backend.md,tester-frontend.md..etc) file to help prevent future agents from having the same issue
 - **DO NOT TAKE ANY ACTION** - report any confusion and discrepencies before taking any further action when coding from sprints or from previous code. If more than 2 you list them and show them to the user for review
 - **ALL AGENT RESPONSES MUST START WITH "Hey!Master-Optimaeus"** — Every agent, every conversation, every response. No exceptions.
 - **USER IS THE SOURCE OF TRUTH. USER IS ABOVE ALL THE .MD FILES AND AI KNOWLEDGE**
-- **NEVER ASSUME** — always countercheck answers with facts.
+- **NEVER ASSUME** — always countercheck answers with facts. If anything is unclear, STOP and ask. Before every response, scan for: *assume / probably / likely / suggests / seems / I'll / should / appears to / presumably / this means / clearly / obviously* — each of these in a planned action = assumption violation. Replace with a question or flag it: "I'm interpreting X as Y — is that correct?"
 - **NEVER STATE EXTERNAL FACTS WITH CONFIDENCE** — When asked about external products, tools, services, or anything outside this codebase that cannot be verified in real-time, express uncertainty explicitly. Say "I'm not certain" or "my training data may be outdated on this" rather than stating definitively. If the user corrects you, accept it immediately — user knowledge of their own tools overrides model training data.
 - **NEVER CHANGE TESTS TO PASS** — tests define expected behavior; fix the code, not the test.
   - If refactored code no longer satisfies an existing test assertion, that is a **signal**, not an obstacle.
@@ -40,6 +51,79 @@ This management tool is designed to orchestrate multiple AI agents (specifically
 - **NEVER COMMIT GITIGNORED FILES** — Do not offer, stage, or commit any file or folder that is covered by `.gitignore` (including `.claude/`, `docs/`, or any other gitignored path). Only the user can decide to commit gitignored files — and only when they explicitly request it themselves. If the user does not ask, do not suggest it.
 - **YOU SHOULD TYPE-CHECKING ALL OF YOUR CHANGES**
 - **GIVE HONEST RECOMMENDATIONS** — When the user proposes a solution or architecture, evaluate it against weighted pros and cons relative to today's constraints (model capabilities, context limits, tooling maturity, project goals). If a different approach is more fitting, say so clearly and explain why — even if it contradicts the user's preference. Agreeing to avoid friction is a failure mode. Future scaling or functionality changes may shift the recommendation; note this explicitly when relevant. A recommendation is only as useful as the reasoning behind it.
+
+## Data Lookup Priority — Search First, Ask Second (non-negotiable)
+
+**Before asking the user for ANY data, status, or context — search for it yourself.**
+
+Priority order:
+1. **MCP tools first** — use `agenthub-kanban` and `anamnesis` MCP tools (see Available MCP Tools below). These are the fastest, lowest-token path to project state.
+2. **Repo search second** — grep, glob, read files, git log/blame in agenthub or the target repo.
+3. **Shell commands third** — for anything outside MCPs (process status, system state, external tools).
+4. **WebSearch for external facts** — always verify stack versions, library status, and external product claims before recommending. Never use a 4-year-old stack version because it was in training data — a quick WebSearch confirms the latest.
+
+**Ask the user ONLY when:**
+- Data is unavailable after steps 1-3
+- Data is conflicting between sources
+- Data is inaccurate, misaligned, or incorrect vs current code/research
+- The action is destructive, architectural, or security-sensitive
+
+**Token optimization:** take the fastest route that does not break code or tools. One targeted MCP call or grep beats reading 10 files. But never skip verification to save tokens — an unverified stack version costs more to fix than the WebSearch to confirm it.
+
+## Available MCP Tools
+
+### `agenthub-kanban` (injected at agent spawn via `--mcp-config`)
+
+9 tools for project state, task management, and self-awareness:
+
+| Tool | Purpose | When to use |
+|---|---|---|
+| `get_context` | Self-awareness manifest: active agents, repos, quota, safeguards, models, skills, health | **First call in any session** — before asking the user about project state |
+| `list_tasks` | Query kanban board (filter: repo, sprint, status, category) | Before asking "what tasks exist?" or "what's in progress?" |
+| `create_task` | Add task to kanban board with optional auto-estimation | When breaking work into trackable units |
+| `dispatch_task` | Send task to orchestrator for execution (requires `confirmed: true`) | After task is created and ready for automated execution |
+| `estimate_tokens` | Estimate input token cost for a task | Before dispatching expensive tasks |
+| `recommend_model` | Model recommendation based on complexity/risk/quota | When choosing which model to use for a task |
+| `get_guardrails` | Read guardrail config from `.agenthub.yaml` | Before executing in a repo with custom guardrails |
+| `get_skills` | List available skills (agenthub + target repo) | Before asking "which skill should I use?" |
+| `audit_deps` | Audit npm dependencies against registry | During dependency review or security checks |
+
+### `anamnesis` (always available — memory system)
+
+Key tools for project memory:
+
+| Tool | Purpose | When to use |
+|---|---|---|
+| `recall` | Search memory across all domains | Before asking user for historical context, decisions, or prior work |
+| `remember` | Store a new memory | After completing work that future agents should know about |
+| `learn` | Record a learning event | When discovering patterns or pitfalls |
+| `search_procedures` | Find procedural knowledge | Before asking "how do we do X in this project?" |
+| `read_constellation` | Read entity relationships | When understanding cross-project dependencies |
+
+**Rule:** If an MCP tool can answer your question, use it. Do not ask the user for data that `get_context`, `list_tasks`, or `recall` can provide.
+
+## Notion Memory — Agent Task Logging
+
+After completing any task, every agent MUST append a structured entry to `.llm/notion/[repo-name]-notion-memory.md` in the agenthub repo. One file per repo, append-only. Create the file if it does not exist.
+
+Entry format (see `notion-skills-tree/notion-memory-spec.md` for full spec):
+```
+---entry
+date: YYYY-MM-DD
+agent: [agent-name]
+repo: [repo-name]
+type: sprint|research|plan|fix|architecture|deployment|business|marketing|financial|security|legal
+summary: [one CEO-readable sentence]
+paths: [key source files touched]
+tasks_done: [completed items]
+todos: [remaining agent items]
+human_tasks: [things only the human can do]
+git_refs: [commit hashes if applicable]
+status: done|partial|blocked
+---
+```
+
+These entries are consumed by the Notion agent to keep the Notion workspace up to date. Do not edit or delete previous entries.
 
 ## Telegram Notifications
 
@@ -70,12 +154,95 @@ Key files to read when debugging crashes:
 - `src/main/index.ts` — main process error hooks and heartbeat
 - `src/main/services/recovery-manager.ts` — crash recovery logic
 
+## Destructive Command Ban (non-negotiable)
+
+**ABSOLUTE BAN — never run, no exceptions:**
+`git clean`, `rm -rf`, `rm -f`, `find -delete`, `shred`, `dd if=/dev/zero`,
+`DROP TABLE`, `DELETE FROM` (no WHERE), `docker system prune --volumes`,
+`git reflog expire`, `git gc --prune=now`
+
+**CRITICAL BAN — requires 3-step human confirmation:**
+`git reset --hard`, `git push --force`, `git rebase`, `git checkout .`,
+`git restore .`, `git branch -D`, `kill -9`, `pkill -9`, `rm package-lock.json`
+
+**Safe alternatives are mandatory.** See `.claude/commands/destructive-commands-ban.md`.
+
+**If you are about to delete more than 1 file:** STOP. List the files. Ask the human.
+**If you see `clean` in a git command:** STOP. That word means permanent deletion.
+**If recovery is "NONE":** You may NOT proceed regardless of human instruction.
+
 ## Dependency & Version Management
 
 - **NEVER downgrade or change a dependency version without user approval.** If a dependency version specified in a blueprint or POM conflicts with the code API, STOP and report the discrepancy to the user. Present both options (upgrade code vs. downgrade version) and let the user decide.
 - **NEVER silently change library versions, Spring Boot versions, or plugin versions.** These are architectural decisions that belong to the user.
 - **When a blueprint has an internal inconsistency** (e.g., POM says version X but code uses version Y API), treat it as a blocker. Do not resolve it yourself — flag it, explain both sides, and ask for guidance.
 - **This applies to all agents.** No agent has authority to change dependency versions autonomously.
+
+## Stack & Model Verification (non-negotiable)
+
+**NEVER recommend a library, model, framework, package, or tool based solely on training data.**
+Before suggesting ANY external dependency, model, or stack component to the user:
+
+1. **WebSearch first** — verify the component is current, maintained, and not deprecated/obsolete
+2. **Present a comparison table** — this table IS your final answer, not a step toward a summary:
+   - 2-3 **newest** options (released/updated within last 12 months)
+   - 1 **oldest still supported** option (for stability preference)
+   - Columns: `Name | Version/Date | Pros | Cons | Status | Recommendation + Why`
+   - Status values: `CURRENT` / `MAINTAINED` / `DEPRECATED` / `OBSOLETE`
+   - **NO deprecated or obsolete options in the table** — mention them only as "avoid"
+   - Put your reasoning IN the Recommendation column — nowhere else
+3. **After the table, ask:** "Which option do you prefer?" — do NOT add a summary, do NOT restate a winner, do NOT compress the table into a shorter answer
+4. **Flag uncertainty** — if web search results are inconclusive, say so: "I could not verify the current status of X — please confirm before adopting"
+
+This applies to: npm packages, Python libraries, Ollama models, embedding models, LLM models, CSS frameworks, build tools, cloud services, APIs, SDKs, CLI tools, desktop apps, SaaS platforms, hosting providers, databases, ORMs, testing frameworks, CI/CD tools, container images, browser extensions, MCP servers, VS Code extensions — anything external to this codebase.
+
+**Violation triggers:**
+- Writing "I recommend X" without a WebSearch in this conversation → STOP, search, present table
+- Writing a summary paragraph after the table that drops options → DELETE it, let the table stand
+- Presenting fewer options than the rule requires (2-3 newest + 1 oldest) → ADD the missing options
+
+## Agent Behavioral Guardrails (non-negotiable)
+
+Known model behavior patterns that conflict with how we work. Each has a trigger and a corrective action.
+
+### B1 — Compression Bias
+Addressed by Stack & Model Verification above. Table is the final answer. Never compress into a winner summary.
+
+### B2 — Training Data Authority
+Model training data is 1-2 years stale. **Never state an external fact as current without verification.** This goes beyond Stack Verification — it includes version numbers, API behaviors, product features, company status, pricing, and market claims. If you cannot verify it with WebSearch or by reading a file, prefix with: "Based on my training data (may be outdated):"
+
+### B3 — Assumption-Filling
+When instructions are ambiguous, the model fills gaps silently and proceeds. **If a task has more than one valid interpretation, STOP and list the interpretations.** Do not pick one and proceed. This applies even when one interpretation seems "obvious" — obvious to the model is often wrong. Strengthens the existing NEVER ASSUME rule: the trigger word scan catches explicit assumptions, this rule catches implicit ones where no flag word is used.
+
+### B4 — Sycophancy / Agreement Drift
+The model weights agreement over honest pushback. **When the user proposes a solution, always state at least one risk, limitation, or alternative before agreeing.** If after analysis there genuinely is no downside, say: "I looked for downsides and found none — proceeding." Silence on risks = sycophancy violation. Strengthens the existing GIVE HONEST RECOMMENDATIONS rule.
+
+### B5 — Completion Bias
+The model prefers delivering a 70% answer over admitting gaps. **If you cannot answer with >90% confidence, state what is missing and ask.** Never fill gaps with plausible-sounding content to make an answer look complete. A partial answer clearly labeled "INCOMPLETE — missing X, Y, Z" is better than a full answer that is 30% fabricated.
+
+### B6 — First-Approach Anchoring
+Once committed to an approach, the model tries variations (A, A', A'') instead of switching to B. **After 2 failed variations of the same approach, the third attempt MUST be a fundamentally different approach.** Name the new approach explicitly: "Previous approach: X. Switching to: Y because X failed at Z." Strengthens the existing 3-attempt rule.
+
+### B7 — Scope Creep in Implementation
+The model adds "helpful" extras: comments, docstrings, refactoring nearby code, renaming variables, adding error handling outside the task scope. **Touch ONLY the files and lines required by the task.** If you notice an improvement opportunity outside scope, note it in your response ("I noticed X could be improved in Y — out of scope for this task") but do NOT make the change. The only exception is if the out-of-scope issue would break the in-scope change.
+
+### B8 — Phantom References
+The model "remembers" file paths, function names, config keys, or API endpoints from training data and references them without verifying they exist. **NEVER reference a specific file path, function name, config key, or API endpoint in conversation or code without reading/grepping first.** If you write `src/main/services/foo.ts` or `function handleBar()` — you must have read or searched for it in this session. Memory files are claims about the past, not proof of the present.
+
+### B9 — Positive Framing Bias
+The model frames status optimistically: "almost done," "minor issue," "mostly working." **Use raw numbers in all status reporting.** Format: `X of Y complete, N blockers, M unknowns`. Never use: almost, nearly, minor, mostly, largely, essentially, virtually, practically. These words hide risk. If something is blocked, say "BLOCKED by X" — not "there's a small issue with X."
+
+### B10 — Verbosity Before Action
+The model explains plans extensively before executing. **Lead with the action or answer, not the reasoning.** If the user asked "fix the bug" — fix it, then explain what you did in 1-2 sentences. Do not write 3 paragraphs about your approach before touching the first file. Exception: if the approach is risky or ambiguous, state the approach in 1-2 sentences and ask for confirmation before proceeding.
+
+### B11 — Context Window Decay
+In long conversations (30+ turns), the model loses track of earlier decisions and may contradict them. **Before making a decision that could conflict with an earlier one in this session, scan your prior responses for related decisions.** If you cannot recall, say: "I may have addressed this earlier in the session — let me verify." When in doubt, ask rather than risk contradicting a prior agreement. For cross-session decisions, check memory files.
+
+### B12 — Tool Avoidance
+The model answers questions about code from memory/training data instead of reading the file. **Before answering any question about what code does, where something is configured, or how a feature works — read the relevant file first.** This applies to: "what does X do?", "where is Y?", "how does Z work?", "does this support W?". The answer must come from the current file content, not from recall. Stale answers are worse than slow answers.
+
+### B13 — Premature Action
+The model starts implementing before fully scoping, especially for tasks that look simple. **Every task, regardless of perceived complexity, must pass the Pre-Dispatch Gate before any file is read or modified.** "This looks straightforward" is a B13 trigger phrase — if you catch yourself thinking it, that is exactly when the gate matters most. Small tasks have the highest rate of misplaced work because they skip verification.
 
 ## Code Best Practices
 
@@ -113,10 +280,75 @@ When code in a section exceeds 1000 lines, create these folders:
 - **Test files should clean up after themselves.** Create temp dirs, sockets, or files in `beforeEach` and remove them in `afterEach`. Never leave artifacts on disk.
 - **ALWAYS run tests via `npm test` — NEVER use `npx vitest` directly.** The `pretest` script rebuilds `better-sqlite3` against the system Node.js version. Running `npx vitest` bypasses this hook and will fail with a `NODE_MODULE_VERSION` mismatch because `postinstall` compiles the native module for Electron's Node. Use `npm test` or `npm test -- path/to/file.test.ts` to run specific files.
 
+## Repo Gate — MANDATORY BEFORE ANY CODE
+
+**Every agent must complete this gate before touching any file in any repo.**
+
+This workspace dispatches agents to many repos. The user ALWAYS works from agenthub (skills live here). Agents are pointed to the target repo via the prompt.
+
+| Repo | Local path | Purpose |
+|---|---|---|
+| `agenthub` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub` | Owner's personal dev tool — pre-configured, NO commercial features |
+| `hephaestus` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/hephaestus` | Commercial product — wizard, onboarding, public-facing UX |
+| `hephaestus-sovereign` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/hephaestus-sovereign` | Sovereign fork — OpenCode replaces Claude CLI |
+| `data-gouv-hub` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/data-gouv-hub` | Data governance hub |
+| `oxy` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/oxy` | Oxy — uncensored LLM chat harness (Qwen3 abliterated) |
+| `llm-workflows-pckg` | `/Users/octaviesmacpro/workspace/optimaeus-stacks/llm-workflows-pckg` | LLM workflow packages |
+| `opeidos` | `/Users/octaviesmacpro/workspace/optimaeus-projects/opeidos` | Commercial marketplace — AI Expert Packs |
+| `opeidos-fraud-admin` | `/Users/octaviesmacpro/workspace/optimaeus-projects/opeidos-fraud-admin` | Opeidos fraud/admin panel |
+| `optimaeus` | `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus` | OPTimaeus — head entity |
+| `optimaeus-commercial` | `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-commercial` | OPTimaeus commercial product |
+| `optimaeus-llm` | `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm` | Shared LLM provider package |
+| `anamnesis` | `/Users/octaviesmacpro/workspace/optimaeus-projects/anamnesis` | Memory system — FastAPI+PG+Memgraph+Qdrant |
+| `anamnesis-commercial` | `/Users/octaviesmacpro/workspace/optimaeus-projects/anamnesis-commercial` | Anamnesis commercial product |
+| `workflow-server-api` | `/Users/octaviesmacpro/workspace/optimaeus-projects/workflow-server-api` | Workflow execution server API |
+
+**Routing rules:**
+- Commercial-only features (setup wizard, onboarding, in-app purchase, public UX) → **`hephaestus` ONLY**
+- Core tooling improvements for the owner's workflow → **`agenthub` first**, port to `hephaestus` selectively and explicitly
+- **NEVER assume the current working directory (`agenthub`) is the correct target repo**
+- When the user or prompt specifies a repo from this table, accept it — do NOT ask "is this agenthub or hephaestus?"
+
+**Before writing a single line of code, the agent MUST:**
+1. State which repo it will modify (full local path) and why that repo and not the other
+2. Wait for explicit user confirmation — _"yes, correct repo"_ or _"no, use [other repo]"_
+3. Invoke `team-impl-lead` (or the relevant team workflow skill) — direct coding without the team workflow is a rule violation
+4. Only proceed after both the repo confirmation AND the team workflow are in place
+
+**Skipping this gate is not acceptable.** The user will not run a dev loop to undo misplaced work.
+
+## Pre-Dispatch Gate — Assumption Enforcement
+
+**Every coordinator and agent must complete this before reading any file or dispatching any agent.**
+
+1. **Repo confirmed?** — State the full repo path. If not confirmed by the user this session, STOP and ask.
+2. **Scope confirmed?** — State exactly what the task covers and what it excludes.
+3. **Ambiguities?** — List any. Either get a user answer, or state your interpretation and ask: "I'm reading this as X — is that correct?"
+
+If any of these cannot be answered without guessing, STOP. Do not dispatch on unresolved assumptions.
+
 ## Coding Workflow
 
-- **Before any long task, invoke `pre-task-skill-check`** — check if a relevant skill exists, create one if not.
+- **Complete the Repo Gate above before anything else.**
+- **Invoke `team-impl-lead`** for any task touching more than one file — this is mandatory, not optional. Direct coding without the team workflow is a rule violation.
+- **Then invoke `pre-task-skill-check`** — check if a relevant skill exists, create one if not.
 - **After any long task**, if errors or misses occurred, update the relevant skill's Pitfalls section and Changelog.
+- **All sprint, plan, and brief creation must follow `.claude/commands/sprint-standards.md`** — model selection, skill assignment, and review gates — applies to every agent, with or without `/team-sprint-planner`.
+
+## Sprint Inventory — Anamnesis Query (mandatory)
+
+**Before creating, dispatching, or planning any sprint**, query the sprint inventory from Anamnesis:
+
+```
+recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
+```
+
+This returns all catalogued sprints across the ecosystem with their implementation status (done/partial/not_done).
+- **Do NOT rely on local `docs/sprints/` or `docs/superpowers/plans/` files** as the authoritative sprint history — Anamnesis is the single source of truth.
+- If the inventory shows work already `done` or `in_progress` for your target, report this before creating duplicate work.
+- The Kanban orchestrator queries this inventory before dispatching any task.
+- Repos covered: agenthub, optimaeus, anamnesis, hephaestus, hephaestus-sovereign, optimaeus-llm, workflow-server-api, optimaeus-commercial, anamnesis-commercial.
+- Voice-ready summary available via: `recall(query="voice sprint summary all repos", domain="sprint_inventory")`
 
 1. **Write a failing test first.**
 2. **Build the implementation.**
@@ -282,9 +514,9 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 
 ---
 
-### Senior UIUX Designer
+### UX Architect
 
-#### `uiux-senior`
+#### `ux-architect`
 
 - Owns UX architecture, design system, interaction patterns, and accessibility.
 - Produces:
@@ -303,7 +535,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - Morphs into the persona of a 40-50 year old non-technical user: AI-curious, wants value with minimal friction and learning curve, fluent with smartphones but not developer tools.
 - Provides feedback on: cognitive load, discoverability, jargon, onboarding friction, feature naming, step count to reach value.
 - **Only invoked during brainstorming sessions** — never during implementation.
-- Always paired with `architect`, `uiux-senior`, and `dev-frontend` in the Non-Tech Review Panel.
+- Always paired with `architect`, `ux-architect`, and `dev-frontend` in the Non-Tech Review Panel.
 
 ---
 
@@ -320,4 +552,4 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
   - Implementation phase: `dev-backend`, `dev-frontend`, `dev-integration`.
   - Validation phase: `tester-backend`, `tester-frontend`, `troubleshooter` (one or two at a time, never exceeding 3 active agents).
   - Pre-commit gate: `sec-devops` (Lead-spawned, counts as 1 of 3) before calling `git-ops`.
-  - Non-tech review (brainstorming): `persona-nontechuser` + `architect` + `uiux-senior` + `dev-frontend` — Lead is excluded from the 3-agent cap during this panel.
+  - Non-tech review (brainstorming): `persona-nontechuser` + `architect` + `ux-architect` + `dev-frontend` — Lead is excluded from the 3-agent cap during this panel.

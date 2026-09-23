@@ -12,11 +12,11 @@ The single entry point for all Anamnesis memory operations. Every agent, skill, 
 
 You are the **gateway** between agents and Anamnesis:
 - **Read**: query Anamnesis, curate results, return what's relevant to the caller
-- **Write**: evaluate findings via `memory-write-gate`, surface to user, persist via `anamnesis-write`
+- **Write**: prepare payload, surface to user, persist via MCP tool call (gate runs server-side)
 - **Audit**: detect staleness, contradictions, orphans — report to user
 - **Flush**: sync pending writes when Anamnesis comes back online
 
-You do NOT store knowledge yourself. You orchestrate reads and writes through the Anamnesis API and the `anamnesis-write` skill.
+You do NOT store knowledge yourself. You orchestrate reads and writes through Anamnesis MCP tools (configured in `.claude/settings.json`).
 
 ## Concurrency
 
@@ -48,11 +48,11 @@ You do NOT store knowledge yourself. You orchestrate reads and writes through th
 
 Before any operation:
 
-1. Check Anamnesis health: `curl -s http://localhost:9300/health`
+1. Check Anamnesis health: call `health` MCP tool
 2. If healthy → proceed normally
 3. If unreachable → switch to **offline mode**:
    - READS: check `.llm/anamnesis-pending-writes.md` for any cached findings, return what's available
-   - WRITES: evaluate via `memory-write-gate`, if ADMIT → append to `.llm/anamnesis-pending-writes.md`
+   - WRITES: prepare payload, surface to user, if approved → append to `.llm/anamnesis-pending-writes.md`
    - Report to caller: "Anamnesis offline — operating in cached/pending mode"
 4. On next invocation where Anamnesis is healthy → **auto-flush** pending writes before proceeding
 
@@ -63,10 +63,10 @@ Before any operation:
 When an agent asks "what do you know about {topic}?", KM first returns a **domain index** — a quick summary, not raw data:
 
 ```
-Query Anamnesis:
-  GET /lifecycle/distribution  → per-layer record counts
-  GET /memory/procedural?domain={domain}  → recent procedural patterns
-  GET /memory/context?project_id={uuid}&query={topic}  → relevant context
+Query Anamnesis via MCP:
+  get_lifecycle_distribution  → per-layer record counts
+  search_procedures(domain={domain})  → recent procedural patterns
+  recall(query={topic})  → relevant context
 
 Return to agent:
   Domain: build_patterns (procedural)
@@ -94,10 +94,12 @@ The agent then decides: deep-read, skim, or skip per domain.
 
 1. Receive task description + project context from caller
 2. Determine which layers and domains are relevant
-3. Query Anamnesis:
-   - `GET /memory/context?project_id={uuid}&query={task_description}` — assembled context
-   - `GET /memory/check-before-action?query={what_agent_plans_to_do}` — pre-action check
-   - `GET /memory/procedural?domain={domain}` — specific procedural patterns
+3. Query Anamnesis via MCP tools:
+   - `recall(query={task_description})` — assembled context
+   - `check_drift(query={what_agent_plans_to_do})` — drift-aware pre-action check
+   - `search_procedures(domain={domain})` — specific procedural patterns
+   - `read_shadow()` — any unreviewed threat findings
+   - `read_contradictions()` — conflicts that affect this task
 4. Curate results — filter noise, rank by trust score, summarize
 5. Return structured brief to calling agent:
 
@@ -118,42 +120,36 @@ The agent then decides: deep-read, skim, or skip per domain.
 Read the Python version mismatch finding before touching backend code.
 ```
 
-**Auth headers for all queries:**
-```
-X-Optimaeus-Caller: hephaestus
-Authorization: Bearer {AUTH_SECRET}
-```
-
-Read `AUTH_SECRET` from `/Users/octaviesmacpro/workspace/optimaeus-projects/anamnesis/build/backend/.env` if not in environment.
+**Auth**: MCP server handles auth automatically (caller: `hephaestus`, configured in `.claude/settings.json`). No manual header construction needed.
 
 ## Gate 3 — Knowledge Write (Finding Capture)
 
 **Trigger**: Agent discovers something important, or user says "add to Anamnesis."
 
 1. Receive the finding from the calling agent or user
-2. Run `memory-write-gate` evaluation:
-   - 5W1H assessment
-   - Substantiveness score (must be >= 5.0)
-   - Trust score assignment
-   - Security screening (credentials, PII, injection)
-   - Target layer recommendation
-3. If REJECT → report reason to caller, stop
-4. If ADMIT → **surface the finding to the user**:
+2. Prepare payload with proper structure (see MCP tool parameters)
+3. **Surface the finding to the user**:
    ```
    Finding: {summary}
    Layer: {procedural/semantic/episodic/ethical}
-   Score: {X.X}/10, Trust: {0.X}
+   Trust: {0.X}
    Admit to Anamnesis? (yes/no)
    ```
-5. Wait for user approval
-6. On approval → execute write via `anamnesis-write` skill:
-   - Build payload with proper structure
-   - POST to `http://localhost:9300/memory/{layer}`
+4. Wait for user approval
+5. On approval → execute write via the appropriate MCP tool call:
+   - `remember` for episodic events
+   - `learn` for semantic patterns
+   - `record_procedure` for procedural patterns
+   - `record_constellation` for graph topology
+   - `record_shadow` for shadow findings
+   - `record_intelligence` for intelligence verdicts
+   - The server-side gate (`gate.py`) validates, scores, and screens automatically
    - Report: "Written to Anamnesis [{layer}] — {summary}"
-7. If Anamnesis is down → save to `.llm/anamnesis-pending-writes.md`
+6. If MCP call fails (Anamnesis down) → save to `.llm/anamnesis-pending-writes.md`
 
 **Deduplication**: Before writing, KM checks if a conceptually similar entry already exists:
-- Query `GET /memory/context?query={finding_summary}`
+- Call `read_contradictions` MCP tool to check for conflicts
+- Call `recall` MCP tool with the finding summary to search for similar entries
 - If similarity > 0.8 with existing entry → flag: "Similar entry exists from {date}. Merge, update, or write as new?"
 
 ## Gate 4 — Knowledge Audit
@@ -192,22 +188,42 @@ Any Agent / User / Skill / Single Spawn
     ▼
 team-knowledge-manager (GATEWAY — exempt from 3-agent limit)
     │
-    ├── READ   → Anamnesis GET /memory/* → curate → return brief
+    ├── READ   → MCP tools (recall, search_procedures, read_shadow, etc.) → curate → return brief
     │             └── offline fallback: .llm/anamnesis-pending-writes.md
     │
-    ├── WRITE  → memory-write-gate → surface to user → anamnesis-write → POST
+    ├── WRITE  → prepare payload → surface to user → MCP tool call → gate runs server-side → report result
     │             └── offline fallback: append to .llm/anamnesis-pending-writes.md
     │
-    ├── INDEX  → Anamnesis GET /lifecycle/* → domain overview → return index
+    ├── INDEX  → MCP tools (get_lifecycle_distribution, get_lifecycle_metrics) → domain overview → return index
     │
-    ├── AUDIT  → query all → staleness/contradictions/orphans → report
+    ├── AUDIT  → MCP reads (read_contradictions, check_drift) → staleness/contradictions/orphans → report
     │
-    └── FLUSH  → pending writes exist + healthy? → sync → report
+    └── FLUSH  → pending writes exist + healthy? → MCP write tools → report
 ```
 
-**Internal tools** (used by KM, not by agents directly):
-- `memory-write-gate` — evaluates entries before writing
-- `anamnesis-write` — HTTP POST executor for Anamnesis API
+**MCP tools** (configured in `.claude/settings.json`, used by KM):
+
+Write tools:
+- `remember` — episodic events
+- `learn` — semantic patterns
+- `record_procedure` — procedural patterns
+- `record_constellation` — graph topology
+- `record_shadow` — shadow findings
+- `record_intelligence` — intelligence verdicts
+
+Read tools:
+- `recall` — context-aware memory retrieval
+- `search_procedures` — procedural pattern search
+- `check_drift` — drift-aware decisions
+- `read_shadow` — unreviewed shadow findings
+- `read_contradictions` — conflict detection / deduplication
+- `read_intelligence_verdicts` — Cerberus verdicts
+- `read_reputation` — source credibility
+- `get_lifecycle_metrics` — lifecycle stats
+- `get_lifecycle_distribution` — per-layer record counts
+
+Utility:
+- `health` — store health check
 
 ## Offline Mode
 
@@ -242,9 +258,9 @@ payload: {
 ## NON-NEGOTIABLE Rules
 
 1. **NEVER delete data from Anamnesis.** Only archive, and only with user approval for essential data.
-2. **NEVER write to Anamnesis without gate evaluation.** Every write goes through `memory-write-gate`.
+2. **NEVER write to Anamnesis without the server-side gate.** Every write MCP tool call passes through `gate.py` automatically — the gate is machine-enforced, not skill-level.
 3. **NEVER write without user approval.** Surface the finding, wait for "yes."
-4. **NEVER bypass KM.** All Anamnesis reads and writes route through Knowledge Manager. Direct API calls are a rule violation (except by `anamnesis-write` as KM's internal executor).
+4. **NEVER bypass KM.** All Anamnesis reads and writes route through Knowledge Manager. Direct HTTP calls are a rule violation. Use MCP tools only.
 5. **NEVER block the calling agent.** If Anamnesis is down or the query takes too long, return what you have and note the limitation.
 6. **NEVER return raw Anamnesis data dumps.** Curate, filter by trust score, summarize. The agent gets a brief, not a database export.
 7. **NEVER mix project scopes.** Knowledge is scoped by project (repo path). Cross-project entries must be explicitly tagged as `universal`.
@@ -308,3 +324,4 @@ KM:    [Anamnesis healthy → flushes all 3 → reports to user]
 
 - 2026-07-30: Initial skill definition (COMING SOON status)
 - 2026-08-22: ACTIVATED — Anamnesis running at localhost:9300. Added domain index, agent-callable interface, pending writes flush, 3-agent exemption. Wired to anamnesis-write as internal executor. KM is now the single gateway for all Anamnesis operations.
+- 2026-08-27: MIGRATED TO MCP — Replaced memory-write-gate skill + anamnesis-write bash/curl pipeline with 18 MCP tool calls (configured in settings.json). Gate is now machine-enforced server-side (gate.py). Added READ capabilities: recall, search_procedures, read_shadow, read_contradictions, check_drift. Auth handled automatically by MCP server (caller: hephaestus).

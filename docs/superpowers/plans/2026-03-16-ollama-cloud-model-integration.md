@@ -70,7 +70,7 @@ git commit -m "feat(models): add requiresCloud field to ModelCatalogEntry"
 Append to `model-catalog.ts`:
 ```ts
 export const OLLAMA_CLOUD_MODELS: ModelCatalogEntry[] = [
-  { id: 'kimi-k2-thinking:cloud',    name: 'Kimi K2 Thinking',     provider: 'ollama-cloud', category: 'thinking', contextWindow: 128000, available: true, requiresCloud: true, supportsEffort: false },
+  { id: 'kimi-k3-thinking:cloud',    name: 'Kimi K3 Thinking',     provider: 'ollama-cloud', category: 'thinking', contextWindow: 128000, available: true, requiresCloud: true, supportsEffort: false },
   { id: 'kimi-k2.5:cloud',           name: 'Kimi K2.5',            provider: 'ollama-cloud', category: 'mixed',    contextWindow: 128000, available: true, requiresCloud: true, supportsEffort: false },
   { id: 'kimi-k2:1t-cloud',          name: 'Kimi K2 1T',           provider: 'ollama-cloud', category: 'mixed',    contextWindow: 128000, available: true, requiresCloud: true, supportsEffort: false },
   { id: 'mistral-large-3:675b-cloud',name: 'Mistral Large 3 675B', provider: 'ollama-cloud', category: 'mixed',    contextWindow: 128000, available: true, requiresCloud: true, supportsEffort: false },

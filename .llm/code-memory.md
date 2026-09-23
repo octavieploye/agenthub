@@ -1,22 +1,59 @@
 # Code Memory — agenthub
 
-> Last sync: db765c8 | 2026-09-13 | coordinator
+> Last sync: 34fb64e | 2026-09-23 | coordinator
 > Commits since last sync: 0
 
-## Sync window — 2026-09-06 to 2026-09-13 (`eecc65b..db765c8`)
+## Sync window — 2026-09-21 to 2026-09-23 (`1100fff..34fb64e`)
 
-- B-path completion and scheduler safety: cross-run completion seeding, explicit B-1/B-2 completion signals, Anamnesis UUID prompt injection, liveness-aware stuck detection, tick pause/resume, and same-tick redispatch protection (`09ddff6`, `0b65510`).
-- Type, session, and recovery hardening: repository-wide TypeScript cleanup; migrations 048-050; session heartbeat/crash detection; MCP IPC auto-reconnect; 24-hour recovery cutoff; grouped recovery UI; bounded task/continuation text; safe batch “Drop All” (`e0e82bb`, `bd7d602`, `91b3dd7`, `4771b26`).
-- Telegram approval flow: content-aware notification deduplication, sidecar-down retry signaling, end-to-end approval state/UI, and approval-result acknowledgement (`d729f6f`, `251f9b9`).
-- Pre-hybrid orchestrator, model, and sound fixes: output-token budget accounting; orphan back-fill on resume; robust DONE/BEL handling; approval toast; canonical dated Haiku ID; definitive agent-exit sound timing; encrypted Anamnesis secret storage; dispatch/approval/status cleanup; DB-persisted spawn count; five-per-minute spawn limiter; phantom-cascade prevention; correct exit-code routing; corresponding test repair; false-lock parser fix (`a546963`, `ea50587`, `d5432a6`, `59cd1e1`, `f440230`, `ac82895`, `638e06c`, `061a9fe`, `21514dc`, `391db23`).
-- Sprint/MCP fixes: SprintWatcher auto-registers valid unknown repo paths; the kanban MCP uses Electron with `ELECTRON_RUN_AS_NODE` for the matching native ABI; `archive_task` performs guarded soft deletion and archived tasks are hidden by default (`b7c0f9a`, `a2abec1`, `cef55e8`).
-- Hybrid orchestrator replacement and immediate repairs: monolith replaced by scheduler + stateless brain + validator + lifecycle bus and a zero-native-module Unix-socket MCP bridge; retry exhaustion terminates runs; dead dispatch layer removed; orphaned DB queries relocated; task approval and valid backlog/today filtering restored (`9880de0`, `44386ed`, `40b402d`, `cb8fb93`, `20485e1`).
-- Hybrid production hardening: AgentHub CWD/target-repo metadata, dependency persistence, complete MCP schemas, prompt readiness, metadata-based routing, Telegram sidecar restart/reliability, command-aware skill validation, orchestrator lock completion, Rust guardrails, cancelled-run migration, `telegramNotify` propagation, 19 restored safeguard/UI/support files, seven scheduler safeguards, visible approval/retry toasts, monitor typing, and active-run tick auto-resume (`28d0d85`, `b0e948a`, `0d9ae3f`, `f33f788`, `fad6b4e`, `a3a23d3`, `9fb55ee`, `9aafe21`, `6110343`).
-- Telegram agent conversations: replies are routed back to the originating agent; structured choices are extracted; questions without explicit choices receive Yes/No buttons; reply mappings are FIFO-capped (`db765c8`).
+- Per-repo/sprint Telegram notifications (`d432ba1`): spawned agents' structured name (`<repo> / <sprint> - <task> - session #N`) and sprint color index are threaded through `sendTelegramNotification`; the sidecar maps the palette index to a circle-emoji badge so concurrent multi-run sprints are visually distinguishable. `SPRINT_COLOR_PALETTE` → `#8D6E63 / #455A64 / #ECEFF1`; `TelegramNotificationPayload` gains `colorIndex`; approval notifications now labeled `<repo> / <sprint>` instead of a flat "Orchestrator".
+- Distinct sprint colors + git-ops spawn permissions (`6a802d4`): `pickSprintColorIndex` strips a `-vN`/`_vN` version suffix before matching the identity integer (so `landing-{entity}-v2` sprints no longer collapse to one color); Telegram `spawn_agent` special-cases the literal `git-ops` name to run with `skipPermissions: true`, inherit the repo color, and use a disambiguated `git-ops / <repo>` name; `git-ops-task.js` commit prompt instructs the agent to run `git status`/`git diff`, stage only relevant source/config files, respect `.gitignore`, and derive the message from actual changes.
+- Telegram-extendable 4h wall-clock cap (`e569953`): `resetRunStartedAt` parameterized query + `extendRunWallClock` scheduler method (paused-only gate → resume); monitor duration-breach message appends a `/extend <runId>` hint; `handleTelegramCommand` extend case with UUID regex validation; sidecar `/extend` parser + help + `setMyCommands`; dev/simple guardrail prompts expanded to ban `git stash`/`git checkout`/`git restore`/`git rebase`/`git branch -D` (not just `reset --hard`); new `service-orchestrator.test.ts` (96 lines).
+- Red-overtime hard-kill routing (`912684d`): `HealthMonitor` routes red-tier `overtime` anomalies to `onHardTimeout` (kill) instead of `onAnomaly` (pause); non-red tiers stay on `onAnomaly`. Completes the `onHardTimeout` callback type committed in `e569953`.
+- Rogue-agent hardening — auto-kill + git boundary (`34fb64e`): S4 auto-kills the orchestrator process tree on completion (`terminateAgentProcess` + `alreadyCompleted` exit handling) so a rogue agent cannot linger past its task; S5b injects a source-controlled git-boundary guardrail (new `guardrails.ts`) into all spawn paths — Claude CLI, ollama, and Codex (`agents-md-generator.ts` adds a `## Git Boundary` section) — banning worker-agent git mutation.
+
+## Previous sync window — 2026-09-19 to 2026-09-21 (`f9f9c52..1100fff`)
+
+- Multi-run orchestrator concurrency (`d7bc79c`): migration 056 adds `orchestrator.maxConcurrentRuns`/`agentLifetimeCap` and FIFO `promoteNextQueued`; deterministic monitor hardened with fail-closed token/duration/retry checks; late agent events guarded against non-running runs; in-flight task logs marked terminal on cancel. Live-verified 2026-09-21 (2 concurrent sprints, 4/4 tasks done).
+- T6 deferred M/L fixes (`7c8cd36`): promote-only `telegramNotify` on run reuse; drop redundant `START_SINGLE_TASK` pre-check; require `repoId` in `scheduler.start()`; latest-started active task log lookup; shared `DEFAULT_ANAMNESIS_URL` constant; `fetchingStatus` dedup guard replaces loading guard.
+- MCP bridge cleanup (`a4e0cee`, `6d1fbf0`, `e67eae7`): deleted dead `McpServerManager` class + test (carried an unreachable snake_case `dispatch_task` signature mismatch); removed dead `McpIpc*` wire-frame types; corrected stale agent-manager comments to point at the live bridge.
+- MCP bridge envelope unwrap (`f14babb`, `413d656`): `get_context` and `callBridge` read the raw `{id,result}` socket envelope, so `get_context` reported empty repos/activeAgents and leaked the envelope for runStatus/quota/safeguards — `callBridge` now returns the payload directly and throws on bridge errors for all tools.
+- `create_task` repo-validation guard (`6811a7c`): reject tasks bound to an unregistered repoId (phantom repoId previously created orphaned tasks the orchestrator could never dispatch).
+- Agent identity refactor (`b132a11`): typed `isOrchestrator` flag replaces `name.startsWith('orchestrator-')`; orchestrator spawn name becomes structured `<repo> / <sprint> - <task> - session #N`.
+- Deterministic sprint color (`1100fff`): same repo/sprint name → same `SPRINT_COLOR_PALETTE` color (trailing integer in sprint/repo name → index; stable hash fallback), independent of dispatch order or restart.
+
+## Previous sync window — 2026-09-18 to 2026-09-19 (`79844c2..f9f9c52`)
+
+- Telegram approval-failure surfacing (`77ff2fe`): `approveTaskDispatch` returns a boolean; run-not-found or inactive-run no-op now routes `approval_result 'failed'` to the sidecar instead of always showing "approved"; the sidecar validates approval-token lookups (stale/unknown token → "no longer active" message, no silent no-op).
+- `buildGitOpsTask` helper (new `telegram-sidecar/git-ops-task.js`): provider-neutral commit task — Claude/Codex/Ollama agents read `plugin/commands/git-commit.md` directly instead of invoking a namespaced slash command (`77ff2fe`).
+- Commit-boundary note injected into task description (`service-orchestrator.ts`): only `complex` tasks get git-ops commit controls; the agent is told deterministically not to ask to commit when no button will render (`77ff2fe`).
+- MCP bridge refactor (`f9f9c52`): `mcp-server` → `mcp-bridge-server` across agent-manager, codex-health, electron-builder, electron.vite; `ensureCodexMcpServers` drops `dbPath`, spawns via `node` with env `AGENTHUB_MCP_BRIDGE_SOCK`/`AGENTHUB_MCP_BRIDGE_TOKEN`/`AGENTHUB_REPO_ROOT`; mcp-helpers + telegram-sidecar ship as packaged resources.
+- Commit controls gated on commit-boundary (`f9f9c52`): `agent-manager.ts` sets `commitable = completed && isCommitBoundary` where `isCommitBoundary = !linkedTask || linkedTask.complex === true` (manual agents keep the commit button).
+- Baseline config: plugin.json 1.1.1 + git-commit.md cleanup + wired-duf skill added to display registry (`f9f9c52`).
+
+## Previous sync window — 2026-09-14 to 2026-09-17 (`5eb377d..79844c2`)
+
+- Git-ops commit/push flow: new `complex` task flag (migration 055) marks commit/push boundaries; Telegram sidecar renders inline `✅ Commit` / `⬆ Commit & push` / `✗ Skip` buttons only on `format: completed` messages of complex tasks; `/commit [repo]` command added; commit routes `/git-commit` to the agent or spawns `git-ops`; short token maps to `{repoPath, push, agentId}` (≤64-byte callback_data) (`84e30a8`, `5bf61f9`, `1c404d3`).
+- `format: 'completed'` Telegram enum: agents signal FINAL completion by calling `send_telegram` once with `completed`; `status` now means nonterminal milestone only; sidecar + MCP schema + codex/agent spawn suffix all updated (`5bf61f9`, `84e30a8`).
+- Explicit completion contract: `completeAgentFromTelegram(agentId)` in agent-manager marks an agent completed+confirmed from its trusted Telegram MCP signal (interactive Claude stays open at its prompt, so PTY exit is no longer the completion contract); removed the `isOrchestratorAgent && locked → agent:completed` heuristic (`e6ae96c`).
+- `reconcileActiveAgents()` DB-backed consistency pass (scheduler + monitor): re-reads active task logs, checks live agent status via `getAgentStatus`, applies missed `completed`/`error` transitions (parser races, restarts); `completeActiveTask`/`failActiveTask` refactored with `source: 'event' | 'reconciliation'` (`cc280bf`, `e6ae96c`).
+- Tick coalescing: `requestTick()` + `tickRequested` + `immediateTickHandle` replace scattered `setTimeout(() => tick(), 0)`; `ensureTicking()`/`suspendScheduling()`; kill-switch path suspends timers but retains lifecycle listeners (`79844c2`).
+- concurrencyCap honored: scheduler uses `run.concurrencyCap ?? deps.maxAgents` for the concurrency gate (matching the monitor cap), fixing false-positive monitor pauses when the scheduler spawned in parallel (`79844c2`).
+- `sendTelegramNotification` gains `repoId`; run-completed messages render commit buttons (`commitable: type === 'run_completed'`); `resolveRepo`/`isTaskComplex` deps gate trusted repo + complexity (`79844c2`, `1c404d3`).
+- `send_task` pick-list fix: callback_data no longer embeds the message (was >64 bytes); message stored in `pendingSendAgent` (`1c404d3`).
+- Coordinator role: global-claude/CLAUDE.md gains the supervision-loop step (`79844c2`).
+
+## Previous sync window — 2026-09-13 to 2026-09-14 (`db765c8..5eb377d`)
+
+- Approval supervisor (A→C→B TTL) + Telegram /approve: approval-gate state persisted in orchestrator_approvals (migration 054); deterministic monitor replaces the scheduler's in-memory Set (re-notify → escalate via /approve → reset-to-backlog only if never-ran); notification-expiry health check; approvalWindowMinutes setting (`0dd8799`).
+- Telegram approval callback fixes: the 78+ byte composite `task:<taskId>:<runId>` requestId exceeded Telegram's 64-byte callback_data limit (BUTTON_DATA_INVALID) — a short random token maps to the full requestId for both Approve/Deny buttons and the /approve fallback; restored approval buttons + surfaced requestId; fixed sidecar error key (error→message); only alert on notifications expired within the last 30 minutes (`aed1756`, `435a03d`, `55c9235`).
+- Approval lifecycle: delete approval rows on run completion via deleteApprovalsForRun wired into maybeCompleteRun/cancel; escalation reminder routes through awaiting_approval for buttons + short token (`a7c60e3`, `03c7219`).
+- Agent/telegram polish: spawned agent names include task title; Telegram notified on lifecycle events (`e0d1408`, `5eb377d`).
+- IPC wiring: AGENTS.LIST_ALL ('agents:list-all') handler + preload bridge (`6ce3118`).
+- Test upkeep: five stale assertions aligned to current contracts (connection user_version, codex `exec codex`, Dirent readdir mocks, runId status payload, process.execPath kanban); approval-cleanup-after-completion assertion (`928e67c`, `c81fd0f`).
 
 ## Backend
 
-- `orchestrator-scheduler.ts` — deterministic 60-second scheduler with a one-task-per-tick ceiling; atomic in-flight tick guard, DB-backed agent budget, sliding-window rate limit, approval gate, dependency ordering, cross-run deduplication, one retry, task/log status synchronization, Anamnesis sprint-inventory preflight, orphan recovery, and active-run startup resume (`9880de0`, `44386ed`, `20485e1`, `a3a23d3`, `6110343`)
+- `orchestrator-scheduler.ts` — deterministic 60-second scheduler with a one-task-per-tick ceiling; atomic in-flight tick guard, DB-backed agent budget, sliding-window rate limit, approval gate, dependency ordering, cross-run deduplication, one retry, task/log status synchronization, Anamnesis sprint-inventory preflight, orphan recovery, and active-run startup resume (`9880de0`, `44386ed`, `20485e1`, `a3a23d3`, `6110343`); added `reconcileActiveAgents()` completion reconciliation, concurrencyCap honoring (was deps.maxAgents), tick coalescing (requestTick/ensureTicking/suspendScheduling), completeActiveTask/failActiveTask refactor, repoId in lifecycle notifications (`79844c2`, `cc280bf`, `e6ae96c`); multi-run concurrency queue + fail-closed monitor checks (`d7bc79c`), T6 deferred M/L fixes (`7c8cd36`)
 - `anamnesis-reader.ts` — read-only HTTP client for Anamnesis lifecycle API; fetches metrics, layer distributions, history, archived records, policies; auth via X-Optimaeus-Caller + Bearer
 - `anamnesis-mcp` — 18 MCP tools for agent Anamnesis access (remember, learn, record_procedure, record_constellation, record_shadow, record_intelligence + 12 read/utility tools); configured in .claude/settings.json; caller=hephaestus; permission=read+write_new; machine-enforced gate (gate.py) on all writes; replaces bash curl in anamnesis-write skill (2026-08-27)
 - `anamnesis-writer.ts` — AUTOMATIC task event pipeline (Electron-side direct HTTP); circuit breaker + batching; routes CARD_TRANSITION/CARD_COMPLETED/SPRINT_INTAKE/ORCHESTRATOR_* events to Anamnesis episodic/procedural layers. Agent knowledge writes now go through MCP tools instead.
@@ -34,7 +71,7 @@
 - `helpers/severity-classifier.ts` — classifies orchestrator issues into critical/high/medium/low
 - `lifecycle.ipc.ts` — IPC handlers for Memory Health Tab (metrics, history, archives, policies, restore, trigger-cycle)
 - `orchestrator.ipc.ts` — IPC handlers for orchestrator start/pause/resume/status/phase-history + push events
-- `agent-manager.ts` — injects AGENTHUB_HOME env into every PTY session; appends agenthub CLAUDE.md via --append-system-prompt-file when CWD differs from agenthub (commit 3e9d79c); cross-repo-context.md instruction layer (commit 171fb78); writeMcpConfig() merges settings.json mcpServers + agenthub-telegram into per-agent temp config (commit 23a2921); Codex spawn: resolves kanban script path (packaged vs dev) + db/socket paths, passes to ensureCodexMcpServers so agenthub-kanban is registered with Codex (commit 093b0d4); setMcpServerInfo(socketPath, socketToken) setter — writeMcpConfig injects agenthub-kanban with runtime socket path+token into every Claude agent spawn (commit 7ac786b); sendInput/resizeAgent: throw→log.warn+return on stale renderer references (graceful degradation, commit eecc65b)
+- `agent-manager.ts` — injects AGENTHUB_HOME env into every PTY session; appends agenthub CLAUDE.md via --append-system-prompt-file when CWD differs from agenthub (commit 3e9d79c); cross-repo-context.md instruction layer (commit 171fb78); writeMcpConfig() merges settings.json mcpServers + agenthub-telegram into per-agent temp config (commit 23a2921); Codex spawn: resolves kanban script path (packaged vs dev) + db/socket paths, passes to ensureCodexMcpServers so agenthub-kanban is registered with Codex (commit 093b0d4); setMcpServerInfo(socketPath, socketToken) setter — writeMcpConfig injects agenthub-kanban with runtime socket path+token into every Claude agent spawn (commit 7ac786b); sendInput/resizeAgent: throw→log.warn+return on stale renderer references (graceful degradation, commit eecc65b); completeAgentFromTelegram(agentId) explicit completion signal; removed locked→completed orchestrator heuristic; telegram suffix + triage payload carry completed format + repoPath/commitable (`e6ae96c`, `5bf61f9`)
 - `agent-mcp-config.ts` — readSettingsMcpServers(settingsPath): reads mcpServers block from .claude/settings.json; returns {} on any error; pure I/O function (no Electron deps); used by writeMcpConfig in agent-manager (commit 23a2921)
 - `skills-service.ts` — isolated project/agenthub scans with independent try/catch; .md skills support command override; ux-challenge added to WORKFLOW_CATEGORIES (commit 3e9d79c)
 - `orchestrator-brain.ts` — stateless Ollama/OpenAI-compatible task selector with a 30-second timeout, strict task-ID validation, and deterministic priority fallback; model/provider/skill selection remains outside the brain (`9880de0`, `40b402d`)
@@ -42,10 +79,12 @@
 - `sprint-watcher.ts` — auto-scans sprint intake JSON, emits `SPRINT_INTAKE_COMPLETED`, and auto-registers a repo when a supplied unknown `repoPath` resolves to a real directory (`7a4f7dc`, `c6497aa`, `b7c0f9a`)
 - `helpers/phase-profile.ts` — per-phase model/provider routing profiles for orchestrator (commit 283d2bc)
 - `helpers/security-output-parser.ts` — parses sec-devops output into structured findings with severity (commit 283d2bc)
-- `service-orchestrator.ts` — wires security gate + phase profiles into orchestrator startup (commit 283d2bc)
+- `service-orchestrator.ts` — wires security gate + phase profiles into orchestrator startup (commit 283d2bc); wires resolveRepo/isTaskComplex/onMcpMessage(format) + getAgentStatus dep + repoId in sendTelegramNotification (`79844c2`, `e6ae96c`)
 - `orchestrator-rules.ts` — anti-injection prompt fencing, shared operating limits, completion/escalation contracts, and language-aware dev/simple guardrails including Rust-specific `cargo check`/test guidance (`336bf5b`, `0d9ae3f`)
 - `orchestrator-settings.ts` — runtime orchestrator settings store (commit f08d81a)
-- `orchestrator-monitor.ts` — S6: independent rules-based safety monitor; 30s poll; enforces maxAgents, maxWallClock (4h), maxTokens (2M per run), stuckLoop (≥3 review-phase failures for same task); on breach: pauses run + Telegram alert; no LLM calls (commit f08d81a)
+- `orchestrator-monitor.ts` — S6: independent rules-based safety monitor; 30s poll; enforces maxAgents, maxWallClock (4h), maxTokens (2M per run), stuckLoop (≥3 review-phase failures for same task); on breach: pauses run + Telegram alert; no LLM calls (commit f08d81a); calls deps.reconcileActiveAgents() before safety checks (`cc280bf`)
+- `orchestrator-scheduler.ts` / `orchestrator-monitor.ts` — approval supervisor (A→C→B TTL) with persisted orchestrator_approvals state replacing the in-memory Set; deleteApprovalsForRun on run completion; lifecycle-event Telegram notification (`0dd8799`, `a7c60e3`, `5eb377d`)
+- `telegram-sidecar/index.js` — short random token mapping for approval callbacks + /approve fallback (64-byte callback_data limit); notification-expiry health check; sidecar error-key fix (`aed1756`, `435a03d`, `55c9235`); commit/push inline buttons + /commit command + commitTokenMap; send_task pick-list stores message locally (`84e30a8`, `5bf61f9`, `1c404d3`)
 - `pre-launch-pipeline.ts` — pre-launch gate before orchestrator start; extended with Codex pre-checks (commit f08d81a)
 - `quota-scrape-scheduler.ts` — scrapes provider quotas every 15 days; 60s defer on startup; 6h recheck interval; stores last scrape ISO in settings key `quota_last_scrape`; injected scrapeFn runs the 3 scrapers (commit 43f346a)
 - `scrapers/claude-dashboard-scraper.ts` — Claude.ai dashboard quota scraper via BrowserClient (Chrome DevTools MCP); returns DashboardQuota {used, limit, percent, resetDate, scrapedAt} (commit 43f346a)
@@ -54,7 +93,7 @@
 - `scrapers/scraper-types.ts` — BrowserClient interface (navigate+evaluate) + DashboardQuota + ScraperResult types; tests mock BrowserClient (commit 43f346a)
 - `parsers/codex-output-parser.ts` — CodexCliOutputParser implementing CliOutputParser; 4096-char rolling buffer; detects: awaiting_approval (highest priority) → rate_limited → completed → locked → busy; 45s startup grace; looping = 25 locked transitions in 30s window (commit 0b86888)
 - `agents-md-generator.ts` — generateAgentsMd(): builds AGENTS.md for Codex CLI agents at spawn time; requires guard file containing 'I cannot assist with that request' phrase (integrity check); embeds: guard policy + skills index + CLAUDE.md + task description; canary marker `Hey!Master-Optimaeus!(canary)` (commit 0b86888)
-- `codex-command-builder.ts` — builds Codex CLI spawn command args (commit a70b638)
+- `codex-command-builder.ts` — builds Codex CLI spawn command args (commit a70b638); telegram suffix instructs one-time format 'completed' on completion (`5bf61f9`)
 - `codex-health.ts` — Codex CLI availability health check (commit a70b638); ensureCodexMcpServers now registers 3 servers: anamnesis + agenthub-telegram + agenthub-kanban; gains kanbanScriptPath/dbPath/socketPath params (commit 093b0d4); always re-registers agenthub-kanban regardless of mcp list output (commit e0d662e); uses Electron binary path instead of `node` for kanban MCP server to avoid NODE_MODULE_VERSION mismatch (commit f6e223b)
 - `codex-mcp-config.ts` — writes per-session MCP config for Codex agents (commit a70b638); ensureCodexMcpServers() merges Anamnesis + agenthub-telegram MCP server entries into Codex config at spawn time (commit a64abc6)
 - `codex-session-reader.ts` — reads Codex CLI session output/state (commit a70b638)
@@ -65,11 +104,13 @@
 - `agent-manager.ts` — invalid await removed from sync spawnAgent function; Anamnesis + Telegram MCP servers injected via ensureCodexMcpServers at Codex spawn (commits 5594b97, a64abc6)
 - `skills-service.ts` — manifest YAML validation: validates triggers (array), resources (object), securitySensitive (boolean) at parse time; consolidated on 'yaml' package (eemeli/yaml v2), removed js-yaml dependency (S83/S84, commit c7b80be)
 - `service-orchestrator.ts` — OLLAMA_URL env var with localhost:11434 fallback (S80); Telegram spawn_agent validates msg.repo against getAllRepos(db) before spawnAgent, rejects unregistered paths (S81, commit c7b80be)
-- `telegram-socket-server.ts` — fail-fast on startup errors; exposes socket bridge health status; extended test coverage 111 lines (commit 400b329)
+- `telegram-socket-server.ts` — fail-fast on startup errors; exposes socket bridge health status; extended test coverage 111 lines (commit 400b329); completed format + resolveRepo/isTaskComplex commit-button gating (`84e30a8`)
 - `recovery-manager.ts` — surfaces interrupted agents, expires recovery candidates after 24 hours, and groups recoverable agents by tracked session; recovery actions batch-kill before removing agent state (`c38c181`, `bd7d602`, `91b3dd7`, `4771b26`)
 - `auto-triage.ts` — rate_limited triage rule added; agents in rate_limited state now correctly triaged (commit cfd2391)
 - `skill-classifier.ts` — maps task descriptions to SkillDomain + complexity level; entry point for skill dispatch pipeline Phase 0 (commit 079a6e2)
 - `pipeline-composer.ts` — template-based execution plan assembly from SkillDomain + complexity; reads pipeline-templates registry (commit 079a6e2)
+- `guardrails.ts` — source-controlled git-boundary guardrail: `GIT_BOUNDARY_RULE` + `getGitBoundaryPath()` write the worker-agent git-mutation ban to a tmpdir file injected via `--append-system-prompt-file`; lives in src/ so a spawned builder cannot rewrite it (commit 34fb64e)
+- `health-monitor.ts` — HealthMonitor watchdog (loop/overtime/error-spiral/scope-creep detection against GuardrailConfig); red-tier overtime routes to `onHardTimeout` kill callback, non-red tiers to `onAnomaly` pause (commit 912684d)
 
 ## Sprint Inventory — Anamnesis (mandatory pre-sprint check)
 
@@ -86,10 +127,10 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `pipeline-templates.ts` — default template registry: code-dev, security-audit, legal-review (triggers corrected to domain:'legal', S82), devops-deploy (commits 079a6e2, c7b80be)
 - `token-budget.ts` — per-skill token ceiling + adaptive learning; stores/reads token_usage table (migration 045); adjusts ceiling based on past runs (commit 079a6e2)
 - `sprint-card-enricher.ts` — YAML manifest + pipeline plan enrichment; hooked into sprint-watcher.parseAndStage() flow at sprint intake (commit 079a6e2)
-- `mcp-bridge-server/index.js` — zero-native-module MCP process exposing the kanban tool surface over the Unix-socket bridge; includes full create-task schema and guarded `archive_task` support (`9880de0`, `28d0d85`, `cef55e8`)
-- `mcp-bridge-handler.ts` — authenticated main-process bridge that routes MCP calls to DB/service dependencies; settings, quota, safeguards, task filters, and dependency queries now live in regular DB query modules (`9880de0`, `cb8fb93`)
+- `mcp-bridge-server/index.js` — zero-native-module MCP process exposing the kanban tool surface over the Unix-socket bridge; includes full create-task schema and guarded `archive_task` support (`9880de0`, `28d0d85`, `cef55e8`); envelope unwrap in get_context/callBridge (`f14babb`, `413d656`), create_task repoId description (`6811a7c`)
+- `mcp-bridge-handler.ts` — authenticated main-process bridge that routes MCP calls to DB/service dependencies; settings, quota, safeguards, task filters, and dependency queries now live in regular DB query modules (`9880de0`, `cb8fb93`); create_task repo-validation guard (`6811a7c`)
 - `mcp-helpers/` — JSON/MCP framing and Unix-socket client helpers used by the bridge without loading native SQLite in the agent-facing process (`9880de0`)
-- `mcp-server-manager.ts` — restored legacy lifecycle/hardening implementation and tests for compatibility/support; the active service graph uses `McpBridgeHandler` for agent kanban MCP (`a3a23d3`)
+- `mcp-server-manager.ts` — DELETED (`a4e0cee`); the live MCP bridge is `McpBridgeHandler` (mcp-bridge-handler.ts) driven by the mcp-bridge-server Unix-socket child
 - `brain-scanner.ts` — BrainScannerService: auto-discovers .md artifacts across all registered repos in 15 known directories (specs, plans, strategy, brainstorm, how-to, marketing, etc.); derives computed_status from checklist ticks + structured [Refs] git signals; auto-promotes active→implemented when done; registerBrainEntry() creates pointer file + db row; getTimeline() merges brain events + git log (commit 4cde8fd)
 - `brain.ipc.ts` — registerBrainIpcHandlers(): BRAIN.QUERY (auto-discover + group by repo + summary counts), BRAIN.UPDATE_STATUS, BRAIN.REGISTER (Zod-validated), BRAIN.TIMELINE, BRAIN.CREATE_TASK (commit 4cde8fd)
 
@@ -143,12 +184,15 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `051-add-anamnesis-auth-secret.sql` — encrypted Anamnesis secret setting (`ac82895`)
 - `052-orchestrator-agents-spawned.sql` — persisted per-run spawn budget accounting (`ac82895`)
 - `053-orchestrator-runs-cancelled-status.sql` — permits terminal `cancelled` orchestrator runs (`0d9ae3f`)
-- Next migration: 054
+- `054-orchestrator-approvals.sql` — orchestrator_approvals table (id, run_id, task_id, status pending/approved/denied/expired, requested_at, expires_at, responded_at, reminder_count); UNIQUE(run_id, task_id) (`0dd8799`)
+- `055-task-complex-flag.sql` — adds `complex INTEGER NOT NULL DEFAULT 0` to tasks; complex tasks are the git-ops commit/push boundaries (`79844c2`)
+- Next migration: 057
 
 ## Integration
 
 - `db/queries/orchestrator.queries.ts` — mapTaskLogRow: gains filesChangedJson field; insertTaskLog return gains filesChangedJson: null; getFilesChangedForTask(db, taskId) — queries most recent dev-phase log for task, parses files_changed_json, Array.isArray guard before cast, returns [] on null/malformed/non-array (commit 336bf5b)
 - `register-all.ts` — registers orchestrator.ipc + lifecycle.ipc handlers
+- `agents.ipc.ts` — AGENTS.LIST_ALL ('agents:list-all') handler + preload bridge wired to getAllAgentsIncludingDead (`6ce3118`)
 - `service-orchestrator.ts` — wires `OrchestratorScheduler`, stateless brain adapter, validator, deterministic monitor, and `McpBridgeHandler`; routes model/provider/skill from task metadata, injects external target paths while spawning from AgentHub CWD, recovers orphaned state, restores active-run ticking at startup, and propagates Telegram approvals (`9880de0`, `28d0d85`, `fad6b4e`, `a3a23d3`, `6110343`)
 - `preload/index.ts` — exposes orchestrator + lifecycle IPC channels to renderer; repos:list-updated push channel (commit a3054a5); sprint-intake-completed push channel (commit c6497aa)
 - `ipc-channels.ts` — added ORCHESTRATOR_* (start/pause/resume/status/phase-history) + LIFECYCLE_* (metrics/history/archives/policies/restore/trigger-cycle) channels; added REPOS_LIST_UPDATED (commit a3054a5); added SPRINT_INTAKE_COMPLETED (commit c6497aa)
@@ -157,7 +201,9 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 ## Testing
 
 - `orchestrator.queries.test.ts` — 446-line query-level tests for orchestrator DB layer
-- `orchestrator-scheduler.test.ts` — hybrid scheduling, approval, retry, dependency, safeguard, and startup-resume coverage (`9880de0`, `fad6b4e`, `a3a23d3`, `6110343`)
+- `orchestrator-scheduler.test.ts` — hybrid scheduling, approval, retry, dependency, safeguard, and startup-resume coverage (`9880de0`, `fad6b4e`, `a3a23d3`, `6110343`); +156 lines reconciliation + concurrencyCap coverage (`79844c2`, `cc280bf`, `e6ae96c`)
+- `orchestrator.queries.test.ts` / `orchestrator-monitor.test.ts` — approval supervisor (A→C→B TTL) + approval-cleanup-on-completion coverage (`0dd8799`, `a7c60e3`, `c81fd0f`)
+- stale assertions aligned in connection/codex-spawn/claude-monitor/codex-health tests (`928e67c`)
 - `orchestrator-brain.test.ts` — LLM response validation and deterministic fallback/error-path coverage (`9880de0`, `40b402d`)
 - `orchestrator-validator.test.ts` — six-check validation pipeline including AgentHub/target-repo skill resolution (`9880de0`, `28d0d85`)
 - `agent-lifecycle-bus.test.ts` — renamed event-bus contract coverage (`9880de0`)
@@ -167,7 +213,7 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `severity-classifier.test.ts` — severity classification tests
 - `anamnesis-writer.test.ts` — payload transformer tests updated
 - `agent-mcp-config.test.ts` — 5 tests for readSettingsMcpServers (commit 23a2921)
-- `orchestrator-monitor.test.ts` — restored rules-based monitor coverage with typed `OrchestratorPhase` parameters (`a3a23d3`, `9aafe21`)
+- `orchestrator-monitor.test.ts` — restored rules-based monitor coverage with typed `OrchestratorPhase` parameters (`a3a23d3`, `9aafe21`); reconcileActiveAgents dep coverage (`cc280bf`)
 - `pre-launch-pipeline.test.ts` — pre-launch gate tests (commit f08d81a)
 - `quota-scrape-scheduler.test.ts` — shouldScrape() + scheduler start/stop tests (commit 43f346a)
 - `rate-limit-cascade.test.ts` — reactive cascade trigger tests (commit cf34e26)
@@ -190,12 +236,12 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `pipeline-composer.test.ts` — 241-line plan assembly tests (commit 079a6e2)
 - `skill-classifier.test.ts` — 303-line domain/complexity detection tests (commit 079a6e2)
 - `token-budget.test.ts` — 211-line per-skill token ceiling tests (commit 079a6e2)
-- `telegram-socket-server.test.ts` — 111-line socket bridge health + fail-fast tests (commit 400b329)
+- `telegram-socket-server.test.ts` — 111-line socket bridge health + fail-fast tests (commit 400b329); +121 lines completed-format + commit-button gating tests (`84e30a8`)
 - `anamnesis-writer.test.ts` — 417 lines; aligned with project registration flow (320 lines added, commit 3a5ddc7)
 - `BreakoutLayout.test.tsx` — terminal widget mock contracts restored (52 lines added, commit c841e39)
 - `FullTerminal.test.tsx` — mock contracts restored (commit c841e39)
 - `mcp-bridge-server/index.test.js`, `mcp-bridge-handler.test.ts`, and `mcp-helpers/*.test.js` — bridge routing, framing, and Unix-socket protocol coverage (`9880de0`)
-- `mcp-server-manager.test.ts` — restored legacy manager lifecycle/socket coverage (`a3a23d3`)
+- `mcp-server-manager.test.ts` — DELETED (`a4e0cee`)
 - `048-agent-session-id.test.ts`, `049-sessions.test.ts`, `050-agent-session-fk.test.ts`, `sessions.queries.test.ts`, `agent-session.test.ts` — session schema, query, and type coverage (`e0e82bb`, `bd7d602`)
 - `recovery-manager.test.ts` / `RecoveryScreen.test.tsx` — session-grouped and bounded recovery coverage (`bd7d602`, `91b3dd7`)
 - `brain.ipc.test.ts` — 5 tests for QUERY/UPDATE_STATUS/REGISTER/TIMELINE/CREATE_TASK handlers (new, commit 4cde8fd)
@@ -227,7 +273,7 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `codex-health.types.ts` — CodexHealthStatus type
 - `lifecycle.types.ts` — LayerDistribution, LifecycleMetrics, LifecycleHistoryEntry, ArchivedRecord/Page, PolicyUpdateRequest/Response, LifecycleRunResult, RestoreResult
 - `ipc.types.ts` — orchestrator + lifecycle + single-task-run (S2) + retry-failures (S3) IPC type signatures
-- `task.types.ts` — scheduled_at, scheduling_rule, model_preference fields (S1); category field (S5); mcp_server, mcp_tool, mcp_args_json, deserialized_title/description/priority/tags typed fields added (Kanban MCP S1, commits 469f1a5, d22e048)
+- `task.types.ts` — scheduled_at, scheduling_rule, model_preference fields (S1); category field (S5); mcp_server, mcp_tool, mcp_args_json, deserialized_title/description/priority/tags typed fields added (Kanban MCP S1, commits 469f1a5, d22e048); `complex` field (TaskItem/CreateTaskInput/UpdateTaskInput) for git-ops commit/push boundary gating (commit 79844c2)
 - `cloud-models.ts` — static cloud model registry with provider/tier metadata (S1); stale Anthropic model IDs fixed (commit 314497b)
 - `category-classifier.ts` — task category classification for model selection (S1)
 - `ipc-channels.ts` — added ORCHESTRATOR_DISPATCH (commit 283d2bc); added USAGE_* channels for quota/scraper data + RATE_LIMIT_* channels for cascade notifications (commits 43f346a/cf34e26)
@@ -235,7 +281,7 @@ recall(query="sprint inventory for <repo-name>", domain="sprint_inventory")
 - `cloud-models.ts` — Codex model entries added to static cloud model registry (commit f26da5d)
 - `skills.types.ts` — SkillItem gains command override field: custom CLI command to run instead of default skill invocation (commit ed0c575); gains SkillManifest, SkillDomain, SprintCardEnrichment types (commit 079a6e2)
 - `ipc.types.ts` — repos:list-updated + sprint-intake-completed push event type signatures added (commits a3054a5, c6497aa); BrainQueryResult, BrainTimelineEntry, RegisterBrainEntryInput types added (commit 4cde8fd)
-- `mcp-server.types.ts` — shared MCP server types: SprintCard, risk engine types; JSDoc on interface fields documents S3 handler contract (commits 0a4deb6, a3038ce); gains DispatchSprintToolInput/Output (commit f8089b9); gains CreateProjectMcpInput/Output (commit 7777717); gains ReportFilesChangedToolInput/Output; McpIpcRequest union adds dispatch_sprint, create_project, report_files_changed variants (commit 336bf5b)
+- `mcp-server.types.ts` — shared MCP server types: SprintCard, risk engine types; JSDoc on interface fields documents S3 handler contract (commits 0a4deb6, a3038ce); gains DispatchSprintToolInput/Output (commit f8089b9); gains CreateProjectMcpInput/Output (commit 7777717); gains ReportFilesChangedToolInput/Output (commit 336bf5b); McpIpc* wire-frame types removed (`6d1fbf0`)
 - `skill-domains.ts` (constants) — SkillDomain string constants; 'legal' domain added (commits 079a6e2, c7b80be)
 - `task.types.ts` — gains target_files_json, skills_json, guardrail_json, risk_factors_json, estimated_tokens, recommended_model, risk_score, created_by fields (commits d36ce78, 079a6e2)
-- `telegram.types.ts` — gains socket bridge health status fields (commit 400b329)
+- `telegram.types.ts` — gains socket bridge health status fields (commit 400b329); gains `TelegramAgentMessageFormat` ('status' | 'completed' | 'question' | 'error') + `repoPath`/`commitable`/`commitAgentId` fields for commit buttons (commits 84e30a8, 5bf61f9)

@@ -1,0 +1,28 @@
+version: 1
+domain: code-dev
+type: workflow
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "launch sprint"
+    weight: 1.0
+  - pattern: "dispatch sprint to orchestrator"
+    weight: 1.0
+  - pattern: "validate sprint before running"
+    weight: 1.0
+  - pattern: "sprint to kanban"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires:
+  - "sprint-reset"
+produces: []
+composableWith:
+  - "sprint-reset"
+  - "agenthub-expert"
+  - "team-sprint-planner"
+targetRepos:
+  - "agenthub"
+targetDomains: []

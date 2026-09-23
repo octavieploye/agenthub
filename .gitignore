@@ -6,6 +6,7 @@ out
 *.log*
 .env
 .claude
+ !.claude/settings.json
 _bmad
 _bmad-output
 .env                                                                                                                                                                                   
@@ -14,3 +15,36 @@ _bmad-output
 resources/voices/                                                                                                                                       
 resources/bin/
 .codex
+
+# Scratch / derived — not for version control
+docs/
+*.png
+screenshots/
+logs/
+test-sound/
+resources/sounds/
+agenthub.db
+.claire/
+.llm/
+workflow-team-library/
+memory/records/
+memory/feedback_live_db_not_workspace_db.md
+
+# Root-level scratch research/status notes
+/*_plan.md
+/*_progress.md
+/*_findings.md
+/*-plan.md
+/*-progress.md
+/*-findings.md
+/progress.md
+/findings.md
+/integrity.md
+/human-task.md
+/dev-task.md
+/features.md
+/context.md
+/compliance-index.md
+/destructive-commands-ban.md
+/agenthub-story.md
+/workflow-library.md

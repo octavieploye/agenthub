@@ -33,7 +33,7 @@ Generated: 2026-06-30 15:50
     4277 | rules     | .claude/CLAUDE.md
     4173 | rules     | .claude/commands/sec-devops.md
     3557 | workflow  | .claude/workflow-team-library/business/brainstorm/NEW-BUSINESS-TEAMS.md
-    3255 | rules     | .claude/workflow-team-library/brain/knowledge/reference/original-hormozi-time-investment-transcription.md
+    3255 | rules     | .claude/workflow-team-library/brain/knowledge/reference/original-[source]-time-investment-transcription.md
     3221 | rules     | .claude/workflow-team-library/brain/knowledge/philosophy.md
 
 ## Token Distribution by Class

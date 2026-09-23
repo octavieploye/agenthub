@@ -1,0 +1,25 @@
+version: 1
+domain: code-dev
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "archive sprint"
+    weight: 1.0
+  - pattern: "reset sprint"
+    weight: 1.0
+  - pattern: "delete sprint"
+    weight: 1.0
+  - pattern: "dispatch_sprint returns existing run"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith:
+  - "agenthub-expert"
+targetRepos:
+  - "agenthub"
+targetDomains: []
