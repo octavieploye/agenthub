@@ -997,6 +997,9 @@ export function initializeServices(db: Database.Database): void {
       start: (input) => orchestratorScheduler!.start(input as Parameters<OrchestratorScheduler['start']>[0]),
       startSingleTask: (input) => orchestratorScheduler!.startSingleTask(input as Parameters<OrchestratorScheduler['startSingleTask']>[0]),
       approveTaskDispatch: (runId, taskId, approved) => orchestratorScheduler!.approveTaskDispatch(runId, taskId, approved),
+      resume: (runId) => orchestratorScheduler!.resume(runId),
+      cancel: (runId) => orchestratorScheduler!.cancel(runId),
+      extendRunWallClock: (runId) => orchestratorScheduler!.extendRunWallClock(runId),
     },
   }
   mcpBridgeHandler = new McpBridgeHandler(bridgeDeps)

@@ -236,6 +236,18 @@ async function createProject(args) {
   return callBridge('createProject', args || {})
 }
 
+async function resumeRun(args) {
+  return callBridge('resumeRun', args || {})
+}
+
+async function cancelRun(args) {
+  return callBridge('cancelRun', args || {})
+}
+
+async function extendRun(args) {
+  return callBridge('extendRun', args || {})
+}
+
 // ── Tool definitions (MCP capabilities) ───────────────────────────────────────
 
 const TOOL_DEFS = [
@@ -410,6 +422,33 @@ const TOOL_DEFS = [
       },
       required: ['repoId', 'name']
     }
+  },
+  {
+    name: 'resume_run',
+    description: 'Resume a paused orchestrator run. Clears the in-memory pause flag and sets status to running.',
+    inputSchema: {
+      type: 'object',
+      properties: { runId: { type: 'string', description: 'Orchestrator run UUID' } },
+      required: ['runId']
+    }
+  },
+  {
+    name: 'cancel_run',
+    description: 'Cancel an orchestrator run. Sets status to cancelled and deletes pending approvals.',
+    inputSchema: {
+      type: 'object',
+      properties: { runId: { type: 'string', description: 'Orchestrator run UUID' } },
+      required: ['runId']
+    }
+  },
+  {
+    name: 'extend_run',
+    description: 'Extend a paused orchestrator run wall-clock deadline and resume it. Requires the run to be in paused status.',
+    inputSchema: {
+      type: 'object',
+      properties: { runId: { type: 'string', description: 'Orchestrator run UUID' } },
+      required: ['runId']
+    }
   }
 ]
 
@@ -446,6 +485,9 @@ async function handleRequest(method, params, id) {
       case 'report_files_changed':result = await reportFilesChanged(args); break
       case 'archive_task':        result = await archiveTask(args); break
       case 'create_project':      result = await createProject(args); break
+      case 'resume_run':          result = await resumeRun(args); break
+      case 'cancel_run':          result = await cancelRun(args); break
+      case 'extend_run':          result = await extendRun(args); break
       default:
         mcpError(id, -32601, `Unknown tool: ${name}`)
         return

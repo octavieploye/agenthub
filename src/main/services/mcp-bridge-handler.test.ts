@@ -147,6 +147,9 @@ function makeScheduler() {
     start: vi.fn((input: unknown) => ({ started: true, input })),
     startSingleTask: vi.fn((input: unknown) => ({ started: true, input })),
     approveTaskDispatch: vi.fn((_runId: string, _taskId: string, _approved: boolean) => {}),
+    resume: vi.fn((_runId: string) => {}),
+    cancel: vi.fn((_runId: string) => {}),
+    extendRunWallClock: vi.fn((_runId: string) => true),
   }
 }
 

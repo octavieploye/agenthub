@@ -46,6 +46,9 @@ export interface BridgeDeps {
     start(input: unknown): unknown
     startSingleTask(input: unknown): unknown
     approveTaskDispatch(runId: string, taskId: string, approved: boolean): void
+    resume(runId: string): void
+    cancel(runId: string): void
+    extendRunWallClock(runId: string): boolean
   }
 }
 
@@ -266,6 +269,25 @@ export class McpBridgeHandler {
         const approved = Boolean(params['approved'])
         scheduler.approveTaskDispatch(runId, taskId, approved)
         return { ok: true }
+      }
+
+      // ── Write: run lifecycle (resume/cancel/extend) ──────────────────────────
+      case 'resumeRun': {
+        const runId = params['runId'] as string
+        scheduler.resume(runId)
+        return { ok: true }
+      }
+
+      case 'cancelRun': {
+        const runId = params['runId'] as string
+        scheduler.cancel(runId)
+        return { ok: true }
+      }
+
+      case 'extendRun': {
+        const runId = params['runId'] as string
+        const extended = scheduler.extendRunWallClock(runId)
+        return { ok: extended }
       }
 
       // ── Write: archive task ──────────────────────────────────────────────────
