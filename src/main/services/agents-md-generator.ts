@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
+import { GIT_BOUNDARY_RULE } from './guardrails'
 
 export interface GenerateAgentsMdOptions {
   guardPath: string
@@ -86,6 +87,16 @@ USER IS THE SOURCE OF TRUTH. User knowledge overrides model training data.
 ## Guard Policy
 
 ${guardContent}
+`)
+
+  // Git boundary guardrail — Codex runs with bypass approvals, so the same
+  // git-mutation prohibition that Claude CLI agents get via --append-system-prompt-file
+  // must be inlined here for Codex agents.
+  sections.push(`---
+
+## Git Boundary
+
+${GIT_BOUNDARY_RULE}
 `)
 
   // Skills index

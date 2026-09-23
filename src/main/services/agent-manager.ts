@@ -15,6 +15,8 @@ import { readSettingsMcpServers } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
+import { killProcessTree } from './process-tree'
+import { getGitBoundaryPath } from './guardrails'
 import { getWindowManager, getAnamnesisWriter, getTelegramSocketPath, getCurrentSessionId } from './service-registry'
 import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
@@ -203,8 +205,30 @@ export function completeAgentFromTelegram(agentId: string): boolean {
   })
   emitTriageResult(managed.state, previousStatus)
   syncKanbanCard(db, agentId, 'completed')
+  // S4: orchestrator agents stay open at their interactive prompt after signaling
+  // completion. Terminate their process tree so a rogue agent cannot linger past
+  // task completion. Manual agents are left running — the user may keep chatting.
+  if (managed.state.isOrchestrator) {
+    terminateAgentProcess(agentId)
+  }
   log.info('Agent completed via explicit Telegram MCP signal', { agentId })
   return true
+}
+
+/**
+ * Kill an agent's process tree WITHOUT flipping its status. Used when the agent
+ * has already signaled final completion (status already 'completed') but its
+ * interactive process is still alive at the prompt. The onExit handler performs
+ * the actual cleanup and preserves the 'completed' status.
+ */
+function terminateAgentProcess(agentId: string): void {
+  const managed = agents.get(agentId)
+  if (!managed) return
+  const pid = managed.ptyProcess.pid
+  log.info('Terminating agent process tree after completion', { id: agentId, pid })
+  void killProcessTree(pid).catch((err) => {
+    log.warn('Failed to kill agent process tree', { agentId, error: err instanceof Error ? err.message : String(err) })
+  })
 }
 
 function getNotificationConfig(): NotificationRouterConfig {
@@ -751,6 +775,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             cancelSilentLockTimer(agentState.id)
           }
           syncKanbanCard(db, agentState.id, newStatus)
+          // S4: parser-detected completion (e.g. "DONE") on an orchestrator agent is a
+          // terminal signal — terminate its process tree so a rogue agent cannot linger.
+          if (newStatus === 'completed' && current.state.isOrchestrator) {
+            terminateAgentProcess(agentState.id)
+          }
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }
 
@@ -874,14 +903,18 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     }
 
     const previousStatusOnExit = agentState.status
-    const exitStatus = exitCode === 0 ? 'completed' : 'error'
+    // S4: an agent that already signaled final completion via the Telegram MCP
+    // contract has status 'completed'; terminateAgentProcess then kills its process
+    // tree, producing a non-zero exit that must NOT be reclassified as an error.
+    const alreadyCompleted = agentState.status === 'completed'
+    const exitStatus = alreadyCompleted ? 'completed' : (exitCode === 0 ? 'completed' : 'error')
     updateAgentStatus(db, agentState.id, exitStatus, 'confirmed')
     agentState.status = exitStatus
     agentState.confidence = 'confirmed'
     emitToAllRenderers(IPC_EVENTS.AGENTS.EXIT, agentState.id, exitCode)
     emitToAllRenderers(IPC_EVENTS.AGENTS.STATUS_CHANGE, agentState.id, exitStatus, 'confirmed')
     insertActivityEvent(db, {
-      eventType: exitCode === 0 ? 'agent_completed' : 'agent_error',
+      eventType: exitStatus === 'completed' ? 'agent_completed' : 'agent_error',
       entityType: 'agent',
       entityId: agentState.id,
       repoId: agentState.repoId,
@@ -1068,6 +1101,11 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const appendGuardFlag = guardExists
     ? ` --append-system-prompt-file '${guardPath}'`
     : ''
+  // S5: inject git-boundary guardrail (source-controlled, lives in src/ not plugin/)
+  // — worker agents must never run git-mutation commands. Applies to every provider
+  // path that uses bypass permissions so the rule cannot be silently rewritten.
+  const gitBoundaryPath = getGitBoundaryPath()
+  const appendGitBoundaryFlag = ` --append-system-prompt-file '${gitBoundaryPath}'`
   // S2: emit SKILL_INJECT_SKIPPED when index is absent but a skill was requested
   if (appendSkillsFlag === '' && options.taskDescription && options.taskDescription.trim().length > 0) {
     emitToAllRenderers(IPC_EVENTS.AGENTS.SKILL_INJECT_SKIPPED, agentState.id)
@@ -1171,7 +1209,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // ollama-cloud agents get MCP tools (agenthub-kanban), plugin, skills, and
     // guard injection. `--effort` is intentionally omitted — unverified for
     // ollama models and not part of the MCP registration path.
-    const extraArgs = `${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}`.trim()
+    const extraArgs = `${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendGitBoundaryFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}`.trim()
     const cmd = extraArgs
       ? `clear; ${ollamaBin} launch claude -y${modelFlag} -- ${extraArgs}\n`
       : `clear; ${ollamaBin} launch claude -y${modelFlag}\n`
@@ -1231,14 +1269,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       // Instead launch interactive claude and send the task as the first prompt.
       // Use exec so the shell is replaced by claude — when claude exits, the PTY exits and onExit fires.
       // Without exec, zsh stays alive after claude finishes, blocking orchestrator dependency chains.
-      const cmd = `clear; exec claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag} -- '${escapedTask}'\n`
+      const cmd = `clear; exec claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendGitBoundaryFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag} -- '${escapedTask}'\n`
       ptyProcess.write(cmd)
       // S24: log metadata only — never log full cmd string (reveals plugin paths + task content)
       log.info('Sent command to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasSkills: !!appendSkillsFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasCrossRepo: !!appendCrossRepoFlag, hasMcp: !!mcpFlag, hasTelegram: !!telegramToolFlag, taskLength: task?.length ?? 0 })
     }, 500)
   } else {
     setTimeout(() => {
-      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}\n`
+      const cmd = `clear; claude${modelFlag}${effortFlag}${permFlag}${telegramToolFlag}${mcpFlag}${pluginFlag}${appendSkillsFlag}${appendGuardFlag}${appendGitBoundaryFlag}${appendAgenthubRulesFlag}${appendCrossRepoFlag}\n`
       ptyProcess.write(cmd)
       // S24: log metadata only
       log.info('Sent command (interactive) to PTY', { id: agentState.id, model: modelName, provider: agentState.provider, effort: agentState.effortLevel, hasPlugin: !!pluginFlag, hasGuard: !!appendGuardFlag, hasAgenthubRules: !!appendAgenthubRulesFlag, hasCrossRepo: !!appendCrossRepoFlag })
