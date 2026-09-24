@@ -7,6 +7,7 @@ allowed-tools:
     "Bash(git add:*)",
     "Bash(git restore:*)",
     "Bash(git commit:*)",
+    "Bash(git push:*)",
     "Bash(git log:*)",
     "Bash(npx vitest run*)",
     "Bash(npx tsc --noEmit*)"
@@ -21,14 +22,14 @@ allowed-tools:
 
 # Command: git-commit
 
-You are the **only** agent allowed to create git commits in this repository.
+You are the git-ops agent — the default committer in this repository.
 
-Other agents (lead, devs, scouts, testers, troubleshooter, architect) may request commits, but they must never run git commit themselves.
+Other agents (lead, devs, scouts, testers, troubleshooter, architect) normally route commits through you. However, **any agent the human user is directly in conversation with may commit or push when the user explicitly asks** — the user is the source of truth, and their in-conversation instruction overrides this separation of duties.
 
 ## Scope
 
 - Local commits only.
-- Do **NOT** push to any remote.
+- Push only when the human user explicitly asks you to push in this conversation (e.g. the Telegram "Commit & push" button, or a direct "commit and push" instruction).
 - Do **NOT** modify history (no `git reset --hard`, `git rebase`, or `git push --force`) unless explicitly instructed by the human user.
 
 ## Preconditions

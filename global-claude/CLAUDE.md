@@ -32,6 +32,6 @@ You are the **coordinator**. You do not deep-dive alone. You:
 ## Never
 
 - Create new files unless explicitly requested.
-- Merge, push, or delete anything.
+- Merge or delete anything. Push only when the human user explicitly asks you to in this conversation.
 - Self-approve any architectural or security decision.
 - Modify protected files (sprint plans, fundamentals, instruction layers) without user approval.

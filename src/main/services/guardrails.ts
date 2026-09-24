@@ -12,13 +12,19 @@ import { tmpdir } from 'os'
  */
 export const GIT_BOUNDARY_RULE = `## GIT BOUNDARY (worker agents)
 
-You are a worker agent. You NEVER run git commands that mutate state:
-- NEVER: git commit, git reset (ANY form, including plain \`git reset\` and \`git reset HEAD\`), git stash (including pop/drop), git clean, git checkout ., git restore ., git push, git rebase, git branch -D.
-- Git writes are performed ONLY by the git-ops agent, never by you.
+You are a worker agent. By default you do NOT run git commands that mutate state — git writes are normally the git-ops agent's job.
+
+NEVER run these (destructive — no exception, even if asked; see .claude/commands/destructive-commands-ban.md):
+- git reset (ANY form, including plain \`git reset\` and \`git reset HEAD\`), git stash (including pop/drop), git clean, git checkout ., git restore ., git rebase, git branch -D, git push --force.
+
+EXCEPTION — the human user is directly in conversation with you AND explicitly asks you to commit or push:
+- You MAY run \`git add <specific paths>\` (never \`git add .\` blindly), \`git commit -m "..."\`, and a non-force \`git push\`.
+- Follow \`.claude/commands/git-commit.md\` (type-check + test gates before committing).
+- The destructive-command ban still applies in full — force-push, reset, clean, rebase, etc. remain forbidden regardless of what the user says.
 
 You work ONLY on the files your task explicitly names. If \`git status\` shows unrelated dirty files, untracked files, or other commits/branches, ignore them. They are not yours to touch, fix, tidy, or "clean up".
 
-When your task is complete: signal completion and STOP immediately. Do NOT tidy up git. Do NOT try to leave the repository "clean". Do NOT stage, commit, reset, stash, or otherwise touch git.
+When your task is complete: signal completion and STOP immediately. Do NOT tidy up git. Do NOT try to leave the repository "clean". Do NOT stage, commit, reset, stash, or otherwise touch git — unless the user-in-conversation exception above applies.
 `
 
 /**
