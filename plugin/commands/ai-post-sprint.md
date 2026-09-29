@@ -44,9 +44,9 @@ Same as `/ai-audit` — filter out `bmad-*` files and `_bmad/` paths from the ch
 
 Read both standards layers:
 1. **Layer 1:** `/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/docs/ai-engineering/ai-engineering-reference.md`
-2. **Layer 2:** `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/standards/optimaeus-ai-standards.md`
+2. **Layer 2:** `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/standards/optimaeus-ai-standards.md`
 
-Check `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/audits/` for the most recent prior audit.
+Recall the most recent prior audit from Anamnesis (project `hephaestus`, domain `ai_team_expert`).
 
 ### Step 4 — Drift detection
 
@@ -69,7 +69,7 @@ Look for patterns worth capturing as learnings:
 
 ### Step 6 — Generate report
 
-Save to: `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/audits/YYYY-MM-DD-post-sprint-audit.md`
+Store in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `remember`, titled `YYYY-MM-DD-post-sprint-audit`, and show it inline.
 
 Use this template:
 
@@ -104,7 +104,7 @@ BMAD files excluded: {N}
 After presenting the report, ask:
 "I identified {N} patterns worth capturing. Shall I write them as learnings? [yes / select / no]"
 
-If yes or select: write learning files to `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/learnings/YYYY-MM-DD-<topic>.md` using the standard learning template:
+If yes or select: record each learning in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `learn`, using the standard learning template:
 
 ```
 # {Pattern Title}
@@ -132,7 +132,7 @@ For each learning, check if it has appeared in 3+ prior audits. If so, propose a
 If the sprint involved significant config changes (5+ files or structural changes), ask:
 "This sprint had significant config changes. Worth a case study? [yes / no]"
 
-If yes: write case study to `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/case-studies/YYYY-MM-DD-<topic>-case.md`
+If yes: store the case study in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `remember`, titled `YYYY-MM-DD-<topic>-case`
 
 ---
 
@@ -141,6 +141,5 @@ If yes: write case study to `/Users/octaviesmacpro/workspace/optimaeus/optimaeus
 ```
 agenthub:    /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/
 optimaeus:   /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/.claude/
-wiki:        /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/
-outputs:     /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/
+outputs:     Anamnesis (project `hephaestus`, domain `ai_team_expert`)
 ```

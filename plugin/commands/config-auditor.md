@@ -23,8 +23,9 @@ Audit the target `.claude/` path (passed in by lead-ai-engineer) against both st
 - Industry best practices for agent command structure
 - Prompt clarity, role definition, tool constraints
 - Anti-patterns: vague roles, missing stop-and-ask rules, overly broad tool grants
+- Model fit (§ Claude 5.x model fit): instructions written for older models — thinking-steering prose, removed API parameters, retired model IDs, emphasis with no stated reason
 
-**Layer 2 — Optimaeus AI Standards** (`.claude/skills/index.md`, existing command files):
+**Layer 2 — Optimaeus AI Standards** (`/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/standards/optimaeus-ai-standards.md`):
 - Sovereignty-first framing
 - trustworthy-sources invocation requirement for any source citation
 - STOP AND ASK rule present in every command
@@ -53,6 +54,7 @@ Recommended fixes: {routed to framework-builder or prompt-optimizer — not exec
 ## Sources
 
 1. `docs/ai-engineering/` — Layer 1 reference (read first)
+1b. `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/standards/optimaeus-ai-standards.md` — Layer 2 standards
 2. `.claude/skills/index.md` — registered skills for cross-reference
 3. `.claude/commands/` — existing commands as Layer 2 baseline
 4. Existing team orchestrator files — for orchestration pattern baseline

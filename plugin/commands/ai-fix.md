@@ -43,7 +43,7 @@ Follow the exact same Steps 1-7 from the `/ai-audit` command:
 4. Load prior audits
 5. Run audit checks (per-file, per-team, cross-project)
 6. Classify findings by severity
-7. Generate report to `optimaeus-architecture/ai-team-expert/audits/YYYY-MM-DD-<scope>-fix.md`
+7. Store the report in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `remember`, titled `YYYY-MM-DD-<scope>-fix`
 
 ### Step 8 — Generate proposed fixes
 
@@ -87,10 +87,7 @@ After applying fixes:
 After fixes are applied, ask:
 "Any patterns worth capturing as a learning? [yes / no]"
 
-If yes, write a learning file to:
-`/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/learnings/YYYY-MM-DD-<topic>.md`
-
-Using the learning template:
+If yes, record it in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `learn`, using the learning template:
 ```
 # {Pattern Title}
 Date: {YYYY-MM-DD}
@@ -119,8 +116,7 @@ Same read targets, reference, and write target as `/ai-audit`.
 ```
 agenthub:    /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/
 optimaeus:   /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/.claude/
-wiki:        /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/
-outputs:     /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/
+outputs:     Anamnesis (project `hephaestus`, domain `ai_team_expert`)
 ```
 
 ## BMAD Exclusion

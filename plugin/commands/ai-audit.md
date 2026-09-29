@@ -52,14 +52,13 @@ Log filtered count: "Excluded N BMAD files from scan."
 
 Read both standards layers:
 1. **Layer 1:** `/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/docs/ai-engineering/ai-engineering-reference.md`
-2. **Layer 2:** `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/standards/optimaeus-ai-standards.md`
+2. **Layer 2:** `/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/standards/optimaeus-ai-standards.md`
 
-Read prior learnings from:
-- `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/learnings/`
+Read prior learnings from Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `recall`.
 
 ### Step 4 — Load prior audits
 
-Check `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/audits/` for the most recent audit report.
+Recall the most recent audit report from Anamnesis (project `hephaestus`, domain `ai_team_expert`).
 Note any findings that were previously identified — reference by ID, do not duplicate.
 
 ### Step 5 — Run audit checks
@@ -113,8 +112,7 @@ Assign severity to each finding:
 ### Step 7 — Generate report
 
 Determine the scope label from invocation (e.g., `single-claude-md`, `team-dev-stack`, `full`).
-Save report to:
-`/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/audits/YYYY-MM-DD-<scope>-audit.md`
+Store the report in Anamnesis (project `hephaestus`, domain `ai_team_expert`) with `remember`, titled `YYYY-MM-DD-<scope>-audit`, and show it inline.
 
 Use this template exactly:
 
@@ -183,14 +181,8 @@ agenthub:    /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/
 optimaeus:   /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/.claude/
 ```
 
-## Reference (read-only, never modify existing files)
-
-```
-wiki:        /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/
-```
-
 ## Write Target
 
 ```
-outputs:     /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/
+outputs:     Anamnesis (project `hephaestus`, domain `ai_team_expert`)
 ```

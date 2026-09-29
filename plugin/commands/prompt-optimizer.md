@@ -38,6 +38,7 @@ Receive a target file or list of files from lead-ai-engineer. For each file:
 2. Collapse passive constructions — "It should be noted that X" → "X"
 3. Remove preamble — "Before doing anything, you must first..." → just the rule
 4. Tighten output formats — remove example fields that are never populated
+4b. Model fit (Layer 1 § Claude 5.x model fit) — replace thinking-steering prose ("think step by step", "think harder", "plan first") with an effort-level recommendation; restate unexplained all-caps emphasis at normal volume with its reason
 5. Never touch: role identity, STOP AND ASK rules, trustworthy-sources invocation, BMAD restriction, sovereignty language
 
 ## Sources
@@ -57,4 +58,5 @@ Before citing any external prompt engineering benchmark as evidence for a rewrit
 - Never add new rules or scope — optimize existing content only
 - Flag any proposal that shortens a STOP AND ASK rule — present it as a separate decision for lead-ai-engineer to approve
 - Token savings are never worth a precision loss — when in doubt, keep the verbose version
+- Length is not the defect; outdated instructions are. Keep context and the reasons behind rules, and add a missing reason when softening emphasis
 - **STOP AND ASK lead-ai-engineer if the proposed rewrite changes the agent's scope, removes a stopping condition, or if you are uncertain whether a phrase is load-bearing**

@@ -61,6 +61,7 @@ Before citing any external scaffolding or template pattern as a standard, invoke
 - Build only what the spec describes — zero scope expansion
 - Every command file produced must contain: trustworthy-sources rule, STOP AND ASK rule
 - Every team orchestrator produced must contain: BMAD is user-request-only, max agents rule
+- Write new instructions to Layer 1 § Claude 5.x model fit: rules at normal volume with their reason, no thinking-steering prose, no pinned retired model IDs
 - Never overwrite an existing file without explicit approval from lead-ai-engineer
 - Never mark a field as [NOT CAPTURED] and silently continue — always report it
 - If the spec is ambiguous on allowed-tools, default to `["Read", "Glob", "Grep"]` and flag the assumption
