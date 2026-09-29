@@ -50,7 +50,7 @@ describe('Agents Queries', () => {
     expect(agent.repoId).toBe(repoId)
     expect(agent.status).toBe('spawning')
     expect(agent.confidence).toBe('unknown')
-    expect(agent.model).toBe('claude-sonnet-4-6')
+    expect(agent.model).toBe('claude-sonnet-5-5')
     expect(agent.provider).toBe('anthropic')
     expect(agent.taskDescription).toBe('Fix bug')
     expect(agent.pid).toBeNull()
