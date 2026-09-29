@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskItem } from '@shared/types/task.types'
 import type { RepoConfig } from '@shared/types/config.types'
+import type { EffortLevel } from '@shared/types/agent.types'
 import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ANTHROPIC_MODEL_OPTIONS, CLOUD_MODEL_OPTIONS, CODEX_MODEL_OPTIONS } from '@shared/constants/cloud-models'
 import type { ValidProvider } from '@shared/constants/cloud-models'
+import { EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
 import { KanbanDispatchAdvanced } from './KanbanDispatchAdvanced'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
@@ -85,6 +87,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
   const [selectedProvider, setSelectedProvider] = useState<ValidProvider>('anthropic')
   const [codexAvailable, setCodexAvailable] = useState(false)
+  const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [skipPermissions, setSkipPermissions] = useState(false)
 
   useEffect(() => {
@@ -120,6 +123,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
         taskDescription: prompt.trim(),
         model: selectedModel,
         provider: selectedProvider,
+        effortLevel,
         skipPermissions,
       })
       if (result.success && result.data) {
@@ -280,6 +284,33 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
                   </optgroup>
                 )}
               </select>
+            </div>
+
+            {/* Effort level selector */}
+            <div>
+              <span className="text-xs font-bold tracking-wide text-base-content/60 block mb-2">
+                REASONING EFFORT
+              </span>
+              <div className="flex gap-2">
+                {EFFORT_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setEffortLevel(level)}
+                    className={`flex-1 text-xs py-1.5 px-2 rounded-lg border transition-all ${
+                      effortLevel === level
+                        ? 'bg-primary/15 border-primary/30 text-primary'
+                        : 'border-base-content/10 text-base-content/50 hover:border-base-content/20'
+                    }`}
+                  >
+                    <div className="font-medium">
+                      {level === 'low' ? 'Low' : level === 'medium' ? 'Medium' : level === 'high' ? 'High' : level === 'xhigh' ? 'Extra High' : 'Maximum'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10px] text-base-content/40 mt-1">
+                {EFFORT_LABELS[effortLevel]}
+              </div>
             </div>
 
             {/* Autonomous mode toggle */}

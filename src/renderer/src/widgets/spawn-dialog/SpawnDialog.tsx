@@ -352,7 +352,9 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
                         : 'border-base-content/10 text-base-content/50 hover:border-base-content/20'
                     }`}
                   >
-                    <div className="font-medium capitalize">{level}</div>
+                    <div className="font-medium">
+                      {level === 'low' ? 'Low' : level === 'medium' ? 'Medium' : level === 'high' ? 'High' : level === 'xhigh' ? 'Extra High' : 'Maximum'}
+                    </div>
                   </button>
                 ))}
               </div>
