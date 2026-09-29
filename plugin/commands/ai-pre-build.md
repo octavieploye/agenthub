@@ -45,7 +45,7 @@ If the directory does not exist, report: "Entity directory not found. Use framew
 ### Step 2 — Load entity definition
 
 Read the entity definition from:
-`/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/.claude/entities/<entity-name>.md`
+`/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/entities/<entity-name>.md`
 
 If no entity definition exists, flag as FAIL: "No entity definition found in wiki."
 
@@ -81,7 +81,7 @@ Verify all file paths referenced in `.claude/` files actually exist on disk.
 
 ### Step 7 — Load accumulated learnings
 
-Read learnings from `/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/learnings/`.
+Recall learnings from Anamnesis (project `hephaestus`, domain `ai_team_expert`).
 Flag any known issues that apply to this entity.
 
 ### Step 8 — Output inline checklist
@@ -116,6 +116,5 @@ Same reference paths as other commands. No write target — this command produce
 ```
 agenthub:    /Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub/.claude/
 optimaeus:   /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/.claude/
-wiki:        /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/
-learnings:   /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/ai-team-expert/learnings/
+learnings:   Anamnesis (project `hephaestus`, domain `ai_team_expert`)
 ```

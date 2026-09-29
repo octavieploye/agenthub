@@ -16,7 +16,7 @@ Invoke when the user wants to audit `.claude/` configuration files, optimize pro
 
 ## What This Team Produces
 
-**Audit mode:** Per-file findings report (PASS/WARN/FAIL/CRITICAL) against two standards layers
+**Audit mode:** Per-file findings report (PASS/WARN/FAIL/CRITICAL) against two standards layers, including fit with the current Claude model
 **Optimize mode:** BEFORE/AFTER proposal with token delta — no file modified until user approves
 **Workflow analysis:** Findings report: dead ends, missing handoffs, gate violations, redundancies
 **Scaffold mode:** New command/skill/config files from an approved spec — no scope expansion
