@@ -1,6 +1,6 @@
-import { OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '../../../shared/constants/model-catalog'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS } from '../../../shared/constants/model-catalog'
 
-const ANTHROPIC_MODELS = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-5', 'claude-sonnet-5'] as const
+const ANTHROPIC_MODEL_IDS = CLAUDE_MODELS.map(m => m.id)
 
 /**
  * Validates that a model override is a known model for the given provider.
@@ -14,8 +14,8 @@ export function validateModelOverride(
   if (!provider) return null
 
   if (provider === 'anthropic') {
-    if (!ANTHROPIC_MODELS.includes(model as typeof ANTHROPIC_MODELS[number])) {
-      return `Unknown Anthropic model: "${model}". Valid: ${ANTHROPIC_MODELS.join(', ')}`
+    if (!ANTHROPIC_MODEL_IDS.includes(model)) {
+      return `Unknown Anthropic model: "${model}". Valid: ${ANTHROPIC_MODEL_IDS.join(', ')}`
     }
     return null
   }

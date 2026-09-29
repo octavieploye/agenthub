@@ -241,8 +241,9 @@ export interface SkillModelRecommendation extends ModelRecommendation {
 
 // Minimum context windows per model (tokens).
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-  [CLAUDE_SONNET]: 200_000,
-  [CLAUDE_OPUS]: 200_000,
+  [CLAUDE_SONNET]: 1_000_000,
+  [CLAUDE_OPUS]: 1_000_000,
+  [CLAUDE_HAIKU]: 200_000,
   [OLLAMA_DEFAULT]: 8_000,
 }
 

@@ -2,7 +2,12 @@
  * Cloud model catalog and provider labels — shared between main and renderer.
  * Source of truth for ollama-cloud model IDs lives in model-dispatcher.ts (main process).
  * This file exports a renderer-safe subset for dropdown population.
+ *
+ * Anthropic models are derived from CLAUDE_MODELS (model-catalog.ts) —
+ * add new Claude models there and they appear in all dropdowns automatically.
  */
+
+import { CLAUDE_MODELS } from './model-catalog'
 
 export interface CloudModelEntry {
   id: string
@@ -32,15 +37,11 @@ export const CLOUD_MODEL_OPTIONS: CloudModelEntry[] = [
   { id: 'gpt-oss:20b-cloud', name: 'GPT OSS 20B', provider: 'ollama-cloud' },
 ]
 
-export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = [
-  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', provider: 'anthropic' },
-  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', provider: 'anthropic' },
-  { id: 'claude-opus-5', name: 'Claude Opus 5', provider: 'anthropic' },
-  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', provider: 'anthropic' },
-  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet', provider: 'anthropic' },
-  { id: 'claude-opus-4-6', name: 'Claude Opus', provider: 'anthropic' },
-  { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku', provider: 'anthropic' },
-]
+export const ANTHROPIC_MODEL_OPTIONS: CloudModelEntry[] = CLAUDE_MODELS.map((m) => ({
+  id: m.id,
+  name: m.name,
+  provider: 'anthropic' as const,
+}))
 
 export const CODEX_MODEL_OPTIONS: CloudModelEntry[] = [
   { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai-codex' },

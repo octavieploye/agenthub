@@ -49,7 +49,10 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
     description: 'Frontier reasoning model. Fallback alias for claude-opus-5-5.',
     strengths: ['deep reasoning', 'planning', 'architecture'],
     speedProfile: 'slow',
-    claudeComparison: 'Most capable Claude model'
+    claudeComparison: 'Most capable Claude model',
+    pricing: { inputPerMTok: 4, outputPerMTok: 20 },
+    thinkingDefault: 'medium',
+    thinkingAlwaysOn: true
   },
   {
     id: 'claude-sonnet-5',
@@ -64,7 +67,56 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
     description: 'Balanced speed & capability. Fallback alias for claude-sonnet-5-5.',
     strengths: ['code generation', 'refactoring', 'reasoning'],
     speedProfile: 'balanced',
-    claudeComparison: 'Best balance of speed and capability'
+    claudeComparison: 'Best balance of speed and capability',
+    pricing: { inputPerMTok: 2, outputPerMTok: 10 },
+    thinkingDefault: 'high'
+  },
+  {
+    id: 'claude-fable-5-1',
+    name: 'Claude Fable 5.1',
+    provider: 'anthropic',
+    category: 'coding',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'expert',
+    description: 'Fast creative coding with always-on thinking. Optimized for rapid iteration.',
+    strengths: ['fast coding', 'creative tasks', 'iteration'],
+    speedProfile: 'fast',
+    claudeComparison: 'Fast creative model with thinking',
+    thinkingDefault: 'medium',
+    thinkingAlwaysOn: true
+  },
+  {
+    id: 'claude-opus-4-8',
+    name: 'Claude Opus 4.8',
+    provider: 'anthropic',
+    category: 'thinking',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'frontier',
+    description: 'Deep reasoning with extended thinking. Predecessor to Opus 5.',
+    strengths: ['deep reasoning', 'planning', 'debugging', 'architecture'],
+    speedProfile: 'slow',
+    claudeComparison: 'Between Opus 4.6 and Opus 5'
+  },
+  {
+    id: 'claude-opus-4-7',
+    name: 'Claude Opus 4.7',
+    provider: 'anthropic',
+    category: 'thinking',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'frontier',
+    description: 'Deep reasoning model. Between Opus 4.6 and 4.8.',
+    strengths: ['deep reasoning', 'planning', 'architecture'],
+    speedProfile: 'slow',
+    claudeComparison: 'Between Opus 4.6 and Opus 4.8'
   },
   {
     id: 'claude-sonnet-4-6',
@@ -93,6 +145,34 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
     strengths: ['deep reasoning', 'planning', 'debugging', 'architecture'],
     speedProfile: 'slow',
     claudeComparison: 'Most capable Claude model'
+  },
+  {
+    id: 'claude-opus-4-5',
+    name: 'Claude Opus 4.5',
+    provider: 'anthropic',
+    category: 'thinking',
+    contextWindow: 200000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'frontier',
+    description: 'Earlier Opus generation. Deep reasoning with 200K context.',
+    strengths: ['deep reasoning', 'planning'],
+    speedProfile: 'slow',
+    claudeComparison: 'Previous-gen frontier model'
+  },
+  {
+    id: 'claude-sonnet-4-5-20241022',
+    name: 'Claude Sonnet 4.5',
+    provider: 'anthropic',
+    category: 'mixed',
+    contextWindow: 200000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'expert',
+    description: 'Earlier Sonnet generation. Balanced coding and reasoning with 200K context.',
+    strengths: ['code generation', 'reasoning'],
+    speedProfile: 'balanced',
+    claudeComparison: 'Previous-gen balanced model'
   },
   {
     id: 'claude-haiku-4-5-20251001',
@@ -213,12 +293,12 @@ export const CODEX_MODELS: ModelCatalogEntry[] = [
   },
 ]
 
-export const EFFORT_LEVELS = ['high', 'medium', 'low', 'xhigh', 'max'] as const
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 
 export const EFFORT_LABELS: Record<string, string> = {
-  high: 'High — deep reasoning, slower',
-  medium: 'Medium — balanced',
   low: 'Low — fast, lighter reasoning',
+  medium: 'Medium — balanced',
+  high: 'High — deep reasoning, slower',
   xhigh: 'Extra High — extended deep reasoning',
   max: 'Max — maximum reasoning depth'
 }
