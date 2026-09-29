@@ -45,7 +45,11 @@ function telegramPost(method, params) {
     // A suspended laptop or broken network must not leave Telegram callback
     // buttons spinning forever. Keep all Bot API calls bounded so callers can
     // report the failure or continue their local command handling.
-    req.setTimeout(10_000, () => {
+    // getUpdates is a long-poll (params.timeout in seconds) — it needs a longer
+    // bound than the quick send/answer/edit calls, otherwise the sidecar tears
+    // it down every 10s and stops reliably receiving messages and approvals.
+    const boundMs = method === 'getUpdates' ? ((params.timeout ?? 0) + 10) * 1000 : 10_000
+    req.setTimeout(boundMs, () => {
       req.destroy(new Error(`Telegram API timeout during ${method}`))
     })
     req.on('error', reject)
