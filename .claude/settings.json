@@ -93,7 +93,7 @@
   "skills": {
     "universal": {
       "description": "Refresh and display the Optimaeus universal standards for this entity (hephaestus).",
-      "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md and summarize the standards that apply to the hephaestus entity right now: DB naming, LLM provider setup, port, shared packages, learning and skill table names, and inter-entity communication. Confirm which provider is currently reachable."
+      "prompt": "Read /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/UNIVERSAL-STANDARDS.md and summarize the standards that apply to the hephaestus entity right now: DB naming, LLM provider setup, port, shared packages, learning and skill table names, and inter-entity communication. Confirm which provider is currently reachable."
     },
     "pkg-docs-check": {
       "description": "Check official docs URL and current version for a package/library/framework before writing code. Use before any new import or install.",

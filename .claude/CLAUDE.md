@@ -4,7 +4,7 @@
 # Do not edit this block manually — re-run bootstrap-universal.sh to update.
 @/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/UNIVERSAL-STANDARDS.md
 # Entity definition for hephaestus:
-@/Users/octaviesmacpro/workspace/optimaeus/optimaeus-architecture/.claude/entities/hephaestus.md
+@/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus-llm/entities/hephaestus.md
 # [/OPTIMAEUS-UNIVERSAL-IMPORT]
 
 @.claude/how-to-index.md
