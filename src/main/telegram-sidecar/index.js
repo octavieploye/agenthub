@@ -42,6 +42,12 @@ function telegramPost(method, params) {
       res.on('data', (c) => { data += c })
       res.on('end', () => { try { resolve(JSON.parse(data)) } catch { reject(new Error('Bad JSON')) } })
     })
+    // A suspended laptop or broken network must not leave Telegram callback
+    // buttons spinning forever. Keep all Bot API calls bounded so callers can
+    // report the failure or continue their local command handling.
+    req.setTimeout(10_000, () => {
+      req.destroy(new Error(`Telegram API timeout during ${method}`))
+    })
     req.on('error', reject)
     req.write(body)
     req.end()
@@ -392,7 +398,13 @@ async function handleCallback(cb) {
   const msgId = cb.message?.message_id
   const data = cb.data || ''
 
-  await answerCallback(cb.id, '')
+  // A callback acknowledgement is best-effort. Do not block command routing
+  // forever if the Bot API is unreachable after suspend/resume.
+  try {
+    await answerCallback(cb.id, '')
+  } catch (err) {
+    sendToParent({ type: 'error', message: `answerCallbackQuery failed: ${String(err)}` })
+  }
 
   if (data.startsWith('approve:')) {
     const rawId = data.slice('approve:'.length)

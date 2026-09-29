@@ -2474,4 +2474,209 @@ describe('OrchestratorScheduler', () => {
       expect(getRun(db, run.id)!.status).toBe('completed')
     })
   })
+
+  // -------------------------------------------------------------------------
+  // heartbeat
+  // -------------------------------------------------------------------------
+
+  describe('heartbeat', () => {
+    it('emits heartbeat for active run with telegramNotify=true at the configured cadence', async () => {
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 3_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'hb-sprint', repoId: 'repo-1', telegramNotify: true })
+
+      // Advance to the cadence boundary; the first tick at T+0 records the base time,
+      // then the tick at T+3000 sees elapsed >= cadence and fires the heartbeat.
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      expect(calls).toHaveLength(1)
+      expect(calls[0][0]).toContain('hb-sprint')
+    })
+
+    it('does not emit heartbeat when telegramNotify=false', async () => {
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 1_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'silent-sprint', repoId: 'repo-1', telegramNotify: false })
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      expect(calls).toHaveLength(0)
+    })
+
+    it('does not emit heartbeat for a paused run', async () => {
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 1_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      const run = scheduler.start({ sprintName: 'paused-hb', repoId: 'repo-1', telegramNotify: true })
+      // Advance once to record base time, then pause
+      await vi.advanceTimersByTimeAsync(0)
+      scheduler.pause(run.id)
+      sendTelegramNotification.mockClear()
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      expect(calls).toHaveLength(0)
+    })
+
+    it('does not emit heartbeat for a queued run', async () => {
+      // Queued runs are not in the active-runs list, so the heartbeat pass skips them.
+      // maxConcurrentRuns=1 is the default; a second start() returns the existing active run.
+      // To get a truly queued run, we need maxConcurrentRuns=2 and fill both slots, then queue a third.
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 1_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'active-a', repoId: 'repo-1', telegramNotify: true })
+      scheduler.start({ sprintName: 'active-b', repoId: 'repo-2', telegramNotify: true })
+      const queued = scheduler.start({ sprintName: 'queued-hb', repoId: 'repo-3', telegramNotify: true })
+      expect(queued.status).toBe('queued')
+      sendTelegramNotification.mockClear()
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      const queuedCalls = calls.filter(([s]) => (s as string).includes('queued-hb'))
+      expect(queuedCalls).toHaveLength(0)
+    })
+
+    it('deduplication: emits only once within the cadence window', async () => {
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 5_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'dedup-hb', repoId: 'repo-1', telegramNotify: true })
+
+      // First cadence: T+0 base, T+5000 fires first heartbeat
+      await vi.advanceTimersByTimeAsync(5_000)
+      const after5s = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat').length
+      expect(after5s).toBe(1)
+
+      // 2s later (7s total): elapsed since last = 2s < 5s cadence → no second heartbeat
+      await vi.advanceTimersByTimeAsync(2_000)
+      const after7s = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat').length
+      expect(after7s).toBe(1)
+
+      // 4s more (11s total): elapsed since last = 6s >= 5s cadence → second heartbeat
+      await vi.advanceTimersByTimeAsync(4_000)
+      const after11s = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat').length
+      expect(after11s).toBe(2)
+    })
+
+    it('emits heartbeat independently for each active run', async () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '3')").run()
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 2_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'multi-a', repoId: 'repo-1', telegramNotify: true })
+      scheduler.start({ sprintName: 'multi-b', repoId: 'repo-2', telegramNotify: true })
+
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      const abeats = calls.filter(([s]) => (s as string).includes('multi-a'))
+      const bbeats = calls.filter(([s]) => (s as string).includes('multi-b'))
+      expect(abeats.length).toBeGreaterThanOrEqual(1)
+      expect(bbeats.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('delivery failure does not affect run state or pause the run', async () => {
+      const sendTelegramNotification = vi.fn(() => { throw new Error('network timeout') })
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 1_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      const run = scheduler.start({ sprintName: 'resilient-hb', repoId: 'repo-1', telegramNotify: true })
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(getRun(db, run.id)!.status).toBe('running')
+    })
+
+    it('heartbeat summary contains sprint name, task counts, and fits within 200 chars', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Widget build' })
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 1_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'content-sprint', repoId: 'repo-1', taskIds: [taskId], telegramNotify: true })
+
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      const [summary, , repoId] = calls[0] as [string, string, string]
+      expect(summary).toContain('content-sprint')
+      expect(summary.length).toBeLessThanOrEqual(200)
+      expect(repoId).toBe('repo-1')
+    })
+
+    it('stops emitting heartbeat after run completes', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Complete task' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-hb-complete') },
+        sendTelegramNotification,
+        tickIntervalMs: 1_000,
+        heartbeatIntervalMs: 2_000,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'done-sprint', repoId: 'repo-1', taskIds: [taskId], telegramNotify: true })
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Complete the task and run
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-hb-complete', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      // Run is now completed; clear all call history
+      expect(getRun(db, scheduler.getStatus().activeRuns[0]?.id ?? 'x')?.status ?? 'completed').toBe('completed')
+      sendTelegramNotification.mockClear()
+
+      // Advance well past cadence — no more heartbeats
+      await vi.advanceTimersByTimeAsync(5_000)
+      const calls = sendTelegramNotification.mock.calls.filter(([, t]) => t === 'run_heartbeat')
+      expect(calls).toHaveLength(0)
+    })
+  })
 })

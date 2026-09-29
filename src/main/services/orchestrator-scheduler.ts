@@ -34,7 +34,7 @@ import {
 } from '../db/queries/orchestrator.queries'
 import { getTasksByRepo, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { getDependencyMap } from '../db/queries/task-dependencies.queries'
-import { isOrchestratorEnabled, getApprovalWindowMinutes, getMaxConcurrentRuns } from './orchestrator-settings'
+import { isOrchestratorEnabled, getApprovalWindowMinutes, getMaxConcurrentRuns, getHeartbeatIntervalMs } from './orchestrator-settings'
 import type { OrchestratorLifecycleNotificationType } from '../db/queries/telegram-notifications.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
@@ -86,6 +86,8 @@ export interface SchedulerDeps {
   emitToRenderer: (channel: string, ...args: unknown[]) => void
   maxAgents: number
   tickIntervalMs?: number
+  /** Heartbeat cadence override for tests. Production reads from DB via getHeartbeatIntervalMs. */
+  heartbeatIntervalMs?: number
   getAgentStatus?: (agentId: string) => AgentLifecycleStatus | null
   notifyApproval?: (taskId: string, runId: string, title: string, repoId: string, sprintName?: string, description?: string) => void
   sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType, repoId?: string, agentId?: string) => void
@@ -116,6 +118,10 @@ export class OrchestratorScheduler {
   private tickRequested = false
   private pausedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
+  // Recorded at construction so the first-cadence window starts from T=0, not from first tick.
+  private readonly schedulerStartTime = Date.now()
+  // Per-run last-heartbeat base time (ms). Undefined = not yet initialized for this run.
+  private lastHeartbeatAt = new Map<string, number>()
 
   // Bound handlers stored so we can remove them in stop()
   private readonly onCompleted: (e: OrchestratorAgentEvent) => void
@@ -347,6 +353,7 @@ export class OrchestratorScheduler {
 
   cancel(runId: string): void {
     this.pausedRunIds.delete(runId)
+    this.lastHeartbeatAt.delete(runId)
     updateRunStatus(this.db, runId, 'cancelled')
     deleteApprovalsForRun(this.db, runId)
 
@@ -784,6 +791,16 @@ export class OrchestratorScheduler {
     if (!dispatched) {
       log.debug('OrchestratorScheduler: no task dispatched this tick', { tick: currentTick })
     }
+
+    // Heartbeat pass — independent of dispatch; processes all active running runs.
+    // Fires a compact Telegram ping at the configured cadence for runs with telegramNotify=true.
+    // Delivery failure is swallowed inside notifyLifecycle — it never fails or pauses the run.
+    for (const runSnapshot of activeRuns) {
+      const run = getRun(this.db, runSnapshot.id)
+      if (!run || run.status !== 'running') continue
+      if (this.pausedRunIds.has(run.id)) continue
+      this.maybeEmitHeartbeat(run)
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -998,11 +1015,22 @@ export class OrchestratorScheduler {
       return true
     })
 
+    // Never auto-complete a run that has had zero activity: no logs dispatched AND no approvals
+    // ever inserted. This keeps task-less runs alive (they can be cancelled later) while still
+    // allowing runs that went through an approval lifecycle to conclude normally.
+    if (candidateTasks.length === 0 && allLogs.length === 0) {
+      const hasAnyApproval = this.db
+        .prepare('SELECT 1 FROM orchestrator_approvals WHERE run_id = ? LIMIT 1')
+        .get(run.id)
+      if (!hasAnyApproval) return
+    }
+
     if (remainingTasks.length === 0) {
       const hasFailed = allLogs.some(l => l.status === 'failed')
       const finalStatus: OrchestratorRunStatus = hasFailed ? 'failed' : 'completed'
       updateRunStatus(this.db, run.id, finalStatus)
       deleteApprovalsForRun(this.db, run.id)
+      this.lastHeartbeatAt.delete(run.id)
       this.emitStatusChange(run.id, finalStatus, run.sprintName)
       this.notifyLifecycle(
         run,
@@ -1046,6 +1074,56 @@ export class OrchestratorScheduler {
   private getSprintName(runId: string): string {
     const run = getRun(this.db, runId)
     return run?.sprintName ?? runId
+  }
+
+  /**
+   * Emit a compact heartbeat ping for a running telegramNotify=true run,
+   * but only if the configured cadence has elapsed since the last ping.
+   *
+   * On the first call per run the base time is recorded and no ping is sent —
+   * the first real ping fires one full cadence interval later.
+   * Delivery failure is caught in notifyLifecycle and never fails or pauses the run.
+   */
+  private maybeEmitHeartbeat(run: OrchestratorRun): void {
+    if (!run.telegramNotify) return
+    const cadenceMs = this.deps.heartbeatIntervalMs ?? getHeartbeatIntervalMs(this.db)
+    const now = Date.now()
+    // On first encounter, seed from schedulerStartTime (T=0) so the first heartbeat
+    // fires at T+cadence, not T+tickInterval+cadence.
+    if (!this.lastHeartbeatAt.has(run.id)) {
+      this.lastHeartbeatAt.set(run.id, this.schedulerStartTime)
+    }
+    const last = this.lastHeartbeatAt.get(run.id)!
+    if (now - last < cadenceMs) return
+    this.lastHeartbeatAt.set(run.id, now)
+    const allLogs = getTaskLogsByRun(this.db, run.id)
+    const activeCount = allLogs.filter(l => l.status === 'active').length
+    const completedCount = allLogs.filter(l => l.status === 'done').length
+    const totalCount = allLogs.length
+    const summary = this.buildHeartbeatSummary(run, activeCount, completedCount, totalCount)
+    this.notifyLifecycle(run, 'run_heartbeat', summary)
+  }
+
+  /**
+   * Build a compact heartbeat summary for a run.
+   * The result is capped at 185 chars — routeTelegramNotification adds the label prefix
+   * and truncates the combined string to 200 chars.
+   */
+  private buildHeartbeatSummary(
+    run: OrchestratorRun,
+    activeCount: number,
+    completedCount: number,
+    totalCount: number,
+  ): string {
+    const ageMs = Date.now() - new Date(run.updatedAt).getTime()
+    const ageMin = Math.floor(ageMs / 60_000)
+    const age = ageMin < 1 ? '<1m' : ageMin < 60 ? `${ageMin}m` : `${Math.floor(ageMin / 60)}h`
+    return [
+      run.sprintName.slice(0, 50),
+      `${completedCount}/${totalCount} done`,
+      `${activeCount} active`,
+      `${age} idle`,
+    ].join(' · ').slice(0, 185)
   }
 
   /**

@@ -8,6 +8,7 @@ export type OrchestratorLifecycleNotificationType =
   | 'task_failed'
   | 'run_completed'
   | 'run_failed'
+  | 'run_heartbeat'
 
 export type TelegramNotificationType =
   | Extract<TelegramNotificationPayload['type'], 'completed' | 'failed'>
@@ -22,6 +23,7 @@ const ORCHESTRATOR_NOTIFICATION_ROUTES: Record<
   task_failed: { type: 'failed', label: '❌ Task failed' },
   run_completed: { type: 'completed', label: '🏁 Run completed' },
   run_failed: { type: 'failed', label: '🚨 Run failed' },
+  run_heartbeat: { type: 'completed', label: '💓 Heartbeat' },
 }
 
 /**
@@ -141,6 +143,38 @@ export function isDuplicate(
      LIMIT 1`
   ).get(agentId, type)
   return row !== undefined
+}
+
+export interface LifecyclePayloadOptions {
+  summary: string
+  type: TelegramNotificationType
+  msgKey: string
+  agentName: string
+  repoName: string
+  repoPath: string | undefined
+  commitAgentId: string | undefined
+  isComplexTask: boolean
+  colorIndex: number | undefined
+}
+
+export function buildOrchestratorLifecyclePayload(
+  opts: LifecyclePayloadOptions
+): Omit<TelegramNotificationPayload, 'timestamp'> {
+  const routed = routeTelegramNotification(opts.summary, opts.type)
+  const isCommitable =
+    Boolean(opts.repoPath) &&
+    (opts.type === 'run_completed' || (opts.type === 'task_completed' && opts.isComplexTask))
+  return {
+    type: routed.type,
+    agentId: opts.msgKey,
+    agentName: opts.agentName,
+    repo: opts.repoName,
+    summary: routed.summary,
+    repoPath: opts.repoPath,
+    commitable: isCommitable,
+    commitAgentId: isCommitable ? opts.commitAgentId : undefined,
+    colorIndex: opts.colorIndex,
+  }
 }
 
 export function getExpiredNotifications(db: Database.Database): TelegramNotificationRow[] {

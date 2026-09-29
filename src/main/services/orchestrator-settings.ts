@@ -6,6 +6,9 @@ export const APPROVAL_WINDOW_MINUTES_KEY = 'orchestrator.approvalWindowMinutes'
 
 export const MAX_CONCURRENT_RUNS_KEY = 'orchestrator.maxConcurrentRuns'
 
+/** DB key for the heartbeat cadence in milliseconds. Default: 300 000 (5 min). */
+export const HEARTBEAT_INTERVAL_MS_KEY = 'orchestrator.heartbeatIntervalMs'
+
 /**
  * Returns true only when the persisted `orchestrator.enabled` setting is
  * explicitly set to the string 'true'. Defaults to false (orchestrator
@@ -48,5 +51,24 @@ export function getMaxConcurrentRuns(db: Database.Database): number {
   if (!row?.value) return 1
   const parsed = Number.parseInt(row.value, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) return 1
+  return parsed
+}
+
+/**
+ * Returns the heartbeat cadence in milliseconds. Reads the persisted
+ * `orchestrator.heartbeatIntervalMs` setting; parses it to a positive integer.
+ * Falls back to 300 000 (5 minutes) when the key is absent or invalid.
+ * Never throws.
+ *
+ * Configure via: INSERT OR REPLACE INTO settings VALUES ('orchestrator.heartbeatIntervalMs', '120000');
+ * A ping delivery failure never fails or pauses the run.
+ */
+export function getHeartbeatIntervalMs(db: Database.Database): number {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(HEARTBEAT_INTERVAL_MS_KEY) as
+    | { value: string }
+    | undefined
+  if (!row?.value) return 300_000
+  const parsed = Number.parseInt(row.value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 300_000
   return parsed
 }

@@ -13,6 +13,7 @@ import {
   getStats,
   isDuplicate,
   routeTelegramNotification,
+  buildOrchestratorLifecyclePayload,
 } from './telegram-notifications.queries'
 import type { TelegramNotificationPayload } from '../../../shared/types/telegram.types'
 
@@ -156,6 +157,7 @@ describe('telegram-notifications queries', () => {
     ['task_failed', 'failed', '❌ Task failed'],
     ['run_completed', 'completed', '🏁 Run completed'],
     ['run_failed', 'failed', '🚨 Run failed'],
+    ['run_heartbeat', 'completed', '💓 Heartbeat'],
   ] as const)('routes %s to a phone-friendly %s payload', (eventType, payloadType, label) => {
     const routed = routeTelegramNotification('Lifecycle details', eventType)
 
@@ -167,5 +169,119 @@ describe('telegram-notifications queries', () => {
     const routed = routeTelegramNotification('x'.repeat(300), 'task_launched')
 
     expect(routed.summary).toHaveLength(200)
+  })
+
+  it('keeps run_heartbeat summaries within the payload limit', () => {
+    const routed = routeTelegramNotification('x'.repeat(300), 'run_heartbeat')
+
+    expect(routed.summary).toHaveLength(200)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildOrchestratorLifecyclePayload — commit-boundary commitable logic (R9)
+// ---------------------------------------------------------------------------
+
+describe('buildOrchestratorLifecyclePayload', () => {
+  const baseOpts = {
+    msgKey: 'orchestrator:task_completed:my-task',
+    agentName: 'Orchestrator',
+    repoName: 'my-repo',
+    repoPath: '/home/user/my-repo' as string | undefined,
+    commitAgentId: 'agent-abc' as string | undefined,
+    colorIndex: undefined as number | undefined,
+  }
+
+  it('complex task_completed with repoPath → commitable=true and commitAgentId set', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'My Task\nSprint: my-sprint',
+      type: 'task_completed',
+      isComplexTask: true,
+    })
+    expect(payload.commitable).toBe(true)
+    expect(payload.commitAgentId).toBe('agent-abc')
+    expect(payload.repoPath).toBe('/home/user/my-repo')
+    expect(payload.type).toBe('completed')
+  })
+
+  it('non-complex task_completed → commitable=false, commitAgentId=undefined', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'Simple Task\nSprint: my-sprint',
+      type: 'task_completed',
+      isComplexTask: false,
+    })
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
+  })
+
+  it('run_completed with repoPath → commitable=true regardless of isComplexTask', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'my-sprint\n2 completed · 0 failed',
+      type: 'run_completed',
+      isComplexTask: false,
+    })
+    expect(payload.commitable).toBe(true)
+    expect(payload.commitAgentId).toBe('agent-abc')
+  })
+
+  it('complex task_completed without repoPath → commitable=false', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'My Task\nSprint: my-sprint',
+      type: 'task_completed',
+      repoPath: undefined,
+      isComplexTask: true,
+    })
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
+  })
+
+  it('task_launched → commitable=false even for complex tasks', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'My Task\nSprint: my-sprint',
+      type: 'task_launched',
+      isComplexTask: true,
+    })
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
+  })
+
+  it('run_failed → commitable=false', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'my-sprint\n0 completed · 1 failed',
+      type: 'run_failed',
+      isComplexTask: false,
+    })
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
+  })
+
+  it('applies routeTelegramNotification label to summary', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'My Task',
+      type: 'task_completed',
+      isComplexTask: true,
+    })
+    expect(payload.summary).toContain('✅ Task completed')
+    expect(payload.summary).toContain('My Task')
+  })
+
+  it('msgKey is used as agentId (dedup key, not the real agent)', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      msgKey: 'orchestrator:task_completed:special-key',
+      summary: 'My Task',
+      type: 'task_completed',
+      isComplexTask: true,
+    })
+    expect(payload.agentId).toBe('orchestrator:task_completed:special-key')
+    // commitAgentId is the real agent, distinct from agentId
+    expect(payload.commitAgentId).toBe('agent-abc')
   })
 })
