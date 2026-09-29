@@ -2,11 +2,76 @@ import type { ModelCatalogEntry } from '../types/model.types'
 
 export const CLAUDE_MODELS: ModelCatalogEntry[] = [
   {
+    id: 'claude-opus-5-5',
+    name: 'Claude Opus 5.5',
+    provider: 'anthropic',
+    category: 'thinking',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'frontier',
+    description: 'Maximum reasoning with always-on extended thinking. Best for complex architecture and deep debugging.',
+    strengths: ['deep reasoning', 'planning', 'debugging', 'architecture'],
+    speedProfile: 'slow',
+    claudeComparison: 'Most capable Claude model with extended thinking',
+    pricing: { inputPerMTok: 4, outputPerMTok: 20 },
+    thinkingDefault: 'medium',
+    thinkingAlwaysOn: true
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    name: 'Claude Sonnet 5.5',
+    provider: 'anthropic',
+    category: 'mixed',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'expert',
+    description: 'Balanced speed & capability with extended thinking support and 1M context.',
+    strengths: ['code generation', 'refactoring', 'reasoning', 'long context'],
+    speedProfile: 'balanced',
+    claudeComparison: 'Best balance of speed and capability with 1M context',
+    pricing: { inputPerMTok: 2, outputPerMTok: 10 },
+    thinkingDefault: 'high'
+  },
+  {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    provider: 'anthropic',
+    category: 'thinking',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'frontier',
+    description: 'Frontier reasoning model. Fallback alias for claude-opus-5-5.',
+    strengths: ['deep reasoning', 'planning', 'architecture'],
+    speedProfile: 'slow',
+    claudeComparison: 'Most capable Claude model'
+  },
+  {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    provider: 'anthropic',
+    category: 'mixed',
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    available: true,
+    supportsEffort: true,
+    capabilityTier: 'expert',
+    description: 'Balanced speed & capability. Fallback alias for claude-sonnet-5-5.',
+    strengths: ['code generation', 'refactoring', 'reasoning'],
+    speedProfile: 'balanced',
+    claudeComparison: 'Best balance of speed and capability'
+  },
+  {
     id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
     provider: 'anthropic',
     category: 'mixed',
-    contextWindow: 200000,
+    contextWindow: 1000000,
     available: true,
     supportsEffort: true,
     capabilityTier: 'expert',
@@ -20,7 +85,7 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
     name: 'Claude Opus 4.6',
     provider: 'anthropic',
     category: 'thinking',
-    contextWindow: 200000,
+    contextWindow: 1000000,
     available: true,
     supportsEffort: true,
     capabilityTier: 'frontier',
@@ -148,12 +213,14 @@ export const CODEX_MODELS: ModelCatalogEntry[] = [
   },
 ]
 
-export const EFFORT_LEVELS = ['high', 'medium', 'low'] as const
+export const EFFORT_LEVELS = ['high', 'medium', 'low', 'xhigh', 'max'] as const
 
 export const EFFORT_LABELS: Record<string, string> = {
   high: 'High — deep reasoning, slower',
   medium: 'Medium — balanced',
-  low: 'Low — fast, lighter reasoning'
+  low: 'Low — fast, lighter reasoning',
+  xhigh: 'Extra High — extended deep reasoning',
+  max: 'Max — maximum reasoning depth'
 }
 
 export const TIER_LABELS: Record<string, string> = {

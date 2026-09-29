@@ -18,7 +18,7 @@ export type StatusConfidence = 'confirmed' | 'inferred' | 'unknown'
 
 export type ModelProvider = 'anthropic' | 'ollama-local' | 'ollama-cloud' | 'openai-codex'
 
-export type EffortLevel = 'high' | 'medium' | 'low'
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 import type { VoiceMode } from './voice.types'
 export type { VoiceMode }

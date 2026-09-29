@@ -109,10 +109,10 @@ function recommendModel(args) {
   const contextSize = (args && typeof args.contextSize === 'number') ? args.contextSize : 0
 
   if (complexity === 'low' && contextSize < 50000) {
-    return { model: 'claude-haiku-4-5', reason: 'low complexity, small context' }
+    return { model: 'claude-haiku-4-5-20251001', reason: 'low complexity, small context' }
   }
   if (complexity === 'high' || contextSize > 100000) {
-    return { model: 'claude-sonnet-4-6', reason: 'high complexity or large context' }
+    return { model: 'claude-opus-5-5', reason: 'high complexity or large context' }
   }
   return { model: 'claude-sonnet-4-6', reason: 'medium complexity' }
 }
