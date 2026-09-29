@@ -1,3 +1,5 @@
+import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL } from '@shared/constants/model-catalog'
+
 export interface SprintPromptInput {
   docPath: string
   projectName: string
@@ -50,7 +52,7 @@ Write ONLY valid JSON matching this exact structure. No markdown fences, no extr
           "priority": 1,
           "category": "<backend|frontend|design|refactor|infra|security — pick one>",
           "skills": ["<skill-name>"],
-          "modelOverride": "<claude-sonnet-5-5|claude-opus-5-5 — omit if default>",
+          "modelOverride": "<${DEFAULT_SONNET_MODEL}|${DEFAULT_OPUS_MODEL} — omit if default>",
           "dependsOn": []
         },
         {
@@ -129,7 +131,7 @@ Examples that do NOT require security:
 
 When in doubt, include \`sec-devops\`. The cost of a false positive is zero. The cost of a false negative is a vulnerability in production.
 
-**modelOverride** — omit for standard tasks. Default is \`claude-sonnet-5-5\`. Set to \`claude-opus-5-5\` for tasks the document explicitly marks as high-complexity, architectural decisions, or security-critical. Valid values: \`claude-sonnet-5-5\`, \`claude-opus-5-5\`.
+**modelOverride** — omit for standard tasks. Default is \`${DEFAULT_SONNET_MODEL}\`. Set to \`${DEFAULT_OPUS_MODEL}\` for tasks the document explicitly marks as high-complexity, architectural decisions, or security-critical. Valid values: \`${DEFAULT_SONNET_MODEL}\`, \`${DEFAULT_OPUS_MODEL}\`.
 
 ## localId rules
 

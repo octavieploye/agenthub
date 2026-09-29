@@ -7,7 +7,7 @@ import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ANTHROPIC_MODEL_OPTIONS, CLOUD_MODEL_OPTIONS, CODEX_MODEL_OPTIONS } from '@shared/constants/cloud-models'
 import type { ValidProvider } from '@shared/constants/cloud-models'
-import { EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
+import { EFFORT_LEVELS, EFFORT_LABELS, DEFAULT_SONNET_MODEL } from '@shared/constants/model-catalog'
 import { KanbanDispatchAdvanced } from './KanbanDispatchAdvanced'
 
 const PRIORITY_TEXT: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
@@ -84,7 +84,7 @@ export function KanbanDispatchModal({ task, agentId, onClose, repos }: KanbanDis
   const [prompt, setPrompt] = useState(() => buildPrompt(task, project?.name))
   const [isDispatching, setIsDispatching] = useState(false)
 
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_SONNET_MODEL)
   const [selectedProvider, setSelectedProvider] = useState<ValidProvider>('anthropic')
   const [codexAvailable, setCodexAvailable] = useState(false)
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')

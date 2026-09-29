@@ -7,7 +7,7 @@ import { useUsageStore } from '@renderer/stores/usage-store'
 import { PLAN_LIMITS } from '@shared/constants/plan-limits'
 import { AGENT_COLOR_PALETTE } from '@shared/constants/defaults'
 import { useAgentStore } from '@renderer/stores/agent-store'
-import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS, EFFORT_LEVELS, EFFORT_LABELS } from '@shared/constants/model-catalog'
+import { CLAUDE_MODELS, OLLAMA_CLOUD_MODELS, CODEX_MODELS, EFFORT_LEVELS, EFFORT_LABELS, DEFAULT_SONNET_MODEL } from '@shared/constants/model-catalog'
 import PreLaunchCard from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import type { ProviderStatus } from '@renderer/widgets/pre-launch-card/PreLaunchCard'
 import ModelPool from '@renderer/widgets/model-pool/ModelPool'
@@ -65,7 +65,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
   const [newRepoPath, setNewRepoPath] = useState('')
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [step, setStep] = useState<Step>('configure')
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6')
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_SONNET_MODEL)
   const [selectedColor, setSelectedColor] = useState<string>(AGENT_COLOR_PALETTE[0])
   const [effortLevel, setEffortLevel] = useState<EffortLevel>('medium')
   const [skipPermissions, setSkipPermissions] = useState(false)
@@ -139,7 +139,7 @@ function SpawnDialog({ open, onClose, onSpawn, prefilledRepoId, prefilledTask }:
       setSelectedRepoId(prefilledRepoId ?? '')
       setShowAddRepo(false)
       setStep(prefilledTask && prefilledRepoId ? 'pre-launch' : 'configure')
-      setSelectedModel('claude-sonnet-4-6')
+      setSelectedModel(DEFAULT_SONNET_MODEL)
       setEffortLevel('medium')
       setSkipPermissions(false)
       setTelegramNotify(false)
