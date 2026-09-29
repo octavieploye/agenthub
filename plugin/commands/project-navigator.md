@@ -20,7 +20,7 @@ Produce a current-state snapshot of all Optimaeus projects.
 
 **Sources to read:**
 - `brain/knowledge/projects-current.md` — primary source
-- `optimaeus-architecture/TODOS/` — universal and entity-specific todos
+- AgentHub kanban (`agenthub-kanban` MCP `list_tasks`) — open tasks across repos
 - Recent git history in active repos (read only — do not modify)
 
 **Produce:**

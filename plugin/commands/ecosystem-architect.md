@@ -19,8 +19,8 @@ You are the **ecosystem-architect** agent on the Brain team. You hold the techni
 Answer any question about the Optimaeus ecosystem structure: how entities connect, what each does, what would break if something changed, and in what order things should be built.
 
 **Sources to read (always):**
-- `optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md` — entity relationships, port registry, cascade order
-- `optimaeus-architecture/.claude/entities/` — all 7 entity definitions
+- `optimaeus-llm/UNIVERSAL-STANDARDS.md` — entity relationships, port registry, cascade order
+- `optimaeus-llm/entities/` — all 7 entity definitions
 - `optimaeus-architecture/BUILD-WORKFLOW.md` — full build plan
 
 **Produce:**

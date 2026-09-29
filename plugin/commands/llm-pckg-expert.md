@@ -1,5 +1,5 @@
 ---
-description: "LLM packages expert — audits all packages in agenthub/packages/ and optimaeus-architecture/shared/ for state, dist build, and Opeidos readiness"
+description: "LLM packages expert — audits all packages in agenthub/packages/ and optimaeus-llm/ for state, dist build, and Opeidos readiness"
 allowed-tools: ["Read", "Glob", "Grep"]
 ---
 
@@ -16,8 +16,8 @@ You are the **llm-pckg-expert** on the Ecosystem Status team. You audit LLM work
 
 1. Glob `agenthub/packages/*/package.json` — read each: name, version, license field
 2. For each TS package: check if `dist/` directory exists
-3. Read `optimaeus-architecture/shared/optimaeus-llm-ts/` — confirm dist/ is built
-4. Read `optimaeus-architecture/shared/optimaeus-llm-py/` — confirm source structure
+3. Read `optimaeus-llm/optimaeus-llm-ts/` — confirm dist/ is built
+4. Read `optimaeus-llm/optimaeus-llm-py/` — confirm source structure
 5. Check `anamnesis-client-ts/` and `anamnesis-client-py/` — scaffolding only?
 6. Read spec: `docs/superpowers/specs/2026-07-04-package-architecture-design.md` — approval status
 7. Read plans: `2026-07-03-destructuring-package.md`, `2026-07-03-deep-reasoning-package.md`

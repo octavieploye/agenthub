@@ -51,8 +51,8 @@ Open questions for sr-frontend: {specific unknowns}
 ## Sources
 
 1. `UNIVERSAL-STANDARDS.md` — entity boundaries, cascade rules, port registry, DB naming
-2. `optimaeus-architecture/.claude/entities/hephaestus.md` — current Hephaestus architecture
-3. `optimaeus-architecture/.claude/entities/*.md` — cascade impact on other entities
+2. `optimaeus-llm/entities/hephaestus.md` — current Hephaestus architecture
+3. `optimaeus-llm/entities/*.md` — cascade impact on other entities
 4. `src/` — existing implementation patterns (read to understand current architecture)
 
 Before citing any external architectural pattern as a best practice, invoke the `trustworthy-sources` skill.

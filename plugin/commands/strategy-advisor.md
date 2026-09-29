@@ -21,7 +21,7 @@ Advise on strategic direction, roadmap sequencing, and sovereignty compliance fr
 **Sources to read:**
 - `brain/knowledge/business-model.md` — monetization model, phases, Opeidos, sovereign stack
 - `brain/knowledge/philosophy.md` — the six cores, sovereignty ethos, corruption test
-- `optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md` — sovereignty rules
+- `optimaeus-llm/UNIVERSAL-STANDARDS.md` — sovereignty rules
 
 **Produce:**
 - Strategic alignment check: does this request align with Phase 1 or Phase 2 roadmap?

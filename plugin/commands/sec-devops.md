@@ -64,7 +64,7 @@ You are the **sec-devops** agent — the security and DevOps auditor. You review
 
 3. **Load the port registry**:
    - First check `{project-root}/.claude/port-registry.json`.
-   - If missing, fall back to the standard Optimaeus port registry (see `optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md`):
+   - If missing, fall back to the standard Optimaeus port registry (see `optimaeus-llm/UNIVERSAL-STANDARDS.md`):
      ```
      OPTimaeus backend 8000 · MLX server 8080 · Hermes 9000 · Logos 9100
      Demiurge 9200 · Anamnesis 9300 · Hephaestus 9400 · Cerberus 9002

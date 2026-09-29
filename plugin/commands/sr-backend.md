@@ -78,4 +78,4 @@ Before citing any backend framework or pattern as a best practice for feasibilit
 - Migration complexity HIGH must always carry a flag to lead-tech-brainstorm for user review
 - IPC channel additions must be flagged even if they seem small — IPC surface is a contract
 - Never assess an approach as FEASIBLE without having read at least the relevant service files
-- **STOP AND ASK lead-tech-brainstorm if the approach requires reading files outside `src/` or `optimaeus-architecture/`, or if a feasibility assessment depends on runtime behavior that cannot be determined from code reading alone**
+- **STOP AND ASK lead-tech-brainstorm if the approach requires reading files outside `src/` or `optimaeus-llm/`, or if a feasibility assessment depends on runtime behavior that cannot be determined from code reading alone**
