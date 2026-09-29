@@ -104,17 +104,20 @@ function estimateTokens(args) {
   return { estimated, note: 'character-based estimate' }
 }
 
-function recommendModel(args) {
+// Model IDs come from the main-process catalog — never hardcoded here.
+// A bridge failure propagates as a tool error rather than a stale model id.
+async function recommendModel(args) {
   const complexity = (args && args.complexity) ? args.complexity : 'medium'
   const contextSize = (args && typeof args.contextSize === 'number') ? args.contextSize : 0
+  const defaults = await callBridge('getDefaultModels', {})
 
   if (complexity === 'low' && contextSize < 50000) {
-    return { model: 'claude-haiku-4-5-20251001', reason: 'low complexity, small context' }
+    return { model: defaults.haiku, reason: 'low complexity, small context' }
   }
   if (complexity === 'high' || contextSize > 100000) {
-    return { model: 'claude-opus-5-5', reason: 'high complexity or large context' }
+    return { model: defaults.opus, reason: 'high complexity or large context' }
   }
-  return { model: 'claude-sonnet-4-6', reason: 'medium complexity' }
+  return { model: defaults.sonnet, reason: 'medium complexity' }
 }
 
 function getGuardrails(args) {
@@ -477,7 +480,7 @@ async function handleRequest(method, params, id) {
       case 'dispatch_task':       result = await dispatchTask(args); break
       case 'dispatch_sprint':     result = await dispatchSprint(args); break
       case 'estimate_tokens':     result = estimateTokens(args); break
-      case 'recommend_model':     result = recommendModel(args); break
+      case 'recommend_model':     result = await recommendModel(args); break
       case 'get_guardrails':      result = getGuardrails(args); break
       case 'get_skills':          result = getSkills(args); break
       case 'audit_deps':          result = auditDeps(args); break

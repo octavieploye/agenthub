@@ -1,6 +1,7 @@
 import type { OrchestratorPhase } from '../../shared/types/orchestrator.types'
 import type { RepoStack } from '../../shared/types/config.types'
 import type { ModelProvider } from '../../shared/types/agent.types'
+import { DEFAULT_SONNET_MODEL, DEFAULT_HAIKU_MODEL } from '../../shared/constants/model-catalog'
 
 /**
  * S7 — Guardrail prompts injected into orchestrator-spawned agents.
@@ -147,10 +148,10 @@ export const GUARDRAIL_PROMPTS: Record<'dev' | 'review' | 'security' | 'simple',
  *   4. model-recommender           — existing quota/complexity logic
  */
 export const STACK_MODEL_DEFAULTS: Record<RepoStack, { model: string; provider: ModelProvider }> = {
-  rust:       { model: 'claude-sonnet-4-6',          provider: 'anthropic' },
-  typescript: { model: 'claude-haiku-4-5-20251001',  provider: 'anthropic' },
-  python:     { model: 'claude-haiku-4-5-20251001',  provider: 'anthropic' },
-  generic:    { model: 'claude-sonnet-4-6',          provider: 'anthropic' },
+  rust:       { model: DEFAULT_SONNET_MODEL, provider: 'anthropic' },
+  typescript: { model: DEFAULT_HAIKU_MODEL,  provider: 'anthropic' },
+  python:     { model: DEFAULT_HAIKU_MODEL,  provider: 'anthropic' },
+  generic:    { model: DEFAULT_SONNET_MODEL, provider: 'anthropic' },
 }
 
 /**

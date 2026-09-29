@@ -1,5 +1,6 @@
 import log from 'electron-log/main'
 import type { ModelProvider } from '@shared/types/agent.types'
+import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL, DEFAULT_HAIKU_MODEL } from '@shared/constants/model-catalog'
 
 export type TaskComplexity = 'simple' | 'moderate' | 'complex'
 export type QuotaZone = 'healthy' | 'moderate' | 'hot'
@@ -30,10 +31,10 @@ export interface SpawnEnv {
 const COMPLEX_KEYWORDS = ['refactor', 'architecture', 'migrate', 'redesign']
 const SIMPLE_KEYWORDS = ['fix', 'bug', 'typo', 'update', 'lint']
 
-export const CLAUDE_SONNET = 'claude-sonnet-4-6'
-export const CLAUDE_OPUS = 'claude-opus-5-5'
+export const CLAUDE_SONNET = DEFAULT_SONNET_MODEL
+export const CLAUDE_OPUS = DEFAULT_OPUS_MODEL
 export const CLAUDE_OPUS_LEGACY = 'claude-opus-4-6'
-export const CLAUDE_HAIKU = 'claude-haiku-4-5-20251001'
+export const CLAUDE_HAIKU = DEFAULT_HAIKU_MODEL
 const OLLAMA_DEFAULT = 'llama3'
 const OLLAMA_LOCAL_URL = 'http://localhost:11434'
 

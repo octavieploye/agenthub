@@ -35,6 +35,7 @@ import {
 } from '../db/queries/settings.queries'
 import type { CreateTaskInput } from '../../shared/types/task.types'
 import type { CreateProjectInput } from '../../shared/types/project.types'
+import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL, DEFAULT_HAIKU_MODEL } from '../../shared/constants/model-catalog'
 
 const LOG_PREFIX = '[mcp-bridge-handler]'
 
@@ -233,6 +234,11 @@ export class McpBridgeHandler {
       // ── Read: safeguards ─────────────────────────────────────────────────────
       case 'getSafeguards': {
         return getSafeguards(db)
+      }
+
+      // ── Read: model defaults (catalog-derived, used by recommend_model) ──────
+      case 'getDefaultModels': {
+        return { sonnet: DEFAULT_SONNET_MODEL, opus: DEFAULT_OPUS_MODEL, haiku: DEFAULT_HAIKU_MODEL }
       }
 
       // ── Write: tasks ─────────────────────────────────────────────────────────

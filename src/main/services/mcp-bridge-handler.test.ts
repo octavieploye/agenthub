@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { McpBridgeHandler } from './mcp-bridge-handler'
 import type { BridgeDeps } from './mcp-bridge-handler'
+import { latestClaudeModel } from '../../shared/constants/model-catalog'
 
 // ─── Mock electron-log (no Electron in test env) ─────────────────────────────
 
@@ -265,6 +266,21 @@ describe('McpBridgeHandler', () => {
     expect(resp['error']).toBeUndefined()
     // No seeded run → null
     expect(resp['result']).toBeNull()
+  })
+
+  it('responds to getDefaultModels with the latest available model per Claude family', async () => {
+    const resp = await sendRequest(handler.socketPath, {
+      id: 'r-defaults',
+      token: handler.token,
+      method: 'getDefaultModels',
+      params: {},
+    })
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toEqual({
+      sonnet: latestClaudeModel('sonnet'),
+      opus: latestClaudeModel('opus'),
+      haiku: latestClaudeModel('haiku'),
+    })
   })
 
   it('returns explicit error for unknown method', async () => {

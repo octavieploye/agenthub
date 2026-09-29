@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import log from 'electron-log/main'
 import type { AgentState, AgentLifecycleStatus, StatusConfidence, EffortLevel, ExecutionMode, VoiceMode } from '../../../shared/types/agent.types'
 import type Database from 'better-sqlite3'
+import { DEFAULT_SONNET_MODEL } from '../../../shared/constants/model-catalog'
 
 function mapRow(row: Record<string, unknown>): AgentState {
   return {
@@ -125,7 +126,7 @@ export function insertAgent(
     agent.repoId,
     agent.name,
     agent.cwd,
-    agent.model ?? 'claude-sonnet-4-6',
+    agent.model ?? DEFAULT_SONNET_MODEL,
     agent.provider ?? 'anthropic',
     effortLevel,
     taskDescription,
@@ -146,7 +147,7 @@ export function insertAgent(
     name: agent.name,
     status: 'spawning',
     confidence: 'unknown',
-    model: agent.model ?? 'claude-sonnet-4-6',
+    model: agent.model ?? DEFAULT_SONNET_MODEL,
     provider: agent.provider ?? 'anthropic',
     effortLevel,
     taskDescription,
