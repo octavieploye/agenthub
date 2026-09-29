@@ -114,7 +114,7 @@ Read the file. Extract:
 - Dependency chain (which task blocks which)
 - `requiresApproval` flags (any task touching DB migrations, IPC contracts, security boundaries, production code)
 - Target files per task
-- Recommended model (default: `claude-sonnet-4-6` for backend Python/TS changes)
+- Recommended model (default: `claude-sonnet-4-6` for backend Python/TS changes; `claude-opus-5-5` for complex architecture/planning tasks with high reasoning needs)
 
 ### From NL description
 Parse into tasks. Apply the `requiresApproval` rule:
@@ -166,7 +166,7 @@ T2_id = create_task({..., requiresApproval: false, dependsOn: [T1_id]})
 | `priority` | 1=critical (blocking), 2=high (sequential), 3=normal |
 | `category` | `backend` / `frontend` / `devops` / `research` |
 | `skills` | `["dev-backend"]` for Python/TS backend; `["dev-frontend"]` for UI; `["team-dev-loop"]` for multi-file |
-| `modelOverride` | `claude-sonnet-4-6` default; `gemma4:31b-cloud` for complex multi-file |
+| `modelOverride` | `claude-sonnet-4-6` default; `claude-opus-5-5` for complex architecture/reasoning; `gemma4:31b-cloud` for complex multi-file |
 | `targetFiles` | Full relative paths from repo root |
 | `requiresApproval` | Follow Phase 1 rules |
 | `complex` | `true` only at commit/push boundaries (see R9) — default `false` |

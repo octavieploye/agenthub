@@ -1,9 +1,19 @@
 # Code Memory — agenthub
 
-> Last sync: 30fb95b | 2026-09-23 | coordinator
+> Last sync: eb31916 | 2026-09-29 | coordinator
 > Commits since last sync: 0
 
-## Sync window — 2026-09-23 (`34fb64e..30fb95b`)
+## Sync window — 2026-09-29 (`30fb95b..eb31916`)
+
+- Single-task cross-sprint dependency fix (`eb31916`): `fetchCandidateTasks` now strips `blockedBy` to `[]` for single-task runs (`triggerSource === 'single-task'` or `singleTaskId` set), so a re-dispatch of a task whose dependency was already done in a prior run reaches the approval gate instead of stalling on `no task dispatched this tick` forever. Regression test added; full 3034-test suite green.
+- Claude in-conversation commit/push allowance (`98766db`): documents that tracked `.claude/` files are committable and clarifies the in-conversation commit exception.
+- Telegram long-poll timeout fix (`e9a2ce9`): the 10s Bot-API request timeout was destroying `getUpdates` (Telegram's 30s long-poll) every 10s, so the sidecar couldn't reliably receive messages or approval prompts. `getUpdates` is now bounded to `(params.timeout + 10)s`; quick send/answer/edit calls keep the 10s bound.
+- Orchestrator + Telegram suspend/resume and network-drop hardening (`ff9bb69`): configurable heartbeat interval (default 5 min), 10s bound on all Bot-API calls, best-effort callback acknowledgement, and task-log phases finalized to a terminal status on run conclude. 126 tests pass.
+- Guardrails: in-conversation commit/push allowance (`d5ae8c5`): git-ops stays the default committer, but any agent the human is directly talking to may commit/push on explicit request.
+- Ollama cloud model context-window enforcement (`daf4321`): inject `CLAUDE_CODE_MAX_CONTEXT_TOKENS` at spawn from Ollama `/api/show`; corrects 19 stale contextWindow values (Claude Code 2.1.267 auto-compacts unknown Ollama models at 200k).
+- Gitignore root AGENTS.md (`a539396`) and code-memory.md re-sync (`bf24cc9`).
+
+## Previous sync window — 2026-09-23 (`34fb64e..30fb95b`)
 
 - Preserve uncommitted work + expand `.gitignore` (`80446c3`): commit the legitimate uncommitted tree — plugin skills/commands, packages (market-modeling, market-sim-pkg, package-factory, package-ts-factory), `agenthub_orchestrator/`, `commercial/`, LICENSE/EULA — plus tracked config drift (`.claude/*`, `.llm/code-memory.md`, `docs/superpowers/*`); `.gitignore` expanded to hide scratch/derived artifacts (`docs/`, `screenshots/`, `*.png`, `logs/`, `test-sound/`, `resources/sounds/`, `agenthub.db`, `.claire/`, `.llm/`, `workflow-team-library/`, `memory/records/`, and root research notes).
 - Remove leftover `file:` dependency (`30fb95b`): drop `anamnesis-landing-page` (`file:../multi-orch-test-3`) from package.json + lockfile — a real test artifact from the orchestrator multi-run build, not a real dependency.
@@ -116,6 +126,9 @@
 - `pipeline-composer.ts` — template-based execution plan assembly from SkillDomain + complexity; reads pipeline-templates registry (commit 079a6e2)
 - `guardrails.ts` — source-controlled git-boundary guardrail: `GIT_BOUNDARY_RULE` + `getGitBoundaryPath()` write the worker-agent git-mutation ban to a tmpdir file injected via `--append-system-prompt-file`; lives in src/ so a spawned builder cannot rewrite it (commit 34fb64e)
 - `health-monitor.ts` — HealthMonitor watchdog (loop/overtime/error-spiral/scope-creep detection against GuardrailConfig); red-tier overtime routes to `onHardTimeout` kill callback, non-red tiers to `onAnomaly` pause (commit 912684d)
+- `telegram-sidecar/index.js` — `getUpdates` long-poll timeout fix: Bot-API request timeout no longer destroys the 30s long-poll every 10s; long-poll bounded to `(params.timeout + 10)s`, quick calls keep 10s (`e9a2ce9`)
+- `orchestrator-scheduler.ts` / `orchestrator-monitor.ts` — configurable heartbeat interval (default 5 min), 10s bound on all Telegram Bot-API calls, best-effort callback ack, task-log phases finalized to terminal on run conclude (`ff9bb69`)
+- model catalog — enforce real Ollama cloud context window via `CLAUDE_CODE_MAX_CONTEXT_TOKENS` at spawn; 19 stale contextWindow values corrected (`daf4321`)
 
 ## Sprint Inventory — Anamnesis (mandatory pre-sprint check)
 

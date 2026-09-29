@@ -112,11 +112,12 @@ The orchestrator resolves these fields in priority order:
 
 | Task type | Recommended model |
 |---|---|
-| Simple, single-file | `qwen3:8b` (local) |
-| Multi-file backend | `gemma4:31b-cloud` or `deepseek-v4-pro:0813:cloud` |
-| Complex reasoning | `deepseek-v4-pro:0813:cloud` |
-| Frontend/UI | `gemma4:31b-cloud` |
-| Research/analysis | `mistral-large:cloud` |
+| Simple, single-file | `claude-haiku-4-5-20251001` or `qwen3:8b` (local) |
+| Multi-file backend | `claude-sonnet-4-6`, `gemma4:31b-cloud`, or `deepseek-v4-pro:0813:cloud` |
+| Complex reasoning | `claude-opus-5-5` or `deepseek-v4-pro:0813:cloud` |
+| Architecture/planning | `claude-opus-5-5` (with extended thinking) |
+| Frontend/UI | `claude-sonnet-4-6` or `gemma4:31b-cloud` |
+| Research/analysis | `mistral-large:cloud` or `claude-opus-5-5` |
 
 ---
 
@@ -273,7 +274,7 @@ This step is optional for test sprints but mandatory for production work.
           "priority": 2,
           "category": "backend",
           "skills": ["team-dev-loop"],
-          "recommendedModel": "deepseek-v4-pro:0813:cloud",
+          "modelOverride": "claude-opus-5-5",
           "targetFiles": ["src/main/ipc/"],
           "requiresApproval": true,
           "dependsOn": ["AUTH-2"]
