@@ -113,10 +113,10 @@ The orchestrator resolves these fields in priority order:
 | Task type | Recommended model |
 |---|---|
 | Simple, single-file | `claude-haiku-4-5-20251001` or `qwen3:8b` (local) |
-| Multi-file backend | `claude-sonnet-4-6`, `gemma4:31b-cloud`, or `deepseek-v4-pro:0813:cloud` |
+| Multi-file backend | `claude-sonnet-5-5`, `gemma4:31b-cloud`, or `deepseek-v4-pro:0813:cloud` |
 | Complex reasoning | `claude-opus-5-5` or `deepseek-v4-pro:0813:cloud` |
 | Architecture/planning | `claude-opus-5-5` (with extended thinking) |
-| Frontend/UI | `claude-sonnet-4-6` or `gemma4:31b-cloud` |
+| Frontend/UI | `claude-sonnet-5-5` or `gemma4:31b-cloud` |
 | Research/analysis | `mistral-large:cloud` or `claude-opus-5-5` |
 
 ---
