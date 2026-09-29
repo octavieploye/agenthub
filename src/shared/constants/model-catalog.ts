@@ -190,6 +190,25 @@ export const CLAUDE_MODELS: ModelCatalogEntry[] = [
   }
 ]
 
+export type ClaudeFamily = 'opus' | 'sonnet' | 'haiku' | 'fable'
+
+/**
+ * Newest available model of a Claude family. CLAUDE_MODELS must stay ordered
+ * newest-first within each family (enforced by model-catalog.test.ts), so adding a
+ * new model to the top of the catalog updates every default. Marking it
+ * `available: false` falls back to the model below. Throws instead of returning a
+ * stale id when the family has no available entry.
+ */
+export function latestClaudeModel(family: ClaudeFamily, catalog: ModelCatalogEntry[] = CLAUDE_MODELS): string {
+  const match = catalog.find((m) => m.available && m.id.startsWith(`claude-${family}-`))
+  if (!match) throw new Error(`No available Claude ${family} model in the model catalog`)
+  return match.id
+}
+
+export const DEFAULT_SONNET_MODEL = latestClaudeModel('sonnet')
+export const DEFAULT_OPUS_MODEL = latestClaudeModel('opus')
+export const DEFAULT_HAIKU_MODEL = latestClaudeModel('haiku')
+
 export const OLLAMA_CLOUD_MODELS: ModelCatalogEntry[] = [
   { id: 'deepseek-v4-pro:0813:cloud', name: 'DeepSeek V4 Pro',       provider: 'ollama-cloud', category: 'thinking', contextWindow: 1048576, available: true, supportsEffort: false, capabilityTier: 'frontier', description: 'Top-tier reasoning and coding. Equal to or better than Opus for high reasoning + context + coding.', strengths: ['deep reasoning', 'code generation', 'long context'], speedProfile: 'slow', claudeComparison: 'Equal to or better than Opus' },
   { id: 'deepseek-v4-flash:0731:cloud', name: 'DeepSeek V4 Flash',   provider: 'ollama-cloud', category: 'coding',   contextWindow: 1048576, available: true, supportsEffort: false, capabilityTier: 'expert', description: 'Fast DeepSeek variant for coding and quick iteration.', strengths: ['code generation', 'fast responses'], speedProfile: 'fast', claudeComparison: 'Comparable to Sonnet, faster' },
