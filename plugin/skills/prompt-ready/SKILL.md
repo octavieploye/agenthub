@@ -57,8 +57,8 @@ score = (cross_refs × 2) + (decisions × 0.5) + pages + amendments + dependenci
 
 | Score | Model | Reasoning |
 |---|---|---|
-| >= 20 | Opus 4.6 | Heavy cross-referencing, architectural decisions, 30+ constraints |
-| 8–19 | Sonnet 4.6 | Standard plans, component specs, moderate constraint tracking |
+| >= 20 | Opus 5.5 (`claude-opus-5-5`) | Heavy cross-referencing, architectural decisions, 30+ constraints |
+| 8–19 | Sonnet 5.5 (`claude-sonnet-5-5`) | Standard plans, component specs, moderate constraint tracking |
 | < 8 | Haiku 4.5 | Template-driven, palette swaps, single-doc transforms, pattern application |
 
 For Ollama Cloud (sovereignty/cost):
