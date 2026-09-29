@@ -106,7 +106,7 @@ Next step: Confirm build plan, assign to dev-stack.
 ### 5. Demiurge — NOT YET CREATED
 Role: The thinker. Idea analyzer. Receives from OPTimaeus, briefs Logos.
 Path target: /Users/octaviesmacpro/workspace/optimaeus-projects/demiurge
-Status: Entity defined in optimaeus-architecture. Build not scheduled.
+Status: Entity defined in optimaeus-llm/entities/. Build not scheduled.
 Prerequisite: Logos must exist before Demiurge can hand off.
 
 ### 6. Logos — NOT YET CREATED (fresh build)

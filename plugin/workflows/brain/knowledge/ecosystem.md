@@ -1,7 +1,7 @@
 # KNOWLEDGE: Optimaeus Neuronal System
 OWNER:  ecosystem-architect
 UPDATED: 2026-06-24
-SOURCE: optimaeus-architecture/ entity definitions + UNIVERSAL-STANDARDS.md
+SOURCE: optimaeus-llm/entities/ entity definitions + UNIVERSAL-STANDARDS.md
 
 ---
 

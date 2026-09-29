@@ -42,7 +42,7 @@ Goal: Accurate architectural answer with source citation.
   1. lead-brain receives the question
   2. lead-brain dispatches ecosystem-architect
   3. ecosystem-architect loads knowledge/ecosystem.md
-  4. ecosystem-architect reads relevant entity definitions from optimaeus-architecture/ if needed
+  4. ecosystem-architect reads relevant entity definitions from optimaeus-llm/entities/ if needed
   5. ecosystem-architect produces: answer + rationale + which files confirm it
   6. lead-brain presents answer to user with source citations
   7. If the answer changes a prior architectural decision → note as a decision for the user to confirm
@@ -99,7 +99,7 @@ Goal: Keep the knowledge base current.
 
   ecosystem-architect:
     LOAD: knowledge/ecosystem.md
-    REFERENCE: optimaeus-architecture/ entity files when specific technical detail is needed
+    REFERENCE: optimaeus-llm/entities/ entity files when specific technical detail is needed
     NEVER: memory folder (that is memory-curator's domain)
 
   project-navigator:

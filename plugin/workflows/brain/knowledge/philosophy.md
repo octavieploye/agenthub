@@ -1,7 +1,7 @@
 # KNOWLEDGE: Optimaeus Philosophy & Vision
 OWNER:  lead-brain + strategy-advisor
 UPDATED: 2026-06-24
-SOURCE: optimaeus-architecture/.claude/entities/optimaeus.md (primary)
+SOURCE: optimaeus-llm/entities/optimaeus.md (primary)
         optimaeus-projects/optimaeus/.claude/skills/sprint-03-brain-core.md (brain_core frameworks)
         User-stated vision
 
