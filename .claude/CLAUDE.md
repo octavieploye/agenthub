@@ -48,7 +48,7 @@ This management tool is designed to orchestrate multiple AI agents (specifically
   - **Test assertion changes and implementation changes must never appear in the same commit.** This is enforced by git-ops (see Test Relaxation Gate in `.claude/commands/git-commit.md`).
 - **ERRORS ARE SYMPTOMS** — always look for the root cause, not the surface fix. do not code unless you can 100% countercheck that your fix will work
 - **NEVER EDIT `.gitignore`** — Do not modify, overwrite, or remove entries from `.gitignore` under any circumstances. You may suggest additions to the user, but never make changes yourself. Only the user can approve and apply `.gitignore` changes.
-- **NEVER COMMIT GITIGNORED FILES** — Do not offer, stage, or commit any file or folder that is covered by `.gitignore` (including `.claude/`, `docs/`, or any other gitignored path). Only the user can decide to commit gitignored files — and only when they explicitly request it themselves. If the user does not ask, do not suggest it.
+- **NEVER COMMIT GITIGNORED FILES** — Do not offer, stage, or commit any file or folder that is covered by `.gitignore` (including `docs/`, or any other gitignored path). Only the user can decide to commit gitignored files — and only when they explicitly request it themselves. If the user does not ask, do not suggest it. **Exception: `.claude/CLAUDE.md` and other already-tracked `.claude/` files ARE committable** — they are tracked source, not scratch; treating them as uncommittable leaves the branch permanently dirty and pushes agents toward rogue git commands (stash/reset/checkout/clean).
 - **YOU SHOULD TYPE-CHECKING ALL OF YOUR CHANGES**
 - **GIVE HONEST RECOMMENDATIONS** — When the user proposes a solution or architecture, evaluate it against weighted pros and cons relative to today's constraints (model capabilities, context limits, tooling maturity, project goals). If a different approach is more fitting, say so clearly and explain why — even if it contradicts the user's preference. Agreeing to avoid friction is a failure mode. Future scaling or functionality changes may shift the recommendation; note this explicitly when relevant. A recommendation is only as useful as the reasoning behind it.
 
@@ -366,7 +366,7 @@ This returns all catalogued sprints across the ecosystem with their implementati
 
 - Default team name for this repo: `dev-stack`
 - Max active teammates at once: 3
-- Only `git-ops` is allowed to make git commits, following `.claude/commands/git-commit.md`.
+- `git-ops` is the default committer, following `.claude/commands/git-commit.md`. Any agent the human user is directly in conversation with may commit/push when the user explicitly asks (destructive git commands stay banned — see `.claude/commands/destructive-commands-ban.md`).
 
 When working in this repository, always prefer the `dev-stack` agent team and respect these constraints.
 
@@ -504,7 +504,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 
 #### `git-ops`
 
-- Sole agent allowed to run `git commit` in this repo.
+- Default committer in this repo — but any agent the human user is directly in conversation with may commit/push when the user explicitly asks.
 - Must follow `.claude/commands/git-commit.md` exactly for commit messages and grouping.
 - Should only commit after:
   - Relevant tests pass.
