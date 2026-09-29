@@ -34,7 +34,7 @@ import { TelegramSocketServer } from './telegram-socket-server'
 import { TelegramQueueProcessor } from './telegram-queue-processor'
 import { OrchestratorScheduler, type SchedulerDeps } from './orchestrator-scheduler'
 import { OrchestratorMonitorService } from './orchestrator-monitor'
-import { GUARDRAIL_PROMPTS } from './orchestrator-rules'
+import { GUARDRAIL_PROMPTS, STACK_MODEL_DEFAULTS } from './orchestrator-rules'
 import { OrchestratorBrain, type BrainConfig } from './orchestrator-brain'
 import { OrchestratorValidator } from './orchestrator-validator'
 import { McpBridgeHandler, type BridgeDeps } from './mcp-bridge-handler'
@@ -781,19 +781,34 @@ export function initializeServices(db: Database.Database): void {
         } else if (task.recommendedModel) {
           effectiveModel = task.recommendedModel
         } else {
-          // Use the recommender: quota-aware, complexity-aware model selection.
-          // Default quotaPercent=0 (healthy) → complex=Opus, else=Sonnet.
-          const taskDesc = task.description ?? task.title
-          const rec = recommend(0, taskDesc)
-          effectiveModel = rec.model
-          effectiveProvider = rec.provider as ModelProvider
-          providerFromRecommender = true
-          log.info('[orchestrator] model-recommender selected', {
-            taskId: task.id,
-            model: rec.model,
-            provider: rec.provider,
-            rationale: rec.rationale,
-          })
+          // Stack-aware default: read .agenthub.yaml from the target repo.
+          const repoGuardrails = guardrailsManager?.loadGuardrails(taskRepo.path)
+          const repoStack = repoGuardrails?.stack
+          if (repoStack && repoStack !== 'generic') {
+            const stackDefault = STACK_MODEL_DEFAULTS[repoStack]
+            effectiveModel = stackDefault.model
+            effectiveProvider = stackDefault.provider
+            log.info('[orchestrator] stack-aware model selected', {
+              taskId: task.id,
+              stack: repoStack,
+              model: stackDefault.model,
+              provider: stackDefault.provider,
+            })
+          } else {
+            // Use the recommender: quota-aware, complexity-aware model selection.
+            // Default quotaPercent=0 (healthy) → complex=Opus, else=Sonnet.
+            const taskDesc = task.description ?? task.title
+            const rec = recommend(0, taskDesc)
+            effectiveModel = rec.model
+            effectiveProvider = rec.provider as ModelProvider
+            providerFromRecommender = true
+            log.info('[orchestrator] model-recommender selected', {
+              taskId: task.id,
+              model: rec.model,
+              provider: rec.provider,
+              rationale: rec.rationale,
+            })
+          }
         }
 
         // Derive provider: task override → recommender result → model-name heuristic

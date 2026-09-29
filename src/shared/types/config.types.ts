@@ -7,6 +7,8 @@ export interface RepoConfig {
   lastUsedAt?: string
 }
 
+export type RepoStack = 'rust' | 'typescript' | 'python' | 'generic'
+
 export interface GuardrailConfig {
   maxDurationMinutes: number
   maxFilesChanged: number
@@ -15,6 +17,8 @@ export interface GuardrailConfig {
   protectedPaths: string[]
   /** Override stuck-agent threshold in ms (default: 60 min). Used by orchestrator tick timer. */
   stuckThresholdMs?: number
+  /** Stack hint for stack-aware model selection. rust → Sonnet (borrow checker strength). */
+  stack?: RepoStack
 }
 
 export const DEFAULT_GUARDRAILS: GuardrailConfig = {

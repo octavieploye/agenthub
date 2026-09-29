@@ -1,6 +1,8 @@
 import YAML from 'yaml'
-import type { GuardrailConfig } from '@shared/types/config.types'
+import type { GuardrailConfig, RepoStack } from '@shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '@shared/types/config.types'
+
+const VALID_STACKS = new Set<RepoStack>(['rust', 'typescript', 'python', 'generic'])
 
 export interface GuardrailsManagerDeps {
   readFile: (path: string) => string | null
@@ -28,6 +30,10 @@ function sanitizeConfig(raw: Record<string, unknown>): GuardrailConfig {
 
   if (Array.isArray(raw['protectedPaths'])) {
     config.protectedPaths = raw['protectedPaths'].filter((p): p is string => typeof p === 'string')
+  }
+
+  if (typeof raw['stack'] === 'string' && VALID_STACKS.has(raw['stack'] as RepoStack)) {
+    config.stack = raw['stack'] as RepoStack
   }
 
   return config

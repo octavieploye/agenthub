@@ -1,4 +1,6 @@
 import type { OrchestratorPhase } from '../../shared/types/orchestrator.types'
+import type { RepoStack } from '../../shared/types/config.types'
+import type { ModelProvider } from '../../shared/types/agent.types'
 
 /**
  * S7 — Guardrail prompts injected into orchestrator-spawned agents.
@@ -129,6 +131,26 @@ export const GUARDRAIL_PROMPTS: Record<'dev' | 'review' | 'security' | 'simple',
     '- Verify crate versions on crates.io before pinning any version.',
     '- New repo: run `cargo init` first, then `cargo add <crate>` for each dependency.',
   ].join('\n'),
+}
+
+/**
+ * Stack-aware model defaults.
+ *
+ * When a repo's `.agenthub.yaml` contains `stack: rust|typescript|python|generic`,
+ * the orchestrator uses these defaults instead of the model-recommender output —
+ * unless the task has an explicit `modelOverride` (task-level always wins).
+ *
+ * Fallback order:
+ *   1. task.modelOverride          — highest priority
+ *   2. task.recommendedModel       — set by sprint JSON import
+ *   3. STACK_MODEL_DEFAULTS[stack] — this map (when stack is set in .agenthub.yaml)
+ *   4. model-recommender           — existing quota/complexity logic
+ */
+export const STACK_MODEL_DEFAULTS: Record<RepoStack, { model: string; provider: ModelProvider }> = {
+  rust:       { model: 'claude-sonnet-4-6',          provider: 'anthropic' },
+  typescript: { model: 'claude-haiku-4-5-20251001',  provider: 'anthropic' },
+  python:     { model: 'claude-haiku-4-5-20251001',  provider: 'anthropic' },
+  generic:    { model: 'claude-sonnet-4-6',          provider: 'anthropic' },
 }
 
 /**
