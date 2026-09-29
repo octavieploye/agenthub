@@ -41,8 +41,8 @@ No external input required. Read from these locations:
 - `src/main/services/service-orchestrator.ts` — startup wiring
 
 **Architecture repo** (entity definition):
-- `optimaeus-architecture/.claude/entities/anamnesis.md` — philosophical design
-- `optimaeus-architecture/shared/UNIVERSAL-STANDARDS.md` — schemas, ports, naming
+- `optimaeus-llm/entities/anamnesis.md` — philosophical design
+- `optimaeus-llm/UNIVERSAL-STANDARDS.md` — schemas, ports, naming
 
 **Memory files** (strategic context, may be stale):
 - `.claude/projects/.../memory/reference_anamnesis_state_july2026.md`
@@ -354,7 +354,7 @@ Status strings:   Universal vocabulary (queued, pending, in_progress, done, fail
 
 1. Identify what aspect of Anamnesis the question targets (architecture / DB / API / integration / build state / competitive / deployment)
 2. Read the relevant files from the correct repo:
-   - Architecture/philosophy -> `optimaeus-architecture/.claude/entities/anamnesis.md`
+   - Architecture/philosophy -> `optimaeus-llm/entities/anamnesis.md`
    - DB schemas -> `anamnesis/build/backend/src/anamnesis/db/` + migrations
    - API contracts -> `anamnesis/api/contracts.md` + route files
    - Services -> `anamnesis/build/backend/src/anamnesis/services/`

@@ -17,7 +17,7 @@ Systematically triage an architecture/blueprint repo against live project repos.
 
 ## What You Need Before Starting
 
-1. **Target repo** — the architecture/blueprint repo to triage (e.g., `optimaeus-architecture`)
+1. **Target repo** — the architecture/blueprint repo to triage (e.g., `optimaeus-llm`)
 2. **Live repo list** — all repos that represent current reality, with paths and status
 3. **User confirmation** — explicit approval of target + live repo list before proceeding
 

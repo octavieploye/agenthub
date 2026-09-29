@@ -22,7 +22,7 @@ Full project oversight for the Optimaeus ecosystem. Invokes 5 specialist agents 
 No input required. The team reads from:
 - AgentHub codebase (`src/`, `docs/superpowers/plans/`)
 - OPTimaeus project (`/Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/`)
-- All packages (`agenthub/packages/`, `optimaeus-architecture/shared/`)
+- All packages (`agenthub/packages/`, `optimaeus-llm/`)
 - Opeidos strategy plans in `docs/superpowers/plans/`
 - Risk scan: `docs/brainstorm/`, `docs/marketing/`, all `package.json` license fields
 

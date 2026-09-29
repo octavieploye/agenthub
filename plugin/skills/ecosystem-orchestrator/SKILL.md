@@ -33,7 +33,7 @@ No external input required. The orchestrator reads from:
 |---|---|---|
 | AgentHub (Hephaestus) | agenthub/ | Runtime + orchestration platform |
 | OPTimaeus | /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus/ | Strategic intelligence engine |
-| LLM Workflow Packages | agenthub/packages/ + optimaeus-architecture/shared/ | Distribution-ready packages for Opeidos |
+| LLM Workflow Packages | agenthub/packages/ + optimaeus-llm/ | Distribution-ready packages for Opeidos |
 | Opeidos | Strategy in agenthub/docs/superpowers/ | Marketplace — distribution channel for all products |
 
 ## Workflow

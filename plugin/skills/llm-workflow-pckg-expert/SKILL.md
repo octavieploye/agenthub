@@ -1,6 +1,6 @@
 ---
 name: llm-workflow-pckg-expert
-description: LLM workflow packages expert — audits current package state, distribution gaps, and Opeidos readiness. Covers all packages in agenthub/packages/ and optimaeus-architecture/shared/.
+description: LLM workflow packages expert — audits current package state, distribution gaps, and Opeidos readiness. Covers all packages in agenthub/packages/ and optimaeus-llm/.
 category: intelligence
 ---
 
@@ -20,7 +20,7 @@ On-demand status snapshot of all LLM workflow packages — what exists, what is 
 
 Read from:
 - `agenthub/packages/` — all package directories
-- `optimaeus-architecture/shared/` — infrastructure packages
+- `optimaeus-llm/` — infrastructure packages
 - `agenthub/docs/superpowers/plans/2026-07-03-*.md` — package plans
 - `agenthub/docs/superpowers/specs/2026-07-04-package-architecture-design.md` — architecture spec
 
@@ -36,12 +36,12 @@ Read from:
 | package-ts-factory | agenthub/packages/package-ts-factory/ | Scaffolding only | N/A | NO |
 | market-modeling | agenthub/packages/market-modeling/ | Workflow, working | N/A | PARTIAL |
 | market-sim-pkg | agenthub/packages/market-sim-pkg/ | Planning docs only | N/A | NO |
-| optimaeus-llm-ts | optimaeus-architecture/shared/optimaeus-llm-ts/ | Built, dist/ COMPILED | YES | NO (not published) |
-| optimaeus-llm-py | optimaeus-architecture/shared/optimaeus-llm-py/ | Built, source ready | N/A | NO (not published) |
-| anamnesis-client-ts | optimaeus-architecture/shared/anamnesis-client-ts/ | Scaffolding only | NO | NO (Anamnesis backend missing) |
-| anamnesis-client-py | optimaeus-architecture/shared/anamnesis-client-py/ | Scaffolding only | NO | NO (Anamnesis backend missing) |
-| learning-schema | optimaeus-architecture/shared/learning-schema/ | SQL reference only | N/A | N/A |
-| skill-schema | optimaeus-architecture/shared/skill-schema/ | SQL reference only | N/A | N/A |
+| optimaeus-llm-ts | optimaeus-llm/optimaeus-llm-ts/ | Built, dist/ COMPILED | YES | NO (not published) |
+| optimaeus-llm-py | optimaeus-llm/optimaeus-llm-py/ | Built, source ready | N/A | NO (not published) |
+| anamnesis-client-ts | optimaeus-llm/anamnesis-client-ts/ | Scaffolding only | NO | NO (Anamnesis backend missing) |
+| anamnesis-client-py | optimaeus-llm/anamnesis-client-py/ | Scaffolding only | NO | NO (Anamnesis backend missing) |
+| learning-schema | optimaeus-llm/learning-schema/ | SQL reference only | N/A | N/A |
+| skill-schema | optimaeus-llm/skill-schema/ | SQL reference only | N/A | N/A |
 
 ### Architecture Spec (2026-07-04 — PENDING APPROVAL)
 - Single monorepo: `llm-workflows-pckg` (not yet created)
@@ -72,7 +72,7 @@ Read from:
 
 1. Glob `agenthub/packages/*/package.json` — list all packages and their version/license fields
 2. Check `dist/` directory exists for each TS package
-3. Check `optimaeus-architecture/shared/optimaeus-llm-ts/dist/` — confirm compiled
+3. Check `optimaeus-llm/optimaeus-llm-ts/dist/` — confirm compiled
 4. Read `docs/superpowers/specs/2026-07-04-package-architecture-design.md` — spec approval status
 5. Read plan files: 2026-07-03-destructuring-package.md, 2026-07-03-deep-reasoning-package.md
 6. Output structured report per package + distribution gap analysis
