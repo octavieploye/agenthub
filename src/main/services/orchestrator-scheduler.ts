@@ -996,6 +996,15 @@ export class OrchestratorScheduler {
       })
     }
 
+    // Single-task runs: treat blockedBy as empty. A single-task dispatch is an
+    // explicit "run this one task" instruction; its historical dependency chain
+    // is the dispatcher's concern, not the scheduler's. completedIds is resolved
+    // only against the current run's logs (never cross-run), so a completed
+    // cross-sprint dependency would otherwise stall the dispatch forever.
+    if (run.triggerSource === 'single-task' || run.singleTaskId != null) {
+      candidates = candidates.map(t => ({ ...t, blockedBy: [] }))
+    }
+
     return candidates
   }
 

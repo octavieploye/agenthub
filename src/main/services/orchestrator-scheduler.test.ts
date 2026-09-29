@@ -377,6 +377,40 @@ describe('OrchestratorScheduler', () => {
     })
   })
 
+  describe('startSingleTask() — cross-sprint dependency', () => {
+    it('dispatches a task whose blockedBy dependency is already done in a prior run', async () => {
+      // A dependency completed in a DIFFERENT (prior) run — not part of this run's scope.
+      const depId = insertTestTask(db, { id: 'prior-dep', repoId: 'repo-1', status: 'done' })
+      const taskId = insertTestTask(db, { id: 'dependent-task', repoId: 'repo-1', status: 'today' })
+      // The dependent task is blocked by a task that is already done elsewhere.
+      db.prepare(
+        'INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)'
+      ).run(taskId, depId)
+
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-id-1') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.startSingleTask({ taskId })
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // The task must dispatch (reach the brain) despite its completed cross-sprint dep.
+      expect(brain.decide).toHaveBeenCalled()
+      expect(dispatch.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ repoId: 'repo-1' }),
+        taskId,
+        expect.any(String)
+      )
+    })
+  })
+
   // -------------------------------------------------------------------------
   // Slot-aware run admission
   // -------------------------------------------------------------------------
