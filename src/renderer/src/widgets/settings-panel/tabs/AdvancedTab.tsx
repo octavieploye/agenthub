@@ -11,6 +11,11 @@ export function AdvancedTab(): React.JSX.Element {
   const [uiScale, setUiScale] = useState<'12px' | '14px' | '16px'>('14px')
   const [orchestratorEnabled, setOrchestratorEnabled] = useState(false)
   const [orchestratorLoading, setOrchestratorLoading] = useState(true)
+  // Anamnesis secret: write-only input; the stored value never comes back to the renderer.
+  const [secretDraft, setSecretDraft] = useState('')
+  const [secretIsSet, setSecretIsSet] = useState<boolean | null>(null)
+  const [secretSaving, setSecretSaving] = useState(false)
+  const [secretError, setSecretError] = useState<string | null>(null)
 
   useEffect(() => {
     window.agentHub.settings.getAll().then((res) => {
@@ -20,6 +25,41 @@ export function AdvancedTab(): React.JSX.Element {
       setOrchestratorLoading(false)
     })
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadSecretStatus = async (): Promise<void> => {
+      try {
+        const res = await window.agentHub.settings.getAnamnesisSecretStatus()
+        if (!cancelled && res.success) setSecretIsSet(res.data.isSet)
+      } catch {
+        // Status unknown — the field stays usable.
+      }
+    }
+    void loadSecretStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleSaveSecret = useCallback(async () => {
+    if (!secretDraft.trim()) return
+    setSecretSaving(true)
+    setSecretError(null)
+    try {
+      const res = await window.agentHub.settings.setAnamnesisSecret(secretDraft)
+      if (res.success) {
+        setSecretDraft('')
+        setSecretIsSet(true)
+      } else {
+        setSecretError(res.error.message)
+      }
+    } catch {
+      setSecretError('unexpected error')
+    } finally {
+      setSecretSaving(false)
+    }
+  }, [secretDraft])
 
   const theme = useThemeStore((s) => s.theme)
   const setTheme = useThemeStore((s) => s.setTheme)
@@ -199,6 +239,48 @@ export function AdvancedTab(): React.JSX.Element {
             }}
           />
         </label>
+      </div>
+
+      {/* Anamnesis secret (write-only) */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-base-content/70">Anamnesis</p>
+        <div>
+          <p className="text-xs font-medium mb-1">
+            Auth secret{' '}
+            <span data-testid="anamnesis-secret-status" className="text-base-content/40 font-normal">
+              {secretIsSet === null ? '' : secretIsSet ? '(set)' : '(not set)'}
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <input
+              data-testid="anamnesis-secret-input"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={secretIsSet ? 'Enter a new secret to replace it' : 'Paste the Anamnesis secret'}
+              value={secretDraft}
+              onChange={(e) => {
+                setSecretDraft(e.target.value)
+                setSecretError(null)
+              }}
+              className="input input-sm input-bordered flex-1"
+            />
+            <button
+              data-testid="anamnesis-secret-save"
+              onClick={handleSaveSecret}
+              disabled={!secretDraft.trim() || secretSaving}
+              className="btn btn-sm btn-outline"
+            >
+              Save
+            </button>
+          </div>
+          {secretError && (
+            <p className="text-xs text-error mt-1">Could not save: {secretError}</p>
+          )}
+          <p className="text-xs text-base-content/40 mt-1">
+            Stored encrypted on this machine and never shown again. Background sync picks up a new secret after an AgentHub restart.
+          </p>
+        </div>
       </div>
 
       {/* Danger Zone */}

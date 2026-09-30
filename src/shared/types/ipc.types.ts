@@ -144,6 +144,10 @@ export interface AgentHubBridge {
     set: (key: string, value: string) => Promise<IpcResponse<void>>
     export: () => Promise<IpcResponse<import('./settings.types').SettingsExport>>
     import: (data: import('./settings.types').SettingsExport) => Promise<IpcResponse<void>>
+    /** Write-only: encrypts and stores the Anamnesis secret. The value is never returned to the renderer. */
+    setAnamnesisSecret: (secret: string) => Promise<IpcResponse<void>>
+    /** Set/not-set only — never the secret itself. */
+    getAnamnesisSecretStatus: () => Promise<IpcResponse<{ isSet: boolean }>>
   }
   clipboard: {
     writeText: (text: string) => void

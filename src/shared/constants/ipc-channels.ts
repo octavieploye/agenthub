@@ -129,7 +129,9 @@ export const IPC_CHANNELS = {
     GET_ALL: 'settings:get-all',
     SET: 'settings:set',
     EXPORT: 'settings:export',
-    IMPORT: 'settings:import'
+    IMPORT: 'settings:import',
+    SET_ANAMNESIS_SECRET: 'settings:set-anamnesis-secret',
+    GET_ANAMNESIS_SECRET_STATUS: 'settings:get-anamnesis-secret-status'
   },
   SYSTEM: {
     GET_APP_VERSION: 'system:get-app-version',

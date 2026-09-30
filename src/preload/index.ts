@@ -165,7 +165,11 @@ const agentHubBridge = {
     set: (key: string, value: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.SET, key, value),
     export: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.EXPORT),
-    import: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.IMPORT, data)
+    import: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.IMPORT, data),
+    setAnamnesisSecret: (secret: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.SET_ANAMNESIS_SECRET, secret),
+    getAnamnesisSecretStatus: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS.GET_ANAMNESIS_SECRET_STATUS)
   },
   clipboard: {
     writeText: (text: string) => clipboard.writeText(text),
