@@ -52,14 +52,15 @@ import { purgeDeadAgents, resetStaleAgentsOnStartup } from '../db/queries/agents
 import { createSession, detectPreviousSessionState } from '../db/queries/sessions.queries'
 import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries/orchestrator.queries'
 import { recommend } from './model-recommender'
-import { getTaskByAgentId, updateTask } from '../db/queries/tasks.queries'
+import { getTaskByAgentId, getTaskById, updateTask } from '../db/queries/tasks.queries'
+import { emitTaskStatusEvent } from './helpers/task-status-events'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
 import { DEFAULT_GUARDRAILS } from '../../shared/types/config.types'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { DEFAULT_ANAMNESIS_URL, SPRINT_COLOR_PALETTE } from '../../shared/constants/defaults'
-import { loadAnamnesisSecret } from './secret-store'
+import { loadAnamnesisSecret, bootstrapAnamnesisSecretFromEnv } from './secret-store'
 import { registerWindowManager, registerAnamnesisWriter, registerTelegramSocketPathFn, registerCurrentSessionId } from './service-registry'
 
 let snapshotEngine: SnapshotEngine | null = null
@@ -547,6 +548,15 @@ export function initializeServices(db: Database.Database): void {
   })
 
   // 15. Anamnesis + Forgejo adapters — null in standalone, real in system mode
+  // One-time import of ANAMNESIS_AUTH_SECRET into secret-store (the only secret source).
+  // Never overrides a stored secret; the value itself is never logged.
+  try {
+    if (bootstrapAnamnesisSecretFromEnv()) log.info('secret-store: imported Anamnesis secret from env (one-time bootstrap)')
+  } catch (err) {
+    log.warn('secret-store: Anamnesis secret env bootstrap failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
   const appMode = resolveAppMode()
   const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
   anamnesisWriter = createAnamnesisAdapter(appMode, db, { anamnesisUrl })
@@ -924,7 +934,15 @@ export function initializeServices(db: Database.Database): void {
           healthMonitor?.registerAgent(agentState.id)
           // FIX H1 — link agent_id to the kanban task so syncKanbanCard / getTaskByAgentId works
           try {
+            const fromStatus = getTaskById(db, taskId)?.status ?? null
             updateTask(db, taskId, { agentId: agentState.id, status: 'in_progress' })
+            emitTaskStatusEvent(db, {
+              taskId,
+              fromStatus,
+              toStatus: 'in_progress',
+              agentId: agentState.id,
+              payload: { source: 'orchestrator', runId },
+            })
           } catch (linkErr) {
             log.warn('Orchestrator dispatch: failed to link agent_id to task', { taskId, agentId: agentState.id, err: String(linkErr) })
           }

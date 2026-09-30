@@ -7,6 +7,7 @@ import {
   getAllTasks,
   getTasksByRepo,
   getTasksByStatus,
+  getTaskById,
   searchTasks,
   insertTask,
   updateTask,
@@ -16,6 +17,7 @@ import type { IpcResponse } from '../../shared/types/ipc.types'
 import type { TaskItem, CreateTaskInput, UpdateTaskInput, TaskStatus } from '../../shared/types/task.types'
 import { z } from 'zod'
 import { validateModelOverride } from '../services/helpers/model-validator'
+import { emitTaskStatusEvent } from '../services/helpers/task-status-events'
 
 const categorySchema = z
   .enum(['backend', 'frontend', 'database', 'schema', 'functionality', 'marketing', 'research', 'business', 'content'])
@@ -154,7 +156,17 @@ export function registerTasksHandlers(): void {
           const modelError = validateModelOverride(validated.modelOverride, validated.providerOverride)
           if (modelError) return error('VALIDATION_ERROR', modelError)
         }
-        updateTask(getDb(), idValidation.data, validated)
+        const db = getDb()
+        const fromStatus = validated.status !== undefined ? (getTaskById(db, idValidation.data)?.status ?? null) : null
+        updateTask(db, idValidation.data, validated)
+        if (validated.status !== undefined) {
+          emitTaskStatusEvent(db, {
+            taskId: idValidation.data,
+            fromStatus,
+            toStatus: validated.status,
+            payload: { source: 'manual' },
+          })
+        }
         return success(undefined)
       } catch (err) {
         return error('TASKS_UPDATE_ERROR', err instanceof Error ? err.message : String(err))
