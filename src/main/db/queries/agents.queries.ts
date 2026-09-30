@@ -247,6 +247,8 @@ export function deleteAgent(db: Database.Database, id: string): void {
       'DELETE FROM terminal_output_fts WHERE rowid IN (SELECT id FROM terminal_output WHERE agent_id = ?)'
     ).run(id)
     db.prepare('DELETE FROM terminal_output WHERE agent_id = ?').run(id)
+    // Nullify tasks.sbar_id before deleting sbar_handoffs to avoid FK violation (same as purgeDeadAgents)
+    db.prepare('UPDATE tasks SET sbar_id = NULL WHERE sbar_id IN (SELECT id FROM sbar_handoffs WHERE agent_id = ?)').run(id)
     db.prepare('DELETE FROM sbar_handoffs WHERE agent_id = ?').run(id)
     db.prepare('UPDATE tasks SET agent_id = NULL WHERE agent_id = ?').run(id)
     db.prepare('DELETE FROM notes WHERE agent_id = ?').run(id)

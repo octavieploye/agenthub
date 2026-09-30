@@ -212,3 +212,62 @@ describe('resetStaleAgentsOnStartup', () => {
     ])
   })
 })
+
+// ---------------------------------------------------------------------------
+// C-T1 (Sprint C): SBAR foreign-key handling when agents are removed.
+// tasks.sbar_id REFERENCES sbar_handoffs(id) (migration 014); Sprint C creates the first real SBAR rows.
+// ---------------------------------------------------------------------------
+import { purgeDeadAgents } from './agents.queries'
+import { insertTask, updateTask, getTaskById } from './tasks.queries'
+import { insertSBAR } from './sbar.queries'
+
+describe('SBAR foreign key on agent removal', () => {
+  let db: Database.Database
+  let repoId: string
+  let agentId: string
+  let taskId: string
+
+  beforeEach(() => {
+    resetDb()
+    db = getDb(':memory:')
+    repoId = insertRepo(db, { name: 'sbar-repo', path: '/tmp/sbar-repo' }).id
+    agentId = insertAgent(db, { repoId, name: 'sbar-agent', cwd: '/tmp/sbar-repo' }).id
+    taskId = insertTask(db, { repoId, title: 'Task with SBAR', status: 'completed' }).id
+    const sbar = insertSBAR(db, {
+      agentId,
+      agentName: 'sbar-agent',
+      repoId,
+      situation: 's',
+      background: 'b',
+      assessment: 'a',
+      recommendation: 'r'
+    })
+    updateTask(db, taskId, { agentId, sbarId: sbar.id })
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('deleteAgent removes an agent whose SBAR is still referenced by tasks.sbar_id', () => {
+    expect(() => deleteAgent(db, agentId)).not.toThrow()
+
+    expect(getAgentById(db, agentId)).toBeNull()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sbar_handoffs').get()).toEqual({ n: 0 })
+    const task = getTaskById(db, taskId)
+    expect(task?.sbarId).toBeNull()
+    expect(task?.agentId).toBeNull()
+  })
+
+  it('purgeDeadAgents nulls tasks.sbar_id before deleting SBARs (regression guard)', () => {
+    db.prepare(
+      "UPDATE agents SET status = 'completed', updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?"
+    ).run(agentId)
+
+    expect(purgeDeadAgents(db, 24)).toBe(1)
+
+    expect(getAgentById(db, agentId)).toBeNull()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sbar_handoffs').get()).toEqual({ n: 0 })
+    expect(getTaskById(db, taskId)?.sbarId).toBeNull()
+  })
+})
