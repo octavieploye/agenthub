@@ -1,12 +1,15 @@
 import { createContext, useContext, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { useViewStore } from '../stores/view-store'
 
 interface VoiceRegistration {
   inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   toggleFn: () => void
+  /** Agent this input belongs to, when it is an agent-scoped field. */
+  ownerId?: string
 }
 
 interface VoiceInputContextValue {
-  register: (id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void) => void
+  register: (id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void, ownerId?: string) => void
   unregister: (id: string) => void
 }
 
@@ -18,8 +21,8 @@ export function VoiceInputProvider({ children }: { children: ReactNode }) {
   const startedThisPress = useRef(false)
   const activeToggleFn = useRef<(() => void) | null>(null)
 
-  const register = useCallback((id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void) => {
-    registrations.current.set(id, { inputRef, toggleFn })
+  const register = useCallback((id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void, ownerId?: string) => {
+    registrations.current.set(id, { inputRef, toggleFn, ownerId })
   }, [])
 
   const unregister = useCallback((id: string) => {
@@ -29,18 +32,35 @@ export function VoiceInputProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const HOLD_THRESHOLD_MS = 300
 
+    // A transcript must never land in a field the user is not looking at, so
+    // every candidate has to be both writable and unambiguously the target.
+    const isWritable = (reg: VoiceRegistration): boolean => {
+      const el = reg.inputRef.current
+      return !!el && !el.disabled
+    }
+
     const findTarget = (): VoiceRegistration | undefined => {
       const active = document.activeElement
-      // First: find registration whose inputRef matches the focused element
+      // First: the focused field wins — the user pointed at it.
       for (const reg of registrations.current.values()) {
-        if (reg.inputRef.current === active) return reg
+        if (reg.inputRef.current === active && isWritable(reg)) return reg
       }
-      // Fallback: last registered (most recently mounted)
-      let last: VoiceRegistration | undefined
-      for (const reg of registrations.current.values()) {
-        last = reg
+      // Second: the field belonging to the focused agent pane. Once that pane
+      // owns a field, it is the only candidate — if its input is disabled the
+      // transcript has nowhere to go, and falling through would type into a
+      // different agent's prompt.
+      const focusedAgentId = useViewStore.getState().focusedAgentId
+      if (focusedAgentId) {
+        const owned = [...registrations.current.values()].filter(
+          (reg) => reg.ownerId === focusedAgentId
+        )
+        if (owned.length > 0) return owned.find(isWritable)
       }
-      return last
+      // Third: a single writable field is unambiguous. More than one and we
+      // stop — picking "most recently mounted" used to type into another
+      // agent's prompt.
+      const writable = [...registrations.current.values()].filter(isWritable)
+      return writable.length === 1 ? writable[0] : undefined
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {

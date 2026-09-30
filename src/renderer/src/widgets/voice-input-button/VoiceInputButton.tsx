@@ -6,17 +6,19 @@ interface VoiceInputButtonProps {
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   onAutoSend?: () => void
   className?: string
+  /** Agent this field belongs to — lets Cmd+E target the focused pane. */
+  ownerId?: string
 }
 
-export function VoiceInputButton({ inputRef, onAutoSend, className = '' }: VoiceInputButtonProps) {
+export function VoiceInputButton({ inputRef, onAutoSend, className = '', ownerId }: VoiceInputButtonProps) {
   const id = useId()
   const { isListening, isProcessing, micError, toggleListening } = useVoiceInput({ inputRef, onAutoSend })
   const { register, unregister } = useVoiceInputContext()
 
   useEffect(() => {
-    register(id, inputRef, toggleListening)
+    register(id, inputRef, toggleListening, ownerId)
     return () => unregister(id)
-  }, [id, inputRef, toggleListening, register, unregister])
+  }, [id, inputRef, toggleListening, register, unregister, ownerId])
 
   const title = micError
     ? micError
