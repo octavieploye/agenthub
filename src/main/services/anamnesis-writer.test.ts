@@ -671,3 +671,54 @@ it('all orchestrator event types are mapped in ENDPOINT_MAP', async () => {
   expect(callsTo(fetchMock, '/memory/episodic')).toHaveLength(2)
   expect(callsTo(fetchMock, '/memory/procedural')).toHaveLength(3)
 })
+
+// ---------------------------------------------------------------------------
+// C-T5f (RED): S87 — CARD_COMPLETED content sent to Anamnesis is built from an allowlist,
+// even for events queued before the fix (raw SBAR copy with extra keys).
+// ---------------------------------------------------------------------------
+
+it('S87: CARD_COMPLETED content carries only allowlisted payload keys and a redacted SBAR', async () => {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Legacy task', status: 'backlog', sprintName: 'sprint-c' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'CARD_COMPLETED',
+    fromStatus: 'in_progress',
+    toStatus: 'completed',
+    agentId: 'agent-1',
+    payload: {
+      taskTitle: 'Legacy task',
+      repoId,
+      cwd: '/tmp/test-repo',
+      rawOutput: 'export API_KEY=sk-live-123',
+      sbar: {
+        id: 'sbar-1',
+        agentName: 'agent-1',
+        situation: 'Agent "agent-1" was finished while working on: FULL PROMPT secret steps',
+        background: 'Repository: r. Working directory: /tmp/test-repo/pkg. Model: m (anthropic)',
+        assessment: 'Last known status: completed (high confidence). Last output: export API_KEY=sk-live-123 | done',
+        recommendation: 'Task completed successfully.',
+        createdAt: '2026-09-30T00:00:00.000Z'
+      }
+    }
+  })
+
+  const { fetchMock } = mockEndpoints()
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  const [, opts] = callsTo(fetchMock, '/memory/procedural')[0]
+  const body = JSON.parse(opts.body as string) as { content: Record<string, unknown> & { sbar: Record<string, string> } }
+  expect(Object.keys(body.content).sort()).toEqual(
+    ['agent_id', 'event_type', 'from_status', 'repoId', 'sbar', 'sprintName', 'taskTitle', 'task_id', 'to_status']
+  )
+  expect(Object.keys(body.content.sbar).sort()).toEqual(
+    ['assessment', 'background', 'createdAt', 'id', 'recommendation', 'situation']
+  )
+  expect(body.content.sbar.background).toContain('Working directory: pkg')
+  const serialized = String(opts.body)
+  expect(serialized).not.toContain('/tmp/test-repo')
+  expect(serialized).not.toContain('sk-live-123')
+  expect(serialized).not.toContain('FULL PROMPT')
+})

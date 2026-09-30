@@ -4,6 +4,7 @@ import { getUnsyncedEvents, markEventSynced } from '../db/queries/task-events.qu
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import { loadAnamnesisSecret } from './secret-store'
+import { redactCompletionPayload, resolveRedactionContext } from './helpers/task-completion-events'
 
 const ENDPOINT_MAP: Record<TaskEventType, string> = {
   CARD_TRANSITION: '/memory/episodic',
@@ -122,6 +123,21 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     }
   }
 
+  /**
+   * S87: CARD_COMPLETED payloads are rebuilt from the allowlist with a redacted SBAR,
+   * including events queued before the allowlist existed. Other event types pass through.
+   */
+  private allowlistPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
+    if (event.eventType !== 'CARD_COMPLETED') return rawPayload
+    const ctx = resolveRedactionContext(this.db, event.taskId) ?? {
+      taskTitle: typeof rawPayload['taskTitle'] === 'string' ? rawPayload['taskTitle'] : '',
+      sprintName: null,
+      taskDescription: null,
+      repoPath: null
+    }
+    return redactCompletionPayload(rawPayload, ctx)
+  }
+
   /** Transform a task event into the Anamnesis write model format. */
   private buildAnamnesisPayload(
     event: TaskEvent,
@@ -194,7 +210,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       projectId = await this.resolveProjectUuid(repoName)
     }
 
-    const body = this.buildAnamnesisPayload(event, rawPayload, projectId)
+    const body = this.buildAnamnesisPayload(event, this.allowlistPayload(event, rawPayload), projectId)
 
     try {
       const res = await this.fetch(url, {
