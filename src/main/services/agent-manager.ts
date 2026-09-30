@@ -40,6 +40,7 @@ import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
 import { getTaskByAgentId, updateTask, linkSBARToTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent } from '../db/queries/task-events.queries'
+import { emitTaskCompletionEvent } from './helpers/task-completion-events'
 import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
 import { getProjectById } from '../db/queries/projects.queries'
 import { writeWorkspaceMemory } from './workspace-memory-writer'
@@ -203,8 +204,10 @@ export function completeAgentFromTelegram(agentId: string): boolean {
     agentId,
     details: { source: 'telegram-mcp' },
   })
-  emitTriageResult(managed.state, previousStatus)
+  // Kanban sync (SBAR + CARD_COMPLETED) runs before the orchestrator bus event so the
+  // scheduler's completion finds the SBAR and its own emit is a no-op duplicate.
   syncKanbanCard(db, agentId, 'completed')
+  emitTriageResult(managed.state, previousStatus)
   // S4: orchestrator agents stay open at their interactive prompt after signaling
   // completion. Terminate their process tree so a rogue agent cannot linger past
   // task completion. Manual agents are left running — the user may keep chatting.
@@ -410,26 +413,22 @@ function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus
     const linkedTask = getTaskByAgentId(db, agentId)
     if (!linkedTask) return
     updateTask(db, linkedTask.id, { status: taskStatus })
-    insertTaskEvent(db, {
-      taskId: linkedTask.id,
-      eventType,
-      fromStatus: linkedTask.status,
-      toStatus: taskStatus,
-      agentId,
-      payload: { taskTitle: linkedTask.title, repoId: linkedTask.repoId }
-    })
 
     if (eventType === 'CARD_COMPLETED') {
-      const managed = agents.get(agentId)
-      if (managed) {
-        try {
-          const sbar = createAndStoreSBAR(db, buildSBARContext(managed))
-          linkSBARToTask(db, linkedTask.id, sbar.id)
-          log.debug('SBAR generated and linked to task on CARD_COMPLETED', { taskId: linkedTask.id, sbarId: sbar.id })
-        } catch (err) {
-          log.warn('Failed to generate SBAR on CARD_COMPLETED', { agentId, error: String(err) })
-        }
-      }
+      // SBAR first so the completion event carries its copy. getTaskByAgentId skips
+      // completed tasks, so a repeat completion signal never reaches this branch again;
+      // emitTaskCompletionEvent is idempotent per (task, agent) against the scheduler too.
+      linkCompletionSBAR(db, agentId, linkedTask.id)
+      emitTaskCompletionEvent(db, { taskId: linkedTask.id, agentId, fromStatus: linkedTask.status })
+    } else {
+      insertTaskEvent(db, {
+        taskId: linkedTask.id,
+        eventType,
+        fromStatus: linkedTask.status,
+        toStatus: taskStatus,
+        agentId,
+        payload: { taskTitle: linkedTask.title, repoId: linkedTask.repoId }
+      })
     }
 
     getAnamnesisWriter()?.onEventInserted()
@@ -437,6 +436,18 @@ function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus
     log.debug('Kanban card synced', { taskId: linkedTask.id, agentId, taskStatus })
   } catch (err) {
     log.warn('Failed to sync kanban card', { agentId, newStatus, error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+function linkCompletionSBAR(db: ReturnType<typeof getDb>, agentId: string, taskId: string): void {
+  const managed = agents.get(agentId)
+  if (!managed) return
+  try {
+    const sbar = createAndStoreSBAR(db, buildSBARContext(managed))
+    linkSBARToTask(db, taskId, sbar.id)
+    log.debug('SBAR generated and linked to task on CARD_COMPLETED', { taskId, sbarId: sbar.id })
+  } catch (err) {
+    log.warn('Failed to generate SBAR on CARD_COMPLETED', { agentId, error: String(err) })
   }
 }
 
@@ -767,6 +778,8 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             agentId: agentState.id,
             details: { from: previousStatus, to: newStatus, confidence: parsed!.confidence }
           })
+          // Kanban sync before the orchestrator bus event (see completeAgentFromTelegram)
+          syncKanbanCard(db, agentState.id, newStatus)
           emitTriageResult(current.state, previousStatus)
           // Silent lock detection: start timer when agent enters locked
           if (newStatus === 'locked') {
@@ -774,7 +787,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
           } else {
             cancelSilentLockTimer(agentState.id)
           }
-          syncKanbanCard(db, agentState.id, newStatus)
           // S4: parser-detected completion (e.g. "DONE") on an orchestrator agent is a
           // terminal signal — terminate its process tree so a rogue agent cannot linger.
           if (newStatus === 'completed' && current.state.isOrchestrator) {
@@ -921,8 +933,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       agentId: agentState.id,
       details: { exitCode }
     })
-    emitTriageResult(agentState, previousStatusOnExit)
+    // Kanban sync before the orchestrator bus event (see completeAgentFromTelegram)
     syncKanbanCard(db, agentState.id, exitStatus)
+    emitTriageResult(agentState, previousStatusOnExit)
 
     // Auto-close breakout window for this agent
     const wm = getWindowManager()
