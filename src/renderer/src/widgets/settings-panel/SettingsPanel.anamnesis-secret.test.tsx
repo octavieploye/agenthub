@@ -28,6 +28,7 @@ describe('SettingsPanel — Anamnesis secret field', () => {
         export: vi.fn().mockResolvedValue({ success: true, data: { version: '1.0.0', exportedAt: '', settings: {} } }),
         import: vi.fn().mockResolvedValue({ success: true, data: undefined }),
         setAnamnesisSecret,
+        getAnamnesisSecretStatus: vi.fn().mockResolvedValue({ success: true, data: { isSet: false } }),
       },
       voice: { status: vi.fn().mockResolvedValue({ success: true, data: { status: 'ready' } }) },
       docker: {
