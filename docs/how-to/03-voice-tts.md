@@ -36,3 +36,18 @@ Press the microphone button in the agent's terminal area, speak, then release to
 Requires `resources/bin/whisper-cli` binary and `~/Library/Application Support/agenthub/models/ggml-small.bin`.
 
 macOS will prompt for microphone access on first use — grant it in System Settings → Privacy & Security → Microphone.
+
+## Which Field Voice Types Into
+
+Voice input writes into one field at a time. With several agents open, AgentHub picks
+the target in this order:
+
+1. The field you clicked into — whatever has your cursor wins.
+2. The prompt field of the agent you currently have selected.
+3. If there is only one usable field on screen, that one.
+
+If none of those apply, `Cmd+E` does nothing rather than guess. This keeps a dictated
+prompt from landing in another agent's field.
+
+A greyed-out field is never a target. If `Cmd+E` seems to do nothing, check whether the
+agent is busy, paused, or its session has ended — see [Agents](05-agents.md).

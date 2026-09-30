@@ -6,9 +6,9 @@ Update the file (or create a new one) when you add or refactor the feature.
 
 - [Kanban Board](../docs/how-to/01-kanban.md) — columns, cards, drag & drop, filters, projects
 - [Sprint Automation](../docs/how-to/02-sprint-automation.md) — Sprint ↑ flow, draft-ready indicator, import to Kanban
-- [Voice & TTS](../docs/how-to/03-voice-tts.md) — voice modes, Piper setup, Whisper, volume control
+- [Voice & TTS](../docs/how-to/03-voice-tts.md) — voice modes, Piper setup, Whisper, volume control, which field voice types into
 - [Skills & Workflows](../docs/how-to/04-skills.md) — skills dropdown with accordion categories, search, tooltips, display registry
-- [Agents](../docs/how-to/05-agents.md) — spawn, dispatch, breakout terminals, Code Blue, concurrency
+- [Agents](../docs/how-to/05-agents.md) — spawn, dispatch, breakout terminals, Code Blue, concurrency, ended sessions and respawn
 - [Workspace Memory](../docs/how-to/06-workspace-memory.md) — context doc, pinned learnings, SBAR auto-injection, project path setup
 - [AI Team Expert](../docs/how-to/07-ai-team-expert.md) — audit, optimize, and sync AI configs across projects
 - [Telegram Alerts](../docs/how-to/08-telegram.md) — connect your bot, receive agent alerts on your phone, send commands remotely

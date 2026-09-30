@@ -33,3 +33,21 @@ Click **⤢** on an agent card to open a full-screen terminal for that agent. Cl
 ## Code Blue — Emergency Stop
 
 Press **Code Blue** (red button in SABar) to immediately pause all active agents. Resume agents individually from their cards.
+
+## When a Session Ends
+
+An agent's terminal stays on screen after the agent finishes, so you can still read
+everything it did. The session itself is over, though — there is no longer a program
+listening on the other side.
+
+You will see:
+
+- A line in the terminal: `── session ended — input is no longer delivered. Respawn to continue. ──`
+- The prompt field greyed out, reading **Session ended — respawn to continue**
+- The **Send** button replaced by a **Respawn** button
+
+Click **Respawn** to start a fresh session for that agent. The prompt field and voice
+input become usable again, and the terminal history stays where it is.
+
+If you type into an ended session nothing happens — that is expected, not a freeze.
+Respawn first, then send your prompt.
