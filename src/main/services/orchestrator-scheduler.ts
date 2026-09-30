@@ -40,6 +40,7 @@ import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 import { getRepoById } from '../db/queries/repos.queries'
 import { loadAnamnesisSecret } from './secret-store'
+import { resolveAppMode } from './adapters/adapter-factory'
 import { emitTaskStatusEvent, moveTaskWithEvent } from './helpers/task-status-events'
 import { emitTaskCompletionEvent, writeTaskCompletionSummary } from './helpers/task-completion-events'
 import type {
@@ -1196,8 +1197,9 @@ export class OrchestratorScheduler {
 
   /**
    * M4: Anamnesis sprint inventory check. Non-blocking fire-and-forget with 3s timeout.
-   * Mirrors the anamnesis MCP `recall(domain=sprint_inventory)`: resolve the repo to its
-   * project UUID (POST /projects), then GET /memory/retrieve?query=sprint_inventory.
+   * Mirrors the anamnesis MCP `recall(domain=sprint_inventory)`: look the repo up by name
+   * (GET /projects/{name} — read-only, never registers a project; S90), then
+   * GET /memory/retrieve?query=sprint_inventory. Runs in system mode only.
    * If the sprint is already done/in_progress in Anamnesis, logs a warning.
    * The secret comes only from secret-store — never from env.
    */
@@ -1206,6 +1208,10 @@ export class OrchestratorScheduler {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 3000)
       try {
+        if (resolveAppMode() !== 'system') {
+          log.debug('OrchestratorScheduler: M4 sprint inventory check skipped — not in system mode')
+          return
+        }
         const authSecret = loadAnamnesisSecret()
         if (!authSecret) {
           log.debug('OrchestratorScheduler: M4 sprint inventory check skipped — no Anamnesis secret stored')
@@ -1221,13 +1227,11 @@ export class OrchestratorScheduler {
           'Authorization': `Bearer ${authSecret}`,
         }
 
-        const projectResp = await fetch(`${anamnesisUrl}/projects`, {
-          method: 'POST',
+        const projectResp = await fetch(`${anamnesisUrl}/projects/${encodeURIComponent(repoName)}`, {
           headers,
-          body: JSON.stringify({ name: repoName }),
           signal: controller.signal,
         })
-        if (!projectResp.ok) return
+        if (!projectResp.ok) return // 404: project not registered — nothing to check
         const project = (await projectResp.json()) as { id?: string }
         if (!project.id) return
 

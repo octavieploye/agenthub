@@ -18,6 +18,7 @@ import {
   type OrchestratorAgentEvent,
 } from './agent-lifecycle-bus'
 import type { AgentLifecycleStatus } from '../../shared/types/agent.types'
+import type { TaskEvent } from '../../shared/types/task.types'
 
 // ---------------------------------------------------------------------------
 // In-memory DB with minimum required tables
@@ -2800,7 +2801,7 @@ describe('OrchestratorScheduler — Anamnesis events (real migrated DB)', () => 
     await vi.advanceTimersByTimeAsync(1)
   }
 
-  const completedEvents = () => getEventsByTask(rdb, taskId).filter((e) => e.eventType === 'CARD_COMPLETED')
+  const completedEvents = (): TaskEvent[] => getEventsByTask(rdb, taskId).filter((e) => e.eventType === 'CARD_COMPLETED')
 
   it('records the dispatch transition today → in_progress exactly once (scheduler.ts:760)', async () => {
     await startAndDispatch()
@@ -2882,7 +2883,7 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
 
   type FetchCall = { url: URL; init?: RequestInit }
 
-  /** External HTTP boundary: fake Anamnesis. /projects resolves the repo; any other GET returns `records`. */
+  /** External HTTP boundary: fake Anamnesis. GET /projects/{name} resolves the repo; any other GET returns `records`. */
   function stubAnamnesis(records: unknown[]): FetchCall[] {
     const calls: FetchCall[] = []
     vi.stubGlobal(
@@ -2890,7 +2891,7 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input))
         calls.push({ url, init })
-        if (url.pathname === '/projects') {
+        if (url.pathname.startsWith('/projects/')) {
           return new Response(JSON.stringify({ id: 'proj-uuid' }), { status: 200 })
         }
         return new Response(
@@ -2932,6 +2933,7 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
     rdb.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.enabled', 'true')").run()
     repoId = insertRepo(rdb, { name: 'repo-a', path: '/tmp/repo-a' }).id
     warnSpy = vi.spyOn(log, 'warn')
+    vi.stubEnv('OPTIMAEUS_SYSTEM', 'true') // S90: M4 runs in system mode only
   })
 
   afterEach(() => {
@@ -2972,9 +2974,11 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
 
     await startSprint('sprint-c')
 
-    const projectCall = calls.find((c) => c.url.pathname === '/projects')
-    expect(projectCall?.init?.method).toBe('POST')
-    expect(JSON.parse(String(projectCall?.init?.body))).toEqual({ name: 'repo-a' })
+    // S90: side-effect-free lookup — GET /projects/{name}, never POST /projects
+    const projectCall = calls.find((c) => c.url.pathname === '/projects/repo-a')
+    expect(projectCall).toBeDefined()
+    expect((projectCall?.init?.method ?? 'GET').toUpperCase()).toBe('GET')
+    expect(projectCall?.init?.body).toBeUndefined()
 
     const retrieve = calls.find((c) => c.url.pathname === '/memory/retrieve')
     expect(retrieve, 'expected GET /memory/retrieve (what recall(domain=sprint_inventory) calls)').toBeDefined()
@@ -2993,6 +2997,57 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
       expect.stringContaining('M4 sprint inventory found existing work'),
       expect.objectContaining({ sprintName: 'sprint-c', existingStatus: 'done' })
     )
+  })
+
+  // C-T5f (RED): S90 — the pre-flight check is side-effect free and runs only in system mode.
+  it('S90: never POSTs /projects on sprint start; resolves the project with GET /projects/{name}', async () => {
+    vi.stubEnv('OPTIMAEUS_SYSTEM', 'true')
+    storeAnamnesisSecret('stored-secret')
+    const calls: FetchCall[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(String(input))
+        calls.push({ url, init })
+        if (url.pathname === '/projects/repo-a') return new Response(JSON.stringify({ id: 'proj-uuid' }), { status: 200 })
+        if (url.pathname === '/memory/retrieve') return new Response(JSON.stringify({ records: [] }), { status: 200 })
+        return new Response('{}', { status: 404 })
+      })
+    )
+
+    await startSprint('sprint-c')
+
+    expect(calls.filter((c) => (c.init?.method ?? 'GET').toUpperCase() !== 'GET')).toHaveLength(0)
+    expect(calls.some((c) => c.url.pathname === '/projects/repo-a')).toBe(true)
+    const retrieve = calls.find((c) => c.url.pathname === '/memory/retrieve')
+    expect(retrieve?.url.searchParams.get('project_id')).toBe('proj-uuid')
+  })
+
+  it('S90: stops without retrieving when the project is not registered in Anamnesis (404)', async () => {
+    vi.stubEnv('OPTIMAEUS_SYSTEM', 'true')
+    storeAnamnesisSecret('stored-secret')
+    const calls: FetchCall[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: new URL(String(input)), init })
+        return new Response('{"detail":"not found"}', { status: 404 })
+      })
+    )
+
+    await startSprint('sprint-c')
+
+    expect(calls.map((c) => c.url.pathname)).toEqual(['/projects/repo-a'])
+  })
+
+  it('S90: is skipped (no HTTP) outside system mode even with a stored secret', async () => {
+    vi.stubEnv('OPTIMAEUS_SYSTEM', 'false')
+    storeAnamnesisSecret('stored-secret')
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-c')
+
+    expect(calls).toHaveLength(0)
   })
 
   it('does not warn for a not_done record or a different sprint', async () => {
