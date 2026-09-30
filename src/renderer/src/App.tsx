@@ -49,7 +49,11 @@ import type { RoutingResult } from '@shared/types/notification.types'
 import { useNotificationStore } from './stores/notification-store'
 import { buildToastFromTriageEvent } from './helpers/triage-toast'
 import type { TriageEvent } from '@shared/types/triage.types'
-import { startIpcListener } from './widgets/full-terminal/terminal-manager'
+import {
+  startIpcListener,
+  markTerminalSessionEnded,
+  clearTerminalSessionEnded
+} from './widgets/full-terminal/terminal-manager'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useAgentHydration } from './hooks/useAgentHydration'
@@ -252,7 +256,15 @@ function AppMain(): React.JSX.Element {
     })
 
     const unsubExit = window.agentHub.on.agentExit((agentId, exitCode) => {
-      // Terminal persists in terminal-manager — no cleanup needed on exit
+      // The terminal persists in terminal-manager, but its PTY is gone. Mark it
+      // so the pane stops swallowing keystrokes and says the session ended.
+      markTerminalSessionEnded(agentId)
+      setEndedAgents((prev) => {
+        if (prev.has(agentId)) return prev
+        const next = new Set(prev)
+        next.add(agentId)
+        return next
+      })
       setProxyAgents((prev) => {
         if (!prev.has(agentId)) return prev
         const next = new Set(prev)
@@ -730,6 +742,21 @@ function AppMain(): React.JSX.Element {
     window.agentHub.agents.sendInput(agentId, data)
   }, [])
 
+  const handleRespawn = useCallback(async (agentId: string) => {
+    try {
+      await window.agentHub.agents.respawn(agentId)
+      clearTerminalSessionEnded(agentId)
+      setEndedAgents((prev) => {
+        if (!prev.has(agentId)) return prev
+        const next = new Set(prev)
+        next.delete(agentId)
+        return next
+      })
+    } catch (err) {
+      console.error('Respawn failed:', err)
+    }
+  }, [])
+
   const handleBreakout = useCallback(async (agentId: string) => {
     try {
       await window.agentHub.windows.createBreakout(agentId)
@@ -739,6 +766,8 @@ function AppMain(): React.JSX.Element {
   }, [])
 
   const [proxyAgents, setProxyAgents] = useState<Set<string>>(new Set())
+  // Agents whose PTY has exited — their prompt bar must not accept input.
+  const [endedAgents, setEndedAgents] = useState<Set<string>>(new Set())
 
   const handleAttachTerminal = useCallback(async (agentId: string) => {
     try {
@@ -1167,6 +1196,8 @@ function AppMain(): React.JSX.Element {
                       <InlineTaskInput
                         agent={agents.get(activeAgentId)!}
                         onSendInput={handleSendInput}
+                        sessionEnded={endedAgents.has(activeAgentId)}
+                        onRespawn={handleRespawn}
                       />
                     )}
                   </div>
@@ -1239,6 +1270,8 @@ function AppMain(): React.JSX.Element {
                     <InlineTaskInput
                       agent={agents.get(activeAgentId)!}
                       onSendInput={handleSendInput}
+                      sessionEnded={endedAgents.has(activeAgentId)}
+                      onRespawn={handleRespawn}
                     />
                   )}
                 </div>

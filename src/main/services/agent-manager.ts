@@ -1304,11 +1304,17 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   return agentState
 }
 
-export function sendInput(agentId: string, data: string, opts?: { isSystemAction?: boolean }): void {
+/**
+ * Write to an agent's PTY.
+ *
+ * Returns false when the agent has no live PTY, so callers can tell a dropped
+ * keystroke from a delivered one instead of assuming every write landed.
+ */
+export function sendInput(agentId: string, data: string, opts?: { isSystemAction?: boolean }): boolean {
   const managed = agents.get(agentId)
   if (!managed) {
     log.warn('sendInput: agent not found (stale renderer reference)', { agentId })
-    return
+    return false
   }
   if (!opts?.isSystemAction) {
     managed.hasSentInput = true
@@ -1350,6 +1356,7 @@ export function sendInput(agentId: string, data: string, opts?: { isSystemAction
   } else {
     managed.ptyProcess.write(data)
   }
+  return true
 }
 
 export function setPtyOwner(agentId: string, webContentsId: number): void {
@@ -1360,14 +1367,16 @@ export function clearPtyOwner(agentId: string): void {
   ptyOwners.delete(agentId)
 }
 
-export function resizeAgent(agentId: string, cols: number, rows: number, _webContentsId?: number): void {
+/** Resize an agent's PTY. Returns false when the agent has no live PTY. */
+export function resizeAgent(agentId: string, cols: number, rows: number, _webContentsId?: number): boolean {
   const managed = agents.get(agentId)
   if (!managed) {
     log.warn('resizeAgent: agent not found (stale renderer reference)', { agentId })
-    return
+    return false
   }
   managed.ptyProcess.resize(cols, rows)
   managed.headlessTerminal.resize(cols, rows)
+  return true
 }
 
 export function killAgent(agentId: string): void {

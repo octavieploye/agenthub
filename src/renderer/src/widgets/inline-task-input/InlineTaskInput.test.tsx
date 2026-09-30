@@ -152,4 +152,84 @@ describe('InlineTaskInput', () => {
     fireEvent.click(screen.getByTestId('inline-send-button'))
     expect(mockOnSendInput).toHaveBeenCalledTimes(1)
   })
+
+  describe('ended session (PTY gone)', () => {
+    it('disables the input even though status is completed', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+        />
+      )
+      expect(screen.getByTestId('inline-input-field')).toBeDisabled()
+    })
+
+    it('tells the user the session ended instead of inviting a prompt', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+        />
+      )
+      expect(screen.getByTestId('inline-input-field')).toHaveAttribute(
+        'placeholder',
+        'Session ended \u2014 respawn to continue'
+      )
+    })
+
+    it('replaces Send with Respawn', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+          onRespawn={vi.fn()}
+        />
+      )
+      expect(screen.getByTestId('inline-respawn-button')).toBeInTheDocument()
+      expect(screen.queryByTestId('inline-send-button')).not.toBeInTheDocument()
+    })
+
+    it('calls onRespawn with the agent id', () => {
+      const onRespawn = vi.fn()
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+          onRespawn={onRespawn}
+        />
+      )
+      fireEvent.click(screen.getByTestId('inline-respawn-button'))
+      expect(onRespawn).toHaveBeenCalledWith('agent-1')
+    })
+
+    it('never forwards input to a dead PTY', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+        />
+      )
+      const input = screen.getByTestId('inline-input-field')
+      fireEvent.change(input, { target: { value: 'still typing' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(mockOnSendInput).not.toHaveBeenCalled()
+    })
+
+    it('keeps the input usable while the session is alive', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded={false}
+        />
+      )
+      expect(screen.getByTestId('inline-input-field')).not.toBeDisabled()
+      expect(screen.getByTestId('inline-send-button')).toBeInTheDocument()
+    })
+  })
 })

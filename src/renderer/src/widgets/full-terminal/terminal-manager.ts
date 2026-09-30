@@ -17,6 +17,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { getXtermTheme } from './theme-bridge'
+import { isSessionEnded, markSessionEnded, clearSessionEnded } from './session-liveness'
 import { watchWebGlContext } from '../../crash-logger'
 
 let webglFailureCount = 0
@@ -260,8 +261,11 @@ export function attachToContainer(agentId: string, container: HTMLDivElement): v
       managed.term.write(pending)
     }
 
-    // Wire keyboard input to IPC
+    // Wire keyboard input to IPC.
+    // An exited agent no longer has a PTY — main would discard the keystroke
+    // silently, which reads as a frozen terminal. Drop it here instead.
     managed.term.onData((data: string) => {
+      if (isSessionEnded(agentId)) return
       window.agentHub.agents.sendInput(agentId, data)
     })
   } else {
@@ -479,4 +483,24 @@ export function searchAllTerminals(query: string): TerminalSearchHit[] {
     }
   }
   return results
+}
+
+/**
+ * Mark an agent's terminal as ended and say so in the buffer.
+ *
+ * Called once per exit from the agentExit subscriber. The banner is the only
+ * signal the user gets that keystrokes are no longer going anywhere.
+ */
+export function markTerminalSessionEnded(agentId: string): void {
+  markSessionEnded(agentId)
+  const managed = terminals.get(agentId)
+  if (!managed) return
+  managed.term.write(
+    '\r\n\x1b[2m\u2500\u2500 session ended \u2014 input is no longer delivered. Respawn to continue. \u2500\u2500\x1b[0m\r\n'
+  )
+}
+
+/** Re-enable keyboard input after a respawn gives the agent a live PTY. */
+export function clearTerminalSessionEnded(agentId: string): void {
+  clearSessionEnded(agentId)
 }

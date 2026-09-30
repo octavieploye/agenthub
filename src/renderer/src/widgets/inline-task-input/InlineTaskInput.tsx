@@ -6,6 +6,13 @@ import { isLightColor } from '../agent-detail/color-utils'
 interface InlineTaskInputProps {
   agent: AgentState
   onSendInput: (agentId: string, data: string) => void
+  /**
+   * True once the agent's PTY has exited. Status alone cannot express this:
+   * an agent reports 'completed' via the Telegram MCP contract while its
+   * process is still alive, so only the exit event tells us input is dead.
+   */
+  sessionEnded?: boolean
+  onRespawn?: (agentId: string) => void
 }
 
 function getInputConfig(status: AgentState['status']): {
@@ -34,12 +41,23 @@ function getInputConfig(status: AgentState['status']): {
   }
 }
 
-function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JSX.Element {
+function InlineTaskInput({
+  agent,
+  onSendInput,
+  sessionEnded = false,
+  onRespawn
+}: InlineTaskInputProps): React.JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const { disabled, placeholder } = getInputConfig(agent.status)
+  const statusConfig = getInputConfig(agent.status)
+  const disabled = sessionEnded || statusConfig.disabled
+  const placeholder = sessionEnded
+    ? 'Session ended \u2014 respawn to continue'
+    : statusConfig.placeholder
 
   const handleSubmit = useCallback(() => {
+    // Nothing is listening on the other end — never pretend the send worked.
+    if (sessionEnded) return
     // Read directly from the DOM element so voice transcription values
     // are captured even before React re-renders the controlled input.
     const el = inputRef.current
@@ -48,7 +66,7 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
     onSendInput(agent.id, trimmed + '\r')
     setInputValue('')
     if (el) el.value = ''
-  }, [agent.id, onSendInput, inputValue])
+  }, [agent.id, onSendInput, inputValue, sessionEnded])
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -108,21 +126,33 @@ function InlineTaskInput({ agent, onSendInput }: InlineTaskInputProps): React.JS
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        disabled={disabled && !inputValue.trim()}
+        disabled={sessionEnded || (disabled && !inputValue.trim())}
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"
       />
-      <VoiceInputButton inputRef={inputRef} onAutoSend={handleSubmit} />
-      <button
-        data-testid="inline-send-button"
-        className="btn btn-sm text-xs"
-        style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
-        type="button"
-        disabled={!inputValue.trim()}
-        onClick={handleSubmit}
-      >
-        Send
-      </button>
+      <VoiceInputButton inputRef={inputRef} onAutoSend={handleSubmit} ownerId={agent.id} />
+      {sessionEnded ? (
+        <button
+          data-testid="inline-respawn-button"
+          className="btn btn-sm text-xs"
+          style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
+          type="button"
+          onClick={() => onRespawn?.(agent.id)}
+        >
+          Respawn
+        </button>
+      ) : (
+        <button
+          data-testid="inline-send-button"
+          className="btn btn-sm text-xs"
+          style={{ backgroundColor: agent.color, color: isLightColor(agent.color) ? '#1e1e2e' : '#ffffff' }}
+          type="button"
+          disabled={!inputValue.trim()}
+          onClick={handleSubmit}
+        >
+          Send
+        </button>
+      )}
     </div>
   )
 }
