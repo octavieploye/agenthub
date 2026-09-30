@@ -38,6 +38,10 @@ import { isOrchestratorEnabled, getApprovalWindowMinutes, getMaxConcurrentRuns, 
 import type { OrchestratorLifecycleNotificationType } from '../db/queries/telegram-notifications.queries'
 import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
+import { getRepoById } from '../db/queries/repos.queries'
+import { loadAnamnesisSecret } from './secret-store'
+import { emitTaskStatusEvent, moveTaskWithEvent } from './helpers/task-status-events'
+import { emitTaskCompletionEvent, writeTaskCompletionSummary } from './helpers/task-completion-events'
 import type {
   OrchestratorRun,
   OrchestratorRunStatus,
@@ -365,10 +369,13 @@ export class OrchestratorScheduler {
       if (processedTaskIds.has(tl.taskId)) continue
       processedTaskIds.add(tl.taskId)
       if (tl.status === 'done') {
-        updateTask(this.db, tl.taskId, { status: 'completed' })
+        moveTaskWithEvent(this.db, tl.taskId, 'completed', { payload: { source: 'orchestrator', runId, reason: 'run_cancelled' } })
         log.info('OrchestratorScheduler: cancel — marked done task as completed', { taskId: tl.taskId, runId })
       } else if (tl.status === 'active') {
-        updateTask(this.db, tl.taskId, { status: 'backlog' })
+        moveTaskWithEvent(this.db, tl.taskId, 'backlog', {
+          agentId: tl.agentId,
+          payload: { source: 'orchestrator', runId, reason: 'run_cancelled' },
+        })
         log.info('OrchestratorScheduler: cancel — reset active task to backlog', { taskId: tl.taskId, runId })
       }
     }
@@ -757,7 +764,16 @@ export class OrchestratorScheduler {
         }
 
         updateTaskLogStatus(this.db, taskLog.id, 'active', agentId)
-        updateTask(this.db, decision.taskId, { status: 'in_progress' })
+        const runContext = { source: 'orchestrator', runId: run.id, sprintName: run.sprintName }
+        moveTaskWithEvent(this.db, decision.taskId, 'in_progress', { agentId, payload: runContext })
+        emitTaskStatusEvent(this.db, {
+          taskId: decision.taskId,
+          eventType: 'ORCHESTRATOR_TASK_STARTED',
+          fromStatus: fullTask.status,
+          toStatus: 'in_progress',
+          agentId,
+          payload: { ...runContext, phase: 'dev' },
+        })
         incrementAgentsSpawned(this.db, run.id)
         updateRunTimestamp(this.db, run.id)
 
@@ -893,7 +909,10 @@ export class OrchestratorScheduler {
     source: 'event' | 'reconciliation'
   ): void {
     updateTaskLogStatus(this.db, taskLog.id, 'done', agentId)
+    const fromStatus = getTaskById(this.db, taskLog.taskId)?.status ?? null
     updateTask(this.db, taskLog.taskId, { status: 'completed' })
+    emitTaskCompletionEvent(this.db, { taskId: taskLog.taskId, agentId, fromStatus })
+    writeTaskCompletionSummary(this.db, taskLog, agentId)
     this.retryMap.delete(this.retryKey(run.id, taskLog.taskId))
     log.info('OrchestratorScheduler: agent completed — kanban task marked completed', {
       agentId,
@@ -947,7 +966,10 @@ export class OrchestratorScheduler {
     }
 
     updateTaskLogStatus(this.db, taskLog.id, 'failed', agentId)
-    updateTask(this.db, taskLog.taskId, { status: 'backlog' })
+    moveTaskWithEvent(this.db, taskLog.taskId, 'backlog', {
+      agentId,
+      payload: { source: 'orchestrator', runId: run.id, reason: 'retries_exhausted' },
+    })
     this.retryMap.delete(this.retryKey(run.id, taskLog.taskId))
     log.error('OrchestratorScheduler: agent failed after retry, giving up — kanban task reset to backlog', {
       agentId,
@@ -1174,45 +1196,56 @@ export class OrchestratorScheduler {
 
   /**
    * M4: Anamnesis sprint inventory check. Non-blocking fire-and-forget with 3s timeout.
+   * Mirrors the anamnesis MCP `recall(domain=sprint_inventory)`: resolve the repo to its
+   * project UUID (POST /projects), then GET /memory/retrieve?query=sprint_inventory.
    * If the sprint is already done/in_progress in Anamnesis, logs a warning.
-   * Ported from old kanban-orchestrator.ts checkSprintInventory.
+   * The secret comes only from secret-store — never from env.
    */
   private checkSprintInventory(sprintName: string, repoId: string): void {
     const doCheck = async (): Promise<void> => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 3000)
       try {
-        const authSecret = process.env['ANAMNESIS_AUTH_SECRET']
+        const authSecret = loadAnamnesisSecret()
         if (!authSecret) {
-          log.debug('OrchestratorScheduler: M4 sprint inventory check skipped — no ANAMNESIS_AUTH_SECRET')
+          log.debug('OrchestratorScheduler: M4 sprint inventory check skipped — no Anamnesis secret stored')
           return
         }
+        const repoName = getRepoById(this.db, repoId)?.name
+        if (!repoName) return
 
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 3000)
         const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-Optimaeus-Caller': 'hephaestus',
+          'Authorization': `Bearer ${authSecret}`,
+        }
 
-        const resp = await fetch(
-          `${anamnesisUrl}/api/v1/memory/procedural?domain=sprint_inventory&query=${encodeURIComponent(sprintName)}`,
-          {
-            headers: {
-              'X-Optimaeus-Caller': 'hephaestus',
-              'Authorization': `Bearer ${authSecret}`,
-            },
-            signal: controller.signal,
-          }
-        )
-        clearTimeout(timeout)
+        const projectResp = await fetch(`${anamnesisUrl}/projects`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: repoName }),
+          signal: controller.signal,
+        })
+        if (!projectResp.ok) return
+        const project = (await projectResp.json()) as { id?: string }
+        if (!project.id) return
 
+        const params = new URLSearchParams({
+          query: SPRINT_INVENTORY_DOMAIN,
+          project_id: project.id,
+          token_budget: '20000',
+          detail_level: 'summary',
+        })
+        const resp = await fetch(`${anamnesisUrl}/memory/retrieve?${params.toString()}`, {
+          headers,
+          signal: controller.signal,
+        })
         if (!resp.ok) return
 
-        const data = (await resp.json()) as {
-          memories?: Array<{ content?: { status?: string } }>
-        }
-        const doneMatch = data.memories?.find(
-          (m) => m.content?.status === 'done' || m.content?.status === 'in_progress'
-        )
-
-        if (doneMatch) {
-          const status = doneMatch.content?.status ?? 'unknown'
+        const data = (await resp.json()) as { records?: Array<{ content?: unknown }> }
+        const status = findActiveInventoryStatus(data.records ?? [], sprintName)
+        if (status) {
           log.warn('OrchestratorScheduler: M4 sprint inventory found existing work', {
             sprintName,
             repoId,
@@ -1223,10 +1256,46 @@ export class OrchestratorScheduler {
         log.warn('OrchestratorScheduler: M4 sprint inventory check failed (non-blocking)', {
           error: err instanceof Error ? err.message : String(err),
         })
+      } finally {
+        clearTimeout(timeout)
       }
     }
 
     // Fire-and-forget — doCheck() has internal try/catch and never rejects
     void doCheck()
+  }
+}
+
+const SPRINT_INVENTORY_DOMAIN = 'sprint_inventory'
+const ACTIVE_INVENTORY_STATUSES = new Set(['done', 'in_progress'])
+
+/**
+ * Scan /memory/retrieve records for a sprint_inventory entry of `sprintName` whose status is
+ * done/in_progress. Record `content` is a JSON string: { domain, content: { sprint_name, status } }.
+ */
+function findActiveInventoryStatus(records: Array<{ content?: unknown }>, sprintName: string): string | null {
+  const wanted = sprintName.trim().toLowerCase()
+  for (const record of records) {
+    const entry = parseInventoryEntry(record.content)
+    if (!entry) continue
+    const name = (entry.sprint_name ?? entry.sprint_slug ?? '').trim().toLowerCase()
+    if (name === wanted && entry.status && ACTIVE_INVENTORY_STATUSES.has(entry.status)) return entry.status
+  }
+  return null
+}
+
+/** Parse one record's content into its inventory entry; null when it is not a sprint_inventory record. */
+function parseInventoryEntry(
+  content: unknown
+): { sprint_name?: string; sprint_slug?: string; status?: string } | null {
+  try {
+    const parsed = (typeof content === 'string' ? JSON.parse(content) : content) as
+      | { domain?: unknown; content?: unknown }
+      | null
+    if (!parsed || typeof parsed !== 'object' || parsed.domain !== SPRINT_INVENTORY_DOMAIN) return null
+    const inner = parsed.content
+    return inner && typeof inner === 'object' ? (inner as { sprint_name?: string; sprint_slug?: string; status?: string }) : null
+  } catch {
+    return null
   }
 }

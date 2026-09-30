@@ -2714,3 +2714,296 @@ describe('OrchestratorScheduler', () => {
     })
   })
 })
+
+// ===========================================================================
+// C-T1 (Sprint C, RED): Anamnesis event emission + M4 sprint inventory check.
+// Real in-memory SQLite with ALL migrations (getDb(':memory:')), not the hand-rolled schema above.
+// ===========================================================================
+import log from 'electron-log/main'
+import { getDb, closeDb, resetDb } from '../db/connection'
+import { insertRepo } from '../db/queries/repos.queries'
+import { insertAgent, purgeDeadAgents } from '../db/queries/agents.queries'
+import { insertTask as insertKanbanTask, updateTask } from '../db/queries/tasks.queries'
+import { insertSBAR } from '../db/queries/sbar.queries'
+import { getEventsByTask } from '../db/queries/task-events.queries'
+import { storeAnamnesisSecret } from './secret-store'
+
+// Electron boundary — safeStorage needs a running Electron process (used by secret-store for M4).
+vi.mock('electron', () => ({
+  safeStorage: {
+    isEncryptionAvailable: () => true,
+    encryptString: (plain: string) => Buffer.from(`enc:${plain}`, 'utf8'),
+    decryptString: (buf: Buffer) => buf.toString('utf8').replace(/^enc:/, ''),
+  },
+}))
+
+const SBAR_TEXT = {
+  situation: 'Situation: orchestrated task finished',
+  background: 'Background: changed the writer',
+  assessment: 'Assessment: all green',
+  recommendation: 'Recommendation: go to review gate',
+}
+
+describe('OrchestratorScheduler — Anamnesis events (real migrated DB)', () => {
+  let rdb: Database.Database
+  let scheduler: OrchestratorScheduler
+  let repoId: string
+  let agentId: string
+  let taskId: string
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetDb()
+    rdb = getDb(':memory:')
+    rdb.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.enabled', 'true')").run()
+    repoId = insertRepo(rdb, { name: 'repo-a', path: '/tmp/repo-a' }).id
+    agentId = insertAgent(rdb, { repoId, name: 'agent-1', cwd: '/tmp/repo-a' }).id
+    taskId = insertKanbanTask(rdb, { repoId, title: 'Orchestrated task', status: 'today' }).id
+  })
+
+  afterEach(() => {
+    scheduler?.stop()
+    closeDb()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  /** Dispatch the task to `agentId` the way service-orchestrator does: link agent_id, leave status to the scheduler. */
+  async function startAndDispatch(): Promise<string> {
+    const decision: SchedulerBrainDecision = {
+      taskId,
+      spawnOptions: { repoId, name: 'agent-1', cwd: '/tmp/repo-a' },
+      reason: 'test',
+    }
+    const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+    const dispatch = {
+      execute: vi.fn((_opts: unknown, tid: string) => {
+        updateTask(rdb, tid, { agentId })
+        return agentId
+      }),
+    }
+    scheduler = new OrchestratorScheduler(
+      buildDeps(rdb, { brain, dispatch: dispatch as unknown as SchedulerDeps['dispatch'] })
+    )
+    const run = scheduler.start({ sprintName: 'sprint-c', repoId, taskIds: [taskId] })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(dispatch.execute).toHaveBeenCalledTimes(1)
+    return run.id
+  }
+
+  function seedSbar(): void {
+    insertSBAR(rdb, { agentId, agentName: 'agent-1', repoId, ...SBAR_TEXT })
+  }
+
+  async function completeAgent(): Promise<void> {
+    emitOrchestratorEvent({ type: 'agent:completed', triageEvent: fakeTriageEvent(agentId, 'completed') })
+    await vi.advanceTimersByTimeAsync(1)
+  }
+
+  const completedEvents = () => getEventsByTask(rdb, taskId).filter((e) => e.eventType === 'CARD_COMPLETED')
+
+  it('records the dispatch transition today → in_progress exactly once (scheduler.ts:760)', async () => {
+    await startAndDispatch()
+
+    const moves = getEventsByTask(rdb, taskId).filter(
+      (e) => e.eventType === 'CARD_TRANSITION' && e.fromStatus === 'today' && e.toStatus === 'in_progress'
+    )
+    expect(moves).toHaveLength(1)
+  })
+
+  it('emits exactly 1 CARD_COMPLETED carrying the SBAR payload on agent:completed', async () => {
+    await startAndDispatch()
+    seedSbar()
+
+    await completeAgent()
+
+    const events = completedEvents()
+    expect(events).toHaveLength(1)
+    expect(events[0].toStatus).toBe('completed')
+    expect(events[0].agentId).toBe(agentId)
+    const payload = JSON.parse(events[0].payloadJson) as { sbar: Record<string, string> }
+    expect(payload.sbar).toMatchObject(SBAR_TEXT)
+  })
+
+  it('still emits CARD_COMPLETED when the task is already completed (tasks.queries.ts:107 race)', async () => {
+    await startAndDispatch()
+    seedSbar()
+    rdb.prepare("UPDATE tasks SET status = 'completed' WHERE id = ?").run(taskId)
+
+    await completeAgent()
+
+    expect(completedEvents()).toHaveLength(1)
+  })
+
+  it('copies the SBAR into the task log summary_json (existing updateTaskLogSummary)', async () => {
+    const runId = await startAndDispatch()
+    seedSbar()
+
+    await completeAgent()
+
+    const taskLog = getTaskLogsByRun(rdb, runId).find((l) => l.taskId === taskId)
+    expect(taskLog?.summaryJson).toBeTruthy()
+    expect(taskLog?.summaryJson).toContain(SBAR_TEXT.situation)
+  })
+
+  it('keeps the SBAR in the event and in summary_json after purgeDeadAgents deletes the SBAR rows', async () => {
+    const runId = await startAndDispatch()
+    seedSbar()
+    await completeAgent()
+    rdb.prepare("UPDATE agents SET status = 'completed', updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(agentId)
+
+    expect(purgeDeadAgents(rdb, 24)).toBe(1)
+
+    expect(rdb.prepare('SELECT COUNT(*) AS n FROM sbar_handoffs').get()).toEqual({ n: 0 })
+    const events = completedEvents()
+    expect(events).toHaveLength(1)
+    expect((JSON.parse(events[0].payloadJson) as { sbar: Record<string, string> }).sbar).toMatchObject(SBAR_TEXT)
+    const taskLog = getTaskLogsByRun(rdb, runId).find((l) => l.taskId === taskId)
+    expect(taskLog?.summaryJson).toContain(SBAR_TEXT.situation)
+  })
+
+  it('records the reset transition in_progress → backlog when an active task is cancelled (scheduler.ts:371)', async () => {
+    const runId = await startAndDispatch()
+
+    scheduler.cancel(runId)
+
+    const resets = getEventsByTask(rdb, taskId).filter(
+      (e) => e.eventType === 'CARD_TRANSITION' && e.fromStatus === 'in_progress' && e.toStatus === 'backlog'
+    )
+    expect(resets).toHaveLength(1)
+  })
+})
+
+describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store)', () => {
+  let rdb: Database.Database
+  let scheduler: OrchestratorScheduler
+  let repoId: string
+  let warnSpy: ReturnType<typeof vi.spyOn>
+
+  type FetchCall = { url: URL; init?: RequestInit }
+
+  /** External HTTP boundary: fake Anamnesis. /projects resolves the repo; any other GET returns `records`. */
+  function stubAnamnesis(records: unknown[]): FetchCall[] {
+    const calls: FetchCall[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(String(input))
+        calls.push({ url, init })
+        if (url.pathname === '/projects') {
+          return new Response(JSON.stringify({ id: 'proj-uuid' }), { status: 200 })
+        }
+        return new Response(
+          JSON.stringify({ records, total_candidates: records.length, budget_used: 0, token_budget: 20000, detail_level: 'summary', gaps: [] }),
+          { status: 200 }
+        )
+      })
+    )
+    return calls
+  }
+
+  /** Real recall(domain=sprint_inventory) record shape: `content` is a JSON STRING; status/sprint_name live in its nested `content`. */
+  function inventoryRecord(sprintName: string, status: string): Record<string, unknown> {
+    return {
+      memory_id: 'mem-1',
+      layer: 'episodic',
+      source_entity: 'hephaestus',
+      project_id: 'proj-uuid',
+      domain: null,
+      content: JSON.stringify({
+        layer: 'procedural',
+        pattern_type: 'sprint_structure',
+        domain: 'sprint_inventory',
+        content: { sprint_name: sprintName, status },
+      }),
+    }
+  }
+
+  async function startSprint(sprintName: string): Promise<void> {
+    scheduler = new OrchestratorScheduler(buildDeps(rdb))
+    scheduler.start({ sprintName, repoId })
+    await vi.advanceTimersByTimeAsync(10) // let the fire-and-forget M4 promise chain settle
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetDb()
+    rdb = getDb(':memory:')
+    rdb.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.enabled', 'true')").run()
+    repoId = insertRepo(rdb, { name: 'repo-a', path: '/tmp/repo-a' }).id
+    warnSpy = vi.spyOn(log, 'warn')
+  })
+
+  afterEach(() => {
+    scheduler?.stop()
+    closeDb()
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('reads the secret from secret-store, not from process.env (env would win today)', async () => {
+    storeAnamnesisSecret('stored-secret')
+    vi.stubEnv('ANAMNESIS_AUTH_SECRET', 'env-secret')
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-c')
+
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      const headers = call.init?.headers as Record<string, string>
+      expect(headers.Authorization).toBe('Bearer stored-secret')
+    }
+  })
+
+  it('is skipped (no HTTP) when only the env var is set and nothing is stored', async () => {
+    vi.stubEnv('ANAMNESIS_AUTH_SECRET', 'env-secret')
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-c')
+
+    expect(calls).toHaveLength(0)
+  })
+
+  it('queries the real retrieve endpoint for the sprint_inventory domain with a resolved project id', async () => {
+    storeAnamnesisSecret('stored-secret')
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-c')
+
+    const projectCall = calls.find((c) => c.url.pathname === '/projects')
+    expect(projectCall?.init?.method).toBe('POST')
+    expect(JSON.parse(String(projectCall?.init?.body))).toEqual({ name: 'repo-a' })
+
+    const retrieve = calls.find((c) => c.url.pathname === '/memory/retrieve')
+    expect(retrieve, 'expected GET /memory/retrieve (what recall(domain=sprint_inventory) calls)').toBeDefined()
+    expect(retrieve?.url.searchParams.get('project_id')).toBe('proj-uuid')
+    expect(retrieve?.url.searchParams.get('query')).toContain('sprint_inventory')
+    expect(calls.some((c) => c.url.pathname.startsWith('/api/v1'))).toBe(false)
+  })
+
+  it('warns when the retrieve response holds a done/in_progress inventory record for this sprint', async () => {
+    storeAnamnesisSecret('stored-secret')
+    stubAnamnesis([inventoryRecord('sprint-c', 'done')])
+
+    await startSprint('sprint-c')
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('M4 sprint inventory found existing work'),
+      expect.objectContaining({ sprintName: 'sprint-c', existingStatus: 'done' })
+    )
+  })
+
+  it('does not warn for a not_done record or a different sprint', async () => {
+    storeAnamnesisSecret('stored-secret')
+    const calls = stubAnamnesis([inventoryRecord('sprint-c', 'not_done'), inventoryRecord('other-sprint', 'done')])
+
+    await startSprint('sprint-c')
+
+    // guard against a vacuous pass: the inventory must actually have been fetched
+    expect(calls.some((c) => c.url.pathname === '/memory/retrieve')).toBe(true)
+    const found = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('found existing work'))
+    expect(found).toHaveLength(0)
+  })
+})
