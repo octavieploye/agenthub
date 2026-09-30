@@ -75,13 +75,32 @@ export function storeAnamnesisSecret(secret: string): void {
  * One-time bootstrap: import `env.ANAMNESIS_AUTH_SECRET` into the store.
  * Returns true only when the secret was imported now. Returns false when the env var is
  * unset/blank or a secret is already stored (a Settings-UI value always wins; later env values are ignored).
+ * Always removes `ANAMNESIS_AUTH_SECRET` from `env`, even when the import throws.
  */
 export function bootstrapAnamnesisSecretFromEnv(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   const candidate = env['ANAMNESIS_AUTH_SECRET']?.trim()
+  // S86: the env copy is dropped after every attempt so agent PTYs never inherit it.
+  delete env['ANAMNESIS_AUTH_SECRET']
   if (!candidate) return false
   if (hasAnamnesisSecret()) return false
   storeAnamnesisSecret(candidate)
   return true
+}
+
+/** Credentials an agent PTY / docker exec must never see (S28, S45, S86). */
+export const AGENT_HIDDEN_ENV_KEYS = [
+  'ANAMNESIS_AUTH_SECRET',
+  'AUTH_SECRET',
+  'FORGEJO_TOKEN',
+  'FORGEJO_URL',
+  'OLLAMA_CLOUD_KEY',
+  'OLLAMA_API_KEY',
+] as const
+
+/** Remove every AGENT_HIDDEN_ENV_KEYS entry from a spawn env (mutates and returns it). */
+export function stripAgentSecretEnv<T extends Record<string, string | undefined>>(env: T): T {
+  for (const key of AGENT_HIDDEN_ENV_KEYS) delete env[key]
+  return env
 }

@@ -21,7 +21,9 @@ import {
   loadAnamnesisSecret,
   storeAnamnesisSecret,
   bootstrapAnamnesisSecretFromEnv,
+  stripAgentSecretEnv,
 } from './secret-store'
+import { buildDockerExecEnv } from './adapters/docker-agent-adapter'
 
 describe('secret-store', () => {
   beforeEach(() => {
@@ -89,5 +91,62 @@ describe('secret-store', () => {
       expect(bootstrapAnamnesisSecretFromEnv({ ANAMNESIS_AUTH_SECRET: '   ' })).toBe(false)
       expect(loadAnamnesisSecret()).toBe('')
     })
+  })
+})
+
+// C-T5f (RED): S86 — ANAMNESIS_AUTH_SECRET must not stay in the process env after the bootstrap,
+// and must never reach an agent PTY / docker exec env.
+describe('S86: Anamnesis secret never stays in an agent env', () => {
+  beforeEach(() => {
+    resetDb()
+    getDb(':memory:')
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('removes ANAMNESIS_AUTH_SECRET from the env after importing it', () => {
+    const env: Record<string, string | undefined> = { ANAMNESIS_AUTH_SECRET: 'from-env', PATH: '/bin' }
+
+    bootstrapAnamnesisSecretFromEnv(env)
+
+    expect('ANAMNESIS_AUTH_SECRET' in env).toBe(false)
+    expect(env.PATH).toBe('/bin')
+    expect(loadAnamnesisSecret()).toBe('from-env')
+  })
+
+  it('removes ANAMNESIS_AUTH_SECRET from the env even when a stored secret wins', () => {
+    storeAnamnesisSecret('from-settings-ui')
+    const env: Record<string, string | undefined> = { ANAMNESIS_AUTH_SECRET: 'from-env' }
+
+    bootstrapAnamnesisSecretFromEnv(env)
+
+    expect('ANAMNESIS_AUTH_SECRET' in env).toBe(false)
+  })
+
+  it('strips every agent-hidden credential, including ANAMNESIS_AUTH_SECRET, from a spawn env', () => {
+    const env = stripAgentSecretEnv({
+      ANAMNESIS_AUTH_SECRET: 'a',
+      AUTH_SECRET: 'b',
+      FORGEJO_TOKEN: 'c',
+      FORGEJO_URL: 'd',
+      OLLAMA_CLOUD_KEY: 'e',
+      OLLAMA_API_KEY: 'f',
+      PATH: '/bin',
+    })
+
+    expect(env).toEqual({ PATH: '/bin' })
+  })
+
+  it('the docker exec env never contains ANAMNESIS_AUTH_SECRET', () => {
+    vi.stubEnv('ANAMNESIS_AUTH_SECRET', 'env-secret')
+    try {
+      const env = buildDockerExecEnv()
+      expect(env.ANAMNESIS_AUTH_SECRET).toBeUndefined()
+      expect(Object.values(env)).not.toContain('env-secret')
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })

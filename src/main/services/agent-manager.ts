@@ -29,7 +29,7 @@ import { insertActivityEvent } from '../db/queries/activity.queries'
 import { getSBARByAgentId } from '../db/queries/sbar.queries'
 import { createAndStoreSBAR, type AgentContext } from './sbar-generator'
 import { routeNotification } from './notification-router'
-import { loadAnamnesisSecret } from './secret-store'
+import { loadAnamnesisSecret, stripAgentSecretEnv } from './secret-store'
 import { emitOrchestratorEvent, type OrchestratorEventType } from './agent-lifecycle-bus'
 import type { NotificationRouterConfig } from '../../shared/types/notification.types'
 import type { TriageInput } from '../../shared/types/triage.types'
@@ -625,13 +625,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   }
   // Remove CLAUDECODE env var so spawned claude CLI doesn't think it's nested
   delete env.CLAUDECODE
-  // S28: strip credentials that should never be visible to agent PTY
-  delete env.AUTH_SECRET
-  delete env.FORGEJO_TOKEN
-  delete env.FORGEJO_URL
-  // S45: strip Ollama Cloud key — not needed by agent PTY (only used by model-service.ts internally)
-  delete env.OLLAMA_CLOUD_KEY
-  delete env.OLLAMA_API_KEY
+  // S28/S45/S86: strip credentials that should never be visible to agent PTY
+  // (AUTH_SECRET, FORGEJO_*, Ollama Cloud keys, ANAMNESIS_AUTH_SECRET)
+  stripAgentSecretEnv(env)
 
   // Inject Telegram identity for Codex agents so send_telegram MCP tool works.
   // The agenthub-telegram server is registered process-wide via ensureCodexMcpServers;

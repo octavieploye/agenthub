@@ -1,6 +1,7 @@
 import * as pty from 'node-pty'
 import { execFile } from 'child_process'
 import log from 'electron-log/main'
+import { stripAgentSecretEnv } from '../secret-store'
 
 export type DockerAgentRole = 'lead' | 'spawn'
 
@@ -9,6 +10,11 @@ export interface DockerExecOptions {
   rows?: number
   role: DockerAgentRole
   env?: Record<string, string>
+}
+
+/** Env for `docker exec`: the main-process env minus every agent-hidden credential (S86). */
+export function buildDockerExecEnv(): Record<string, string> {
+  return stripAgentSecretEnv({ ...process.env } as Record<string, string>)
 }
 
 export class DockerAgentAdapter {
@@ -28,7 +34,7 @@ export class DockerAgentAdapter {
         name: 'xterm-256color',
         cols,
         rows,
-        env: process.env as Record<string, string>
+        env: buildDockerExecEnv()
       }
     )
 
