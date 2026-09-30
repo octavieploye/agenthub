@@ -1,9 +1,27 @@
 # Code Memory — agenthub
 
-> Last sync: eb31916 | 2026-09-29 | coordinator
+> Last sync: bc165d3 | 2026-09-30 | coordinator
 > Commits since last sync: 0
 
-## Sync window — 2026-09-29 (`30fb95b..eb31916`)
+## Sync window — 2026-09-30 (`ac40abf..bc165d3`, 6 `src/` commits — Anamnesis secret + task events)
+
+- Agent delete FK fix (`6e4b7cb`): `deleteAgent` nulls `tasks.sbar_id` for the agent's `sbar_handoffs` before deleting them (same as `purgeDeadAgents`), so a task linked to an SBAR no longer blocks agent deletion.
+- Secret store (`acfc119`): the Anamnesis secret is encrypted via `safeStorage` on a dedicated `__secret_anchor__` settings row (legacy first-row copies are cleared on store); new `hasAnamnesisSecret()` (never decrypts) and `bootstrapAnamnesisSecretFromEnv()` (one-time import of `ANAMNESIS_AUTH_SECRET`, never overrides a stored secret). `secret-store` is the only secret source — env is read only by the bootstrap.
+- Task events (`8de5b0b`): new helpers `task-status-events.ts` (`emitTaskStatusEvent`, `moveTaskWithEvent`) and `task-completion-events.ts` (`emitTaskCompletionEvent` — one idempotent `CARD_COMPLETED` event per (task, agent) carrying an SBAR copy; `writeTaskCompletionSummary` for orchestrator task logs). `tasks:update` emits a status event (`source: manual`); `service-orchestrator` emits `in_progress` when linking an agent and calls the env bootstrap at startup (step 15).
+- Event ordering (`fcce02f`): `agent-manager` runs `syncKanbanCard` before `emitTriageResult` on Telegram completion, parser status change and process exit, so the SBAR and `CARD_COMPLETED` exist before the scheduler reacts (its own emit is then a no-op); SBAR linking extracted to `linkCompletionSBAR`.
+- Scheduler events + inventory check (`44ae957`): cancel / dispatch (`ORCHESTRATOR_TASK_STARTED`) / completion / retries-exhausted paths write task events. M4 sprint inventory check now uses `loadAnamnesisSecret()`, resolves the repo via `POST /projects`, then `GET /memory/retrieve?query=sprint_inventory` and matches the sprint name with status `done`/`in_progress`; 3s timeout cleared in `finally`.
+- Anamnesis secret UI (`bc165d3`): IPC `settings:set-anamnesis-secret` (string, non-empty, ≤4096) and `settings:get-anamnesis-secret-status` (`{ isSet }` only); preload + `AgentHubBridge` methods; Advanced tab password field with (set)/(not set) status. Write-only — the value never returns to the renderer; a rotated secret takes effect after restart.
+- Open (security log S86–S91, uncommitted `docs/`): `ANAMNESIS_AUTH_SECRET` stays in `process.env` and is not in the S28 agent env strip list (S86); SBAR copy in `CARD_COMPLETED` carries raw PTY lines/cwd/prompt and is POSTed unredacted to Anamnesis (S87); no sender validation on the new IPC handlers (S88); no https/loopback check on `ANAMNESIS_URL` (S89); inventory check POSTs `/projects` and is not gated on system mode (S90); writer/reader cache the secret at init (S91). No `docs/how-to/` entry yet for the secret setting.
+
+## Previous sync window — 2026-09-29 to 2026-09-30 (`eb31916..ac40abf`, 8 `src/` commits — Opus 5.5 upgrade)
+
+- Claude 5.x catalog + effort levels (`eccb67e`): `claude-opus-5-5`, `claude-sonnet-5-5` (+ `claude-opus-5`/`claude-sonnet-5` aliases) added to `CLAUDE_MODELS`/`ANTHROPIC_MODEL_OPTIONS`; `EffortLevel` gains `xhigh`/`max`; `ModelCatalogEntry` gains `maxOutput`/`pricing`/`thinkingDefault`/`thinkingAlwaysOn`; model-validator accepts 5.x IDs; recommender `CLAUDE_OPUS` → `claude-opus-5-5` with `CLAUDE_OPUS_LEGACY` pinned to `claude-opus-4-6` by design.
+- Stack-aware model selection (`208e050`): optional `stack` (`rust|typescript|python|generic`) in `.agenthub.yaml` → `STACK_MODEL_DEFAULTS`; fallback order `task.modelOverride → task.recommendedModel → STACK_MODEL_DEFAULTS[stack] → model-recommender`.
+- Effort selector in dispatch UI (`a1aea59`): `KanbanDispatchModal` effort strip (default `medium`); SpawnDialog label map (`xhigh` → "Extra High", `max` → "Maximum"); Claude 5.x short labels in model-utils.
+- Dynamic model sync (`77ab8dc`): Fable 5.1, Opus 4.8/4.7/4.5, Sonnet 4.5 added; `ANTHROPIC_MODEL_OPTIONS` and the validator allowlist now derive from `CLAUDE_MODELS` (single source of truth); `MODEL_CONTEXT_WINDOWS` Opus/Sonnet 1M, Haiku 200K; `EFFORT_LEVELS` ascending.
+- Catalog-derived defaults (`971b5f7`, `366d830`, `5769acb`; test-first `b39d1ef`): `latestClaudeModel(family)` + `DEFAULT_SONNET_MODEL`/`DEFAULT_OPUS_MODEL`/`DEFAULT_HAIKU_MODEL` (throws if a family has no available entry); recommender, `STACK_MODEL_DEFAULTS`, agents fallback, SpawnDialog and KanbanDispatchModal all read them — default Sonnet moved `claude-sonnet-4-6` → `claude-sonnet-5-5`. New MCP bridge method `getDefaultModels` feeds `recommend_model` (restart AgentHub after deploy: an older main process lacks it). Open: `mcp-bridge-server/index.test.js` tests a local copy of `recommendModel`, not `index.js`.
+
+## Previous sync window — 2026-09-29 (`30fb95b..eb31916`)
 
 - Single-task cross-sprint dependency fix (`eb31916`): `fetchCandidateTasks` now strips `blockedBy` to `[]` for single-task runs (`triggerSource === 'single-task'` or `singleTaskId` set), so a re-dispatch of a task whose dependency was already done in a prior run reaches the approval gate instead of stalling on `no task dispatched this tick` forever. Regression test added; full 3034-test suite green.
 - Claude in-conversation commit/push allowance (`98766db`): documents that tracked `.claude/` files are committable and clarifies the in-conversation commit exception.
