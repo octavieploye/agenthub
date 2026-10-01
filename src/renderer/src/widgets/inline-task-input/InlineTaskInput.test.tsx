@@ -192,6 +192,17 @@ describe('InlineTaskInput', () => {
       expect(screen.queryByTestId('inline-send-button')).not.toBeInTheDocument()
     })
 
+    it('disables voice input explicitly', () => {
+      render(
+        <InlineTaskInput
+          agent={createMockAgent({ status: 'completed' })}
+          onSendInput={mockOnSendInput}
+          sessionEnded
+        />
+      )
+      expect(screen.getByTestId('voice-input-button')).toBeDisabled()
+    })
+
     it('calls onRespawn with the agent id', () => {
       const onRespawn = vi.fn()
       render(

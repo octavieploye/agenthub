@@ -1,4 +1,4 @@
-import { type RefObject, useId, useEffect } from 'react'
+import { type ReactElement, type RefObject, useId, useEffect } from 'react'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
 import { useVoiceInputContext } from '../../contexts/VoiceInputContext'
 
@@ -8,31 +8,45 @@ interface VoiceInputButtonProps {
   className?: string
   /** Agent this field belongs to — lets Cmd+E target the focused pane. */
   ownerId?: string
+  /** Whether both the mic button and Cmd+E may start dictation. */
+  canDictate?: boolean
 }
 
-export function VoiceInputButton({ inputRef, onAutoSend, className = '', ownerId }: VoiceInputButtonProps) {
+export function VoiceInputButton({
+  inputRef,
+  onAutoSend,
+  className = '',
+  ownerId,
+  canDictate = true
+}: VoiceInputButtonProps): ReactElement {
   const id = useId()
-  const { isListening, isProcessing, micError, toggleListening } = useVoiceInput({ inputRef, onAutoSend })
+  const { isListening, isProcessing, micError, toggleListening } = useVoiceInput({
+    inputRef,
+    onAutoSend
+  })
   const { register, unregister } = useVoiceInputContext()
+  const voiceAvailable = canDictate && !isProcessing
 
   useEffect(() => {
-    register(id, inputRef, toggleListening, ownerId)
+    register(id, { inputRef, toggleFn: toggleListening, ownerId, canDictate: voiceAvailable })
     return () => unregister(id)
-  }, [id, inputRef, toggleListening, register, unregister, ownerId])
+  }, [id, inputRef, toggleListening, ownerId, voiceAvailable, register, unregister])
 
-  const title = micError
-    ? micError
-    : isProcessing
-      ? 'Transcribing...'
-      : isListening
-        ? 'Listening — click or Cmd+E to stop'
-        : 'Voice input (Cmd+E)'
+  const title = !canDictate
+    ? 'Voice input unavailable'
+    : micError
+      ? micError
+      : isProcessing
+        ? 'Transcribing...'
+        : isListening
+          ? 'Listening — click or Cmd+E to stop'
+          : 'Voice input (Cmd+E)'
 
   return (
     <button
       type="button"
       onClick={toggleListening}
-      disabled={isProcessing}
+      disabled={!voiceAvailable}
       title={title}
       data-testid="voice-input-button"
       className={`btn btn-ghost btn-xs ${className}`}

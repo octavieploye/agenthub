@@ -1,4 +1,12 @@
-import { createContext, useContext, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactElement,
+  type ReactNode
+} from 'react'
 import { useViewStore } from '../stores/view-store'
 
 interface VoiceRegistration {
@@ -6,23 +14,25 @@ interface VoiceRegistration {
   toggleFn: () => void
   /** Agent this input belongs to, when it is an agent-scoped field. */
   ownerId?: string
+  /** Voice capability is explicit; prompt writability is a separate concern. */
+  canDictate: boolean
 }
 
 interface VoiceInputContextValue {
-  register: (id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void, ownerId?: string) => void
+  register: (id: string, registration: VoiceRegistration) => void
   unregister: (id: string) => void
 }
 
 const VoiceInputContext = createContext<VoiceInputContextValue | null>(null)
 
-export function VoiceInputProvider({ children }: { children: ReactNode }) {
+export function VoiceInputProvider({ children }: { children: ReactNode }): ReactElement {
   const registrations = useRef(new Map<string, VoiceRegistration>())
   const keyDownTimeRef = useRef<number>(0)
   const startedThisPress = useRef(false)
   const activeToggleFn = useRef<(() => void) | null>(null)
 
-  const register = useCallback((id: string, inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, toggleFn: () => void, ownerId?: string) => {
-    registrations.current.set(id, { inputRef, toggleFn, ownerId })
+  const register = useCallback((id: string, registration: VoiceRegistration) => {
+    registrations.current.set(id, registration)
   }, [])
 
   const unregister = useCallback((id: string) => {
@@ -32,38 +42,37 @@ export function VoiceInputProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const HOLD_THRESHOLD_MS = 300
 
-    // A transcript must never land in a field the user is not looking at, so
-    // every candidate has to be both writable and unambiguously the target.
-    const isWritable = (reg: VoiceRegistration): boolean => {
-      const el = reg.inputRef.current
-      return !!el && !el.disabled
-    }
+    // Prompt writability and dictation are deliberately separate. A busy
+    // agent may reject typed input while still accepting a voice draft.
+    const canTarget = (reg: VoiceRegistration): boolean => !!reg.inputRef.current && reg.canDictate
 
     const findTarget = (): VoiceRegistration | undefined => {
       const active = document.activeElement
       // First: the focused field wins — the user pointed at it.
       for (const reg of registrations.current.values()) {
-        if (reg.inputRef.current === active && isWritable(reg)) return reg
+        if (reg.inputRef.current === active && canTarget(reg)) return reg
       }
       // Second: the field belonging to the focused agent pane. Once that pane
-      // owns a field, it is the only candidate — if its input is disabled the
-      // transcript has nowhere to go, and falling through would type into a
-      // different agent's prompt.
+      // owns a voice destination, it is the only candidate. If dictation is
+      // explicitly unavailable, falling through would target another agent.
       const focusedAgentId = useViewStore.getState().focusedAgentId
       if (focusedAgentId) {
         const owned = [...registrations.current.values()].filter(
           (reg) => reg.ownerId === focusedAgentId
         )
-        if (owned.length > 0) return owned.find(isWritable)
+        if (owned.length > 0) {
+          const eligibleOwned = owned.filter(canTarget)
+          return eligibleOwned.length === 1 ? eligibleOwned[0] : undefined
+        }
       }
-      // Third: a single writable field is unambiguous. More than one and we
+      // Third: a single dictatable field is unambiguous. More than one and we
       // stop — picking "most recently mounted" used to type into another
       // agent's prompt.
-      const writable = [...registrations.current.values()].filter(isWritable)
-      return writable.length === 1 ? writable[0] : undefined
+      const eligible = [...registrations.current.values()].filter(canTarget)
+      return eligible.length === 1 ? eligible[0] : undefined
     }
 
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.metaKey && !e.shiftKey && e.key === 'e' && !e.repeat) {
         e.preventDefault()
         keyDownTimeRef.current = Date.now()
@@ -77,7 +86,7 @@ export function VoiceInputProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const handleKeyUp = (e: KeyboardEvent) => {
+    const handleKeyUp = (e: KeyboardEvent): void => {
       if ((e.key === 'e' || e.key === 'E') && keyDownTimeRef.current > 0) {
         const held = Date.now() - keyDownTimeRef.current
         keyDownTimeRef.current = 0

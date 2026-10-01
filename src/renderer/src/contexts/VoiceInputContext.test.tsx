@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactElement } from 'react'
 import { VoiceInputProvider, useVoiceInputContext } from './VoiceInputContext'
 import { useViewStore } from '../stores/view-store'
 
@@ -12,25 +12,27 @@ function Pane({
   id,
   ownerId,
   toggle,
-  disabled = false
+  disabled = false,
+  canDictate = true
 }: {
   id: string
   ownerId?: string
   toggle: () => void
   disabled?: boolean
-}) {
+  canDictate?: boolean
+}): ReactElement {
   const inputRef = useRef<HTMLInputElement>(null)
   const { register, unregister } = useVoiceInputContext()
 
   useEffect(() => {
-    register(id, inputRef, toggle, ownerId)
+    register(id, { inputRef, toggleFn: toggle, ownerId, canDictate })
     return () => unregister(id)
-  }, [id, ownerId, toggle, register, unregister])
+  }, [id, ownerId, toggle, canDictate, register, unregister])
 
   return <input ref={inputRef} data-testid={id} disabled={disabled} />
 }
 
-function pressVoiceKey() {
+function pressVoiceKey(): void {
   fireEvent.keyDown(window, { key: 'e', metaKey: true })
 }
 
@@ -102,7 +104,7 @@ describe('VoiceInputContext — Cmd+E routing', () => {
     expect(toggleA).toHaveBeenCalledTimes(1)
   })
 
-  it('never targets a disabled input', () => {
+  it('routes to a dictatable target even when its text input is disabled', () => {
     const toggleA = vi.fn()
     render(
       <VoiceInputProvider>
@@ -112,16 +114,46 @@ describe('VoiceInputContext — Cmd+E routing', () => {
 
     pressVoiceKey()
 
-    expect(toggleA).not.toHaveBeenCalled()
+    expect(toggleA).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores a focused-agent match whose input is disabled', () => {
+  it('routes to the focused agent when its text input is disabled but dictation is allowed', () => {
     const toggleA = vi.fn()
     const toggleB = vi.fn()
     useViewStore.setState({ focusedAgentId: 'agent-a' })
     render(
       <VoiceInputProvider>
         <Pane id="a" ownerId="agent-a" toggle={toggleA} disabled />
+        <Pane id="b" ownerId="agent-b" toggle={toggleB} />
+      </VoiceInputProvider>
+    )
+
+    pressVoiceKey()
+
+    expect(toggleA).toHaveBeenCalledTimes(1)
+    expect(toggleB).not.toHaveBeenCalled()
+  })
+
+  it('does not target an explicitly ineligible voice destination', () => {
+    const toggleA = vi.fn()
+    render(
+      <VoiceInputProvider>
+        <Pane id="a" toggle={toggleA} canDictate={false} />
+      </VoiceInputProvider>
+    )
+
+    pressVoiceKey()
+
+    expect(toggleA).not.toHaveBeenCalled()
+  })
+
+  it('does not fall through to another agent when the focused destination is ineligible', () => {
+    const toggleA = vi.fn()
+    const toggleB = vi.fn()
+    useViewStore.setState({ focusedAgentId: 'agent-a' })
+    render(
+      <VoiceInputProvider>
+        <Pane id="a" ownerId="agent-a" toggle={toggleA} canDictate={false} />
         <Pane id="b" ownerId="agent-b" toggle={toggleB} />
       </VoiceInputProvider>
     )

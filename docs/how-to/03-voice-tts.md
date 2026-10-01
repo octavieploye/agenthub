@@ -49,5 +49,6 @@ the target in this order:
 If none of those apply, `Cmd+E` does nothing rather than guess. This keeps a dictated
 prompt from landing in another agent's field.
 
-A greyed-out field is never a target. If `Cmd+E` seems to do nothing, check whether the
-agent is busy, paused, or its session has ended — see [Agents](05-agents.md).
+A busy agent's prompt may appear grey while it is not ready to receive typed input, but
+voice dictation remains available. The transcript becomes an editable draft. A destination
+whose voice control is explicitly unavailable, such as an ended session, is never targeted.

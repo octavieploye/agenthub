@@ -130,7 +130,12 @@ function InlineTaskInput({
         placeholder={placeholder}
         className="flex-1 input input-sm input-bordered bg-base-100/50 text-base-content text-xs placeholder:text-base-content/30"
       />
-      <VoiceInputButton inputRef={inputRef} onAutoSend={handleSubmit} ownerId={agent.id} />
+      <VoiceInputButton
+        inputRef={inputRef}
+        onAutoSend={handleSubmit}
+        ownerId={agent.id}
+        canDictate={!sessionEnded}
+      />
       {sessionEnded ? (
         <button
           data-testid="inline-respawn-button"
