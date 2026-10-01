@@ -2,7 +2,7 @@ import { it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
 import Database from 'better-sqlite3'
 import { runMigrations } from '../db/migration-runner'
 import { insertTask } from '../db/queries/tasks.queries'
-import { insertTaskEvent } from '../db/queries/task-events.queries'
+import { insertTaskEvent, getUnsyncedEvents } from '../db/queries/task-events.queries'
 import { insertRepo } from '../db/queries/repos.queries'
 import { AnamnesisWriter } from './anamnesis-writer'
 
@@ -810,4 +810,224 @@ it('every payload sent carries a domain_category that is one of the 7 shared cat
   const { body } = await flushOneEvent('CARD_COMPLETED', 'research')
 
   expect(['code', 'business', 'marketing', 'strategy', 'client', 'legal', 'operations']).toContain(body.domain_category)
+})
+
+// ── S93: BRAIN_ENTRY_PUBLISHED payloads go through the writer allowlist ──
+
+function insertBrainEvent(payload: Record<string, unknown>): void {
+  insertTaskEvent(db, {
+    taskId: null,
+    eventType: 'BRAIN_ENTRY_PUBLISHED',
+    fromStatus: null,
+    toStatus: 'active',
+    agentId: null,
+    payload
+  })
+}
+
+it('S93: BRAIN_ENTRY_PUBLISHED content drops non-allowlisted keys and absolute artifact paths (legacy queued events)', async () => {
+  insertBrainEvent({
+    entry_id: 'b1',
+    repo_id: 'r1',
+    repo_name: 'test-repo',
+    type: 'plan',
+    subject: 'Q4 plan',
+    status: 'active',
+    computed_status: null,
+    artifact_path: '/Users/someone/private/plan.md',
+    created_at: '2026-09-30T10:00:00.000Z',
+    domain_category: 'strategy',
+    pointer_path: '/Users/someone/private/brain/b1.md',
+    stray_secret: 'sk-live-123'
+  })
+
+  const { fetchMock } = mockEndpoints()
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+  await writer.flush()
+
+  const calls = callsTo(fetchMock, '/memory/episodic')
+  expect(calls).toHaveLength(1)
+  const serialized = String(calls[0][1].body)
+  expect(serialized).not.toContain('/Users/')
+  expect(serialized).not.toContain('sk-live-123')
+  expect(serialized).not.toContain('pointer_path')
+  const body = JSON.parse(serialized) as { content: Record<string, unknown>; domain_category: string }
+  expect(body.content.artifact_path).toBe('plan.md')
+  expect(body.content.artifact_path_scope).toBe('basename')
+  expect(body.content.entry_id).toBe('b1')
+  expect(body.content.subject).toBe('Q4 plan')
+  expect(body.domain_category).toBe('strategy')
+})
+
+it('S93: BRAIN_ENTRY_PUBLISHED keeps a repo-relative artifact path unchanged', async () => {
+  insertBrainEvent({
+    entry_id: 'b2',
+    repo_name: 'test-repo',
+    type: 'spec',
+    subject: 'Auth spec',
+    status: 'active',
+    artifact_path: 'docs/auth.md',
+    artifact_path_scope: 'repo_relative',
+    domain_category: 'code'
+  })
+
+  const { fetchMock } = mockEndpoints()
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+  await writer.flush()
+
+  const body = JSON.parse(callsTo(fetchMock, '/memory/episodic')[0][1].body as string) as {
+    content: Record<string, unknown>
+  }
+  expect(body.content.artifact_path).toBe('docs/auth.md')
+  expect(body.content.artifact_path_scope).toBe('repo_relative')
+})
+
+// ── S94: the bearer secret is only sent to https or loopback-http Anamnesis URLs ──
+
+async function flushOneEventAgainst(url: string, authSecret: string): Promise<Array<Record<string, string>>> {
+  const repoId = seedRepoOnce()
+  const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'SPRINT_INTAKE',
+    fromStatus: null,
+    toStatus: 'backlog',
+    agentId: null,
+    payload: {}
+  })
+  const fetchMock = vi.fn<EndpointHandler>(async (input) =>
+    String(input).endsWith('/projects') ? projectResponse() : response()
+  )
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: url, fetch: fetchMock as typeof fetch, authSecret })
+  await writer.flush()
+  expect(fetchMock).toHaveBeenCalled()
+  return fetchMock.mock.calls.map(([, init]) => headersOf(init))
+}
+
+it('S94: sends the bearer to an https Anamnesis URL', async () => {
+  const headers = await flushOneEventAgainst('https://anamnesis.example.eu', 's3cret')
+  for (const h of headers) expect(h['Authorization']).toBe('Bearer s3cret')
+})
+
+it('S94: sends the bearer to http on loopback hosts (localhost, 127.0.0.1, ::1)', async () => {
+  for (const url of ['http://localhost:9300', 'http://127.0.0.1:9300', 'http://[::1]:9300']) {
+    const headers = await flushOneEventAgainst(url, 's3cret')
+    for (const h of headers) expect(h['Authorization']).toBe('Bearer s3cret')
+  }
+})
+
+it('S94: sends no bearer to a plain-http non-loopback Anamnesis URL', async () => {
+  const headers = await flushOneEventAgainst('http://anamnesis.attacker.test:9300', 's3cret')
+  for (const h of headers) expect(h['Authorization']).toBeUndefined()
+})
+
+it('S94: sends no bearer when the URL only imitates loopback in its userinfo', async () => {
+  const headers = await flushOneEventAgainst('http://localhost@attacker-two.test:9300', 's3cret')
+  for (const h of headers) expect(h['Authorization']).toBeUndefined()
+})
+
+// ── S95: best-effort project-status PUT leaves an audit/reconcile record on failure ──
+
+function statusPutHandler(putResult: () => Promise<Response>): EndpointMock {
+  return vi.fn<EndpointHandler>(async (input, init) => {
+    const url = String(input)
+    if (url === `${ANAMNESIS_URL}/projects`) return projectResponse()
+    if (url.startsWith(`${ANAMNESIS_URL}/memory/`)) return response()
+    if (init?.method === 'PUT' && url.startsWith(`${ANAMNESIS_URL}/projects/${PROJECT_UUID}/status/`)) {
+      return putResult()
+    }
+    throw new Error(`Unexpected Anamnesis URL: ${url}`)
+  })
+}
+
+function insertCompletedEvent(title: string): { taskId: string; repoId: string } {
+  const repoId = seedRepoOnce()
+  const task = insertTask(db, { repoId, title, status: 'in_progress', category: 'backend' })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'CARD_COMPLETED',
+    fromStatus: 'in_progress',
+    toStatus: 'completed',
+    agentId: 'agent-1',
+    payload: { taskTitle: title, repoId }
+  })
+  return { taskId: task.id, repoId }
+}
+
+function seedRepoOnce(): string {
+  const existing = db.prepare('SELECT id FROM repos LIMIT 1').get() as { id: string } | undefined
+  return existing?.id ?? seedRepo()
+}
+
+interface ReconcileRow {
+  event_type: string
+  entity_type: string
+  entity_id: string
+  repo_id: string | null
+  details: string | null
+}
+
+function reconcileRows(): ReconcileRow[] {
+  return db
+    .prepare(`SELECT event_type, entity_type, entity_id, repo_id, details FROM activity_log WHERE event_type = 'anamnesis_status_unreconciled'`)
+    .all() as ReconcileRow[]
+}
+
+it('S95: a rejected project-status PUT writes a reconcile record to activity_log and logs the status', async () => {
+  const { taskId, repoId } = insertCompletedEvent('Finish feature')
+  const fetchMock = statusPutHandler(async () => response(false, 503))
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  const rows = reconcileRows()
+  expect(rows).toHaveLength(1)
+  expect(rows[0].entity_type).toBe('task')
+  expect(rows[0].entity_id).toBe(taskId)
+  expect(rows[0].repo_id).toBe(repoId)
+  const details = JSON.parse(rows[0].details ?? '{}') as Record<string, unknown>
+  expect(details.projectId).toBe(PROJECT_UUID)
+  expect(details.domainCategory).toBe('code')
+  expect(details.state).toBe('done')
+  expect(details.httpStatus).toBe(503)
+})
+
+it('S95: an unreachable project-status PUT records the error message in the reconcile record', async () => {
+  insertCompletedEvent('Finish feature')
+  const fetchMock = statusPutHandler(async () => {
+    throw new Error('connect ECONNREFUSED')
+  })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  const rows = reconcileRows()
+  expect(rows).toHaveLength(1)
+  const details = JSON.parse(rows[0].details ?? '{}') as Record<string, unknown>
+  expect(details.error).toBe('connect ECONNREFUSED')
+})
+
+it('S95: a successful project-status PUT writes no reconcile record', async () => {
+  insertCompletedEvent('Finish feature')
+  const fetchMock = statusPutHandler(async () => response())
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  expect(reconcileRows()).toHaveLength(0)
+})
+
+it('S95: failing project-status PUTs never trip the circuit breaker and the event stays synced', async () => {
+  for (const title of ['one', 'two', 'three']) insertCompletedEvent(title)
+  const fetchMock = statusPutHandler(async () => response(false, 500))
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+  expect(getUnsyncedEvents(db)).toHaveLength(0)
+  expect(reconcileRows()).toHaveLength(3)
+
+  insertCompletedEvent('four')
+  await writer.flush()
+  expect(getUnsyncedEvents(db)).toHaveLength(0)
+  expect(reconcileRows()).toHaveLength(4)
 })

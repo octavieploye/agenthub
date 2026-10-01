@@ -9,6 +9,7 @@ import type {
   LifecycleRunResult,
   RestoreResult,
 } from '../../shared/types/lifecycle.types'
+import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
 
 export interface AnamnesisReaderOpts {
   baseUrl: string
@@ -25,9 +26,7 @@ export class AnamnesisReader {
     this.headers = {
       'Content-Type': 'application/json',
       'X-Optimaeus-Caller': opts.caller ?? 'hephaestus',
-    }
-    if (opts.authSecret) {
-      this.headers['Authorization'] = `Bearer ${opts.authSecret}`
+      ...resolveAnamnesisAuthHeaders(this.baseUrl, opts.authSecret),
     }
   }
 

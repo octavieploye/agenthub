@@ -1,9 +1,12 @@
+import { basename, isAbsolute } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { getUnsyncedEvents, markEventSynced } from '../db/queries/task-events.queries'
+import { insertActivityEvent } from '../db/queries/activity.queries'
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import { loadAnamnesisSecret } from './secret-store'
+import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
 import { redactCompletionPayload, resolveRedactionContext } from './helpers/task-completion-events'
 import { mapTaskCategoryToDomainCategory } from './helpers/anamnesis-domain-mapper'
 import {
@@ -29,6 +32,27 @@ const ENDPOINT_MAP: Record<TaskEventType, string> = {
 /** Universal status vocabulary: the state a completed task sets on its project domain. */
 const PROJECT_STATUS_DONE = 'done'
 
+/** S93: the only keys a BRAIN_ENTRY_PUBLISHED payload may carry to Anamnesis. */
+const BRAIN_ENTRY_PAYLOAD_KEYS = [
+  'entry_id',
+  'repo_id',
+  'repo_name',
+  'type',
+  'subject',
+  'status',
+  'computed_status',
+  'artifact_path',
+  'artifact_path_scope',
+  'created_at',
+  'domain_category'
+] as const
+
+/** Why a project-status PUT did not land: an HTTP rejection or a transport error. */
+interface ProjectStatusFailure {
+  httpStatus?: number
+  error?: string
+}
+
 interface AnamnesisWriterDeps {
   anamnesisUrl: string
   fetch?: typeof globalThis.fetch
@@ -39,7 +63,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   private db: Database.Database
   private anamnesisUrl: string
   private fetch: typeof globalThis.fetch
-  private authSecret: string
+  private authHeaders: Record<string, string>
   private consecutiveFailures = 0
   private circuitOpen = false
   private lastFailureTime = 0
@@ -58,7 +82,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     this.db = db
     this.anamnesisUrl = deps.anamnesisUrl
     this.fetch = deps.fetch ?? globalThis.fetch
-    this.authSecret = deps.authSecret ?? loadAnamnesisSecret()
+    this.authHeaders = resolveAnamnesisAuthHeaders(this.anamnesisUrl, deps.authSecret ?? loadAnamnesisSecret())
   }
 
   onEventInserted(): void {
@@ -138,7 +162,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
         headers: {
           'Content-Type': 'application/json',
           'X-Optimaeus-Caller': 'hephaestus',
-          ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
+          ...this.authHeaders
         },
         body: JSON.stringify({ name: repoName }),
         signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
@@ -158,10 +182,29 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   }
 
   /**
+   * S93: BRAIN_ENTRY_PUBLISHED payloads are rebuilt from BRAIN_ENTRY_PAYLOAD_KEYS, including events
+   * queued before the allowlist existed; an absolute `artifact_path` is reduced to its file name.
+   */
+  private allowlistBrainEntryPayload(rawPayload: Record<string, unknown>): Record<string, unknown> {
+    const allowed: Record<string, unknown> = {}
+    for (const key of BRAIN_ENTRY_PAYLOAD_KEYS) {
+      if (key in rawPayload) allowed[key] = rawPayload[key]
+    }
+    const artifactPath = allowed['artifact_path']
+    if (typeof artifactPath === 'string' && isAbsolute(artifactPath)) {
+      allowed['artifact_path'] = basename(artifactPath)
+      allowed['artifact_path_scope'] = 'basename'
+    }
+    return allowed
+  }
+
+  /**
    * S87: CARD_COMPLETED payloads are rebuilt from the allowlist with a redacted SBAR,
-   * including events queued before the allowlist existed. Other event types pass through.
+   * including events queued before the allowlist existed. S93: so are BRAIN_ENTRY_PUBLISHED
+   * payloads. Other event types pass through.
    */
   private allowlistPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
+    if (event.eventType === 'BRAIN_ENTRY_PUBLISHED') return this.allowlistBrainEntryPayload(rawPayload)
     if (event.eventType !== 'CARD_COMPLETED') return rawPayload
     const ctx = (event.taskId ? resolveRedactionContext(this.db, event.taskId) : null) ?? {
       taskTitle: typeof rawPayload['taskTitle'] === 'string' ? rawPayload['taskTitle'] : '',
@@ -260,7 +303,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
         headers: {
           'Content-Type': 'application/json',
           'X-Optimaeus-Caller': 'hephaestus',
-          ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
+          ...this.authHeaders
         },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
@@ -277,7 +320,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
         if (event.eventType === 'CARD_COMPLETED' && projectId) {
           const summary =
             typeof sentPayload['taskTitle'] === 'string' ? sentPayload['taskTitle'] : null
-          await this.publishProjectStatus(projectId, domainCategory, summary)
+          await this.publishProjectStatus(event, projectId, domainCategory, summary)
         }
         return true
       } else {
@@ -293,10 +336,11 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   }
 
   /**
-   * Best-effort project-status upsert after a synced CARD_COMPLETED. A failure is logged only:
-   * it never unsyncs the event nor counts toward the circuit breaker.
+   * Best-effort project-status upsert after a synced CARD_COMPLETED. A failure is logged and
+   * recorded for reconciliation (S95): it never unsyncs the event nor counts toward the circuit breaker.
    */
   private async publishProjectStatus(
+    event: TaskEvent,
     projectId: string,
     domainCategory: AnamnesisDomainCategory,
     summary: string | null
@@ -308,21 +352,42 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
         headers: {
           'Content-Type': 'application/json',
           'X-Optimaeus-Caller': 'hephaestus',
-          ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
+          ...this.authHeaders
         },
         body: JSON.stringify({ state: PROJECT_STATUS_DONE, summary }),
         signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
       })
-      if (!res.ok) {
-        log.warn('AnamnesisWriter: project status PUT rejected', {
-          status: res.status,
-          projectId,
-          domainCategory
-        })
-      }
-    } catch {
-      log.warn('AnamnesisWriter: project status PUT failed', { projectId, domainCategory })
+      if (!res.ok) this.recordProjectStatusFailure(event, projectId, domainCategory, { httpStatus: res.status })
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      this.recordProjectStatusFailure(event, projectId, domainCategory, { error })
     }
+  }
+
+  /** Log a failed project-status PUT and leave an activity_log record to reconcile from. */
+  private recordProjectStatusFailure(
+    event: TaskEvent,
+    projectId: string,
+    domainCategory: AnamnesisDomainCategory,
+    failure: ProjectStatusFailure
+  ): void {
+    log.warn('AnamnesisWriter: project status PUT failed', { projectId, domainCategory, eventId: event.id, ...failure })
+    insertActivityEvent(this.db, {
+      eventType: 'anamnesis_status_unreconciled',
+      entityType: 'task',
+      entityId: event.taskId ?? projectId,
+      repoId: this.resolveTaskRepoId(event.taskId) ?? undefined,
+      details: { projectId, domainCategory, state: PROJECT_STATUS_DONE, eventId: event.id, ...failure }
+    })
+  }
+
+  /** Repo id of a task, for the reconcile record. */
+  private resolveTaskRepoId(taskId: string | null): string | null {
+    if (!taskId) return null
+    const row = this.db.prepare('SELECT repo_id FROM tasks WHERE id = ?').get(taskId) as
+      | { repo_id: string | null }
+      | undefined
+    return row?.repo_id ?? null
   }
 
   private recordFailure(): void {
