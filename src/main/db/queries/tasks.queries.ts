@@ -104,7 +104,7 @@ export function getTaskById(db: Database.Database, id: string): TaskItem | null 
 export function getTaskByAgentId(db: Database.Database, agentId: string): TaskItem | null {
   const row = db
     .prepare(
-      "SELECT * FROM tasks WHERE agent_id = ? AND status NOT IN ('completed', 'tested') LIMIT 1"
+      "SELECT * FROM tasks WHERE agent_id = ? AND status NOT IN ('completed', 'tested', 'archived') LIMIT 1"
     )
     .get(agentId) as Record<string, unknown> | undefined
   if (!row) return null

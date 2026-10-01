@@ -7,7 +7,7 @@ import { getDb, isDbShuttingDown } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
-import { createParser, type CliOutputParser } from '../parsers/cli-output-parser'
+import { createParser, gateParsedStatus, type CliOutputParser } from '../parsers/cli-output-parser'
 import { buildCodexCommand } from './codex-command-builder'
 import { checkCodexHealth, ensureCodexMcpServers } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
@@ -38,25 +38,13 @@ import { filterTtsResponse } from '../utils/tts-response-filter'
 import { HeadlessTerminalBuffer } from '../utils/headless-terminal-buffer'
 import { shouldResetTtsBuffer } from '../utils/tts-buffer-reset'
 import { TtsTrigger } from '../utils/tts-trigger'
-import { getTaskByAgentId, updateTask, linkSBARToTask } from '../db/queries/tasks.queries'
-import { insertTaskEvent } from '../db/queries/task-events.queries'
+import { getTaskByAgentId, linkSBARToTask } from '../db/queries/tasks.queries'
+import { syncAgentStatusToTask } from './helpers/task-card-sync'
 import { emitTaskCompletionEvent } from './helpers/task-completion-events'
-import type { TaskStatus, TaskEventType } from '../../shared/types/task.types'
 import { getProjectById } from '../db/queries/projects.queries'
 import { writeWorkspaceMemory } from './workspace-memory-writer'
 import type { TelegramNotificationPayload } from '../../shared/types/telegram.types'
 import { getTelegramPrefs } from '../db/queries/telegram.queries'
-
-const AGENT_TO_TASK_STATUS: Partial<Record<string, TaskStatus>> = {
-  busy: 'in_progress',
-  completed: 'completed',
-  interrupted: 'interrupted'
-}
-const AGENT_TO_EVENT_TYPE: Partial<Record<string, TaskEventType>> = {
-  busy: 'CARD_TRANSITION',
-  completed: 'CARD_COMPLETED',
-  interrupted: 'CARD_INTERRUPTED'
-}
 
 interface ManagedAgent {
   state: AgentState
@@ -406,13 +394,10 @@ function cancelSilentLockTimer(agentId: string): void {
 }
 
 function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus: string): void {
-  const taskStatus = AGENT_TO_TASK_STATUS[newStatus]
-  const eventType = AGENT_TO_EVENT_TYPE[newStatus]
-  if (!taskStatus || !eventType) return
   try {
-    const linkedTask = getTaskByAgentId(db, agentId)
-    if (!linkedTask) return
-    updateTask(db, linkedTask.id, { status: taskStatus })
+    const synced = syncAgentStatusToTask(db, agentId, newStatus)
+    if (!synced) return
+    const { task: linkedTask, eventType } = synced
 
     if (eventType === 'CARD_COMPLETED') {
       // SBAR first so the completion event carries its copy. getTaskByAgentId skips
@@ -420,20 +405,11 @@ function syncKanbanCard(db: ReturnType<typeof getDb>, agentId: string, newStatus
       // emitTaskCompletionEvent is idempotent per (task, agent) against the scheduler too.
       linkCompletionSBAR(db, agentId, linkedTask.id)
       emitTaskCompletionEvent(db, { taskId: linkedTask.id, agentId, fromStatus: linkedTask.status })
-    } else {
-      insertTaskEvent(db, {
-        taskId: linkedTask.id,
-        eventType,
-        fromStatus: linkedTask.status,
-        toStatus: taskStatus,
-        agentId,
-        payload: { taskTitle: linkedTask.title, repoId: linkedTask.repoId }
-      })
     }
 
     getAnamnesisWriter()?.onEventInserted()
     emitToAllRenderers(IPC_EVENTS.TASKS.UPDATED, { taskId: linkedTask.id })
-    log.debug('Kanban card synced', { taskId: linkedTask.id, agentId, taskStatus })
+    log.debug('Kanban card synced', { taskId: linkedTask.id, agentId, newStatus })
   } catch (err) {
     log.warn('Failed to sync kanban card', { agentId, newStatus, error: err instanceof Error ? err.message : String(err) })
   }
@@ -715,7 +691,9 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
     }
 
-    const parsed = parser.parse(data)
+    // Orchestrator agents complete only via the explicit MCP signal
+    // (completeAgentFromTelegram) — an inferred parser completion never applies.
+    const parsed = gateParsedStatus(parser.parse(data), agentState.isOrchestrator === true)
     if (parsed) {
       const mgd = agents.get(agentState.id)
       if (mgd && mgd.state.status !== parsed.status) {
@@ -777,11 +755,6 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
             startSilentLockTimer(agentState.id)
           } else {
             cancelSilentLockTimer(agentState.id)
-          }
-          // S4: parser-detected completion (e.g. "DONE") on an orchestrator agent is a
-          // terminal signal — terminate its process tree so a rogue agent cannot linger.
-          if (newStatus === 'completed' && current.state.isOrchestrator) {
-            terminateAgentProcess(agentState.id)
           }
           log.debug('Agent status changed via parser', { id: agentState.id, status: newStatus, confidence: parsed!.confidence })
         }

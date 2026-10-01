@@ -1,5 +1,27 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { ClaudeCliOutputParser } from './cli-output-parser'
+import { ClaudeCliOutputParser, gateParsedStatus } from './cli-output-parser'
+
+describe('gateParsedStatus', () => {
+  it('drops an inferred completion for an orchestrator agent', () => {
+    expect(gateParsedStatus({ status: 'completed', confidence: 'inferred' }, true)).toBeNull()
+  })
+
+  it('keeps an inferred completion for a manual agent', () => {
+    expect(gateParsedStatus({ status: 'completed', confidence: 'inferred' }, false))
+      .toEqual({ status: 'completed', confidence: 'inferred' })
+  })
+
+  it('keeps non-completion statuses for an orchestrator agent', () => {
+    expect(gateParsedStatus({ status: 'busy', confidence: 'inferred' }, true))
+      .toEqual({ status: 'busy', confidence: 'inferred' })
+    expect(gateParsedStatus({ status: 'rate_limited', confidence: 'confirmed' }, true))
+      .toEqual({ status: 'rate_limited', confidence: 'confirmed' })
+  })
+
+  it('passes through a null parse', () => {
+    expect(gateParsedStatus(null, true)).toBeNull()
+  })
+})
 
 describe('ClaudeCliOutputParser', () => {
   let parser: ClaudeCliOutputParser

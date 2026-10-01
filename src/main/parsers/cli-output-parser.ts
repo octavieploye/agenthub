@@ -172,6 +172,19 @@ export class ClaudeCliOutputParser implements CliOutputParser {
   }
 }
 
+/**
+ * Trust gate for parser output. Pattern-matched completion is not a reliable
+ * signal: the task prompt echoed into the PTY at spawn contains the same
+ * phrases. An orchestrator agent's task ends only on its explicit MCP
+ * completion signal, so an inferred completion is dropped for it. Manual
+ * agents keep the parser's result unchanged.
+ */
+export function gateParsedStatus(parsed: ParsedStatus | null, isOrchestrator: boolean): ParsedStatus | null {
+  if (!parsed) return null
+  if (isOrchestrator && parsed.status === 'completed' && parsed.confidence === 'inferred') return null
+  return parsed
+}
+
 export function createParser(provider?: ModelProvider): CliOutputParser {
   if (provider === 'openai-codex') {
     return new CodexCliOutputParser()

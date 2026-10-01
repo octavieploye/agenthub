@@ -12,7 +12,8 @@ import {
   deleteTask,
   getCompletedTasksSince,
   updateTaskPosition,
-  linkSBARToTask
+  linkSBARToTask,
+  getTaskByAgentId
 } from './tasks.queries'
 import { insertRepo } from './repos.queries'
 import { insertAgent } from './agents.queries'
@@ -654,6 +655,29 @@ describe('tasks.queries', () => {
         expect(found?.estimatedTokens).toBe(10000)
         expect(found?.riskScore).toBe(0.5)
       })
+    })
+  })
+
+  describe('getTaskByAgentId', () => {
+    function linkedTask(status: string): {
+      agent: ReturnType<typeof insertAgent>
+      task: ReturnType<typeof insertTask>
+    } {
+      const repoId = seedRepo()
+      const agent = insertAgent(db, { repoId, name: 'Agent 1', cwd: '/tmp/test-repo' })
+      const task = insertTask(db, { repoId, title: 'Task' })
+      updateTask(db, task.id, { agentId: agent.id, status: status as never })
+      return { agent, task }
+    }
+
+    it('returns the live task linked to the agent', () => {
+      const { agent, task } = linkedTask('in_progress')
+      expect(getTaskByAgentId(db, agent.id)?.id).toBe(task.id)
+    })
+
+    it.each(['archived', 'completed', 'tested'])('does not return a %s task', (status) => {
+      const { agent } = linkedTask(status)
+      expect(getTaskByAgentId(db, agent.id)).toBeNull()
     })
   })
 })
