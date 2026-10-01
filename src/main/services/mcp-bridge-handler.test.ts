@@ -386,7 +386,7 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
   it('publishes exactly one batch when dryRun is false', async () => {
     seedBrainEntries(7)
 
-    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 3 })
+    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 3, confirmed: true })
 
     expect(resp['error']).toBeUndefined()
     expect(resp['result']).toEqual({ dryRun: false, enqueued: 3, remaining: 4 })
@@ -396,7 +396,7 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
   it('uses a default batch of 50 when batchSize is omitted', async () => {
     seedBrainEntries(55)
 
-    const resp = await call('backfillBrainEntries', { dryRun: false })
+    const resp = await call('backfillBrainEntries', { dryRun: false, confirmed: true })
 
     expect(resp['result']).toEqual({ dryRun: false, enqueued: 50, remaining: 5 })
   })
@@ -404,7 +404,7 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
   it('caps batchSize at 200', async () => {
     seedBrainEntries(205)
 
-    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 999 })
+    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 999, confirmed: true })
 
     expect(resp['result']).toEqual({ dryRun: false, enqueued: 200, remaining: 5 })
   })
