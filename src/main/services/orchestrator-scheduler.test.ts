@@ -162,6 +162,26 @@ function insertTestTask(
   return id
 }
 
+/**
+ * A dispatchable backlog task in `sprintName`. start() refuses a named sprint run without
+ * taskIds whose sprint has no dispatchable task (it would never conclude), so tests that start
+ * a named sprint run seed one task in that sprint first.
+ */
+function seedSprintTask(db: Database.Database, sprintName: string, repoId: string): string {
+  return insertTestTask(db, { repoId, status: 'backlog', sprintName, title: `seed ${sprintName}` })
+}
+
+/**
+ * Like seedSprintTask, but the seeded task is blocked by an in-progress task of the same sprint,
+ * so start() accepts the run while the tick still finds no ready task.
+ */
+function seedBlockedSprintTask(db: Database.Database, sprintName: string, repoId: string): string {
+  const blocker = insertTestTask(db, { repoId, status: 'in_progress', sprintName, title: `blocker ${sprintName}` })
+  const seeded = seedSprintTask(db, sprintName, repoId)
+  db.prepare('INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)').run(seeded, blocker)
+  return seeded
+}
+
 function buildDeps(db: Database.Database, partial: Partial<SchedulerDeps> = {}): SchedulerDeps {
   return {
     db,
@@ -226,6 +246,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
 
       expect(run.status).toBe('running')
@@ -236,9 +257,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
       expect(first.status).toBe('running')
 
+      seedSprintTask(db, 'sprint-2', 'repo-1')
       const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
       expect(second.id).toBe(first.id)
     })
@@ -247,9 +270,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', telegramNotify: true })
       expect(first.telegramNotify).toBe(true)
 
+      seedSprintTask(db, 'sprint-2', 'repo-1')
       const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1', telegramNotify: false })
       expect(second.id).toBe(first.id)
       expect(second.telegramNotify).toBe(true)
@@ -260,11 +285,14 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
       expect(first.status).toBe('running')
+      seedSprintTask(db, 'sprint-2', 'repo-1')
       const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
       expect(second.status).toBe('running')
 
+      seedSprintTask(db, 'sprint-3', 'repo-1')
       const third = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-1' })
       expect(third.id).not.toBe(first.id)
       expect(third.id).not.toBe(second.id)
@@ -298,6 +326,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { emitToRenderer })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
 
       expect(emitToRenderer).toHaveBeenCalledWith(
@@ -310,6 +339,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', agentLifetimeCap: 7 })
 
       expect(getRun(db, run.id)!.agentLifetimeCap).toBe(7)
@@ -319,6 +349,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', projectId: 'proj-9' })
 
       expect(getRun(db, run.id)!.projectId).toBe('proj-9')
@@ -328,6 +359,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({
         sprintName: 'sprint-1',
         repoId: 'repo-1',
@@ -345,6 +377,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({
         sprintName: 'sprint-1',
         repoId: 'repo-1',
@@ -430,8 +463,11 @@ describe('OrchestratorScheduler', () => {
       insertTestTask(db, { id: 'task-b', repoId: 'repo-2' })
       insertTestTask(db, { id: 'task-c', repoId: 'repo-3' })
 
+      seedSprintTask(db, 's1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 's1', repoId: 'repo-1' })
+      seedSprintTask(db, 's2', 'repo-2')
       const run2 = scheduler.start({ sprintName: 's2', repoId: 'repo-2' })
+      seedSprintTask(db, 's3', 'repo-3')
       const run3 = scheduler.start({ sprintName: 's3', repoId: 'repo-3' })
 
       expect(run1.status).toBe('running')
@@ -439,6 +475,7 @@ describe('OrchestratorScheduler', () => {
       expect(run3.status).toBe('running')
 
       // 4th run should be queued
+      seedSprintTask(db, 's4', 'repo-4')
       const run4 = scheduler.start({ sprintName: 's4', repoId: 'repo-4' })
       expect(run4.status).toBe('queued')
     })
@@ -451,7 +488,9 @@ describe('OrchestratorScheduler', () => {
       const taskId = insertTestTask(db, { repoId: 'repo-1' })
 
       // Fill both slots
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-1')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
 
       // Single-task run should be queued
@@ -464,6 +503,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
       expect(first.status).toBe('running')
 
@@ -471,6 +511,7 @@ describe('OrchestratorScheduler', () => {
       scheduler.cancel(first.id)
 
       // Now a new run should start, not queue
+      seedSprintTask(db, 'sprint-2', 'repo-1')
       const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
       expect(second.status).toBe('running')
     })
@@ -480,12 +521,15 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
       scheduler.pause(run1.id)
       expect(getRun(db, run1.id)!.status).toBe('paused')
 
       // Paused run still occupies a slot — 3rd run should queue
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const run3 = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
       expect(run3.status).toBe('queued')
     })
@@ -495,8 +539,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
 
       const found = getRun(db, queued.id)
@@ -516,6 +563,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
       scheduler.pause(run.id)
 
@@ -530,6 +578,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { emitToRenderer })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
       emitToRenderer.mockClear()
       scheduler.pause(run.id)
@@ -552,7 +601,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain })
       scheduler = new OrchestratorScheduler(deps)
 
-      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
+      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
+      const run = scheduler.start({ repoId: 'repo-1' })
       scheduler.pause(run.id)
       brain.decide.mockClear()
 
@@ -566,6 +616,7 @@ describe('OrchestratorScheduler', () => {
     it('throws when orchestrator is disabled', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
       scheduler.pause(run.id)
 
@@ -584,6 +635,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'wc-sprint', 'repo-1')
       const run = scheduler.start({ sprintName: 'wc-sprint', repoId: 'repo-1' })
       const originalStartedAt = getRun(db, run.id)!.startedAt!
 
@@ -613,6 +665,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'wc-running', 'repo-1')
       const run = scheduler.start({ sprintName: 'wc-running', repoId: 'repo-1' })
       expect(getRun(db, run.id)!.status).toBe('running')
 
@@ -639,6 +692,7 @@ describe('OrchestratorScheduler', () => {
     it('marks run as cancelled and removes from active runs', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
 
       scheduler.cancel(run.id)
@@ -650,6 +704,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
       const taskId = insertTestTask(db, { id: 'multi-log-task', repoId: 'repo-1', status: 'in_progress' })
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
 
       // Insert two logs for the same task: first active (older), then done (newer)
@@ -676,6 +731,7 @@ describe('OrchestratorScheduler', () => {
       scheduler = new OrchestratorScheduler(deps)
       const taskId = insertTestTask(db, { id: 'cancel-link-task', repoId: 'repo-1', status: 'in_progress' })
       db.prepare('UPDATE tasks SET agent_id = ? WHERE id = ?').run('agent-still-alive', taskId)
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
 
       const now = new Date().toISOString()
@@ -702,6 +758,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
       const taskId = insertTestTask(db, { id: 'm2-active-task', repoId: 'repo-1', status: 'in_progress' })
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
 
       const now = new Date().toISOString()
@@ -720,6 +777,7 @@ describe('OrchestratorScheduler', () => {
       const emitToRenderer = vi.fn()
       const deps = buildDeps(db, { emitToRenderer })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 's', 'repo-1')
       const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
       emitToRenderer.mockClear()
 
@@ -751,6 +809,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 's', 'repo-1')
       scheduler.start({ sprintName: 's', repoId: 'repo-1' })
       db.prepare("DELETE FROM settings WHERE key = 'orchestrator.enabled'").run()
 
@@ -764,6 +823,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 's', 'repo-1')
       scheduler.start({ sprintName: 's', repoId: 'repo-1' })
 
       // Disable before the first tick fires
@@ -820,6 +880,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { dispatch })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint', 'repo-1')
       scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       await vi.advanceTimersByTimeAsync(60_000)
 
@@ -842,6 +903,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, validator, dispatch })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint', 'repo-1')
       scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       await vi.advanceTimersByTimeAsync(60_000)
 
@@ -890,7 +952,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, dispatch })
       scheduler = new OrchestratorScheduler(deps)
 
-      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+      // Placeholder run: a named sprint with no dispatchable task is refused at start()
+      scheduler.start({ repoId: 'repo-1' })
       await vi.advanceTimersByTimeAsync(60_000)
 
       // Returns early before brain because candidateTasks is empty (in_progress is not dispatchable)
@@ -1528,8 +1591,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       const run2 = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
       expect(queued.status).toBe('queued')
 
@@ -1610,6 +1676,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       const taskLog = insertTaskLog(db, { runId: run.id, taskId: 'task-abc', phase: 'dev' })
 
@@ -1625,7 +1692,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, tickIntervalMs: 999_999 })
       scheduler = new OrchestratorScheduler(deps)
 
-      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
+      const run = scheduler.start({ repoId: 'repo-1' })
       brain.decide.mockClear()
 
       scheduler.approveTaskDispatch(run.id, 'task-abc', true)
@@ -1642,7 +1710,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, tickIntervalMs: 999_999 })
       scheduler = new OrchestratorScheduler(deps)
 
-      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
+      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
+      const run = scheduler.start({ repoId: 'repo-1' })
       insertApproval(db, { runId: run.id, taskId: 'task-approve', windowMinutes: 30 })
       brain.decide.mockClear()
 
@@ -1662,6 +1731,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       insertApproval(db, { runId: run.id, taskId: 'task-deny', windowMinutes: 30 })
       const taskLog = insertTaskLog(db, { runId: run.id, taskId: 'task-deny', phase: 'dev' })
@@ -1955,6 +2025,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain: { decide: vi.fn().mockResolvedValue(decision) }, dispatch })
       scheduler = new OrchestratorScheduler(deps)
 
+      seedBlockedSprintTask(db, 'sprint-A', 'repo-1')
       scheduler.start({ sprintName: 'sprint-A', repoId: 'repo-1' })
       await vi.advanceTimersByTimeAsync(60_000)
 
@@ -2140,6 +2211,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint', 'repo-1')
       const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1' })
       insertTaskLog(db, { runId: run.id, taskId: 'task-log-test', phase: 'dev' })
       insertTaskLog(db, { runId: run.id, taskId: 'other-task', phase: 'dev' })
@@ -2154,9 +2226,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-a', 'repo-a')
       const runA = scheduler.start({ sprintName: 'sprint-a', repoId: 'repo-a' })
       // runB is the "newer" active run — old code's getActiveRun() (ORDER BY updated_at DESC LIMIT 1) returns runB,
       // so any task belonging to runA would be invisible to the old getTaskLog() implementation
+      seedSprintTask(db, 'sprint-b', 'repo-b')
       const runB = scheduler.start({ sprintName: 'sprint-b', repoId: 'repo-b' })
       expect(runB.status).toBe('running')
 
@@ -2485,8 +2559,11 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
       expect(queued.status).toBe('queued')
 
@@ -2513,6 +2590,7 @@ describe('OrchestratorScheduler', () => {
       scheduler = new OrchestratorScheduler(deps)
 
       scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId] })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
       const queued = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3', taskIds: [taskForQueued] })
       expect(queued.status).toBe('queued')
@@ -2536,9 +2614,13 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const queuedFirst = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      seedSprintTask(db, 'sprint-4', 'repo-4')
       const queuedSecond = scheduler.start({ sprintName: 'sprint-4', repoId: 'repo-4' })
       expect(queuedFirst.status).toBe('queued')
       expect(queuedSecond.status).toBe('queued')
@@ -2555,7 +2637,9 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
 
       // Cancel run1 — no queued runs exist, should not throw or error
@@ -2571,6 +2655,7 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
 
       // Manually insert a queued run to simulate edge case
@@ -2592,9 +2677,13 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
+      seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-2')
       scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-2' })
+      seedSprintTask(db, 'sprint-3', 'repo-3')
       const queued1 = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-3' })
+      seedSprintTask(db, 'sprint-4', 'repo-4')
       const queued2 = scheduler.start({ sprintName: 'sprint-4', repoId: 'repo-4' })
 
       // Cancel only 1 run — should promote exactly 1 queued run, not both
@@ -2621,6 +2710,7 @@ describe('OrchestratorScheduler', () => {
       ).run()
 
       // Insert a healthy running run
+      seedSprintTask(db, 'healthy', 'repo-2')
       scheduler.start({ sprintName: 'healthy', repoId: 'repo-2' })
 
       // Insert a queued run
@@ -2762,6 +2852,7 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 3_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'hb-sprint', 'repo-1')
       scheduler.start({ sprintName: 'hb-sprint', repoId: 'repo-1', telegramNotify: true })
 
       // Advance to the cadence boundary; the first tick at T+0 records the base time,
@@ -2781,6 +2872,7 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 1_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'silent-sprint', 'repo-1')
       scheduler.start({ sprintName: 'silent-sprint', repoId: 'repo-1', telegramNotify: false })
 
       await vi.advanceTimersByTimeAsync(5_000)
@@ -2797,6 +2889,7 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 1_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'paused-hb', 'repo-1')
       const run = scheduler.start({ sprintName: 'paused-hb', repoId: 'repo-1', telegramNotify: true })
       // Advance once to record base time, then pause
       await vi.advanceTimersByTimeAsync(0)
@@ -2821,8 +2914,11 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 1_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'active-a', 'repo-1')
       scheduler.start({ sprintName: 'active-a', repoId: 'repo-1', telegramNotify: true })
+      seedSprintTask(db, 'active-b', 'repo-2')
       scheduler.start({ sprintName: 'active-b', repoId: 'repo-2', telegramNotify: true })
+      seedSprintTask(db, 'queued-hb', 'repo-3')
       const queued = scheduler.start({ sprintName: 'queued-hb', repoId: 'repo-3', telegramNotify: true })
       expect(queued.status).toBe('queued')
       sendTelegramNotification.mockClear()
@@ -2842,6 +2938,7 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 5_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'dedup-hb', 'repo-1')
       scheduler.start({ sprintName: 'dedup-hb', repoId: 'repo-1', telegramNotify: true })
 
       // First cadence: T+0 base, T+5000 fires first heartbeat
@@ -2869,7 +2966,9 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 2_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'multi-a', 'repo-1')
       scheduler.start({ sprintName: 'multi-a', repoId: 'repo-1', telegramNotify: true })
+      seedSprintTask(db, 'multi-b', 'repo-2')
       scheduler.start({ sprintName: 'multi-b', repoId: 'repo-2', telegramNotify: true })
 
       await vi.advanceTimersByTimeAsync(3_000)
@@ -2889,6 +2988,7 @@ describe('OrchestratorScheduler', () => {
         heartbeatIntervalMs: 1_000,
       })
       scheduler = new OrchestratorScheduler(deps)
+      seedSprintTask(db, 'resilient-hb', 'repo-1')
       const run = scheduler.start({ sprintName: 'resilient-hb', repoId: 'repo-1', telegramNotify: true })
 
       await vi.advanceTimersByTimeAsync(5_000)
@@ -3160,6 +3260,8 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
   }
 
   async function startSprint(sprintName: string): Promise<void> {
+    // start() refuses a named sprint run whose sprint has no dispatchable task
+    insertKanbanTask(rdb, { repoId, title: `seed ${sprintName}`, sprintName })
     scheduler = new OrchestratorScheduler(buildDeps(rdb))
     scheduler.start({ sprintName, repoId })
     await vi.advanceTimersByTimeAsync(10) // let the fire-and-forget M4 promise chain settle
