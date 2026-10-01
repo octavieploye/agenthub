@@ -10,6 +10,7 @@ import {
 } from './brain-scanner'
 import { GitService } from './git-service'
 import { getDb, resetDb, closeDb } from '../db/connection'
+import { upsertBrainEntry } from '../db/queries/brain.queries'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -376,8 +377,9 @@ describe('discoverRepoArtifacts', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Anamnesis publish scope (S92) — discovery never publishes; registration
-// publishes only the entry it just registered, never the unsynced backlog.
+// Anamnesis publish scope — discovery publishes only the entries it newly inserted
+// (max 50 per call, option A); registration publishes only the entry it just registered.
+// Neither ever publishes the pre-existing unsynced backlog (S92 protection).
 // ---------------------------------------------------------------------------
 
 describe('brain scanner Anamnesis publish scope', () => {
@@ -398,6 +400,26 @@ describe('brain scanner Anamnesis publish scope', () => {
     return row.s
   }
 
+  function unsyncedCount(): number {
+    const row = getDb()
+      .prepare('SELECT COUNT(*) AS n FROM brain_entries WHERE synced_to_anamnesis = 0')
+      .get() as { n: number }
+    return row.n
+  }
+
+  function seedUnsyncedEntry(id: string, artifactPath: string): void {
+    upsertBrainEntry(getDb(), {
+      id,
+      repoId: 'repo-pub',
+      pointerPath: artifactPath,
+      artifactPath,
+      type: 'spec',
+      subject: 'Seeded backlog entry',
+      status: 'active',
+      createdAt: '2026-06-01'
+    })
+  }
+
   beforeEach(() => {
     resetDb()
     tmpDir = mkdtempSync(join(tmpdir(), 'brain-scanner-publish-test-'))
@@ -412,7 +434,7 @@ describe('brain scanner Anamnesis publish scope', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  test('discoverAllArtifacts enqueues no task_events row and leaves entries unsynced', () => {
+  test('discoverAllArtifacts enqueues one BRAIN_ENTRY_PUBLISHED per newly discovered entry', () => {
     const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
     mkdirSync(specsDir, { recursive: true })
     writeFileSync(join(specsDir, '2026-07-01-first-spec.md'), '# First\n\nLong enough spec content here.\n')
@@ -421,18 +443,101 @@ describe('brain scanner Anamnesis publish scope', () => {
     const result = scanner.discoverAllArtifacts()
 
     expect(result.discovered).toBe(2)
+    expect(brainOutboxCount()).toBe(2)
+    expect(unsyncedCount()).toBe(0)
+  })
+
+  test('discoverAllArtifacts never publishes an entry that already existed unsynced before the scan', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    const existingPath = join(specsDir, '2026-07-01-existing-spec.md')
+    writeFileSync(existingPath, '# Existing\n\nLong enough spec content here.\n')
+    seedUnsyncedEntry('auto_repo-pub_docs_superpowers_specs_2026_07_01_existing_spec_md', existingPath)
+    writeFileSync(join(specsDir, '2026-07-02-new-spec.md'), '# New\n\nLong enough spec content here.\n')
+
+    scanner.discoverAllArtifacts()
+
+    expect(brainOutboxCount()).toBe(1)
+    expect(syncedFlag('auto_repo-pub_docs_superpowers_specs_2026_07_01_existing_spec_md')).toBe(0)
+    expect(unsyncedCount()).toBe(1)
+  })
+
+  test('discoverAllArtifacts leaves a pre-existing unsynced entry unsynced even when nothing is new', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    const backlogPath = join(specsDir, '2026-07-01-backlog-spec.md')
+    writeFileSync(backlogPath, '# Backlog\n\nLong enough spec content here.\n')
+    const backlogId = 'auto_repo-pub_docs_superpowers_specs_2026_07_01_backlog_spec_md'
+    seedUnsyncedEntry(backlogId, backlogPath)
+
+    scanner.discoverAllArtifacts()
+
     expect(brainOutboxCount()).toBe(0)
-    const unsynced = getDb()
-      .prepare('SELECT COUNT(*) AS n FROM brain_entries WHERE synced_to_anamnesis = 0')
-      .get() as { n: number }
-    expect(unsynced.n).toBe(2)
+    expect(syncedFlag(backlogId)).toBe(0)
+  })
+
+  test('discoverAllArtifacts publishes at most 50 new entries per call, oldest first, and leaves the overflow unsynced', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    for (let i = 1; i <= 60; i++) {
+      // Dates ascend with i: 2026-08-01..30, then 2026-09-01..30 — the filename date is created_at.
+      const month = i <= 30 ? '08' : '09'
+      const day = String(i <= 30 ? i : i - 30).padStart(2, '0')
+      writeFileSync(
+        join(specsDir, `2026-${month}-${day}-spec-${i}.md`),
+        `# Spec ${i}\n\nLong enough spec content here.\n`
+      )
+    }
+
+    const result = scanner.discoverAllArtifacts()
+
+    expect(result.discovered).toBe(60)
+    expect(brainOutboxCount()).toBe(50)
+    expect(unsyncedCount()).toBe(10)
+    const unsyncedDates = (getDb()
+      .prepare('SELECT created_at AS c FROM brain_entries WHERE synced_to_anamnesis = 0 ORDER BY created_at')
+      .all() as { c: string }[]).map((r) => r.c)
+    const newestPublished = (getDb()
+      .prepare('SELECT MAX(created_at) AS c FROM brain_entries WHERE synced_to_anamnesis = 1')
+      .get() as { c: string }).c
+    expect(unsyncedDates.every((d) => d > newestPublished)).toBe(true)
+  })
+
+  test('a second scan with nothing new enqueues nothing, and the overflow stays unsynced', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    for (let i = 1; i <= 60; i++) {
+      const day = String(i).padStart(2, '0')
+      writeFileSync(join(specsDir, `2026-07-01-spec-${day}.md`), `# Spec ${day}\n\nLong enough spec content here.\n`)
+    }
+    scanner.discoverAllArtifacts()
+    const afterFirst = brainOutboxCount()
+
+    scanner.discoverAllArtifacts()
+
+    expect(afterFirst).toBe(50)
+    expect(brainOutboxCount()).toBe(50)
+    expect(unsyncedCount()).toBe(10)
+  })
+
+  test('discoverAllArtifacts never re-publishes a pre-existing synced entry', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    const syncedPath = join(specsDir, '2026-07-01-synced-spec.md')
+    writeFileSync(syncedPath, '# Synced\n\nLong enough spec content here.\n')
+    const syncedId = 'auto_repo-pub_docs_superpowers_specs_2026_07_01_synced_spec_md'
+    seedUnsyncedEntry(syncedId, syncedPath)
+    getDb().prepare('UPDATE brain_entries SET synced_to_anamnesis = 1 WHERE id = ?').run(syncedId)
+
+    scanner.discoverAllArtifacts()
+
+    expect(brainOutboxCount()).toBe(0)
+    expect(syncedFlag(syncedId)).toBe(1)
   })
 
   test('registerBrainEntry enqueues only its own entry when other unsynced entries exist', () => {
-    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
-    mkdirSync(specsDir, { recursive: true })
-    writeFileSync(join(specsDir, '2026-07-01-backlog-spec.md'), '# Backlog\n\nLong enough spec content here.\n')
-    scanner.discoverAllArtifacts()
+    mkdirSync(join(tmpDir, 'docs'), { recursive: true })
+    seedUnsyncedEntry('backlog-entry', join(tmpDir, 'docs', 'backlog.md'))
 
     const artifactPath = join(tmpDir, 'docs', 'manual.md')
     writeFileSync(artifactPath, '# Manual\n')

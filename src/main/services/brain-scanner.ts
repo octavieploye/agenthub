@@ -19,7 +19,11 @@ import {
 import { RepoConfig } from '../../shared/types/config.types'
 import { getRepoById, getAllRepos } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
-import { publishBrainEntryById } from './helpers/brain-entries-publisher'
+import {
+  publishBrainEntryById,
+  publishDiscoveredBrainEntries,
+  type DiscoveredBrainEntry
+} from './helpers/brain-entries-publisher'
 
 /** Parse markdown checklist items from file content. */
 export function parseChecklist(content: string): { total: number; done: number } {
@@ -93,6 +97,11 @@ const ARTIFACT_SCAN_RULES: { dir: string; type: BrainEntryType; recursive: boole
   { dir: 'TODO',                      type: 'plan',        recursive: true  },
 ]
 
+/** True when no brain_entries row has this id yet (checked before the upsert). */
+function isNewBrainEntry(db: ReturnType<typeof getDb>, entryId: string): boolean {
+  return !getBrainEntryById(db, entryId)
+}
+
 /**
  * Extract a human-readable subject from a markdown filename.
  * "2026-07-03-deep-reasoning-package-design.md" → "Deep Reasoning Package Design"
@@ -144,17 +153,21 @@ export class BrainScannerService {
 
   /**
    * Auto-discover and register all artifacts across all known repos.
-   * Called on brain panel refresh.
+   * Called on brain panel refresh. Publishes to Anamnesis only the entries this scan newly
+   * inserted (oldest first, capped); pre-existing unsynced entries go through backfill_brain_entries.
    */
   discoverAllArtifacts(): { discovered: number; repos: number } {
     const db = getDb()
     const repos = getAllRepos(db)
     let totalDiscovered = 0
+    const newEntries: DiscoveredBrainEntry[] = []
 
     for (const repo of repos) {
       if (!repo.path) continue
-      totalDiscovered += this.discoverRepoArtifacts(repo)
+      totalDiscovered += this.discoverRepoArtifacts(repo, newEntries)
     }
+
+    publishDiscoveredBrainEntries(db, newEntries)
 
     // Promote any existing entries that are computed-done but still showing as active.
     // Only promotes 'active' → 'implemented'; leaves 'parked' and other manual statuses alone.
@@ -174,8 +187,9 @@ export class BrainScannerService {
 
   /**
    * Auto-discover artifacts in a single repo by scanning known directories.
+   * Entries inserted by this scan (not already present) are appended to `newEntries` when given.
    */
-  discoverRepoArtifacts(repo: RepoConfig): number {
+  discoverRepoArtifacts(repo: RepoConfig, newEntries: DiscoveredBrainEntry[] = []): number {
     if (!repo.path || !existsSync(repo.path)) return 0
 
     const db = getDb()
@@ -221,6 +235,7 @@ export class BrainScannerService {
           const gitSignalBool = detectGitSignal(repoGitLog, createdAt, slug)
           const computedStatus = deriveComputedStatus(checklist.total, checklist.done, gitSignalBool, fileContent)
 
+          const isNew = isNewBrainEntry(db, entryId)
           upsertBrainEntry(db, {
             id: entryId,
             repoId: repo.id,
@@ -239,6 +254,7 @@ export class BrainScannerService {
             checklistDone: checklist.done,
             gitSignal: gitSignalBool ? 1 : 0,
           })
+          if (isNew) newEntries.push({ id: entryId, createdAt })
           count++
         } catch (error) {
           log.warn(`Brain discovery: skipping ${filePath}: ${error}`)

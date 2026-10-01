@@ -1,4 +1,4 @@
-import { isAbsolute, relative } from 'path'
+import { basename, isAbsolute, relative } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
 import { insertTaskEvent } from '../../db/queries/task-events.queries'
@@ -22,6 +22,15 @@ interface UnsyncedBrainEntryRow {
 /** Default and maximum number of entries one publish call may enqueue. */
 const DEFAULT_PUBLISH_LIMIT = 50
 const MAX_PUBLISH_LIMIT = 200
+
+/** Most newly discovered entries one discovery scan may enqueue; the overflow waits for the next scan or backfill. */
+export const DISCOVERY_PUBLISH_LIMIT = 50
+
+/** A brain entry a discovery scan just inserted (not one that already existed). */
+export interface DiscoveredBrainEntry {
+  id: string
+  createdAt: string
+}
 
 const UNSYNCED_ENTRY_SELECT = `SELECT be.id, be.repo_id AS repoId, r.name AS repoName, r.path AS repoPath,
               be.artifact_path AS artifactPath, be.type, be.subject, be.status,
@@ -52,15 +61,27 @@ function getUnsyncedBrainEntryById(db: Database.Database, entryId: string): Unsy
     .get(entryId) as UnsyncedBrainEntryRow | undefined
 }
 
-/** Repo-relative artifact path, so the payload never carries the local home directory. */
-function toRepoRelativePath(artifactPath: string, repoPath: string | null): string {
-  if (!repoPath) return artifactPath
-  const rel = relative(repoPath, artifactPath)
-  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : artifactPath
+/** How an artifact path was reduced for the payload: relative to its repo, or file name only. */
+type ArtifactPathScope = 'repo_relative' | 'basename'
+
+/**
+ * Repo-relative artifact path, so the payload never carries the local home directory (S93).
+ * An artifact outside the repo (or with no repo path) is reduced to its file name — never absolute.
+ */
+function toPayloadArtifactPath(
+  artifactPath: string,
+  repoPath: string | null
+): { path: string; scope: ArtifactPathScope } {
+  if (repoPath) {
+    const rel = relative(repoPath, artifactPath)
+    if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return { path: rel, scope: 'repo_relative' }
+  }
+  return { path: basename(artifactPath), scope: 'basename' }
 }
 
 /** Outbox payload for one brain entry. `domain_category` is one of the 7 shared categories. */
 function buildBrainEntryPayload(entry: UnsyncedBrainEntryRow): Record<string, unknown> {
+  const artifact = toPayloadArtifactPath(entry.artifactPath, entry.repoPath)
   return {
     entry_id: entry.id,
     repo_id: entry.repoId,
@@ -69,7 +90,8 @@ function buildBrainEntryPayload(entry: UnsyncedBrainEntryRow): Record<string, un
     subject: entry.subject,
     status: entry.status,
     computed_status: entry.computedStatus,
-    artifact_path: toRepoRelativePath(entry.artifactPath, entry.repoPath),
+    artifact_path: artifact.path,
+    artifact_path_scope: artifact.scope,
     created_at: entry.createdAt,
     domain_category: mapBrainTypeToDomainCategory(entry.type as BrainEntryType)
   }
@@ -132,4 +154,28 @@ export function publishBrainEntryById(db: Database.Database, entryId: string): b
   log.info(`Brain publisher: enqueued brain entry ${entryId} for Anamnesis`)
   getAnamnesisWriter()?.onEventInserted()
   return true
+}
+
+/**
+ * Publish the entries a discovery scan newly inserted — oldest first, at most
+ * DISCOVERY_PUBLISH_LIMIT. Never touches pre-existing unsynced rows. A failure on one
+ * entry is logged and leaves it unsynced; it never stops the rest or throws.
+ * Returns the number of entries enqueued.
+ */
+export function publishDiscoveredBrainEntries(
+  db: Database.Database,
+  discovered: DiscoveredBrainEntry[]
+): number {
+  const oldestFirst = [...discovered].sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+  )
+  let published = 0
+  for (const entry of oldestFirst.slice(0, DISCOVERY_PUBLISH_LIMIT)) {
+    try {
+      if (publishBrainEntryById(db, entry.id)) published++
+    } catch (error) {
+      log.warn(`Brain publisher: enqueue failed, entry ${entry.id} stays unsynced: ${error}`)
+    }
+  }
+  return published
 }

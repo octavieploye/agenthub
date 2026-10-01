@@ -236,3 +236,53 @@ describe('publishBrainEntryById', () => {
     expect(syncedFlag('real')).toBe(0)
   })
 })
+
+describe('publishUnsyncedBrainEntries — artifact path leakage (S93)', () => {
+  function seedOutsideEntry(id: string, artifactPath: string): void {
+    upsertBrainEntry(db, {
+      id,
+      repoId,
+      pointerPath: `/tmp/brain-repo/docs/brain/${id}.md`,
+      artifactPath,
+      type: 'plan',
+      subject: `Subject ${id}`,
+      status: 'active',
+      createdAt: '2026-09-30T10:00:00.000Z'
+    })
+  }
+
+  function publishedPayload(): Record<string, unknown> {
+    return JSON.parse(brainOutbox()[0].payloadJson) as Record<string, unknown>
+  }
+
+  it('keeps a repo-relative path for an artifact inside the repo and marks its scope', () => {
+    seedEntry('in1', 'plan', 'Inside')
+
+    publishUnsyncedBrainEntries(db)
+
+    const payload = publishedPayload()
+    expect(payload.artifact_path).toBe('docs/in1.md')
+    expect(payload.artifact_path_scope).toBe('repo_relative')
+  })
+
+  it('sends only the file basename for an artifact outside the repo, never the absolute path', () => {
+    seedOutsideEntry('out1', '/Users/someone/elsewhere/notes/plan.md')
+
+    publishUnsyncedBrainEntries(db)
+
+    const payload = publishedPayload()
+    expect(payload.artifact_path).toBe('plan.md')
+    expect(payload.artifact_path_scope).toBe('basename')
+    expect(JSON.stringify(payload)).not.toContain('/Users/')
+  })
+
+  it('does not treat a sibling directory sharing the repo path prefix as inside the repo', () => {
+    seedOutsideEntry('out2', '/tmp/brain-repo-other/secret/plan.md')
+
+    publishUnsyncedBrainEntries(db)
+
+    const payload = publishedPayload()
+    expect(payload.artifact_path).toBe('plan.md')
+    expect(payload.artifact_path_scope).toBe('basename')
+  })
+})
