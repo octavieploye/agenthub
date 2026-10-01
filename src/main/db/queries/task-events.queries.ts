@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import type { TaskEvent, TaskEventType } from '../../../shared/types/task.types'
 
 interface InsertTaskEventInput {
-  taskId: string
+  taskId: string | null
   eventType: TaskEventType
   fromStatus: string | null
   toStatus: string
@@ -56,7 +56,7 @@ export function getEventsByTask(db: Database.Database, taskId: string): TaskEven
 function mapEventRow(row: Record<string, unknown>): TaskEvent {
   return {
     id: row.id as string,
-    taskId: row.task_id as string,
+    taskId: (row.task_id as string) ?? null,
     eventType: row.event_type as TaskEventType,
     fromStatus: (row.from_status as string) ?? null,
     toStatus: row.to_status as string,

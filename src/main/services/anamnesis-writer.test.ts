@@ -722,3 +722,92 @@ it('S87: CARD_COMPLETED content carries only allowlisted payload keys and a reda
   expect(serialized).not.toContain('sk-live-123')
   expect(serialized).not.toContain('FULL PROMPT')
 })
+
+// ── domain_category (additive): the legacy `domain` field is untouched, a new top-level
+// `domain_category` carries one of the 7 shared categories. Top-level, not inside `content`:
+// the CARD_COMPLETED content key list is pinned by the SBAR allowlist test above.
+
+async function flushOneEvent(
+  eventType: 'CARD_TRANSITION' | 'CARD_COMPLETED' | 'ORCHESTRATOR_TASK_SECURED',
+  category: string | null
+): Promise<{ body: Record<string, unknown>; content: Record<string, unknown> }> {
+  const repoId = seedRepo()
+  const task = insertTask(db, { repoId, title: 'Categorised task', status: 'in_progress', category })
+  insertTaskEvent(db, {
+    taskId: task.id,
+    eventType,
+    fromStatus: 'in_progress',
+    toStatus: 'completed',
+    agentId: 'agent-1',
+    payload: { taskTitle: 'Categorised task', repoId }
+  })
+
+  const { fetchMock } = mockEndpoints()
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+  await writer.flush()
+
+  const path = eventType === 'CARD_TRANSITION' ? '/memory/episodic' : '/memory/procedural'
+  const calls = callsTo(fetchMock, path)
+  expect(calls).toHaveLength(1)
+  const body = JSON.parse(calls[0][1].body as string) as Record<string, unknown>
+  return { body, content: body.content as Record<string, unknown> }
+}
+
+it('CARD_COMPLETED payload adds domain_category and keeps the legacy domain unchanged', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', 'marketing')
+
+  expect(body.domain_category).toBe('marketing')
+  expect(body.domain).toBe('task_completion')
+  expect(body.pattern_type).toBe('build_sequence')
+})
+
+it('domain_category maps a code-like task category (backend) to code', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', 'backend')
+
+  expect(body.domain_category).toBe('code')
+})
+
+it('domain_category maps a business task category to business', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', 'business')
+
+  expect(body.domain_category).toBe('business')
+})
+
+it('domain_category defaults to code when the task has no category', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', null)
+
+  expect(body.domain_category).toBe('code')
+  expect(body.domain).toBe('task_completion')
+})
+
+it('domain_category defaults to code for an unrecognised free-form task category', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', 'not-a-known-category')
+
+  expect(body.domain_category).toBe('code')
+})
+
+it('ORCHESTRATOR_TASK_SECURED keeps domain security_audit and adds domain_category from the task category', async () => {
+  const { body } = await flushOneEvent('ORCHESTRATOR_TASK_SECURED', 'business')
+
+  expect(body.domain).toBe('security_audit')
+  expect(body.pattern_type).toBe('security_scan')
+  expect(body.domain_category).toBe('business')
+})
+
+it('episodic CARD_TRANSITION payload also carries domain_category', async () => {
+  const { body } = await flushOneEvent('CARD_TRANSITION', 'marketing')
+
+  expect(body.domain_category).toBe('marketing')
+})
+
+it('domain_category is never placed inside content (content key list is pinned by the SBAR allowlist)', async () => {
+  const { content } = await flushOneEvent('CARD_COMPLETED', 'marketing')
+
+  expect(content).not.toHaveProperty('domain_category')
+})
+
+it('every payload sent carries a domain_category that is one of the 7 shared categories', async () => {
+  const { body } = await flushOneEvent('CARD_COMPLETED', 'research')
+
+  expect(['code', 'business', 'marketing', 'strategy', 'client', 'legal', 'operations']).toContain(body.domain_category)
+})

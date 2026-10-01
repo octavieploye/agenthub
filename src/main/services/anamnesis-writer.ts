@@ -5,6 +5,12 @@ import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import { loadAnamnesisSecret } from './secret-store'
 import { redactCompletionPayload, resolveRedactionContext } from './helpers/task-completion-events'
+import { mapTaskCategoryToDomainCategory } from './helpers/anamnesis-domain-mapper'
+import {
+  DEFAULT_DOMAIN_CATEGORY,
+  isAnamnesisDomainCategory,
+  type AnamnesisDomainCategory
+} from '../../shared/constants/anamnesis-domains'
 
 const ENDPOINT_MAP: Record<TaskEventType, string> = {
   CARD_TRANSITION: '/memory/episodic',
@@ -17,7 +23,11 @@ const ENDPOINT_MAP: Record<TaskEventType, string> = {
   ORCHESTRATOR_TASK_COMMITTED: '/memory/procedural',
   ORCHESTRATOR_SPRINT_COMPLETED: '/memory/episodic',
   DATE_TRIGGER_FIRED: '/memory/episodic',
+  BRAIN_ENTRY_PUBLISHED: '/memory/episodic',
 }
+
+/** Universal status vocabulary: the state a completed task sets on its project domain. */
+const PROJECT_STATUS_DONE = 'done'
 
 interface AnamnesisWriterDeps {
   anamnesisUrl: string
@@ -93,6 +103,30 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     return row?.name ?? null
   }
 
+  /** Resolve the shared domain category from the event's task category (default `code`). */
+  private resolveDomainCategory(taskId: string): AnamnesisDomainCategory {
+    const row = this.db.prepare('SELECT category FROM tasks WHERE id = ?').get(taskId) as
+      | { category: string | null }
+      | undefined
+    return mapTaskCategoryToDomainCategory(row?.category)
+  }
+
+  /** Task events resolve the repo via their task; brain entry events carry `repo_name` in the payload. */
+  private resolveEventRepoName(event: TaskEvent, rawPayload: Record<string, unknown>): string | null {
+    if (event.taskId) return this.resolveRepoName(event.taskId)
+    return typeof rawPayload['repo_name'] === 'string' ? rawPayload['repo_name'] : null
+  }
+
+  /** Task events map their task category; brain entry events carry an already-mapped `domain_category`. */
+  private resolveEventDomainCategory(
+    event: TaskEvent,
+    rawPayload: Record<string, unknown>
+  ): AnamnesisDomainCategory {
+    if (event.taskId) return this.resolveDomainCategory(event.taskId)
+    const category = rawPayload['domain_category']
+    return isAnamnesisDomainCategory(category) ? category : DEFAULT_DOMAIN_CATEGORY
+  }
+
   /** Register or look up a project in Anamnesis, returning the UUID. Caches results. */
   private async resolveProjectUuid(repoName: string): Promise<string | null> {
     const cached = this.projectUuidCache.get(repoName)
@@ -129,7 +163,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
    */
   private allowlistPayload(event: TaskEvent, rawPayload: Record<string, unknown>): Record<string, unknown> {
     if (event.eventType !== 'CARD_COMPLETED') return rawPayload
-    const ctx = resolveRedactionContext(this.db, event.taskId) ?? {
+    const ctx = (event.taskId ? resolveRedactionContext(this.db, event.taskId) : null) ?? {
       taskTitle: typeof rawPayload['taskTitle'] === 'string' ? rawPayload['taskTitle'] : '',
       sprintName: null,
       taskDescription: null,
@@ -143,11 +177,13 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     event: TaskEvent,
     rawPayload: Record<string, unknown>,
     projectId: string | null,
+    domainCategory: AnamnesisDomainCategory
   ): Record<string, unknown> {
     const isEpisodic = event.eventType === 'CARD_TRANSITION'
       || event.eventType === 'SPRINT_INTAKE'
       || event.eventType === 'ORCHESTRATOR_TASK_STARTED'
       || event.eventType === 'ORCHESTRATOR_SPRINT_COMPLETED'
+      || event.eventType === 'BRAIN_ENTRY_PUBLISHED'
 
     if (isEpisodic) {
       return {
@@ -159,8 +195,11 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
           from_status: event.fromStatus,
           to_status: event.toStatus,
           agent_id: event.agentId,
-          ...rawPayload
+          ...rawPayload,
+          // Anamnesis reads the work-event category from episodic content (writer.py)
+          domain_category: domainCategory
         },
+        domain_category: domainCategory,
         sovereignty_tier: 1
       }
     }
@@ -179,6 +218,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       ...(projectId ? { project_id: projectId } : {}),
       pattern_type: orchMeta?.pattern_type ?? 'build_sequence',
       domain: orchMeta?.domain ?? (event.eventType === 'CARD_COMPLETED' ? 'task_completion' : 'task_interruption'),
+      domain_category: domainCategory,
       content: {
         event_type: event.eventType.toLowerCase(),
         task_id: event.taskId,
@@ -203,14 +243,16 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       return false
     }
 
-    // Resolve project UUID from task → repo → Anamnesis project registry
+    // Resolve project UUID from task (or brain entry payload) → repo → Anamnesis project registry
     let projectId: string | null = null
-    const repoName = this.resolveRepoName(event.taskId)
+    const repoName = this.resolveEventRepoName(event, rawPayload)
     if (repoName) {
       projectId = await this.resolveProjectUuid(repoName)
     }
 
-    const body = this.buildAnamnesisPayload(event, this.allowlistPayload(event, rawPayload), projectId)
+    const domainCategory = this.resolveEventDomainCategory(event, rawPayload)
+    const sentPayload = this.allowlistPayload(event, rawPayload)
+    const body = this.buildAnamnesisPayload(event, sentPayload, projectId, domainCategory)
 
     try {
       const res = await this.fetch(url, {
@@ -232,6 +274,11 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
           clearTimeout(this.recoveryTimer)
           this.recoveryTimer = null
         }
+        if (event.eventType === 'CARD_COMPLETED' && projectId) {
+          const summary =
+            typeof sentPayload['taskTitle'] === 'string' ? sentPayload['taskTitle'] : null
+          await this.publishProjectStatus(projectId, domainCategory, summary)
+        }
         return true
       } else {
         log.warn('AnamnesisWriter: non-OK response', { status: res.status, eventId: event.id })
@@ -242,6 +289,39 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       log.warn('AnamnesisWriter: Anamnesis unreachable, event queued', { eventId: event.id })
       this.recordFailure()
       return false
+    }
+  }
+
+  /**
+   * Best-effort project-status upsert after a synced CARD_COMPLETED. A failure is logged only:
+   * it never unsyncs the event nor counts toward the circuit breaker.
+   */
+  private async publishProjectStatus(
+    projectId: string,
+    domainCategory: AnamnesisDomainCategory,
+    summary: string | null
+  ): Promise<void> {
+    const url = `${this.anamnesisUrl}/projects/${projectId}/status/${domainCategory}`
+    try {
+      const res = await this.fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Optimaeus-Caller': 'hephaestus',
+          ...(this.authSecret ? { Authorization: `Bearer ${this.authSecret}` } : {})
+        },
+        body: JSON.stringify({ state: PROJECT_STATUS_DONE, summary }),
+        signal: AbortSignal.timeout(AnamnesisWriter.FETCH_TIMEOUT_MS)
+      })
+      if (!res.ok) {
+        log.warn('AnamnesisWriter: project status PUT rejected', {
+          status: res.status,
+          projectId,
+          domainCategory
+        })
+      }
+    } catch {
+      log.warn('AnamnesisWriter: project status PUT failed', { projectId, domainCategory })
     }
   }
 

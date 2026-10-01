@@ -148,10 +148,12 @@ export type TaskEventType =
   | 'ORCHESTRATOR_TASK_COMMITTED'
   | 'ORCHESTRATOR_SPRINT_COMPLETED'
   | 'DATE_TRIGGER_FIRED'
+  | 'BRAIN_ENTRY_PUBLISHED'
 
 export interface TaskEvent {
   id: string
-  taskId: string
+  /** NULL for events that describe a non-task record (BRAIN_ENTRY_PUBLISHED). */
+  taskId: string | null
   eventType: TaskEventType
   fromStatus: string | null
   toStatus: string
