@@ -23,3 +23,21 @@ export function readSettingsMcpServers(settingsPath: string): Record<string, unk
   }
   return {}
 }
+
+/**
+ * Returns a copy of `mcpServers` whose `anamnesis` entry carries the spawned agent's
+ * Anamnesis environment: OPTIMAEUS_CALLER is always 'hephaestus', AUTH_SECRET is set only
+ * when a non-empty secret is available. Never invents an anamnesis entry; never mutates input.
+ */
+export function applyAnamnesisEnv(
+  mcpServers: Record<string, unknown>,
+  secret: string | null
+): Record<string, unknown> {
+  const anamnesis = mcpServers['anamnesis']
+  if (anamnesis === null || typeof anamnesis !== 'object') return mcpServers
+  const entry = anamnesis as Record<string, unknown>
+  const env: Record<string, string> = { ...((entry.env ?? {}) as Record<string, string>) }
+  env['OPTIMAEUS_CALLER'] = 'hephaestus'
+  if (typeof secret === 'string' && secret.length > 0) env['AUTH_SECRET'] = secret
+  return { ...mcpServers, anamnesis: { ...entry, env } }
+}

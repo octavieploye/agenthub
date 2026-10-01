@@ -11,7 +11,7 @@ import { createParser, type CliOutputParser } from '../parsers/cli-output-parser
 import { buildCodexCommand } from './codex-command-builder'
 import { checkCodexHealth, ensureCodexMcpServers } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
-import { readSettingsMcpServers } from './agent-mcp-config'
+import { readSettingsMcpServers, applyAnamnesisEnv } from './agent-mcp-config'
 import { insertTerminalOutput } from '../db/queries/history.queries'
 import { PtyProxy } from './pty-proxy'
 import { executeKillHierarchy } from './kill-hierarchy'
@@ -479,16 +479,11 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
   const baseServers = readSettingsMcpServers(agenthubSettingsPath)
   const targetServers = readSettingsMcpServers(join(targetCwd, '.claude', 'settings.json'))
 
-  const mcpServers: Record<string, unknown> = { ...baseServers, ...targetServers }
-
-  // Inject anamnesis auth secret at runtime (never stored in config files)
-  const anamnesisSecret = loadAnamnesisSecret()
-  if (mcpServers['anamnesis'] && anamnesisSecret) {
-    const anamnesisCfg = mcpServers['anamnesis'] as Record<string, unknown>
-    const env = (anamnesisCfg.env ?? {}) as Record<string, string>
-    env['AUTH_SECRET'] = anamnesisSecret
-    anamnesisCfg.env = env
-  }
+  // Inject anamnesis auth secret + caller identity at runtime (never stored in config files)
+  const mcpServers: Record<string, unknown> = applyAnamnesisEnv(
+    { ...baseServers, ...targetServers },
+    loadAnamnesisSecret()
+  )
 
   // B1: Telegram is optional — add it only when the socket is available.
   // Never gate the entire MCP config on telegram availability.
