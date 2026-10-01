@@ -40,6 +40,7 @@ import { IPC_EVENTS } from '../../shared/constants/ipc-channels'
 import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 import { getRepoById } from '../db/queries/repos.queries'
 import { loadAnamnesisSecret } from './secret-store'
+import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
 import { resolveAppMode } from './adapters/adapter-factory'
 import { emitTaskStatusEvent, moveTaskWithEvent } from './helpers/task-status-events'
 import { emitTaskCompletionEvent, writeTaskCompletionSummary } from './helpers/task-completion-events'
@@ -179,6 +180,8 @@ export class OrchestratorScheduler {
     }
     const repoId = input.repoId
 
+    this.assertSprintHasDispatchableTasks(input.sprintName, repoId, input.taskIds)
+
     // Slot-aware admission: queue when active-run count reaches maxConcurrentRuns
     const activeRuns = getActiveRuns(this.db)
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
@@ -199,7 +202,7 @@ export class OrchestratorScheduler {
 
     if (activeRuns.length >= maxConcurrentRuns) {
       const run = insertRun(this.db, {
-        sprintName: input.sprintName ?? 'manual',
+        sprintName: input.sprintName ?? MANUAL_SPRINT_NAME,
         repoId,
         projectId: input.projectId,
         taskIds: input.taskIds,
@@ -222,7 +225,7 @@ export class OrchestratorScheduler {
     }
 
     const run = insertRun(this.db, {
-      sprintName: input.sprintName ?? 'manual',
+      sprintName: input.sprintName ?? MANUAL_SPRINT_NAME,
       repoId: input.repoId ?? 'default',
       projectId: input.projectId,
       taskIds: input.taskIds,
@@ -279,7 +282,7 @@ export class OrchestratorScheduler {
 
     if (activeRuns.length >= maxConcurrentRuns) {
       const run = insertRun(this.db, {
-        sprintName: `single:${task.title}`,
+        sprintName: `${SINGLE_TASK_SPRINT_PREFIX}${task.title}`,
         repoId: task.repoId,
         singleTaskId: input.taskId,
         taskIds: [input.taskId],
@@ -298,7 +301,7 @@ export class OrchestratorScheduler {
     }
 
     const run = insertRun(this.db, {
-      sprintName: `single:${task.title}`,
+      sprintName: `${SINGLE_TASK_SPRINT_PREFIX}${task.title}`,
       repoId: task.repoId,
       singleTaskId: input.taskId,
       taskIds: [input.taskId],
@@ -377,6 +380,9 @@ export class OrchestratorScheduler {
           agentId: tl.agentId,
           payload: { source: 'orchestrator', runId, reason: 'run_cancelled' },
         })
+        // Unlink the agent (still alive until killed) so a later busy signal cannot re-claim the card.
+        // History is kept: the task log row and the event above carry the agent id.
+        updateTask(this.db, tl.taskId, { agentId: null })
         log.info('OrchestratorScheduler: cancel — reset active task to backlog', { taskId: tl.taskId, runId })
       }
     }
@@ -991,19 +997,42 @@ export class OrchestratorScheduler {
   // Helpers — private
   // -------------------------------------------------------------------------
 
-  private fetchCandidateTasks(run: OrchestratorRun): TaskItem[] {
-    const isDispatchable = (t: TaskItem | null): t is TaskItem =>
-      t !== null && (t.status === 'backlog' || t.status === 'today')
+  /** Queued (backlog/today) tasks of a repo in a sprint; a placeholder sprintName keeps the whole repo backlog. */
+  private fetchSprintQueuedTasks(repoId: string, sprintName: string): TaskItem[] {
+    const repoQueued = getTasksByRepo(this.db, repoId).filter(isDispatchableTask)
+    return isPlaceholderSprintName(sprintName)
+      ? repoQueued
+      : repoQueued.filter(t => t.sprintName === sprintName)
+  }
 
+  /**
+   * A named (non-placeholder) sprint run without explicit taskIds that finds no dispatchable
+   * task of its sprint would never conclude (maybeCompleteRun keeps zero-activity runs alive)
+   * and would hold a run slot forever. Refuse it before any orchestrator_runs row is created.
+   */
+  private assertSprintHasDispatchableTasks(sprintName: string | undefined, repoId: string, taskIds: string[] | undefined): void {
+    if (sprintName === undefined || isPlaceholderSprintName(sprintName)) return
+    if (taskIds && taskIds.length > 0) return
+    const alreadyDone = getCompletedTaskIds(this.db, { repoId, sprintName })
+    const dispatchable = this.fetchSprintQueuedTasks(repoId, sprintName).filter(t => !alreadyDone.has(t.id))
+    if (dispatchable.length > 0) return
+    throw new Error(
+      `ORCHESTRATOR_SPRINT_HAS_NO_TASKS: sprint "${sprintName}" has no dispatchable (backlog/today) tasks in repo ${repoId}; no run was created`
+    )
+  }
+
+  private fetchCandidateTasks(run: OrchestratorRun): TaskItem[] {
     let candidates: TaskItem[]
     if (run.taskIds && run.taskIds.length > 0) {
       // Scoped run: only the explicitly listed task IDs that are queued
       candidates = run.taskIds
         .map(id => getTaskById(this.db, id))
-        .filter(isDispatchable)
+        .filter(isDispatchableTask)
     } else {
-      // Sprint-scoped run: all queued tasks for this repo
-      candidates = getTasksByRepo(this.db, run.repoId).filter(isDispatchable)
+      // Sprint-scoped run: queued tasks of this repo that belong to the run's sprint.
+      // Placeholder-named runs ('manual', 'single:<title>') have no real sprint to
+      // scope by, so they keep the whole repo backlog.
+      candidates = this.fetchSprintQueuedTasks(run.repoId, run.sprintName)
     }
 
     // Cross-run dedup: filter out tasks already completed in a previous run of
@@ -1224,7 +1253,8 @@ export class OrchestratorScheduler {
         const headers = {
           'Content-Type': 'application/json',
           'X-Optimaeus-Caller': 'hephaestus',
-          'Authorization': `Bearer ${authSecret}`,
+          // S89: bearer only to https or loopback http, same gate as the writer/reader
+          ...resolveAnamnesisAuthHeaders(anamnesisUrl, authSecret),
         }
 
         const projectResp = await fetch(`${anamnesisUrl}/projects/${encodeURIComponent(repoName)}`, {
@@ -1268,6 +1298,22 @@ export class OrchestratorScheduler {
     // Fire-and-forget — doCheck() has internal try/catch and never rejects
     void doCheck()
   }
+}
+
+const MANUAL_SPRINT_NAME = 'manual'
+const SINGLE_TASK_SPRINT_PREFIX = 'single:'
+
+/** A task the orchestrator may still dispatch: queued in backlog or today. */
+function isDispatchableTask(t: TaskItem | null): t is TaskItem {
+  return t !== null && (t.status === 'backlog' || t.status === 'today')
+}
+
+/**
+ * True when a run's sprintName is a scheduler-generated placeholder rather than a real
+ * sprint: start() defaults to 'manual', startSingleTask() uses 'single:<title>'.
+ */
+function isPlaceholderSprintName(sprintName: string): boolean {
+  return sprintName === MANUAL_SPRINT_NAME || sprintName.startsWith(SINGLE_TASK_SPRINT_PREFIX)
 }
 
 const SPRINT_INVENTORY_DOMAIN = 'sprint_inventory'

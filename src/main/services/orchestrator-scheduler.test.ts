@@ -19,6 +19,7 @@ import {
 } from './agent-lifecycle-bus'
 import type { AgentLifecycleStatus } from '../../shared/types/agent.types'
 import type { TaskEvent } from '../../shared/types/task.types'
+import { ClaudeCliOutputParser, gateParsedStatus } from '../parsers/cli-output-parser'
 
 // ---------------------------------------------------------------------------
 // In-memory DB with minimum required tables
@@ -141,19 +142,20 @@ function buildDb(): Database.Database {
 
 function insertTestTask(
   db: Database.Database,
-  overrides: Partial<{ id: string; repoId: string; status: string; priority: number; title: string }>
+  overrides: Partial<{ id: string; repoId: string; status: string; priority: number; title: string; sprintName: string }>
 ): string {
   const id = overrides.id ?? `task-${Date.now()}-${Math.random()}`
   const now = new Date().toISOString()
   db.prepare(
-    `INSERT INTO tasks (id, repo_id, title, description, priority, status, created_at, updated_at)
-     VALUES (?, ?, ?, '', ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, repo_id, title, description, priority, status, sprint_name, created_at, updated_at)
+     VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)`
   ).run(
     id,
     overrides.repoId ?? 'repo-1',
     overrides.title ?? 'Test Task',
     overrides.priority ?? 3,
     overrides.status ?? 'today',
+    overrides.sprintName ?? null,
     now,
     now
   )
@@ -669,6 +671,33 @@ describe('OrchestratorScheduler', () => {
       expect(task.status).toBe('completed')
     })
 
+    it('clears the agent link of a reverted active task but keeps the agent id in the task log', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+      const taskId = insertTestTask(db, { id: 'cancel-link-task', repoId: 'repo-1', status: 'in_progress' })
+      db.prepare('UPDATE tasks SET agent_id = ? WHERE id = ?').run('agent-still-alive', taskId)
+      const run = scheduler.start({ sprintName: 's', repoId: 'repo-1' })
+
+      const now = new Date().toISOString()
+      db.prepare(
+        `INSERT INTO orchestrator_task_log (id, run_id, task_id, phase, status, agent_id, created_at, updated_at)
+         VALUES ('log-cancel-link', ?, ?, 'dev', 'active', 'agent-still-alive', ?, ?)`
+      ).run(run.id, taskId, now, now)
+
+      scheduler.cancel(run.id)
+
+      const task = db.prepare('SELECT status, agent_id FROM tasks WHERE id = ?').get(taskId) as {
+        status: string
+        agent_id: string | null
+      }
+      expect(task.status).toBe('backlog')
+      expect(task.agent_id).toBeNull()
+      const log = db.prepare('SELECT agent_id FROM orchestrator_task_log WHERE id = ?').get('log-cancel-link') as {
+        agent_id: string | null
+      }
+      expect(log.agent_id).toBe('agent-still-alive')
+    })
+
     it('marks in-flight active task logs as skipped on cancel (M-2)', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
@@ -1107,6 +1136,66 @@ describe('OrchestratorScheduler', () => {
       const logs = getTaskLogsByRun(db, run.id)
       expect(logs.some(l => l.taskId === taskId && l.status === 'active')).toBe(true)
       expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(false)
+    })
+
+    it('keeps an orchestrator agent running when its echoed prompt matches parser completion phrases (C-T2 incident)', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      // Built from fragments so this source never contains the literal phrases.
+      const echoedPrompt = [
+        'PROBLEM: the parser matches',
+        ['task', 'completed'].join(' '),
+        'and',
+        ['✓', 'all', 'done'].join(' '),
+        'in the prompt echoed at spawn.',
+      ].join(' ')
+      expect(new ClaudeCliOutputParser().parse(echoedPrompt)?.status).toBe('completed')
+
+      // Mirrors agent-manager's PTY handler: parser output passes the trust gate
+      // before it may change the orchestrator agent's lifecycle status.
+      const parser = new ClaudeCliOutputParser()
+      let agentStatus: AgentLifecycleStatus = 'busy'
+      const applyPtyOutput = (chunk: string): void => {
+        const parsed = gateParsedStatus(parser.parse(chunk), true)
+        if (parsed) agentStatus = parsed.status
+      }
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-echoed-prompt', cwd: '/tmp' },
+        reason: 'test echoed prompt',
+      }
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-echoed-prompt') },
+        getAgentStatus: vi.fn(() => agentStatus),
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+      await vi.advanceTimersByTimeAsync(1)
+
+      applyPtyOutput(echoedPrompt)
+      expect(agentStatus).toBe('busy')
+
+      // Heartbeat reconciliation must not see a completion either.
+      await vi.advanceTimersByTimeAsync(60_000)
+      const taskStatus = (): string =>
+        (db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string }).status
+      let logs = getTaskLogsByRun(db, run.id)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'active')).toBe(true)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(false)
+      expect(taskStatus()).toBe('in_progress')
+
+      // The explicit MCP 'completed' signal (completeAgentFromTelegram → agent:completed) still completes it.
+      agentStatus = 'completed'
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-echoed-prompt', 'completed'),
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      logs = getTaskLogsByRun(db, run.id)
+      expect(logs.some(l => l.taskId === taskId && l.status === 'done')).toBe(true)
+      expect(taskStatus()).toBe('completed')
     })
 
     it('coalesces an immediate tick requested while another tick is in flight', async () => {
@@ -1774,14 +1863,14 @@ describe('OrchestratorScheduler', () => {
       const now = new Date().toISOString()
       // Task A requires approval (priority 1)
       db.prepare(
-        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run('approval-blocker', 'repo-1', 'Needs approval', 'desc', 1, 'today', 1, now, now)
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, sprint_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('approval-blocker', 'repo-1', 'Needs approval', 'desc', 1, 'today', 1, 'test-sprint', now, now)
       // Task B does NOT require approval (priority 2)
       db.prepare(
-        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run('free-task', 'repo-1', 'Free task', 'desc', 2, 'today', 0, now, now)
+        `INSERT INTO tasks (id, repo_id, title, description, priority, status, requires_approval, sprint_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('free-task', 'repo-1', 'Free task', 'desc', 2, 'today', 0, 'test-sprint', now, now)
 
       const decision: SchedulerBrainDecision = {
         taskId: 'free-task',
@@ -1807,7 +1896,7 @@ describe('OrchestratorScheduler', () => {
     })
 
     it('C4: immediate tick fires within 1ms of start()', async () => {
-      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', sprintName: 'sprint' })
       const decision: SchedulerBrainDecision = {
         taskId,
         spawnOptions: { repoId: 'repo-1', name: 'agent-imm', cwd: '/tmp' },
@@ -1825,6 +1914,156 @@ describe('OrchestratorScheduler', () => {
 
       expect(brain.decide).toHaveBeenCalled()
       expect(dispatch.execute).toHaveBeenCalled()
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // fetchCandidateTasks() — sprint scoping (AH-2, run R06f)
+  // -------------------------------------------------------------------------
+
+  describe('sprint-scoped candidate fetch', () => {
+    function candidateIdsSeenByBrain(deps: SchedulerDeps): string[] {
+      const calls = (deps.brain.decide as ReturnType<typeof vi.fn>).mock.calls
+      return calls.flatMap(c => (c[0] as { candidateTasks: Array<{ id: string }> }).candidateTasks.map(t => t.id))
+    }
+
+    it('a sprint run without taskIds only sees backlog tasks of its own sprint, not other sprints of the same repo', async () => {
+      const own = insertTestTask(db, { id: 'own-1', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-A' })
+      insertTestTask(db, { id: 'other-sprint', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      insertTestTask(db, { id: 'no-sprint', repoId: 'repo-1', status: 'today' })
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-A', repoId: 'repo-1' })
+      await vi.advanceTimersByTimeAsync(1)
+
+      const seen = candidateIdsSeenByBrain(deps)
+      expect(seen).toContain(own)
+      expect(seen).not.toContain('other-sprint')
+      expect(seen).not.toContain('no-sprint')
+    })
+
+    it('a sprint run does not dispatch a same-repo backlog task that belongs to a different sprint', async () => {
+      insertTestTask(db, { id: 'stray', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      const decision: SchedulerBrainDecision = {
+        taskId: 'stray',
+        spawnOptions: { repoId: 'repo-1', name: 'agent-stray', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-stray-id') }
+      const deps = buildDeps(db, { brain: { decide: vi.fn().mockResolvedValue(decision) }, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-A', repoId: 'repo-1' })
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(dispatch.execute).not.toHaveBeenCalled()
+    })
+
+    it('a run with explicit taskIds dispatches only those tasks, whatever their sprintName', async () => {
+      const picked = insertTestTask(db, { id: 'picked', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      insertTestTask(db, { id: 'sibling', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-A' })
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ sprintName: 'sprint-A', repoId: 'repo-1', taskIds: [picked] })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(new Set(candidateIdsSeenByBrain(deps))).toEqual(new Set([picked]))
+    })
+
+    it('a placeholder-named run (sprintName omitted => "manual") without taskIds still takes the whole repo backlog', async () => {
+      insertTestTask(db, { id: 'm-1', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-A' })
+      insertTestTask(db, { id: 'm-2', repoId: 'repo-1', status: 'today' })
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.start({ repoId: 'repo-1' })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(new Set(candidateIdsSeenByBrain(deps))).toEqual(new Set(['m-1', 'm-2']))
+    })
+
+    it('a placeholder-named run (sprintName omitted => "manual") still dispatches a task whose sprintName is NULL', async () => {
+      const taskId = insertTestTask(db, { id: 'null-sprint', repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-null-sprint', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const brain = { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) }
+      const dispatch = { execute: vi.fn().mockReturnValue('agent-null-sprint-id') }
+      const deps = buildDeps(db, { brain, dispatch })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ repoId: 'repo-1' })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(run.sprintName).toBe('manual')
+      expect(dispatch.execute).toHaveBeenCalledWith(expect.objectContaining({ repoId: 'repo-1' }), taskId, run.id)
+    })
+
+    it('refuses a named sprint run without taskIds when its sprint has no dispatchable tasks, leaving no run behind', () => {
+      insertTestTask(db, { id: 'elsewhere', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      insertTestTask(db, { id: 'already-done', repoId: 'repo-1', status: 'done', sprintName: 'sprint-unknown' })
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'sprint-unknown', repoId: 'repo-1' }))
+        .toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS.*sprint-unknown/)
+      expect(getActiveRuns(db)).toHaveLength(0)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+      const rows = db.prepare('SELECT COUNT(*) AS n FROM orchestrator_runs').get() as { n: number }
+      expect(rows.n).toBe(0)
+    })
+
+    it('refuses an empty named sprint run even when the run would be queued (slots full)', () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('orchestrator.maxConcurrentRuns', '2')").run()
+      insertTestTask(db, { id: 'a-1', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-A' })
+      insertTestTask(db, { id: 'b-1', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({ sprintName: 'sprint-A', repoId: 'repo-1' })
+      scheduler.start({ sprintName: 'sprint-B', repoId: 'repo-1' })
+
+      expect(() => scheduler.start({ sprintName: 'sprint-unknown', repoId: 'repo-1' }))
+        .toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS.*sprint-unknown/)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+    })
+
+    it('still starts a placeholder-named run with an empty repo backlog', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ repoId: 'repo-1' })
+
+      expect(run.status).toBe('running')
+    })
+
+    it('still starts a named sprint run with explicit taskIds even if none of them is dispatchable', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint-unknown', repoId: 'repo-1', taskIds: ['missing-task'] })
+
+      expect(run.status).toBe('running')
+    })
+
+    it('startSingleTask() still dispatches its task regardless of the task sprintName', async () => {
+      const taskId = insertTestTask(db, { id: 'solo', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+      insertTestTask(db, { id: 'bystander', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-B' })
+
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      scheduler.startSingleTask({ taskId })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(new Set(candidateIdsSeenByBrain(deps))).toEqual(new Set([taskId]))
     })
   })
 
@@ -2951,6 +3190,38 @@ describe('OrchestratorScheduler — M4 sprint inventory check (real secret-store
     const calls = stubAnamnesis([])
 
     await startSprint('sprint-c')
+
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      const headers = call.init?.headers as Record<string, string>
+      expect(headers.Authorization).toBe('Bearer stored-secret')
+    }
+  })
+
+  // S89: the M4 bearer goes through the shared https/loopback validation like the writer/reader.
+  it('S89: withholds the bearer when ANAMNESIS_URL is plain http to a non-loopback host', async () => {
+    storeAnamnesisSecret('stored-secret')
+    vi.stubEnv('ANAMNESIS_URL', 'http://anamnesis.example.test:9300')
+    insertKanbanTask(rdb, { repoId, title: 'S89 task', sprintName: 'sprint-s89' })
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-s89')
+
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      const headers = call.init?.headers as Record<string, string>
+      expect(headers.Authorization).toBeUndefined()
+      expect(JSON.stringify(headers)).not.toContain('stored-secret')
+    }
+  })
+
+  it('S89: still sends the bearer to a loopback http ANAMNESIS_URL', async () => {
+    storeAnamnesisSecret('stored-secret')
+    vi.stubEnv('ANAMNESIS_URL', 'http://127.0.0.1:9300')
+    insertKanbanTask(rdb, { repoId, title: 'S89 task', sprintName: 'sprint-s89' })
+    const calls = stubAnamnesis([])
+
+    await startSprint('sprint-s89')
 
     expect(calls.length).toBeGreaterThan(0)
     for (const call of calls) {

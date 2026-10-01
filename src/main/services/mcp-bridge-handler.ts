@@ -72,6 +72,17 @@ interface BridgeResponse {
   error?: string
 }
 
+// ─── Param validation ─────────────────────────────────────────────────────────
+
+/** dispatch_sprint: `taskIds` is optional, but when present it must be an array of non-empty strings. */
+function assertValidTaskIds(taskIds: unknown): void {
+  if (taskIds === undefined) return
+  const valid = Array.isArray(taskIds) && taskIds.every(id => typeof id === 'string' && id.trim() !== '')
+  if (!valid) {
+    throw new Error('dispatch_sprint: taskIds must be an array of non-empty task id strings')
+  }
+}
+
 // ─── McpBridgeHandler ─────────────────────────────────────────────────────────
 
 export class McpBridgeHandler {
@@ -263,6 +274,7 @@ export class McpBridgeHandler {
       }
 
       case 'dispatchSprint': {
+        assertValidTaskIds(params['taskIds'])
         return scheduler.start(params)
       }
 
@@ -303,7 +315,7 @@ export class McpBridgeHandler {
       // ── Write: archive task ──────────────────────────────────────────────────
       case 'archiveTask': {
         const taskId = params['taskId'] as string
-        updateTask(db, taskId, { status: 'archived' })
+        updateTask(db, taskId, { status: 'archived', agentId: null })
         return { ok: true }
       }
 

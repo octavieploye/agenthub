@@ -298,6 +298,119 @@ describe('McpBridgeHandler', () => {
     expect(resp['error']).toMatch(/unknown method/)
   })
 
+  describe('dispatchSprint taskIds', () => {
+    const sprintParams = { sprintName: 'sprint-A', repoId: 'repo-1', confirmed: true }
+
+    it('forwards an explicit taskIds array to scheduler.start', async () => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'ds1',
+        token: handler.token,
+        method: 'dispatchSprint',
+        params: { ...sprintParams, taskIds: ['task-1', 'task-2'] },
+      })
+      expect(resp['error']).toBeUndefined()
+      expect(deps.scheduler.start).toHaveBeenCalledWith(expect.objectContaining({ taskIds: ['task-1', 'task-2'] }))
+    })
+
+    it('still starts a sprint run when taskIds is omitted', async () => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'ds2',
+        token: handler.token,
+        method: 'dispatchSprint',
+        params: sprintParams,
+      })
+      expect(resp['error']).toBeUndefined()
+      expect(deps.scheduler.start).toHaveBeenCalledTimes(1)
+      expect((deps.scheduler.start as ReturnType<typeof vi.fn>).mock.calls[0][0]).not.toHaveProperty('taskIds')
+    })
+
+    it.each([
+      ['a string', 'task-1'],
+      ['an array holding a non-string', ['task-1', 42]],
+      ['an array holding an empty string', ['task-1', '  ']],
+    ])('rejects taskIds that is %s and does not start a run', async (_label, taskIds) => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'ds3',
+        token: handler.token,
+        method: 'dispatchSprint',
+        params: { ...sprintParams, taskIds },
+      })
+      expect(resp['error']).toMatch(/taskIds/)
+      expect(deps.scheduler.start).not.toHaveBeenCalled()
+    })
+  })
+
+  // S97: confirmed:true on dispatch_task / dispatch_sprint is enforced in the handler, not only in the schema
+  describe('dispatch confirmation (S97)', () => {
+    it.each([
+      ['missing', {}],
+      ['false', { confirmed: false }],
+      ['the string "true"', { confirmed: 'true' }],
+    ])('rejects dispatchTask when confirmed is %s and starts nothing', async (_label, extra) => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'dt-unconfirmed',
+        token: handler.token,
+        method: 'dispatchTask',
+        params: { taskId: 'task-1', ...extra },
+      })
+      expect(resp['error']).toMatch(/dispatch_task: requires confirmed: true/)
+      expect(deps.scheduler.startSingleTask).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['missing', {}],
+      ['false', { confirmed: false }],
+      ['the string "true"', { confirmed: 'true' }],
+    ])('rejects dispatchSprint when confirmed is %s and starts nothing', async (_label, extra) => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'ds-unconfirmed',
+        token: handler.token,
+        method: 'dispatchSprint',
+        params: { sprintName: 'sprint-A', repoId: 'repo-1', ...extra },
+      })
+      expect(resp['error']).toMatch(/dispatch_sprint: requires confirmed: true/)
+      expect(deps.scheduler.start).not.toHaveBeenCalled()
+    })
+
+    it('dispatches a task when confirmed is true', async () => {
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'dt-confirmed',
+        token: handler.token,
+        method: 'dispatchTask',
+        params: { taskId: 'task-1', confirmed: true },
+      })
+      expect(resp['error']).toBeUndefined()
+      expect(deps.scheduler.startSingleTask).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('archiveTask', () => {
+    it('archives the task and clears its agent link so a live agent cannot resurrect it', async () => {
+      const now = new Date().toISOString()
+      deps.db
+        .prepare(
+          `INSERT INTO tasks (id, repo_id, title, status, agent_id, created_at, updated_at)
+           VALUES ('t-arch', 'repo-1', 'Card', 'in_progress', 'agent-live', ?, ?)`
+        )
+        .run(now, now)
+
+      const resp = await sendRequest(handler.socketPath, {
+        id: 'ar1',
+        token: handler.token,
+        method: 'archiveTask',
+        params: { taskId: 't-arch' },
+      })
+
+      expect(resp['error']).toBeUndefined()
+      const row = deps.db.prepare('SELECT status, agent_id FROM tasks WHERE id = ?').get('t-arch') as {
+        status: string
+        agent_id: string | null
+      }
+      expect(row.status).toBe('archived')
+      expect(row.agent_id).toBeNull()
+    })
+  })
+
   it('stop() closes the server — subsequent connections are rejected', async () => {
     handler.stop()
     await new Promise((r) => setTimeout(r, 50))

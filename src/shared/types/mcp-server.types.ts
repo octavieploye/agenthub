@@ -115,6 +115,7 @@ export interface DispatchTaskToolOutput {
 export interface DispatchSprintToolInput {
   sprintName: string
   repoId: string
+  taskIds?: string[]
   projectId?: string
   concurrencyCap?: number
   telegramNotify?: boolean

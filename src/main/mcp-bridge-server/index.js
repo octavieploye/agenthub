@@ -319,12 +319,17 @@ const TOOL_DEFS = [
   },
   {
     name: 'dispatch_sprint',
-    description: 'Dispatch all tasks in a sprint to the orchestrator. confirmed must be true.',
+    description: 'Dispatch a sprint to the orchestrator. Without taskIds the run takes the queued (backlog/today) tasks of the repo whose sprintName equals sprintName; with taskIds it dispatches only those tasks. confirmed must be true.',
     inputSchema: {
       type: 'object',
       properties: {
         sprintName: { type: 'string' },
         repoId: { type: 'string' },
+        taskIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional task UUIDs. When set, only these tasks are dispatched (sprintName is just the run label); when omitted, the run is scoped to tasks with a matching sprintName.'
+        },
         projectId: { type: 'string' },
         concurrencyCap: { type: 'number' },
         telegramNotify: { type: 'boolean' },
