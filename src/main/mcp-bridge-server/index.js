@@ -455,12 +455,13 @@ const TOOL_DEFS = [
   },
   {
     name: 'backfill_brain_entries',
-    description: 'Controlled backfill of unsynced Brain entries to Anamnesis. dryRun defaults to TRUE: returns { dryRun: true, unsynced } and publishes nothing. With dryRun: false, each call publishes ONE batch (oldest first, batchSize default 50, max 200) and returns { dryRun: false, enqueued, remaining } — call again to publish the next batch.',
+    description: 'Controlled backfill of unsynced Brain entries to Anamnesis. dryRun defaults to TRUE: returns { dryRun: true, unsynced } and publishes nothing. With dryRun: false, each call publishes ONE batch (oldest first, batchSize default 50, max 200) and returns { dryRun: false, enqueued, remaining } — call again to publish the next batch. Non-dry runs require confirmed: true.',
     inputSchema: {
       type: 'object',
       properties: {
         dryRun: { type: 'boolean', description: 'Default true — report the unsynced count only. Pass false to publish one batch.' },
-        batchSize: { type: 'number', description: 'Entries to publish in this call (default 50, max 200). Ignored when dryRun is true.' }
+        batchSize: { type: 'number', description: 'Entries to publish in this call (default 50, max 200). Ignored when dryRun is true.' },
+        confirmed: { type: 'boolean', description: 'Must be true when dryRun is false — non-dry runs require confirmed: true.' }
       }
     }
   }

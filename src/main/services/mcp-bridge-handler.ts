@@ -336,6 +336,11 @@ export class McpBridgeHandler {
         if (params['dryRun'] !== false) {
           return { dryRun: true, unsynced: countUnsyncedBrainEntries(db) }
         }
+        // S96: a non-dry backfill is a confirmed action (like dispatch_task/dispatch_sprint).
+        // Enforced here, not only in the MCP schema — the bridge socket is reachable locally.
+        if (params['confirmed'] !== true) {
+          throw new Error('backfill_brain_entries: non-dry runs require confirmed: true')
+        }
         const batchSize = params['batchSize'] as number | undefined
         const enqueued = publishUnsyncedBrainEntries(db, { limit: batchSize })
         return { dryRun: false, enqueued, remaining: countUnsyncedBrainEntries(db) }

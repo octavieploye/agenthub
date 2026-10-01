@@ -408,4 +408,44 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
 
     expect(resp['result']).toEqual({ dryRun: false, enqueued: 200, remaining: 5 })
   })
+
+  // S96: a non-dry backfill is a confirmed action (like dispatch_task/dispatch_sprint)
+  function unsyncedCount(): number {
+    const row = db
+      .prepare(`SELECT COUNT(*) AS n FROM brain_entries WHERE synced_to_anamnesis = 0`)
+      .get() as { n: number }
+    return row.n
+  }
+
+  it('rejects dryRun:false without confirmed and publishes nothing', async () => {
+    seedBrainEntries(7)
+
+    const resp = await call('backfillBrainEntries', { dryRun: false })
+
+    expect(resp['result']).toBeUndefined()
+    expect(resp['error']).toMatch(/confirmed: true/)
+    expect(brainOutboxCount()).toBe(0)
+    expect(unsyncedCount()).toBe(7)
+  })
+
+  it('rejects dryRun:false with confirmed:false and publishes nothing', async () => {
+    seedBrainEntries(7)
+
+    const resp = await call('backfillBrainEntries', { dryRun: false, confirmed: false })
+
+    expect(resp['result']).toBeUndefined()
+    expect(resp['error']).toMatch(/confirmed: true/)
+    expect(brainOutboxCount()).toBe(0)
+    expect(unsyncedCount()).toBe(7)
+  })
+
+  it('still allows a dry run without confirmed', async () => {
+    seedBrainEntries(4)
+
+    const resp = await call('backfillBrainEntries', { dryRun: true })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toEqual({ dryRun: true, unsynced: 4 })
+    expect(brainOutboxCount()).toBe(0)
+  })
 })
