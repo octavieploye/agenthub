@@ -38,17 +38,30 @@ function warnBearerWithheldOnce(baseUrl: string): void {
 }
 
 /**
+ * The Anamnesis secret when it may travel to `baseUrl`, or `undefined` when there is no secret
+ * or the URL is neither https nor loopback http (S94/S89/S99). The single gate for every route
+ * by which the secret leaves the main process.
+ */
+export function resolveAnamnesisSecretForUrl(
+  baseUrl: string,
+  authSecret: string | null | undefined
+): string | undefined {
+  if (!authSecret) return undefined
+  if (!isBearerSafeUrl(baseUrl)) {
+    warnBearerWithheldOnce(baseUrl)
+    return undefined
+  }
+  return authSecret
+}
+
+/**
  * The `Authorization` header for Anamnesis requests, or `{}` when there is no secret or the
- * URL is neither https nor loopback http (S94/S89). Shared by the writer and the reader.
+ * URL is neither https nor loopback http (S94/S89). Shared by the writer, the reader and the scheduler.
  */
 export function resolveAnamnesisAuthHeaders(
   baseUrl: string,
   authSecret: string | undefined
 ): Record<string, string> {
-  if (!authSecret) return {}
-  if (!isBearerSafeUrl(baseUrl)) {
-    warnBearerWithheldOnce(baseUrl)
-    return {}
-  }
-  return { Authorization: `Bearer ${authSecret}` }
+  const secret = resolveAnamnesisSecretForUrl(baseUrl, authSecret)
+  return secret ? { Authorization: `Bearer ${secret}` } : {}
 }

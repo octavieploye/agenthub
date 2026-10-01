@@ -83,6 +83,13 @@ function assertValidTaskIds(taskIds: unknown): void {
   }
 }
 
+/** S97: a dispatch is a confirmed action — the schema `required` is advisory, so enforce it here. */
+function assertDispatchConfirmed(toolName: string, params: Record<string, unknown>): void {
+  if (params['confirmed'] !== true) {
+    throw new Error(`${toolName}: requires confirmed: true`)
+  }
+}
+
 // ─── McpBridgeHandler ─────────────────────────────────────────────────────────
 
 export class McpBridgeHandler {
@@ -270,10 +277,12 @@ export class McpBridgeHandler {
       }
 
       case 'dispatchTask': {
+        assertDispatchConfirmed('dispatch_task', params)
         return scheduler.startSingleTask(params)
       }
 
       case 'dispatchSprint': {
+        assertDispatchConfirmed('dispatch_sprint', params)
         assertValidTaskIds(params['taskIds'])
         return scheduler.start(params)
       }

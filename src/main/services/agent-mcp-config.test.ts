@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import log from 'electron-log/main'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -122,6 +123,44 @@ describe('applyAnamnesisEnv (spawned agent MCP environment)', () => {
     const env = anamnesisEnv(applyAnamnesisEnv(servers(), null))
     expect(env).not.toHaveProperty('AUTH_SECRET')
     expect(env['OPTIMAEUS_CALLER']).toBe('hephaestus')
+  })
+
+  // S99: the secret follows the same https / loopback-http gate as the in-process bearer
+  describe('AUTH_SECRET URL gate (S99)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.restoreAllMocks()
+    })
+
+    function withUrl(url: string): Record<string, unknown> {
+      return { anamnesis: { command: '/bin/anamnesis-mcp', env: { ANAMNESIS_URL: url } } }
+    }
+
+    it.each(['http://anamnesis.example.test:9300', 'http://localhost.attacker.test:9300', 'not a url'])(
+      'does not inject AUTH_SECRET when the entry ANAMNESIS_URL is %s, but still sets the caller and warns',
+      (url) => {
+        const warn = vi.spyOn(log, 'warn')
+        const env = anamnesisEnv(applyAnamnesisEnv(withUrl(url), 's3cret'))
+        expect(env).not.toHaveProperty('AUTH_SECRET')
+        expect(env['OPTIMAEUS_CALLER']).toBe('hephaestus')
+        expect(env['ANAMNESIS_URL']).toBe(url)
+        expect(warn).toHaveBeenCalled()
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('s3cret')
+      }
+    )
+
+    it.each(['https://anamnesis.example.test', 'http://127.0.0.1:9300', 'http://[::1]:9300'])(
+      'injects AUTH_SECRET when the entry ANAMNESIS_URL is %s',
+      (url) => {
+        expect(anamnesisEnv(applyAnamnesisEnv(withUrl(url), 's3cret'))['AUTH_SECRET']).toBe('s3cret')
+      }
+    )
+
+    it('falls back to the inherited process ANAMNESIS_URL when the entry sets none', () => {
+      vi.stubEnv('ANAMNESIS_URL', 'http://anamnesis.example.test:9300')
+      const bare = { anamnesis: { command: '/bin/anamnesis-mcp' } }
+      expect(anamnesisEnv(applyAnamnesisEnv(bare, 's3cret'))).not.toHaveProperty('AUTH_SECRET')
+    })
   })
 
   it('does not invent an anamnesis server when none is configured', () => {
