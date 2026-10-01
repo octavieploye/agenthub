@@ -33,6 +33,10 @@ import {
   getQuota,
   getSafeguards,
 } from '../db/queries/settings.queries'
+import {
+  countUnsyncedBrainEntries,
+  publishUnsyncedBrainEntries,
+} from './helpers/brain-entries-publisher'
 import type { CreateTaskInput } from '../../shared/types/task.types'
 import type { CreateProjectInput } from '../../shared/types/project.types'
 import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL, DEFAULT_HAIKU_MODEL } from '../../shared/constants/model-catalog'
@@ -323,6 +327,18 @@ export class McpBridgeHandler {
              )`
         ).run(filesJson, now, taskId, taskId)
         return { ok: true }
+      }
+
+      // ── Write: controlled Anamnesis backfill of brain entries ────────────────
+      case 'backfillBrainEntries': {
+        // dryRun defaults to TRUE — only an explicit `false` enqueues anything.
+        // Each non-dry call publishes ONE batch (publisher clamps batchSize to 1..200).
+        if (params['dryRun'] !== false) {
+          return { dryRun: true, unsynced: countUnsyncedBrainEntries(db) }
+        }
+        const batchSize = params['batchSize'] as number | undefined
+        const enqueued = publishUnsyncedBrainEntries(db, { limit: batchSize })
+        return { dryRun: false, enqueued, remaining: countUnsyncedBrainEntries(db) }
       }
 
       default:

@@ -8,6 +8,9 @@ import Database from 'better-sqlite3'
 import { McpBridgeHandler } from './mcp-bridge-handler'
 import type { BridgeDeps } from './mcp-bridge-handler'
 import { latestClaudeModel } from '../../shared/constants/model-catalog'
+import { runMigrations } from '../db/migration-runner'
+import { insertRepo } from '../db/queries/repos.queries'
+import { upsertBrainEntry } from '../db/queries/brain.queries'
 
 // ─── Mock electron-log (no Electron in test env) ─────────────────────────────
 
@@ -307,5 +310,102 @@ describe('McpBridgeHandler', () => {
         params: {},
       })
     ).rejects.toThrow()
+  })
+})
+
+// ─── backfillBrainEntries (S92 controlled backfill) ──────────────────────────
+
+describe('McpBridgeHandler — backfillBrainEntries', () => {
+  let handler: McpBridgeHandler
+  let db: Database.Database
+
+  function seedBrainEntries(count: number): void {
+    const repoId = insertRepo(db, { name: 'backfill-repo', path: '/tmp/backfill-repo' }).id
+    db.transaction(() => {
+      for (let i = 0; i < count; i++) {
+        upsertBrainEntry(db, {
+          id: `bf${String(i).padStart(4, '0')}`,
+          repoId,
+          pointerPath: `/tmp/backfill-repo/docs/brain/bf${i}.md`,
+          artifactPath: `/tmp/backfill-repo/docs/bf${i}.md`,
+          type: 'plan',
+          subject: `Backfill ${i}`,
+          status: 'active',
+          createdAt: '2026-09-30T10:00:00.000Z'
+        })
+      }
+    })()
+  }
+
+  function brainOutboxCount(): number {
+    const row = db
+      .prepare(`SELECT COUNT(*) AS n FROM task_events WHERE event_type = 'BRAIN_ENTRY_PUBLISHED'`)
+      .get() as { n: number }
+    return row.n
+  }
+
+  function call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return sendRequest(handler.socketPath, { id: 'bf', token: handler.token, method, params })
+  }
+
+  beforeEach(async () => {
+    db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    runMigrations(db, __dirname + '/../db/migrations')
+    handler = new McpBridgeHandler({ db, scheduler: makeScheduler() })
+    await new Promise<void>((resolve) => {
+      handler.start()
+      const interval = setInterval(() => {
+        if (existsSync(handler.socketPath)) {
+          clearInterval(interval)
+          resolve()
+        }
+      }, 10)
+    })
+  })
+
+  afterEach(async () => {
+    handler.stop()
+    await new Promise((r) => setTimeout(r, 30))
+    if (existsSync(handler.socketPath)) {
+      await unlink(handler.socketPath).catch(() => {})
+    }
+    db.close()
+  })
+
+  it('defaults to dryRun: reports the unsynced count and enqueues nothing', async () => {
+    seedBrainEntries(7)
+
+    const resp = await call('backfillBrainEntries', {})
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toEqual({ dryRun: true, unsynced: 7 })
+    expect(brainOutboxCount()).toBe(0)
+  })
+
+  it('publishes exactly one batch when dryRun is false', async () => {
+    seedBrainEntries(7)
+
+    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 3 })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toEqual({ dryRun: false, enqueued: 3, remaining: 4 })
+    expect(brainOutboxCount()).toBe(3)
+  })
+
+  it('uses a default batch of 50 when batchSize is omitted', async () => {
+    seedBrainEntries(55)
+
+    const resp = await call('backfillBrainEntries', { dryRun: false })
+
+    expect(resp['result']).toEqual({ dryRun: false, enqueued: 50, remaining: 5 })
+  })
+
+  it('caps batchSize at 200', async () => {
+    seedBrainEntries(205)
+
+    const resp = await call('backfillBrainEntries', { dryRun: false, batchSize: 999 })
+
+    expect(resp['result']).toEqual({ dryRun: false, enqueued: 200, remaining: 5 })
   })
 })
