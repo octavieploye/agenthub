@@ -16,3 +16,4 @@ Update the file (or create a new one) when you add or refactor the feature.
 - [Content Automation](../docs/how-to/10-content-automation.md) — automate content creation, scheduling, and distribution across platforms
 - [Kanban Orchestrator](../docs/how-to/11-kanban-orchestrator.md) — 5-phase pipeline, single-task pipeline, date triggers, model/provider selection, category safety gate, scheduling indicators, retry failure toast, safeguards (kill-switch, pick-list confirmation, budget cap, deterministic monitor)
 - [Orchestrator Quickstart](../docs/how-to/12-orchestrator-quickstart.md) — step-by-step guide: get tasks in (JSON/AI/manual), configure, run (sprint/single/zap), monitor, handle issues
+- [Anamnesis Shared Brain](../docs/how-to/13-anamnesis-shared-brain.md) — automatic writer: sync Kanban events to memory, domain category mapping, project-status updates, connectivity
