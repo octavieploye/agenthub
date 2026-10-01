@@ -19,6 +19,7 @@ import {
 import { RepoConfig } from '../../shared/types/config.types'
 import { getRepoById, getAllRepos } from '../db/queries/repos.queries'
 import { GitService } from './git-service'
+import { publishBrainEntryById } from './helpers/brain-entries-publisher'
 
 /** Parse markdown checklist items from file content. */
 export function parseChecklist(content: string): { total: number; done: number } {
@@ -310,7 +311,20 @@ export class BrainScannerService {
     })
 
     log.info('Brain artifact registered', { entryId, repoId: input.repoId, pointerPath })
+    this.publishToAnamnesis(db, entryId)
     return entryId
+  }
+
+  /**
+   * Enqueue only the given (just-registered) brain entry for Anamnesis — never the unsynced
+   * backlog, which goes through the controlled backfill. A failure never breaks registration.
+   */
+  private publishToAnamnesis(db: ReturnType<typeof getDb>, entryId: string): void {
+    try {
+      publishBrainEntryById(db, entryId)
+    } catch (error) {
+      log.warn(`Brain publisher: enqueue failed, entry ${entryId} stays unsynced: ${error}`)
+    }
   }
 
   /**

@@ -374,3 +374,84 @@ describe('discoverRepoArtifacts', () => {
     expect(result).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Anamnesis publish scope (S92) — discovery never publishes; registration
+// publishes only the entry it just registered, never the unsynced backlog.
+// ---------------------------------------------------------------------------
+
+describe('brain scanner Anamnesis publish scope', () => {
+  let tmpDir: string
+  let scanner: BrainScannerService
+
+  function brainOutboxCount(): number {
+    const row = getDb()
+      .prepare(`SELECT COUNT(*) AS n FROM task_events WHERE event_type = 'BRAIN_ENTRY_PUBLISHED'`)
+      .get() as { n: number }
+    return row.n
+  }
+
+  function syncedFlag(id: string): number {
+    const row = getDb()
+      .prepare('SELECT synced_to_anamnesis AS s FROM brain_entries WHERE id = ?')
+      .get(id) as { s: number }
+    return row.s
+  }
+
+  beforeEach(() => {
+    resetDb()
+    tmpDir = mkdtempSync(join(tmpdir(), 'brain-scanner-publish-test-'))
+    scanner = new BrainScannerService(createMockGitService())
+    getDb().prepare(
+      'INSERT INTO repos (id, name, path, created_at) VALUES (?, ?, ?, ?)'
+    ).run('repo-pub', 'Publish Repo', tmpDir, '2026-01-01T00:00:00Z')
+  })
+
+  afterEach(() => {
+    closeDb()
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test('discoverAllArtifacts enqueues no task_events row and leaves entries unsynced', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(join(specsDir, '2026-07-01-first-spec.md'), '# First\n\nLong enough spec content here.\n')
+    writeFileSync(join(specsDir, '2026-07-02-second-spec.md'), '# Second\n\nLong enough spec content here.\n')
+
+    const result = scanner.discoverAllArtifacts()
+
+    expect(result.discovered).toBe(2)
+    expect(brainOutboxCount()).toBe(0)
+    const unsynced = getDb()
+      .prepare('SELECT COUNT(*) AS n FROM brain_entries WHERE synced_to_anamnesis = 0')
+      .get() as { n: number }
+    expect(unsynced.n).toBe(2)
+  })
+
+  test('registerBrainEntry enqueues only its own entry when other unsynced entries exist', () => {
+    const specsDir = join(tmpDir, 'docs', 'superpowers', 'specs')
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(join(specsDir, '2026-07-01-backlog-spec.md'), '# Backlog\n\nLong enough spec content here.\n')
+    scanner.discoverAllArtifacts()
+
+    const artifactPath = join(tmpDir, 'docs', 'manual.md')
+    writeFileSync(artifactPath, '# Manual\n')
+    const entryId = scanner.registerBrainEntry({
+      repoId: 'repo-pub',
+      subject: 'Manual Entry',
+      type: 'spec',
+      artifactPath
+    })
+
+    expect(brainOutboxCount()).toBe(1)
+    const event = getDb()
+      .prepare(`SELECT payload_json AS p FROM task_events WHERE event_type = 'BRAIN_ENTRY_PUBLISHED'`)
+      .get() as { p: string }
+    expect(event.p).toContain(entryId)
+    expect(syncedFlag(entryId)).toBe(1)
+    const backlog = getDb()
+      .prepare('SELECT COUNT(*) AS n FROM brain_entries WHERE synced_to_anamnesis = 0')
+      .get() as { n: number }
+    expect(backlog.n).toBe(1)
+  })
+})
