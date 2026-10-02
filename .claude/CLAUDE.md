@@ -49,6 +49,7 @@ Reference files — read on demand, not loaded every session:
 - **Never state external facts with confidence** — WebSearch first; prefix unverified claims with "Based on my training data (may be outdated):".
 - **Update how-to docs** when adding/refactoring a feature: write `docs/how-to/<NN-slug>.md` and update `.claude/how-to-index.md`.
 - **Report confusion and discrepancies** before coding from sprints or prior code; if more than 2, list them for review. Note surprises in the relevant AgentMD file.
+- **Be context-aware in long sessions** — before compacting/compressing context (e.g. a long brainstorm), write a summary of decisions and key context so it survives the compaction.
 
 ## Skill discovery
 
@@ -86,7 +87,7 @@ Before reading files or dispatching: (1) repo confirmed, (2) scope confirmed, (3
 
 ## Coding workflow
 
-Complete the repo gate first. Pick the team/workflow/skill that fits the task — every skill is always available, and the kanban orchestrator dispatches agents with their assigned skills; no single process skill is a mandatory gate. Write a failing test first, implement, run; after 3 failed attempts, STOP and report rather than retrying the same approach. After long tasks with errors/misses, update the relevant skill's Pitfalls section and Changelog. Sprints and plans follow `.claude/commands/sprint-standards.md`.
+Complete the repo gate first. A small fix (≤20 lines, <3 files) you run yourself; anything larger or multi-file, pick the team/workflow/skill that fits the task and dispatch via the kanban orchestrator — no single process skill is a mandatory gate. Write a failing test first, implement, run; after 3 failed attempts, STOP and report rather than retrying the same approach. After long tasks with errors/misses, update the relevant skill's Pitfalls section and Changelog. Sprints and plans follow `.claude/commands/sprint-standards.md`.
 
 ## Sprint inventory (before any sprint)
 

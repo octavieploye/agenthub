@@ -29,7 +29,7 @@ This workspace dispatches agents to many repos. The user ALWAYS works from agent
 **Before writing a single line of code, the agent MUST:**
 1. State which repo it will modify (full local path) and why that repo and not the other
 2. Wait for explicit user confirmation — _"yes, correct repo"_ or _"no, use [other repo]"_
-3. Select the appropriate team/workflow/skill for the task (all skills are always available to agents); dispatch multi-step work via the kanban orchestrator. _Changed 2026-10-02 — was "invoke `team-impl-lead` mandatory"; no single process skill is a gate anymore._
+3. A small fix (≤20 lines, <3 files) you run yourself; otherwise select the appropriate team/workflow/skill for the task and dispatch via the kanban orchestrator. _Changed 2026-10-02 — was "invoke `team-impl-lead` mandatory"; no single process skill is a gate anymore._
 4. Only proceed after both the repo confirmation AND the team workflow are in place
 
 Skipping this gate is not acceptable.
