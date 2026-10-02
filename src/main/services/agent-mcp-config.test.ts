@@ -175,6 +175,34 @@ describe('applyAnamnesisEnv (spawned agent MCP environment)', () => {
       const bare = { anamnesis: { command: '/bin/anamnesis-mcp' } }
       expect(anamnesisEnv(applyAnamnesisEnv(bare, 's3cret'))).not.toHaveProperty('AUTH_SECRET')
     })
+
+    // S107: the MCP child inherits the PTY env (process env + renderer envOverrides), so the
+    // gate must evaluate that effective spawn env, not AgentHub's own process env.
+    it('S107: refuses AUTH_SECRET when the effective spawn env points ANAMNESIS_URL at a non-allowed host', () => {
+      vi.stubEnv('ANAMNESIS_URL', 'http://127.0.0.1:9300')
+      const bare = { anamnesis: { command: '/bin/anamnesis-mcp' } }
+      const spawnEnv = { ANAMNESIS_URL: 'http://anamnesis.example.test:9300' }
+      expect(anamnesisEnv(applyAnamnesisEnv(bare, 's3cret', spawnEnv))).not.toHaveProperty('AUTH_SECRET')
+    })
+
+    it('S107: injects AUTH_SECRET when the effective spawn env ANAMNESIS_URL is allowed', () => {
+      vi.stubEnv('ANAMNESIS_URL', 'http://anamnesis.example.test:9300')
+      const bare = { anamnesis: { command: '/bin/anamnesis-mcp' } }
+      const spawnEnv = { ANAMNESIS_URL: 'https://anamnesis.example.test' }
+      expect(anamnesisEnv(applyAnamnesisEnv(bare, 's3cret', spawnEnv))['AUTH_SECRET']).toBe('s3cret')
+    })
+
+    it('S107: the entry ANAMNESIS_URL still wins over the spawn env (it is what the child sees)', () => {
+      const spawnEnv = { ANAMNESIS_URL: 'https://anamnesis.example.test' }
+      const env = anamnesisEnv(applyAnamnesisEnv(withUrl('http://anamnesis.example.test:9300'), 's3cret', spawnEnv))
+      expect(env).not.toHaveProperty('AUTH_SECRET')
+    })
+
+    it('S107: a spawn env without ANAMNESIS_URL falls back to the client default, not the process env', () => {
+      vi.stubEnv('ANAMNESIS_URL', 'http://anamnesis.example.test:9300')
+      const bare = { anamnesis: { command: '/bin/anamnesis-mcp' } }
+      expect(anamnesisEnv(applyAnamnesisEnv(bare, 's3cret', {}))['AUTH_SECRET']).toBe('s3cret')
+    })
   })
 
   it('does not invent an anamnesis server when none is configured', () => {

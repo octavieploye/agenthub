@@ -1027,6 +1027,31 @@ it('S103: a transport error whose message embeds a URL stores no URL in the reco
   expect(stored).not.toContain('@')
 })
 
+it.each([
+  ['an uppercase scheme', 'Failed: HTTP://user:s3cret@anamnesis.internal:9300/projects'],
+  ['a malformed scheme (undici parse error)', 'Failed to parse URL from http//user:s3cret@anamnesis.internal:9300/projects'],
+  ['a scheme-less URL with userinfo', 'Failed to parse URL from user:s3cret@anamnesis.internal:9300/projects'],
+  ['userinfo holding whitespace', 'Failed to parse URL from http://user:s3 cret@anamnesis.internal:9300/projects'],
+  ['a scheme-less host:port', 'connect ECONNREFUSED anamnesis.internal:9300'],
+])('S106: a transport error with %s stores no credential or host in the reconcile record', async (_label, message) => {
+  insertCompletedEvent('Finish feature')
+  const fetchMock = statusPutHandler(async () => {
+    throw new TypeError(message)
+  })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  const rows = reconcileRows()
+  expect(rows).toHaveLength(1)
+  const details = JSON.parse(rows[0].details ?? '{}') as Record<string, unknown>
+  const stored = String(details.error)
+  expect(stored).toContain('[redacted-url]')
+  for (const leaked of ['s3', 'cret', 'user:', '@', 'anamnesis.internal', '9300']) {
+    expect(stored).not.toContain(leaked)
+  }
+})
+
 it('S95: a successful project-status PUT writes no reconcile record', async () => {
   insertCompletedEvent('Finish feature')
   const fetchMock = statusPutHandler(async () => response())

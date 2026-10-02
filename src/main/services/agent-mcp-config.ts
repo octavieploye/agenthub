@@ -26,23 +26,30 @@ export function readSettingsMcpServers(settingsPath: string): Record<string, unk
   return {}
 }
 
+/** The environment a spawned agent's PTY gets — and its MCP children inherit. */
+type SpawnEnv = Record<string, string | undefined>
+
 /**
- * The URL the anamnesis MCP child will actually call: its own env entry, else the inherited
- * process env, else the Anamnesis client default.
+ * The URL the anamnesis MCP child will actually call: its own env entry, else the env it
+ * inherits from the agent PTY (S107: AgentHub's process env plus renderer envOverrides),
+ * else the Anamnesis client default.
  */
-function effectiveAnamnesisUrl(env: Record<string, string>): string {
-  return env['ANAMNESIS_URL'] ?? process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
+function effectiveAnamnesisUrl(env: Record<string, string>, spawnEnv: SpawnEnv): string {
+  return env['ANAMNESIS_URL'] ?? spawnEnv['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
 }
 
 /**
  * Returns a copy of `mcpServers` whose `anamnesis` entry carries the spawned agent's
  * Anamnesis environment: OPTIMAEUS_CALLER is always 'hephaestus', AUTH_SECRET is set only
  * when a non-empty secret is available AND the effective ANAMNESIS_URL is https or loopback
- * http (S99; otherwise a warning is logged). Never invents an anamnesis entry; never mutates input.
+ * http (S99; otherwise a warning is logged). `spawnEnv` is the agent's effective PTY env, which
+ * the MCP child inherits (S107); it defaults to AgentHub's process env for callers without one.
+ * Never invents an anamnesis entry; never mutates input.
  */
 export function applyAnamnesisEnv(
   mcpServers: Record<string, unknown>,
-  secret: string | null
+  secret: string | null,
+  spawnEnv: SpawnEnv = process.env
 ): Record<string, unknown> {
   const anamnesis = mcpServers['anamnesis']
   if (anamnesis === null || typeof anamnesis !== 'object') return mcpServers
@@ -53,7 +60,7 @@ export function applyAnamnesisEnv(
   // never reach the MCP child when the gate refuses to re-admit one.
   delete env['AUTH_SECRET']
   env['OPTIMAEUS_CALLER'] = 'hephaestus'
-  const allowedSecret = resolveAnamnesisSecretForUrl(effectiveAnamnesisUrl(env), secret)
+  const allowedSecret = resolveAnamnesisSecretForUrl(effectiveAnamnesisUrl(env, spawnEnv), secret)
   if (allowedSecret) env['AUTH_SECRET'] = allowedSecret
   return { ...mcpServers, anamnesis: { ...entry, env } }
 }

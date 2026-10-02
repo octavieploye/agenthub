@@ -56,11 +56,23 @@ interface ProjectStatusFailure {
 /**
  * S103: strip any URL from a transport error message before it is persisted. Node fetch
  * embeds the full URL — userinfo included — in some TypeError messages, and that URL is
- * configurable, so it must never land in the activity log.
+ * configurable, so it must never land in the activity log. S106: any scheme case, a malformed
+ * scheme ('http//'), userinfo holding whitespace, scheme-less userinfo and host:port forms too.
  */
 function redactUrls(message: string): string {
-  return message.replace(/\bhttps?:\/\/\S+/g, '[redacted-url]')
+  return message
+    .replace(SCHEME_URL_RE, REDACTED_URL)
+    .replace(AT_TOKEN_RE, REDACTED_URL)
+    .replace(HOST_PORT_RE, REDACTED_URL)
 }
+
+const REDACTED_URL = '[redacted-url]'
+/** A scheme URL ('://' or a malformed '//'), any case; swallows userinfo up to its '@' even across whitespace. */
+const SCHEME_URL_RE = /\b[a-z][a-z0-9+.-]*:?\/\/(?:[^@\n]*@)?\S*/gi
+/** Leftover userinfo: any token glued to an '@' (scheme-less 'user:pass@host'). */
+const AT_TOKEN_RE = /\S*@\S*/g
+/** A scheme-less host:port (dotted host or name), with an optional path. */
+const HOST_PORT_RE = /\b(?:(?:[a-z0-9-]+\.)+[a-z0-9-]+|[a-z][a-z0-9-]*):\d{1,5}\b(?:\/\S*)?/gi
 
 interface AnamnesisWriterDeps {
   anamnesisUrl: string
