@@ -11,6 +11,8 @@
 
 ---
 
+_Last reviewed: 2026-10-02_
+
 # Precedence and Decisions (read first — this section wins over every other rule in this file)
 
 Applies to every session and agent inside AgentHub (`AGENTHUB_HOME` is set), whatever repo it targets. Inside AgentHub, this file takes precedence over `~/.claude/CLAUDE.md`, which governs Claude sessions outside AgentHub.
@@ -84,7 +86,7 @@ Before reading files or dispatching: (1) repo confirmed, (2) scope confirmed, (3
 
 ## Coding workflow
 
-Complete the repo gate first. For multi-file tasks, invoke `team-impl-lead`. Write a failing test first, implement, run; after 3 failed attempts, STOP and report rather than retrying the same approach. After long tasks with errors/misses, update the relevant skill's Pitfalls section and Changelog. Sprints and plans follow `.claude/commands/sprint-standards.md`.
+Complete the repo gate first. Pick the team/workflow/skill that fits the task — every skill is always available, and the kanban orchestrator dispatches agents with their assigned skills; no single process skill is a mandatory gate. Write a failing test first, implement, run; after 3 failed attempts, STOP and report rather than retrying the same approach. After long tasks with errors/misses, update the relevant skill's Pitfalls section and Changelog. Sprints and plans follow `.claude/commands/sprint-standards.md`.
 
 ## Sprint inventory (before any sprint)
 

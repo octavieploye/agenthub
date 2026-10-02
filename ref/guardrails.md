@@ -1,4 +1,5 @@
 # Agent Behavioral Guardrails
+_Last reviewed: 2026-10-02_
 
 Known model behavior patterns that conflict with how we work. Each has a trigger and a corrective action.
 

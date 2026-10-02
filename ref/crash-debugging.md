@@ -1,4 +1,5 @@
 # Crash Debugging
+_Last reviewed: 2026-10-02_
 
 When investigating app crashes or unexpected restarts:
 

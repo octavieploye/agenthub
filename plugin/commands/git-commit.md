@@ -9,10 +9,12 @@ allowed-tools:
     "Bash(git commit:*)",
     "Bash(git push:*)",
     "Bash(git log:*)",
-    "Bash(npx vitest run*)",
-    "Bash(npx tsc --noEmit*)"
-]
+    "Bash(npm test*)",
+    "Bash(npm run typecheck*)"
+  ]
 ---
+
+_Last reviewed: 2026-10-02_
 
 # Git Commit Format
 
@@ -46,7 +48,7 @@ Before committing:
 
 ### Type-Check Gate (mandatory — runs before tests)
 
-4. **Run the TypeScript compiler**: `npx tsc --noEmit 2>&1 | head -30`
+4. **Run the type-check**: `npm run typecheck 2>&1 | head -30`
 5. **Evaluate the result**:
    - **No errors** → proceed to Test Gate.
    - **Errors found** → STOP. Do NOT commit. Report the type errors to the requesting agent or user. The code must compile before committing.
@@ -54,12 +56,12 @@ Before committing:
 
 ### Test Gate (mandatory)
 
-7. **Run the full test suite**: `npx vitest run 2>&1 | tail -20`
+7. **Run the full test suite**: `npm test 2>&1 | tail -20`
 8. **Evaluate the result**:
    - **All tests pass** → proceed to commit.
    - **New failures introduced by staged changes** → STOP. Do NOT commit. Report the failing tests to the requesting agent or user. The code must be fixed before committing.
-   - **Only pre-existing failures** (failures that also exist on the current HEAD before your changes) → you may proceed, but list the pre-existing failures in the `## Open Issues / Remaining` section of the commit message.
-9. To distinguish new vs pre-existing failures: if in doubt, stash your changes (`git stash`), run `npx vitest run`, then `git stash pop` and compare.
+   - **Only pre-existing failures** (failures that also exist on the current HEAD before your changes) → you may proceed, but list the pre-existing failures in the commit body.
+9. To distinguish new vs pre-existing failures: compare the failing tests against the staged diff — a failure in a file your change did not touch is pre-existing. `git stash` is banned (see the destructive-command ban); if you must isolate a change, use a separate worktree.
 10. **Never skip the test gate.** If tests cannot run (e.g., missing dependencies), report the blocker instead of committing blind.
 
 ### Commit Scope Limits (mandatory)
@@ -116,21 +118,21 @@ When asked to commit:
 
 ## Commit Message Format
 
-Use a short, single-line message in imperative mood.
+Use a short, single-line subject in imperative mood, optionally followed by a body for justification or detail.
 
-Recommended structure:
-
-`<type>: <short description>`
+`<type>(<scope>): <short description>`
 
 Where `<type>` is one of:
 
 - `feat` – new feature
 - `fix` – bug fix
 - `refactor` – code restructuring without behavior change
+- `perf` – performance improvement
 - `chore` – tooling, configs, maintenance
 - `test` – adding or updating tests
 - `docs` – documentation only
 - `style` – formatting or cosmetic changes (no logic)
+- `security` – security fix or hardening
 
 Rules:
 
@@ -142,14 +144,13 @@ Examples:
 
 - `feat: add backend endpoint for project summary`
 - `fix: correct frontend route guard for private pages`
-- `refactor: extract shared layout for dashboard`
-- `test: add integration tests for auth flow`
+- `security(anamnesis): gate the bearer secret by URL`
 
 ## Constraints
 
 - Only commit when explicitly requested by the **user** or the **lead agent**.
 - If the request is ambiguous, ask clarifying questions before committing.
-- Do **NOT** add any “Co-authored-by” or AI attribution lines. [web:61][web:67]
+- Do **NOT** add any “Co-authored-by” or AI attribution lines.
 - Do **NOT** run:
   - `git push*`
   - `git reset --hard*`
@@ -165,109 +166,3 @@ Examples:
   - The **Test Gate** above has been run by YOU (git-ops) — do not rely on other agents' claims that "tests pass." Run the suite yourself.
   - The **lead** has approved the change set.
 - If the test suite introduces new failures, return the commit request to the requesting agent with the failure details. Do not commit.
-
-
-
-## Commit Message Structure
-
-```
-<type>(<scope>): <short summary>
-
-[Task]        #<issue/task-id> — <task title>
-[Category]    <Implementation | Bugfix | Refactor | Config | Test | Docs | CI/CD | Migration>
-[Services]    <affected services, comma-separated>
-[Refs]        <artifact-slug>[#section-or-task-N], ...  ← omit if no brain entry
-
-## What Was Done
-- <concise bullet describing each change>
-- <one bullet per logical change, not per file>
-
-## Review Notes
-- <anything reviewers should pay attention to>
-- <breaking changes, migration steps, env changes>
-
-## Open Issues / Remaining
-- <what is not yet done or needs follow-up>
-- <known limitations, TODOs, blocked items>
-- NONE (if nothing remains)
-```
-
-## Type Prefixes
-
-| Prefix       | Use When                                                  |
-|--------------|-----------------------------------------------------------|
-| `feat`       | New feature or capability                                 |
-| `fix`        | Bug fix                                                   |
-| `refactor`   | Code restructure with no behavior change                  |
-| `test`       | Adding or updating tests only                             |
-| `docs`       | Documentation only                                        |
-| `chore`      | Build, config, dependencies, CI/CD                        |
-| `migration`  | Database schema changes (Liquibase)                       |
-| `style`      | Formatting, whitespace, SCSS — no logic change            |
-| `perf`       | Performance improvement                                   |
-| `security`   | Security fix or hardening                                 |
-
-## Scope Values
-
-Use the service or module name: `user-service`, `association-service`, `payment-service`, `notification-service`, `api-gateway`, `discovery-service`, `error-handling`, `common`, `frontend`, `docker`, `e2e`, `ci`.
-
-For cross-cutting changes use: `multi` or `infra`.
-
-## Rules
-
-1. **Subject line** — imperative mood, max 72 chars, no period at end.
-2. **Body** — wrap at 100 chars per line.
-3. **One commit = one logical change** — do not bundle unrelated work.
-4. **Always include** `[Task]`, `[Category]`, `[Services]`, `What Was Done`, and `Remaining` sections.
-5. **If no issue/task exists**, use `[Task] N/A — <brief context>`.
-6. **`[Refs]` is mandatory when implementing a brain artifact** (plan, spec, brainstorm, strategy). The slug is the artifact filename without its `.md` extension (e.g. `2026-07-06-brain-status-filter`). Append `#section-N` or `#task-N` to indicate which part was worked on. Multiple slugs are comma-separated. This is how the Brain panel marks entries as `in_progress`.
-6. **Breaking changes** — prefix the summary with `BREAKING:` and detail in Review Notes.
-
-## Issues Noted
-- Always add issues noted during the development process.
-- Always add remaining tasks in the `Remaining` section.
-
-## Examples
-
-```
-feat(association-service): add session attendance tracking
-
-[Task]        #42 — Attendance Management
-[Category]    Implementation
-[Services]    association-service, common
-[Refs]        2026-07-03-deep-reasoning-package#section-2
-
-## What Was Done
-- Created AttendanceRecord entity with Liquibase migration
-- Implemented AttendanceController with mark/unmark endpoints
-- Added AttendanceService with business validation rules
-- Published AttendanceMarkedEvent to Kafka
-
-## Review Notes
-- New Liquibase changeset 007 — run migrations before deploying
-- Kafka topic attendance-events must exist in broker config
-
-## Open Issues / Remaining
-- Bulk attendance marking endpoint (next sprint)
-- Notification integration on absence threshold
-```
-
-```
-fix(api-gateway): resolve JWT expiry returning 500 instead of 401
-
-[Task]        #78 — Gateway Error Handling
-[Category]    Bugfix
-[Services]    api-gateway
-
-## What Was Done
-- Fixed JwtAuthenticationFilter to catch ExpiredJwtException
-- Mapped expired tokens to 401 with proper error body
-
-## Review Notes
-- NONE
-
-## Open Issues / Remaining
-- NONE
-```
-
----

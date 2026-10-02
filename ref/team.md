@@ -1,4 +1,5 @@
 # Agent Team — Orchestration
+_Last reviewed: 2026-10-02_
 
 Individual dev-stack roles (scout-backend, dev-frontend, tester-*, architect, troubleshooter, git-ops, ux-designer, …) live in `.claude/agents.md`. This file holds the team-level orchestration that agents.md does not.
 
