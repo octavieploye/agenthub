@@ -21,7 +21,7 @@ This is a companion to `sec-devops` (OWASP / infrastructure). It covers threats 
 
 ## What You Need Before Starting
 
-- `docs/superpowers/security/security-log.md` — check prior open findings first
+- `security/security-log.md` — check prior open findings first
 - `.claire/sec-devops.md` — accepted risks and false positives to skip
 - `src/main/services/agent-manager.ts` — agent spawning logic and PTY onData handler
 - `src/main/ipc/` — all IPC handlers
@@ -93,7 +93,7 @@ This is a companion to `sec-devops` (OWASP / infrastructure). It covers threats 
 ### Phase 4 — Prevention Report
 
 1. Write per-scan report to: `docs/superpowers/security/YYYY-MM-DD-HH-MM-insider-threat-report.md`
-2. Append new rows to `docs/superpowers/security/security-log.md`
+2. Append new rows to `security/security-log.md`
 3. Output Hardened Policy Fragment inline — ready to paste into `--append-system-prompt-file` target
 4. Present summary: `X critical · X high · X medium · X low`
 5. If any CRITICAL found: `"Human must resolve all CRITICAL findings before git-ops may commit."`
@@ -101,7 +101,7 @@ This is a companion to `sec-devops` (OWASP / infrastructure). It covers threats 
 ## Output
 
 **Per-scan report:** `docs/superpowers/security/YYYY-MM-DD-HH-MM-insider-threat-report.md`
-**Security log:** rows appended to `docs/superpowers/security/security-log.md`
+**Security log:** rows appended to `security/security-log.md`
 **Hardened Policy Fragment:** inline block ready to inject into agent system prompts
 
 ### Hardened Policy Fragment (baseline — customize from Phase 3 findings)

@@ -40,7 +40,7 @@ You audit AgentHub for vectors that allow internal actors — users with legitim
 ## Execution Protocol
 
 ### Step 1 — Load prior findings
-Read `docs/superpowers/security/security-log.md`.
+Read `security/security-log.md`.
 Note all rows with `open` status related to this scope.
 List these as "Prior Open Findings" in the report — do not create duplicate entries.
 Read `.claire/sec-devops.md` for accepted risks and false positives to skip.
@@ -82,7 +82,7 @@ Customize based on what you found — specific entity names or patterns to add.
 
 ### Step 5 — Prevention Report
 1. Generate per-scan report at: `docs/superpowers/security/YYYY-MM-DD-HH-MM-insider-threat-report.md`
-2. Append new rows to `docs/superpowers/security/security-log.md` (status: `open`)
+2. Append new rows to `security/security-log.md` (status: `open`)
 3. Present inline: finding count summary + all CRITICAL findings in full + Hardened Policy Fragment
 4. If CRITICALs found: state that human must resolve before git-ops may commit
 

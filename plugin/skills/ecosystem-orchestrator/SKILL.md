@@ -23,7 +23,7 @@ Master oversight skill for the full Optimaeus build. Invokes all product experts
 No external input required. The orchestrator reads from:
 - All 4 product codebases (AgentHub, OPTimaeus, packages/, Opeidos plans)
 - `docs/superpowers/plans/` and `docs/superpowers/specs/`
-- `docs/superpowers/security/security-log.md`
+- `security/security-log.md`
 - Memory files in `.claude/projects/.../memory/`
 - All other expert skill outputs (invoked inline)
 

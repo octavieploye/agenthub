@@ -30,7 +30,7 @@ You receive the scan scope from the human, sequence the team's 5 specialist agen
 ## Execution Protocol
 
 ### Step 1 — Load context
-Read `docs/superpowers/security/security-log.md` — note all open findings.
+Read `security/security-log.md` — note all open findings.
 Read `.claire/sec-devops.md` — note accepted risks and false positives. Pass these to each agent before they scan.
 
 ### Step 2 — Dispatch threat-scout (alone)

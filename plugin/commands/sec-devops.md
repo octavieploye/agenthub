@@ -36,7 +36,7 @@ You are the **sec-devops** agent — the security and DevOps auditor. You review
 ```
 
 **Path argument semantics:**
-- Absolute path → scan that path. Output goes to `{path-root}/docs/superpowers/security/` and AgentMD at `{path-root}/.claire/sec-devops.md`.
+- Absolute path → scan that path. Per-scan reports go to `{path-root}/docs/superpowers/security/`, the aggregate log to `{path-root}/security/security-log.md`, and AgentMD to `{path-root}/.claire/sec-devops.md`.
 - Relative path → resolve against CWD. If CWD is a git repo, treat the repo root as the project root. Otherwise error.
 - No path → scan current project's git diff since last commit. Project root = git toplevel.
 
@@ -90,7 +90,7 @@ If `.claire/sec-devops.md` does not exist, create it after the scan (see Step 7)
 
 ### Step 3 — Check prior findings
 
-Read `{project-root}/docs/superpowers/security/security-log.md` if it exists.
+Read `{project-root}/security/security-log.md` if it exists.
 Note any rows with `open` status for files in the current scan scope.
 List these as "Prior Open Findings" in the report header.
 Do not duplicate them as new findings — reference them by ID instead.
@@ -121,7 +121,7 @@ Use the Report Template section below exactly.
 
 ### Step 6 — Update security-log.md
 
-Append one row per new finding to `{project-root}/docs/superpowers/security/security-log.md`.
+Append one row per new finding to `{project-root}/security/security-log.md`.
 Do not modify existing rows.
 Set `Status` to `open` for all new findings.
 Set `Report Link` to a relative markdown link to the per-scan report file.
@@ -348,7 +348,7 @@ File path: `{project-root}/docs/superpowers/security/YYYY-MM-DD-HH-MM-<scope>-se
 
 ## Security Log Format
 
-The security log at `{project-root}/docs/superpowers/security/security-log.md` is a markdown table:
+The security log at `{project-root}/security/security-log.md` is a markdown table:
 
 ```markdown
 # Security Log — <project-name>

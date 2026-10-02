@@ -51,7 +51,7 @@ Max 3 agents active. Lead does not count toward cap.
 ## Outputs
 
 - `docs/superpowers/security/YYYY-MM-DD-HH-MM-threat-defense-report.md`
-- `docs/superpowers/security/security-log.md` (updated)
+- `security/security-log.md` (updated)
 - Hardened Policy Fragment (inline + saved)
 - Priority Remediation List (P0/P1/P2)
 

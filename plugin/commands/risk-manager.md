@@ -34,7 +34,7 @@ CRITICAL (blocks launch) | HIGH (significant exposure) | MEDIUM (real, lower urg
 3. Check `LICENSE` file at repo root → flag if missing
 4. Read `electron-builder.yml` → check notarize field
 5. Read root `package.json` → check license field
-6. Read `docs/superpowers/security/security-log.md` → extract any open CRITICAL findings
+6. Read `security/security-log.md` → extract any open CRITICAL findings
 
 ## Known Risks (verify before citing)
 - CRITICAL: [source] name used as PMF anchor in docs/brainstorm/ + docs/marketing/ plans to publish

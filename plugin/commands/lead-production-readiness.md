@@ -34,7 +34,7 @@ Ask: "Which repo is this audit for? (full path)" — CWD is not confirmation.
 Wait for explicit user confirmation before reading any file or dispatching any agent.
 
 ### Step 1 — Load context
-Read `docs/superpowers/security/security-log.md` — note all open findings.
+Read `security/security-log.md` — note all open findings.
 Read `.claire/sec-devops.md` — note accepted risks and false positives. Pass these to each agent.
 
 ### Step 2 — Dispatch db-schema-auditor (alone first)
@@ -64,7 +64,7 @@ Wait for human response before proceeding to Step 6.
 ### Step 6 — Synthesize Production Readiness Report
 Combine all 5 phase reports into unified output.
 Write to: `docs/superpowers/security/YYYY-MM-DD-HH-MM-production-readiness-report.md`
-Append new rows to: `docs/superpowers/security/security-log.md`
+Append new rows to: `security/security-log.md`
 
 ### Step 7 — Present summary
 Output:

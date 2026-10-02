@@ -39,7 +39,7 @@ Wait for explicit user confirmation before reading any file or dispatching any s
 
 Before dispatching Phase 1:
 
-1. Read `docs/superpowers/security/security-log.md` — note all prior open findings.
+1. Read `security/security-log.md` — note all prior open findings.
 2. Read `.claire/sec-devops.md` — note accepted risks and false positives. Pass to each audit team.
 3. **Verify a test suite exists and is currently passing.** If no tests or tests are failing: STOP. Report to human. Do not proceed until tests pass.
 4. Confirm with human: repo path, DB type, payment stack (Stripe/other), email provider, hosting setup.
@@ -250,7 +250,7 @@ Backend is production-ready.
 Accepted risks: [list any items accepted-risk during pipeline]
 ```
 
-Append summary row to `docs/superpowers/security/security-log.md`.
+Append summary row to `security/security-log.md`.
 
 Present to human: final report path + roadmap link + clearance statement.
 

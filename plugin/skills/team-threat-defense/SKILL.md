@@ -23,7 +23,7 @@ category: dev-skills
 ## What You Need Before Starting
 
 - Scope: which paths, features, or modules to scan (or "full" for entire src/)
-- Access to `docs/superpowers/security/security-log.md` (prior open findings)
+- Access to `security/security-log.md` (prior open findings)
 - Access to `.claire/sec-devops.md` (accepted risks + false positives to skip)
 
 ## What This Team Produces

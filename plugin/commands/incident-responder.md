@@ -65,7 +65,7 @@ For each exposed credential (name only, never value):
 
 ### Step 6 — Write TIP report
 Save to: `docs/superpowers/security/YYYY-MM-DD-HH-MM-threat-defense-report.md`
-Append rows to: `docs/superpowers/security/security-log.md` (status: `open`)
+Append rows to: `security/security-log.md` (status: `open`)
 
 ---
 

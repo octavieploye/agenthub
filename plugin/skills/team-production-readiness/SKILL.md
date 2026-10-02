@@ -23,7 +23,7 @@ category: security
 ## What You Need Before Starting
 
 - Scope: target repo full path — Repo Gate required before any agent reads a file
-- Access to `docs/superpowers/security/security-log.md` (prior open findings)
+- Access to `security/security-log.md` (prior open findings)
 - Access to `.claire/sec-devops.md` (accepted risks + false positives to skip)
 - Tech stack info: DB type (PostgreSQL/SQLite), payment provider, email provider, hosting setup
 
