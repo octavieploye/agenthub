@@ -1007,6 +1007,26 @@ it('S95: an unreachable project-status PUT records the error message in the reco
   expect(details.error).toBe('connect ECONNREFUSED')
 })
 
+it('S103: a transport error whose message embeds a URL stores no URL in the reconcile record', async () => {
+  insertCompletedEvent('Finish feature')
+  const fetchMock = statusPutHandler(async () => {
+    throw new TypeError(
+      'Request cannot be constructed from a URL that includes credentials: http://user:s3cret@localhost:9300/projects'
+    )
+  })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  const rows = reconcileRows()
+  expect(rows).toHaveLength(1)
+  const details = JSON.parse(rows[0].details ?? '{}') as Record<string, unknown>
+  const stored = String(details.error)
+  expect(stored).not.toContain('http://')
+  expect(stored).not.toContain('s3cret')
+  expect(stored).not.toContain('@')
+})
+
 it('S95: a successful project-status PUT writes no reconcile record', async () => {
   insertCompletedEvent('Finish feature')
   const fetchMock = statusPutHandler(async () => response())

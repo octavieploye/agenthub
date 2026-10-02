@@ -53,6 +53,15 @@ interface ProjectStatusFailure {
   error?: string
 }
 
+/**
+ * S103: strip any URL from a transport error message before it is persisted. Node fetch
+ * embeds the full URL — userinfo included — in some TypeError messages, and that URL is
+ * configurable, so it must never land in the activity log.
+ */
+function redactUrls(message: string): string {
+  return message.replace(/\bhttps?:\/\/\S+/g, '[redacted-url]')
+}
+
 interface AnamnesisWriterDeps {
   anamnesisUrl: string
   fetch?: typeof globalThis.fetch
@@ -359,7 +368,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       })
       if (!res.ok) this.recordProjectStatusFailure(event, projectId, domainCategory, { httpStatus: res.status })
     } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
+      const error = err instanceof Error ? redactUrls(err.message) : redactUrls(String(err))
       this.recordProjectStatusFailure(event, projectId, domainCategory, { error })
     }
   }
