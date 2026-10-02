@@ -30,10 +30,11 @@ AgentHub is an Electron desktop app that orchestrates multiple Claude CLI sessio
 
 Reference files — read on demand, not loaded every session:
 - `ref/repos.md` — repo→path table, routing rules, repo-gate steps
+- `ref/team.md` — team orchestration (lead, sec-devops, ux-architect, persona, concurrency, flow)
 - `ref/guardrails.md` — the B1–B13 behavioral guardrails in full
 - `ref/testing.md` — code best practices + testing philosophy
 - `ref/crash-debugging.md` — how to debug app crashes
-- `.claude/agents.md` — the agent roster and team roles
+- `.claude/agents.md` — the agent roster and individual role descriptions
 
 ## Core Principles
 
