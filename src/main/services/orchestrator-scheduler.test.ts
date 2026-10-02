@@ -582,6 +582,239 @@ describe('OrchestratorScheduler', () => {
   })
 
   // -------------------------------------------------------------------------
+  // S105 — run re-use and queue promotion at the default maxConcurrentRuns=1
+  // -------------------------------------------------------------------------
+
+  describe('S105: re-use and promotion at maxConcurrentRuns=1', () => {
+    it('promotes the queued different sprint (A1) when the active run is cancelled', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      seedSprintTask(db, 'sprint-1', 'repo-1')
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-2', 'repo-1')
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(second.status).toBe('queued')
+
+      scheduler.cancel(first.id)
+
+      expect(getRun(db, second.id)!.status).toBe('running')
+    })
+
+    it('promotes the queued different sprint (A1) when the active run completes', async () => {
+      const taskId = insertTestTask(db, { id: 's105-done', repoId: 'repo-1', status: 'today' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-s105', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-s105-id') },
+      })
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId] })
+      seedSprintTask(db, 'sprint-2', 'repo-1')
+      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(second.status).toBe('queued')
+
+      await vi.advanceTimersByTimeAsync(1)
+      emitOrchestratorEvent({ type: 'agent:completed', triageEvent: fakeTriageEvent('agent-s105-id', 'completed') })
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(getRun(db, first.id)!.status).toBe('completed')
+      expect(getRun(db, second.id)!.status).toBe('running')
+    })
+
+    it('promotes the queued different single task (A1) when the active run ends', () => {
+      const taskA = insertTestTask(db, { repoId: 'repo-1' })
+      const taskB = insertTestTask(db, { repoId: 'repo-1' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.startSingleTask({ taskId: taskA })
+      const second = scheduler.startSingleTask({ taskId: taskB })
+      expect(second.status).toBe('queued')
+
+      scheduler.cancel(first.id)
+
+      expect(getRun(db, second.id)!.status).toBe('running')
+    })
+
+    it('a single task dispatched during a sprint run is queued, then promoted when the sprint run ends', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      seedSprintTask(db, 'sprint-1', 'repo-1')
+      const sprintRun = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      const solo = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const single = scheduler.startSingleTask({ taskId: solo })
+      expect(single.status).toBe('queued')
+
+      scheduler.cancel(sprintRun.id)
+
+      expect(getRun(db, single.id)!.status).toBe('running')
+    })
+
+    it('does not re-use a same-name sprint run of a different repo', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      seedSprintTask(db, 'sprint-1', 'repo-1')
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-1', 'repo-2')
+      const second = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-2' })
+
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
+      expect(second.repoId).toBe('repo-2')
+    })
+
+    it('does not re-use a same-sprint run when the explicit taskIds differ', () => {
+      const t1 = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const t2 = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [t1] })
+      const second = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [t2] })
+
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
+    })
+
+    it('does not re-use a sprint-wide run for a dispatch that names explicit taskIds', () => {
+      const t1 = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      const second = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [t1] })
+
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
+    })
+
+    it('re-uses the run when repo, sprint and the taskIds set are the same (order-insensitive)', () => {
+      const t1 = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const t2 = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [t1, t2] })
+      const second = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [t2, t1] })
+
+      expect(second.id).toBe(first.id)
+    })
+
+    it('never re-uses a "manual" run for another dispatch', () => {
+      insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ repoId: 'repo-1' })
+      const second = scheduler.start({ repoId: 'repo-1' })
+
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // S104 — every admission path requires >=1 dispatchable candidate
+  // -------------------------------------------------------------------------
+
+  describe('S104: dispatchable-candidate gate on every admission path', () => {
+    function seedPriorDoneLog(repoId: string, sprintName: string, taskId: string): void {
+      const now = new Date().toISOString()
+      const runId = `prior-${Math.random()}`
+      db.prepare(
+        `INSERT INTO orchestrator_runs (id, sprint_name, repo_id, status, concurrency_cap, agents_spawned, created_at, updated_at)
+         VALUES (?, ?, ?, 'completed', 3, 0, ?, ?)`
+      ).run(runId, sprintName, repoId, now, now)
+      db.prepare(
+        `INSERT INTO orchestrator_task_log (id, run_id, task_id, phase, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'dev', 'done', ?, ?)`
+      ).run(`log-${Math.random()}`, runId, taskId, now, now)
+    }
+
+    function runRowCount(): number {
+      return (db.prepare("SELECT COUNT(*) AS n FROM orchestrator_runs WHERE status != 'completed'").get() as { n: number }).n
+    }
+
+    it('refuses an omitted sprintName when the repo has no dispatchable task, leaving no run row', () => {
+      insertTestTask(db, { repoId: 'repo-1', status: 'done' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ repoId: 'repo-1' })).toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS/)
+      expect(runRowCount()).toBe(0)
+    })
+
+    it('refuses an explicit placeholder sprintName ("manual") when the repo has no dispatchable task', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'manual', repoId: 'repo-1' })).toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS/)
+      expect(runRowCount()).toBe(0)
+    })
+
+    it('refuses explicit taskIds that the cross-run dedup removes (done in a prior run of the same repo+sprint)', () => {
+      const taskId = seedSprintTask(db, 'sprint-1', 'repo-1')
+      seedPriorDoneLog('repo-1', 'sprint-1', taskId)
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', taskIds: [taskId] }))
+        .toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS.*sprint-1/)
+      expect(runRowCount()).toBe(0)
+    })
+
+    it('startSingleTask refuses a non-dispatchable task with a clear error and leaves no run row', () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'in_progress' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.startSingleTask({ taskId })).toThrow(/ORCHESTRATOR_TASK_NOT_DISPATCHABLE.*in_progress/)
+      expect(runRowCount()).toBe(0)
+    })
+
+    it('re-dispatching a running sprint whose tasks are now in_progress returns the existing run', () => {
+      const taskId = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      db.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").run(taskId)
+
+      const again = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      expect(again.id).toBe(first.id)
+    })
+
+    it('concludes (does not promote) a queued run that has no candidate left, then promotes the next one', () => {
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      seedSprintTask(db, 'sprint-1', 'repo-1')
+      const active = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+      const emptied = seedSprintTask(db, 'sprint-2', 'repo-1')
+      const stale = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      seedSprintTask(db, 'sprint-3', 'repo-1')
+      const next = scheduler.start({ sprintName: 'sprint-3', repoId: 'repo-1' })
+      expect(stale.status).toBe('queued')
+      expect(next.status).toBe('queued')
+
+      // sprint-2's only task leaves the backlog while the run waits in the queue
+      db.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").run(emptied)
+      scheduler.cancel(active.id)
+
+      expect(getRun(db, stale.id)!.status).toBe('completed')
+      expect(getRun(db, next.id)!.status).toBe('running')
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // pause()
   // -------------------------------------------------------------------------
 

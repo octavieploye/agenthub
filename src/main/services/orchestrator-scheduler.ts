@@ -179,34 +179,29 @@ export class OrchestratorScheduler {
       throw new Error('ORCHESTRATOR_START_REQUIRES_REPO_ID: repoId is required')
     }
     const repoId = input.repoId
-
-    this.assertSprintHasDispatchableTasks(input.sprintName, repoId, input.taskIds)
+    const dispatch: DispatchKey = {
+      repoId,
+      sprintName: input.sprintName ?? MANUAL_SPRINT_NAME,
+      taskIds: input.taskIds ?? null,
+      singleTaskId: input.singleTaskId ?? null,
+    }
 
     // Slot-aware admission: queue when active-run count reaches maxConcurrentRuns
     const activeRuns = getActiveRuns(this.db)
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
 
-    // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1),
-    // re-use the existing active run instead of queueing a second one — but only when the
-    // new dispatch targets the SAME sprint. A different sprint must not be silently absorbed
-    // into an unrelated run (A1); it falls through to the queue path below.
-    if (maxConcurrentRuns === 1 && activeRuns.length >= 1) {
-      const existing = activeRuns[0]
-      if (existing.sprintName === (input.sprintName ?? MANUAL_SPRINT_NAME)) {
-        if (input.telegramNotify && !existing.telegramNotify) {
-          updateRunTelegramNotify(this.db, existing.id, true)
-        }
-        this.ensureTicking()
-        // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
-        // so the effective value is `existing || input`. `??` would wrongly report false
-        // when input is explicitly false while the persisted run still notifies.
-        return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
-      }
-    }
+    // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1), re-use the existing
+    // active run instead of queueing a second one — but only for the SAME dispatch (same repo,
+    // sprint and taskIds set; S105). Anything else falls through to the queue path below.
+    const reusable = maxConcurrentRuns === 1 ? activeRuns.find((r) => isSameDispatch(r, dispatch)) : undefined
+    if (reusable) return this.reuseActiveRun(reusable, input.telegramNotify)
+
+    // S104: after re-use, so re-dispatching a running sprint whose tasks are in_progress returns that run.
+    this.assertSprintHasDispatchableTasks(dispatch)
 
     if (activeRuns.length >= maxConcurrentRuns) {
       const run = insertRun(this.db, {
-        sprintName: input.sprintName ?? MANUAL_SPRINT_NAME,
+        sprintName: dispatch.sprintName,
         repoId,
         projectId: input.projectId,
         taskIds: input.taskIds,
@@ -229,8 +224,8 @@ export class OrchestratorScheduler {
     }
 
     const run = insertRun(this.db, {
-      sprintName: input.sprintName ?? MANUAL_SPRINT_NAME,
-      repoId: input.repoId ?? 'default',
+      sprintName: dispatch.sprintName,
+      repoId,
       projectId: input.projectId,
       taskIds: input.taskIds,
       triggerSource: input.triggerSource ?? 'manual',
@@ -266,31 +261,33 @@ export class OrchestratorScheduler {
       throw new Error(`Task not found: ${input.taskId}`)
     }
 
+    const dispatch: DispatchKey = {
+      repoId: task.repoId,
+      sprintName: `${SINGLE_TASK_SPRINT_PREFIX}${task.title}`,
+      taskIds: [input.taskId],
+      singleTaskId: input.taskId,
+    }
+
     // Slot-aware admission: queue when active-run count reaches maxConcurrentRuns
     const activeRuns = getActiveRuns(this.db)
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
 
-    // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1),
-    // re-use the existing active run instead of queueing a second one — but only when it is
-    // the SAME single task. A different task must not be silently absorbed (A1); it falls
-    // through to the queue path below.
-    if (maxConcurrentRuns === 1 && activeRuns.length >= 1) {
-      const existing = activeRuns[0]
-      if (existing.singleTaskId === input.taskId) {
-        if (input.telegramNotify && !existing.telegramNotify) {
-          updateRunTelegramNotify(this.db, existing.id, true)
-        }
-        this.ensureTicking()
-        // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
-        // so the effective value is `existing || input`. `??` would wrongly report false
-        // when input is explicitly false while the persisted run still notifies.
-        return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
-      }
+    // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1), re-use the existing
+    // active run only when it is the SAME single task (A1, S105); otherwise queue below.
+    const reusable = maxConcurrentRuns === 1 ? activeRuns.find((r) => isSameDispatch(r, dispatch)) : undefined
+    if (reusable) return this.reuseActiveRun(reusable, input.telegramNotify)
+
+    // S104: refuse a task the tick could never dispatch — no run row is created.
+    if (!this.hasDispatchableCandidate(dispatch)) {
+      throw new Error(
+        `ORCHESTRATOR_TASK_NOT_DISPATCHABLE: task ${input.taskId} (status ${task.status}) is not a dispatchable ` +
+        `backlog/today task, or it is already done in a prior run; no run was created`
+      )
     }
 
     if (activeRuns.length >= maxConcurrentRuns) {
       const run = insertRun(this.db, {
-        sprintName: `${SINGLE_TASK_SPRINT_PREFIX}${task.title}`,
+        sprintName: dispatch.sprintName,
         repoId: task.repoId,
         singleTaskId: input.taskId,
         taskIds: [input.taskId],
@@ -309,7 +306,7 @@ export class OrchestratorScheduler {
     }
 
     const run = insertRun(this.db, {
-      sprintName: `${SINGLE_TASK_SPRINT_PREFIX}${task.title}`,
+      sprintName: dispatch.sprintName,
       repoId: task.repoId,
       singleTaskId: input.taskId,
       taskIds: [input.taskId],
@@ -482,7 +479,6 @@ export class OrchestratorScheduler {
 
   private promoteNextQueued(): void {
     const maxConcurrent = getMaxConcurrentRuns(this.db)
-    if (maxConcurrent <= 1) return
 
     const queued = getQueuedRuns(this.db)
     if (queued.length === 0) return
@@ -490,14 +486,45 @@ export class OrchestratorScheduler {
     for (const q of queued) {
       if (getActiveRuns(this.db).length >= maxConcurrent) break
 
-      updateRunStatus(this.db, q.id, 'running')
-      this.emitStatusChange(q.id, 'running', q.sprintName)
-      this.validateDependencies(q)
-      this.checkSprintInventory(q.sprintName, q.repoId)
-      log.info('OrchestratorScheduler: promoted queued run', { runId: q.id, sprintName: q.sprintName })
+      // S104: a queued run whose candidates vanished while it waited would hold the slot forever.
+      if (!this.hasDispatchableCandidate(q)) {
+        this.concludeEmptyQueuedRun(q)
+        continue
+      }
+      this.promoteQueuedRun(q)
     }
 
     this.requestTick()
+  }
+
+  private promoteQueuedRun(q: OrchestratorRun): void {
+    updateRunStatus(this.db, q.id, 'running')
+    this.emitStatusChange(q.id, 'running', q.sprintName)
+    this.validateDependencies(q)
+    this.checkSprintInventory(q.sprintName, q.repoId)
+    log.info('OrchestratorScheduler: promoted queued run', { runId: q.id, sprintName: q.sprintName })
+  }
+
+  private concludeEmptyQueuedRun(q: OrchestratorRun): void {
+    updateRunStatus(this.db, q.id, 'completed')
+    this.emitStatusChange(q.id, 'completed', q.sprintName)
+    this.notifyLifecycle(q, 'run_completed', `${q.sprintName}\nno dispatchable task left — concluded without starting`)
+    log.info('OrchestratorScheduler: queued run concluded without promotion — no dispatchable candidate', {
+      runId: q.id,
+      sprintName: q.sprintName,
+    })
+  }
+
+  /** Re-use an active run for an identical dispatch; telegramNotify is promote-only. */
+  private reuseActiveRun(existing: OrchestratorRun, telegramNotify: boolean | undefined): OrchestratorRun {
+    if (telegramNotify && !existing.telegramNotify) {
+      updateRunTelegramNotify(this.db, existing.id, true)
+    }
+    this.ensureTicking()
+    // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
+    // so the effective value is `existing || input`. `??` would wrongly report false
+    // when input is explicitly false while the persisted run still notifies.
+    return { ...existing, telegramNotify: existing.telegramNotify || (telegramNotify ?? false) }
   }
 
   resumeIfActive(): boolean {
@@ -1014,56 +1041,52 @@ export class OrchestratorScheduler {
   }
 
   /**
-   * A named (non-placeholder) sprint run that finds no dispatchable task would never conclude
-   * (maybeCompleteRun keeps zero-activity runs alive) and would hold a run slot forever. Refuse
-   * it before any orchestrator_runs row is created — whether it scopes by sprint name or by an
-   * explicit taskIds list (S101: the list must include at least one backlog/today task).
+   * A run that finds no dispatchable task would never conclude (maybeCompleteRun keeps
+   * zero-activity runs alive) and would hold a run slot forever. Refuse it before any
+   * orchestrator_runs row is created — named sprint, placeholder/omitted sprintName or
+   * explicit taskIds alike (S101, S104).
    */
-  private assertSprintHasDispatchableTasks(sprintName: string | undefined, repoId: string, taskIds: string[] | undefined): void {
-    if (sprintName === undefined || isPlaceholderSprintName(sprintName)) return
-
-    let hasDispatchable: boolean
-    if (taskIds && taskIds.length > 0) {
-      // S101: an explicit taskIds list must include at least one backlog/today task,
-      // else the run would be created with 0 candidates and never conclude.
-      hasDispatchable = taskIds
-        .map((id) => getTaskById(this.db, id))
-        .filter(isDispatchableTask)
-        .length > 0
-    } else {
-      const alreadyDone = getCompletedTaskIds(this.db, { repoId, sprintName })
-      hasDispatchable = this.fetchSprintQueuedTasks(repoId, sprintName).some((t) => !alreadyDone.has(t.id))
-    }
-
-    if (hasDispatchable) return
+  private assertSprintHasDispatchableTasks(scope: CandidateScope): void {
+    if (this.hasDispatchableCandidate(scope)) return
     throw new Error(
-      `ORCHESTRATOR_SPRINT_HAS_NO_TASKS: sprint "${sprintName}" has no dispatchable (backlog/today) tasks in repo ${repoId}; no run was created`
+      `ORCHESTRATOR_SPRINT_HAS_NO_TASKS: sprint "${scope.sprintName}" has no dispatchable (backlog/today) tasks in repo ${scope.repoId}; no run was created`
     )
   }
 
-  private fetchCandidateTasks(run: OrchestratorRun): TaskItem[] {
-    let candidates: TaskItem[]
-    if (run.taskIds && run.taskIds.length > 0) {
-      // Scoped run: only the explicitly listed task IDs that are queued
-      candidates = run.taskIds
+  /** The admission predicate: true when the scope has >=1 candidate under the rules fetchCandidateTasks applies. */
+  private hasDispatchableCandidate(scope: CandidateScope): boolean {
+    return this.excludeDoneInPriorRuns(scope, this.fetchScopedQueuedTasks(scope)).length > 0
+  }
+
+  /** Queued tasks in a scope: its explicit taskIds when given, else its sprint (or repo backlog for a placeholder). */
+  private fetchScopedQueuedTasks(scope: CandidateScope): TaskItem[] {
+    if (scope.taskIds && scope.taskIds.length > 0) {
+      return scope.taskIds
         .map(id => getTaskById(this.db, id))
         .filter(isDispatchableTask)
-    } else {
-      // Sprint-scoped run: queued tasks of this repo that belong to the run's sprint.
-      // Placeholder-named runs ('manual', 'single:<title>') have no real sprint to
-      // scope by, so they keep the whole repo backlog.
-      candidates = this.fetchSprintQueuedTasks(run.repoId, run.sprintName)
     }
+    return this.fetchSprintQueuedTasks(scope.repoId, scope.sprintName)
+  }
 
-    // Cross-run dedup: filter out tasks already completed in a previous run of
-    // the SAME repo+sprint (scoped so a different repo's run never skips a task).
-    const globallyDone = getCompletedTaskIds(this.db, { repoId: run.repoId, sprintName: run.sprintName })
-    const before = candidates.length
-    candidates = candidates.filter(t => !globallyDone.has(t.id))
-    if (before !== candidates.length) {
+  /**
+   * Cross-run dedup: drop tasks already completed in a previous run of the SAME repo+sprint
+   * (scoped so a different repo's run never skips a task).
+   */
+  private excludeDoneInPriorRuns(scope: CandidateScope, tasks: TaskItem[]): TaskItem[] {
+    const globallyDone = getCompletedTaskIds(this.db, { repoId: scope.repoId, sprintName: scope.sprintName })
+    return tasks.filter(t => !globallyDone.has(t.id))
+  }
+
+  private fetchCandidateTasks(run: OrchestratorRun): TaskItem[] {
+    // Scoped run: only the explicitly listed task IDs that are queued. Sprint-scoped run:
+    // queued tasks of this repo in the run's sprint; placeholder-named runs ('manual',
+    // 'single:<title>') have no real sprint to scope by, so they keep the whole repo backlog.
+    const queued = this.fetchScopedQueuedTasks(run)
+    let candidates = this.excludeDoneInPriorRuns(run, queued)
+    if (queued.length !== candidates.length) {
       log.info('OrchestratorScheduler: cross-run dedup removed candidates already done', {
         runId: run.id,
-        removed: before - candidates.length,
+        removed: queued.length - candidates.length,
         remaining: candidates.length,
       })
     }
@@ -1322,6 +1345,36 @@ export class OrchestratorScheduler {
 
 const MANUAL_SPRINT_NAME = 'manual'
 const SINGLE_TASK_SPRINT_PREFIX = 'single:'
+
+/** What decides a run's candidate tasks. */
+type CandidateScope = Pick<OrchestratorRun, 'repoId' | 'sprintName' | 'taskIds'>
+
+/** What identifies a dispatch for run re-use. */
+interface DispatchKey extends CandidateScope {
+  singleTaskId: string | null
+}
+
+/**
+ * True when an active run was created by the same dispatch (S105): a single-task run matches only
+ * the same task in the same repo; a sprint run matches the same repo, sprint and taskIds set.
+ * A placeholder ('manual') dispatch is never the same as another one.
+ */
+function isSameDispatch(run: OrchestratorRun, dispatch: DispatchKey): boolean {
+  if (run.singleTaskId !== null || dispatch.singleTaskId !== null) {
+    return run.singleTaskId === dispatch.singleTaskId && run.repoId === dispatch.repoId
+  }
+  if (isPlaceholderSprintName(dispatch.sprintName)) return false
+  return run.repoId === dispatch.repoId &&
+    run.sprintName === dispatch.sprintName &&
+    hasSameTaskIdSet(run.taskIds, dispatch.taskIds)
+}
+
+/** Order-insensitive taskIds comparison; null and [] both mean "no explicit taskIds". */
+function hasSameTaskIdSet(a: string[] | null, b: string[] | null): boolean {
+  const left = new Set(a ?? [])
+  const right = new Set(b ?? [])
+  return left.size === right.size && [...left].every((id) => right.has(id))
+}
 
 /** A task the orchestrator may still dispatch: queued in backlog or today. */
 function isDispatchableTask(t: TaskItem | null): t is TaskItem {
