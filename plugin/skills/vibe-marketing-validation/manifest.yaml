@@ -1,0 +1,19 @@
+version: 1
+domain: business-venture
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "validate product idea niche pre-sell"
+    weight: 1.0
+  - pattern: "Meta campaign blue ocean ads"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

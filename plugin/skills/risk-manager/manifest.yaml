@@ -1,0 +1,19 @@
+version: 1
+domain: security
+type: skill
+complexity: moderate
+securitySensitive: true
+triggers:
+  - pattern: "legal technical business risk register"
+    weight: 1.0
+  - pattern: "commercial launch blockers licenses"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

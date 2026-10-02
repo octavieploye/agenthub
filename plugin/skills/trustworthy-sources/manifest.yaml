@@ -1,0 +1,19 @@
+version: 1
+domain: content-voice
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "source credibility evaluate evidence"
+    weight: 1.0
+  - pattern: "trustworthy factual claim verify"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

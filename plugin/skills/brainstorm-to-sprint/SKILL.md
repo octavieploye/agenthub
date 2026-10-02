@@ -1,6 +1,6 @@
 ---
 name: brainstorm-to-sprint
-description: Post-brainstorm meta-orchestrator — chains sprint planning → dev loop → full-code-review gate. Review gate loops with dev-loop until all conflicts, assumptions, and long-term debt are resolved.
+description: Post-brainstorm meta-orchestrator — chains sprint planning → dev loop → senior review gate (architect + sr-frontend + sr-backend). Review gate loops with dev-loop until all conflicts, assumptions, and long-term debt are resolved.
 category: dev-skills
 ---
 
@@ -51,10 +51,10 @@ PHASE 2: DEV LOOP  ◄───────────────────�
        Output: implementation + tests pass   │
        Gate: dev-loop exits DONE             │
                                              │
-PHASE 3: FULL CODE REVIEW GATE               │
-  └─ full-code-review (chained mode)         │
+PHASE 3: SENIOR REVIEW GATE                  │
+  └─ architect + sr-frontend + sr-backend    │
        Input: all changes from Phase 2       │
-       Output: Master Issue List             │
+       Output: review report                 │
        Gate:                                 │
          CLEAN → EXIT DONE                   │
          ISSUES → back to Phase 2 ───────────┘
@@ -100,7 +100,7 @@ Sprint: {sprint name}
 
 ---
 
-## Phase 3 — Full Code Review Gate
+## Phase 3 — Senior Review Gate
 
 ### State
 
@@ -111,24 +111,48 @@ max_review_cycles: 3       (hard cap — escalate after this)
 
 ### Review Dispatch
 
-Invoke `/full-code-review` in **chained mode**:
+Dispatch 3 agents in parallel (all read-only):
 
-- Pass scope = all files changed during Phase 2 (exact file paths from dev-loop output)
-- Pass repo path — already confirmed, do NOT re-ask
-- `full-code-review` runs `architect`, `sr-backend`, and `sr-frontend` in parallel and returns a deduplicated **Master Issue List**
-- Do NOT duplicate agent dispatch here — `full-code-review` owns that
-- In chained mode, `full-code-review` skips the dependency scan if it was already run this session; otherwise it runs Phase 0 automatically
+**architect** — Architecture review
+- Read all changes from Phase 2
+- Check for: architectural conflicts with existing codebase, CLAUDE.md violations, sovereignty violations, scope creep, design decisions that should have been flagged
+- Assess long-term technical debt introduced by the changes
+- Output: architecture review with CONFLICT / ASSUMPTION / DEBT items
 
-Receive the Master Issue List from `full-code-review`.
+**sr-frontend** — Senior frontend review
+- Read all frontend changes from Phase 2
+- Check for: component impact on existing UI, state management conflicts, IPC surface changes, DaisyUI/Tailwind divergence, renderer risks, test surface gaps
+- Flag any assumption about frontend behavior not backed by code evidence
+- Output: frontend review with CONFLICT / ASSUMPTION / DEBT items
+
+**sr-backend** — Senior backend review
+- Read all backend changes from Phase 2
+- Check for: service integration conflicts, migration complexity, IPC contract changes, native module concerns, test surface gaps
+- Flag any assumption about backend behavior not backed by code evidence
+- Output: backend review with CONFLICT / ASSUMPTION / DEBT items
+
+### Review Output Format
+
+Each reviewer produces items in this format:
+```
+## {CONFLICT | ASSUMPTION | DEBT} — {title}
+Severity: CRITICAL | HIGH | MEDIUM | LOW
+File: {file:line}
+Description: {what is wrong}
+Recommendation: {how to fix}
+```
+
+### Merge and Decide
+
+Merge all three review outputs into a single **Senior Review Report**, deduplicated by file:line.
 
 Print:
 ```
-FULL CODE REVIEW — Cycle {N}/{max_review_cycles}
-CRITICAL: {N}
-HIGH:     {N}
-MEDIUM:   {N}
-LOW:      {N}
-Total:    {N}
+SENIOR REVIEW — Cycle {N}/{max_review_cycles}
+CONFLICTS:   {count}
+ASSUMPTIONS: {count}
+DEBT:        {count}
+Total:       {count} (CRITICAL:{n} HIGH:{n} MEDIUM:{n} LOW:{n})
 ```
 
 ### Gate Decision
@@ -186,21 +210,21 @@ STOP. Do not retry. Wait for user instruction.
 ## Constraints
 
 - NEVER skip Phase 1 — no implementation without an approved sprint plan
-- NEVER skip Phase 3 — no commit without full-code-review
+- NEVER skip Phase 3 — no commit without senior review
 - NEVER proceed to Phase 2 without user approval of the sprint plan
 - NEVER exceed max_review_cycles without escalating
 - NEVER commit — escalate to git-ops after user confirms Done
-- `full-code-review` is READ-ONLY in Phase 3 — it does not fix code
+- All three reviewers in Phase 3 are READ-ONLY — they do not fix code
 - Fixes from review findings go through team-dev-loop, not direct edits
+- Phase 3 reviewers must cite specific file:line evidence for every finding
 - CRITICAL findings in any review cycle block progression — must be resolved before next cycle
-- Do NOT re-dispatch architect/sr-backend/sr-frontend manually — full-code-review owns that
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---|---|
 | Starting dev-loop before sprint plan is user-approved | Phase 1 gate is mandatory — wait for explicit user confirmation |
-| Manually dispatching architect/sr-backend/sr-frontend in Phase 3 | Invoke full-code-review in chained mode — it owns the 3-agent dispatch |
+| Reviewers proposing code fixes directly | Reviewers are read-only — findings go to dev-loop for implementation |
 | Counting MEDIUM/LOW items as blockers on final cycle | Only CRITICAL/HIGH block — MEDIUM/LOW can be accepted as known debt on escalation |
-| Feeding full Master Issue List as dev-loop input | Extract only actionable issue IDs — dev-loop needs fix targets, not the full report prose |
-| Asking for scope or repo confirmation inside full-code-review | Chained mode — parent already confirmed both; full-code-review inherits scope |
+| Feeding full review report as dev-loop input | Extract only the actionable issues list — dev-loop needs fix targets, not prose |
+| Running reviewers sequentially instead of in parallel | All 3 reviewers are independent — dispatch in parallel for speed |

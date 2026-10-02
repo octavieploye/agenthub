@@ -1,0 +1,19 @@
+version: 1
+domain: code-quality
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "token optimize AI instructions audit"
+    weight: 1.0
+  - pattern: "token efficiency instruction files"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -20,6 +20,10 @@ Invoke when the user wants to build a persona, design a channel strategy, create
 **Pre-launch:** V0 gate pass/fail → Persona brief → Channel strategy → Message framework → Content calendar → Campaign brief
 **Post-launch (REVERSE):** Performance audit → Attribution analysis → Self-improving ad loop report
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. `readiness-analyst` — V0 3-filter gate (category heat, blue ocean gap, virality). Blocks M1 until 50+ email signups if any filter fails.

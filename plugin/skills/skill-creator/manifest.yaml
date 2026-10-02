@@ -1,0 +1,19 @@
+version: 1
+domain: code-quality
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "create skill team workflow command"
+    weight: 1.0
+  - pattern: "reusable artifact new skill"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -1,7 +1,7 @@
 ---
 name: agenthub-expert
 description: AgentHub feature oracle — instant status report of what is built, what is missing, and what must be done before commercial launch. Covers features, plans, monetization gaps, and pre-ship checklist.
-category: intelligence
+category: business-intelligence
 ---
 
 # AgentHub Expert

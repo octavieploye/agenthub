@@ -1,0 +1,19 @@
+version: 1
+domain: workflows
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "dispatch prompt session hand-off"
+    weight: 1.0
+  - pattern: "execution prompt generate"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

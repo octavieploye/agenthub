@@ -52,24 +52,44 @@ Systematically triage an architecture/blueprint repo against live project repos.
 3. **repo-census-scout** — catalogs each live repo: exists? what's implemented? what's the current state?
 
 ### Phase 3-4 (sequential, 1 agent)
-4. **cross-reference-analyst** — receives Phase 1-2 outputs, categorizes every file, produces Triage Report
+4. **cross-reference-analyst** — receives Phase 1-2 outputs, categorizes every file:
+   - `CURRENT` — still accurate, matches live state
+   - `IMPLEMENTED` — was blueprint, now lives in a real repo (archive candidate)
+   - `OUTDATED` — contradicts current reality, needs update or archive
+   - `RESEARCH` — valuable reference material not tied to implementation state
+   - `ABANDONED` — planned but explicitly dropped
+   - `FUTURE` — still planned, not yet built
+   - Produces the Triage Report with one-line summaries per file
 
 ### Phase 5 (sequential, 1 agent, requires user approval)
-5. **archive-executor** — moves approved files to `_archived/` with date prefix. NEVER deletes.
+5. **archive-executor** — after user reviews and approves the triage report:
+   - Creates `_archived/` subdirectories where needed
+   - Moves approved files with `YYYY-MM-DD-` prefix
+   - NEVER deletes any file — archive only
 
 ## Key Rules
 
 - **NEVER delete any file** — always archive by moving to `_archived/` subfolder
-- **All archival actions require explicit user approval**
+- **All archival actions require explicit user approval** — present the full list, wait for confirmation
 - **Max 3 concurrent agents** (lead counts as 1)
-- **Report must be CEO-readable** — one-line summaries, clear categories
-- **Reusable** — can be re-run periodically
+- **Report must be CEO-readable** — one-line summaries, clear categories, no jargon
+- **Git log is the age source** — use `git log --format='%ai' -1 -- <file>` for last-modified dates
+- **Reusable** — the skill can be re-run periodically; archived files stay in `_archived/`
+- **Cross-reference by content, not just name** — a file may have been renamed or split across repos
+
+## Output Location
+
+Reports are written to `docs/triage/` in the target architecture repo:
+- `docs/triage/YYYY-MM-DD-inventory.md`
+- `docs/triage/YYYY-MM-DD-census.md`
+- `docs/triage/YYYY-MM-DD-triage-report.md`
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---|---|
 | Deleting files instead of archiving | ALWAYS move to `_archived/` with date prefix |
-| Categorizing without reading the file | Read at least first 50 lines + check git age |
-| Assuming old = outdated | Old files can still be current — cross-reference |
-| Archiving without user approval | Present full list, wait for confirmation |
+| Categorizing without reading the file | Read at least the first 50 lines + check git age |
+| Assuming a file is outdated because it's old | Old files can still be current — cross-reference against live repos |
+| Archiving without user approval | Present full list, wait for explicit confirmation |
+| Running more than 3 agents at once | Phase 1-2 parallel (2 + lead), then sequential |

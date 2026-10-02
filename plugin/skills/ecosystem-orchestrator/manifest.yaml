@@ -1,0 +1,19 @@
+version: 1
+domain: business-research
+type: skill
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "full project overview status report"
+    weight: 1.0
+  - pattern: "ecosystem PDF milestone"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -37,6 +37,10 @@ No input required. The team reads from:
 - Ordered action plan (CRITICAL blockers → P0 → READY → PLANNING)
 - PDF instructions (pandoc command or print-to-PDF)
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 ### Phase 1 — Expert Trio (parallel, 3 agents max)

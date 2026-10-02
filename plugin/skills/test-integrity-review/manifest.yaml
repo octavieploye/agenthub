@@ -1,0 +1,19 @@
+version: 1
+domain: code-quality
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "test integrity review code changes"
+    weight: 1.0
+  - pattern: "test follows code violation"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

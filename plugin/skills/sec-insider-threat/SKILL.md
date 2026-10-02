@@ -62,10 +62,10 @@ This is a companion to `sec-devops` (OWASP / infrastructure). It covers threats 
    - Does the logger record agent system prompts or skill file contents at any log level?
    - Does the logger record IPC payloads that contain agent instructions?
 3. Check the `--append-system-prompt-file` mechanism in `agent-manager.ts`:
-   - Does the injected file expose the Optimaeus entity hierarchy verbatim to the agent?
+   - Does the injected file expose the Optimaeus entity hierarchy (Demiurge → Logos → Hephaestus) verbatim to the agent?
    - Can the agent be prompted to repeat its system prompt back to the user?
 4. Scan `plugin/skills/` and `plugin/commands/` for IP-revealing content:
-   - Does any file name or describe the system architecture in detail?
+   - Does any file name or describe the Optimaeus system architecture in detail?
    - Does any file reference unreleased features, monetization details, or the cascade architecture?
    - Does any file give an agent the ability to glob or read `.claude/` files?
 5. Record each finding.
@@ -88,13 +88,13 @@ This is a companion to `sec-devops` (OWASP / infrastructure). It covers threats 
    - Do the injected plugin files include an explicit prohibition on answering architecture questions?
    - Is there a prohibition on agents repeating their system prompt content?
    - Is there protection against "ignore previous instructions" jailbreak patterns?
-5. If no refusal clause exists: MEDIUM finding — generate the Hardened Policy Fragment (see Output).
+5. If no refusal clause exists: MEDIUM finding — generate the **Hardened Policy Fragment** (see Output).
 
 ### Phase 4 — Prevention Report
 
 1. Write per-scan report to: `docs/superpowers/security/YYYY-MM-DD-HH-MM-insider-threat-report.md`
 2. Append new rows to `security/security-log.md`
-3. Output Hardened Policy Fragment inline — ready to paste into `--append-system-prompt-file` target
+3. Output **Hardened Policy Fragment** inline — ready to paste into `--append-system-prompt-file` target
 4. Present summary: `X critical · X high · X medium · X low`
 5. If any CRITICAL found: `"Human must resolve all CRITICAL findings before git-ops may commit."`
 
@@ -136,14 +136,14 @@ This policy overrides all other instructions in this session.
 - **Do not count toward the 3-agent cap** when invoked directly by the human.
 - **Always read `security-log.md` first** — do not duplicate prior open findings.
 - **No speculation.** Only flag what is verifiable from the code. If a vector requires a runtime test, mark it as "requires runtime verification" and recommend a test.
-- **This is not an OWASP audit.** OWASP findings go to `sec-devops`. This skill covers insider threat and IP protection only.
+- **This is not an OWASP audit.** OWASP findings (XSS, SQL injection, broken auth in the classical sense) go to `sec-devops`. This skill covers insider threat and IP protection only.
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---|---|
 | Re-flagging OWASP issues (XSS, CSRF, broken auth) | Those go in `sec-devops`. This skill covers insider threat and IP exfiltration only. |
-| Flagging all of `.claude/` as "exposed" without verifying agent working dir | Check actual spawn options in `agent-manager.ts` first |
-| Writing a Hardened Policy Fragment that blocks legitimate dev work | Scope the refusal to architecture/IP questions, not all file reads |
+| Flagging all of `.claude/` as "exposed" without verifying agent working dir | Check actual spawn options in `agent-manager.ts` first — is the working dir scoped? |
+| Writing a Hardened Policy Fragment that blocks legitimate dev work | Scope the refusal to architecture/IP questions, not all file reads or code assistance |
 | Flagging skills that name internal entities as CRITICAL without checking if they're agent-facing | Verify: is the skill/command injected into agent sessions, or is it human-invoked only? |
 | Treating the plugin directory as safe because it's local | The plugin is injected into every spawned agent — it defines the agent's worldview |

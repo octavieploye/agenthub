@@ -1,0 +1,27 @@
+version: 1
+domain: code-quality
+type: skill
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "data relevance audit"
+    weight: 1.0
+  - pattern: "verify wiring frontend backend"
+    weight: 1.0
+  - pattern: "broken buttons empty data"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: expert
+requires: []
+produces:
+  - "DUF Audit Report (markdown)"
+  - "Wiring Map (data lineage)"
+composableWith:
+  - "full-code-review"
+  - "frontend-wire-verifier"
+  - "team-production-readiness"
+targetRepos: []
+targetDomains:
+  - "full-stack applications"

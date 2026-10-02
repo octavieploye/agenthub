@@ -1,7 +1,7 @@
 ---
 name: risk-manager
 description: Risk register for the Optimaeus ecosystem — legal risks (celebrity names, licenses, trademarks), technical risks, business risks, and infra risks across all 4 products. Produces actionable risk register with severity and remediation.
-category: security
+category: business-analysis
 ---
 
 # Risk Manager

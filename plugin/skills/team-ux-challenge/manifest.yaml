@@ -1,0 +1,19 @@
+version: 1
+domain: code-dev
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "UX challenge full-site adversarial audit"
+    weight: 1.0
+  - pattern: "design converge persona critique sprint"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

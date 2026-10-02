@@ -31,6 +31,10 @@ category: marketing
 5. **Content Package** — 3 pain-oriented articles + onboarding copy + optional founder note
 6. **Conversion Review Report** — pass/fail checklist, top 3 improvement flags, readiness score
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. `product-researcher` — Phase 0: product discovery from all available materials
@@ -55,6 +59,6 @@ Max 3 agents active at once. Phases 3 and 4 may run in parallel if context allow
 
 ## How to Invoke
 
-Tell lead-landing-lab what you are building and provide any available product materials. If you have research transcripts or data, pass it directly — the team will extract pain phrases, frameworks, and positioning signals from it.
+Tell lead-landing-lab what you are building and provide any available product materials. If you have research transcripts or data (like the source material provided), pass it directly — the team will extract pain phrases, frameworks, and positioning signals from it.
 
 Pass `REVERSE` if you have existing copy to audit — conversion-reviewer runs first and flags what needs to be rebuilt.

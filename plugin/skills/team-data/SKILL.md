@@ -24,6 +24,10 @@ Invoke automatically after every business, marketing, brainstorm, or tech-brains
 - Opportunity report: patterns in 3+ records, white space findings, cross-session connections
 - Risk report: contradictions, decaying signals, blind spots, assumption drift
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 **Deposit mode:** `data-architect` only — reads synthesis, selects schema, creates record, updates index.

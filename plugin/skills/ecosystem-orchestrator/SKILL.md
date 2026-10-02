@@ -1,7 +1,7 @@
 ---
 name: ecosystem-orchestrator
 description: Lead orchestrator for the Optimaeus ecosystem — invokes all expert skills, aggregates findings, and produces a PDF-ready project evolution report covering AgentHub, OPTimaeus, LLM Packages, and Opeidos.
-category: intelligence
+category: business-intelligence
 ---
 
 # Ecosystem Orchestrator

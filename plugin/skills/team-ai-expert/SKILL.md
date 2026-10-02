@@ -22,6 +22,10 @@ Invoke when the user wants to audit `.claude/` configuration files, optimize pro
 **Scaffold mode:** New command/skill/config files from an approved spec — no scope expansion
 **Pre-build gate:** Readiness checklist for `.claude/` config before starting a major build
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence (select per mode)
 
 - `config-auditor` — audit against Layer 1 (ai-engineering-reference) and Layer 2 (Optimaeus standards)

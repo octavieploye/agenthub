@@ -1,0 +1,19 @@
+version: 1
+domain: content-voice
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "external source transcript strategy"
+    weight: 1.0
+  - pattern: "competitive brief learnings"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

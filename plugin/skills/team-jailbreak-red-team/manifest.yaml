@@ -1,0 +1,19 @@
+version: 1
+domain: security
+type: team
+complexity: complex
+securitySensitive: true
+triggers:
+  - pattern: "jailbreak adversarial attack scenarios LLM"
+    weight: 1.0
+  - pattern: "red team deception protected assets"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

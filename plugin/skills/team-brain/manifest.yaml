@@ -1,0 +1,19 @@
+version: 1
+domain: teams
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "ecosystem orientation meta-intelligence"
+    weight: 1.0
+  - pattern: "brainstorm context strategy overview"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

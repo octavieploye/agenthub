@@ -1,0 +1,19 @@
+version: 1
+domain: content-voice
+type: skill
+complexity: simple
+securitySensitive: false
+triggers:
+  - pattern: "voice tone articulation style"
+    weight: 1.0
+  - pattern: "pragmatic structuralist writing"
+    weight: 1.0
+resources:
+  minContextWindow: 16000
+  estimatedTokens: 15000
+  preferredTier: capable
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

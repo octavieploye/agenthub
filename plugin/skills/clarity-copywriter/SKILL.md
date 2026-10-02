@@ -67,9 +67,9 @@ Deliver a **Copy Pack**:
 Headline: [max 8 words, problem-first]
 Subheadline: [max 15 words, mechanism]
 CTA: [max 5 words, verb + outcome]
-Tagline 1 (pain): [max 8 words]
-Tagline 2 (outcome): [max 8 words]
-Tagline 3 (trust): [max 8 words]
+Tagline 1: [pain angle, max 8 words]
+Tagline 2: [outcome angle, max 8 words]
+Tagline 3: [trust signal, max 8 words]
 Bullets:
 - [result-first, max 12 words]
 - [result-first, max 12 words]

@@ -29,7 +29,7 @@ Do NOT invoke if you want to start coding immediately — this team plans first,
 
 1. **Codebase Report** (`repo-mapper`) — package audit, directory map, DB schema, existing services, auth footprint, test coverage
 2. **Sprint Plan Draft** (`sprint-architect`) — all sprints with ownership matrix, TDD tests, workflow assignments, dependency map
-3. **Orchestration Validation Report** (`orchestration-validator`) — 8-gate check: agent existence, TDD compliance, concurrency safety, ownership completeness, security coverage, git-ops integrity, codebase report fidelity, verif-code-gate
+3. **Orchestration Validation Report** (`orchestration-validator`) — 9-gate check: agent existence, TDD compliance, concurrency safety, ownership completeness, security coverage, git-ops integrity, codebase report fidelity, verif-code-gate, **sprint-standards-gate** (every task has `targetRepo`, `modelOverride`, `skills`, `reviewGate`)
 4. **Final Sprint Plan** — written to `docs/sprints/{slug}-sprint-plan.md` after user approval
 5. **Orchestration Check** — written to `docs/sprints/{slug}-orchestration-check.md`
 
@@ -37,8 +37,8 @@ Do NOT invoke if you want to start coding immediately — this team plans first,
 
 1. `sprint-planner-lead` — runs clarification gate: repo paths, scope, ambiguities, existing plans. Does NOT proceed until all ambiguities resolved.
 2. `repo-mapper` — reads target repos. Read-only. Produces Codebase Report.
-3. `sprint-architect` — designs sprint phases from Codebase Report + confirmed scope. Selects teams/workflows. Produces Sprint Plan Draft.
-4. `orchestration-validator` — validates Sprint Plan Draft against 8 gates (including verif-code-gate). Returns PASS/WARN/FAIL. FAIL gates return to sprint-architect.
+3. `sprint-architect` — designs sprint phases from Codebase Report + confirmed scope. Selects teams/workflows. **Must apply `.claude/commands/sprint-standards.md` for every task produced**: assign `targetRepo`, `modelOverride` (via model selection decision tree), `skills`, and `reviewGate`. Produces Sprint Plan Draft.
+4. `orchestration-validator` — validates Sprint Plan Draft against 9 gates (including verif-code-gate and sprint-standards-gate). Returns PASS/WARN/FAIL. FAIL gates return to sprint-architect.
 5. `sprint-planner-lead` — presents final plan to user for approval. Writes to docs/sprints/ after approval.
 
 ## Ownership Matrix (enforced per sprint)
@@ -68,6 +68,8 @@ Every sprint must have:
 - `sprint-architect` always assigns `team-dev-loop` as default executor unless there is an explicit reason to deviate
 - Security sprints are mandatory for auth, fraud, payments, and API route tasks
 - `team-production-readiness` is always the final sprint
+- **`sprint-architect` must read `.claude/commands/sprint-standards.md` before producing any task output** — model selection, skill assignment, and review gate rules are non-negotiable per task
+- **`orchestration-validator` sprint-standards-gate is a FAIL gate** — any task missing `targetRepo`, `modelOverride`, `skills`, or `reviewGate` blocks the plan from reaching the user
 
 ## How to Invoke
 

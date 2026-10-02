@@ -39,7 +39,7 @@ sqlite3 "/Users/octaviesmacpro/Library/Application Support/agenthub/agenthub.db"
 create_task returns `result.id` (a UUID like `cc682d44-...`). The `dependsOn` parameter takes this UUID, not the localId from the sprint plan (like `VP2P7-T0`). Tasks must be created sequentially: T0 first → capture UUID → T1 with `dependsOn: ["<T0-uuid>"]`.
 
 ### R3 — telegramNotify: true is mandatory when any task has requiresApproval: true
-Source-verified (scheduler tick approval gate + `notifyApproval`): Telegram notification only fires if `run.telegramNotify === true`. There is NO approval button in the AgentHub UI. If `telegramNotify: false`, tasks with `requiresApproval: true` deadlock silently — no notification fires anywhere.
+Source-verified (orchestrator-scheduler.ts line 424): Telegram notification only fires if `run.telegramNotify === true`. There is NO approval button in the AgentHub UI. If `telegramNotify: false`, tasks with `requiresApproval: true` deadlock silently — no notification fires anywhere.
 
 Rule: if ANY task in the sprint has `requiresApproval: true`, dispatch with `telegramNotify: true`.
 
@@ -63,23 +63,6 @@ When approval is needed and Telegram isn't responding: use `mcp__agenthub-kanban
 
 ### R7 — Only backlog/today tasks get dispatched
 Tasks with status `in_progress`, `completed`, `tested`, or `interrupted` are skipped by the scheduler. Sprint tasks must have status `backlog` (default on create) to be picked up.
-
-### R8 — concurrencyCap is enforced per-run (not the global maxAgents)
-The scheduler now honors `run.concurrencyCap` for the number of *concurrently active* agents. `maxAgents` (50) is only the cumulative spawn budget for the whole run. Consequences:
-
-- **Sequential dependency chain** → `concurrencyCap: 1`. A dependent task will NOT dispatch while its prerequisite is still active, even if it would otherwise be dispatchable.
-- **Independent tasks** → set `concurrencyCap` to the number you want running in parallel (max 10 per the IPC schema).
-- `dependsOn` (the dependency solver) is a *hard* ordering guarantee independent of concurrency; `concurrencyCap` is the *parallelism* limit. Use both: `dependsOn` for "B must follow A", `concurrencyCap` for "how many at once".
-
-### R9 — Commit/push controls are gated by the `complex` flag
-The Telegram sidecar renders Commit / Commit & push / Skip buttons **only** on a `format: completed` message from a task flagged `complex: true`. Non-complex tasks complete normally but offer no git-ops controls.
-
-- Set `complex: true` ONLY for tasks that represent a commit/push boundary (e.g. a feature milestone, a completed task series).
-- Do NOT set `complex: true` on every task — that reproduces the "commit at every task" noise this flag removes.
-- The run-level `run_completed` notification still offers commit controls for the whole sprint, independent of this flag.
-
-### R10 — Pausing/resuming a run is UI-only
-The scheduler has `resumeIfActive()` but there is NO MCP `reset_task`/`cancel_run`/`resume` tool. A run paused by the monitor (or a false-positive breach) can only be resumed from the AgentHub UI, or by re-dispatching with `dispatch_sprint` (which updates the existing run). Do not tell the user to resume via MCP.
 
 ---
 
@@ -114,7 +97,7 @@ Read the file. Extract:
 - Dependency chain (which task blocks which)
 - `requiresApproval` flags (any task touching DB migrations, IPC contracts, security boundaries, production code)
 - Target files per task
-- Recommended model (default: `claude-sonnet-5-5` for backend Python/TS changes; `claude-opus-5-5` for complex architecture/planning tasks with high reasoning needs)
+- Recommended model (default: `claude-sonnet-5-5` for backend Python/TS changes)
 
 ### From NL description
 Parse into tasks. Apply the `requiresApproval` rule:
@@ -133,9 +116,9 @@ Parse tasks array. Map `localId` → task object. Build the dependency chain as 
 ### Output
 Produce an internal task list:
 ```
-T0: <title> | deps: [] | approval: false | complex: false | model: claude-sonnet-5-5
-T1: <title> | deps: [T0] | approval: true  | complex: false | model: claude-sonnet-5-5
-T2: <title> | deps: [T1] | approval: false | complex: true  | model: claude-sonnet-5-5
+T0: <title> | deps: [] | approval: false | model: claude-sonnet-5-5
+T1: <title> | deps: [T0] | approval: true  | model: claude-sonnet-5-5
+T2: <title> | deps: [T1] | approval: false | model: claude-sonnet-5-5
 ```
 Present to user before creating tasks. Wait for confirmation.
 
@@ -166,12 +149,26 @@ T2_id = create_task({..., requiresApproval: false, dependsOn: [T1_id]})
 | `priority` | 1=critical (blocking), 2=high (sequential), 3=normal |
 | `category` | `backend` / `frontend` / `devops` / `research` |
 | `skills` | `["dev-backend"]` for Python/TS backend; `["dev-frontend"]` for UI; `["team-dev-loop"]` for multi-file |
-| `modelOverride` | `claude-sonnet-5-5` default; `claude-opus-5-5` for complex architecture/reasoning; `gemma4:31b-cloud` for complex multi-file |
+| `modelOverride` | `claude-sonnet-5-5` default; `gemma4:31b-cloud` for complex multi-file |
 | `targetFiles` | Full relative paths from repo root |
 | `requiresApproval` | Follow Phase 1 rules |
-| `complex` | `true` only at commit/push boundaries (see R9) — default `false` |
+| `complex` | `true` when the task is a commit/push boundary — see the table below |
 | `dependsOn` | Actual DB UUIDs from previous create_task results |
 | `description` | Agent's full prompt — include repo path, exact files, verification commands, commit rules |
+
+### `complex` flag — when to set `true`
+
+`complex: true` marks a task as a **commit/push boundary**. The orchestrator only offers git-ops commit controls when a completed task is flagged `complex`. Non-complex tasks complete without commit buttons. Set it by task shape:
+
+| Task shape | `complex` |
+|---|---|
+| Backend migration + router + store (one feature slice) | `true` |
+| Complete screen + wiring + tests | `true` |
+| Cross-cutting change (types, contracts, DB schema, IPC) | `true` |
+| Single incremental UI component within a multi-task feature | `false` |
+| Isolated test-only / read-only / doc task | `false` |
+
+Rule of thumb: `complex: true` when the task's output is independently committable (builds + tests pass in isolation). `false` when the output only becomes meaningful once the next task lands.
 
 ### Description writing rules (critical for agent quality)
 The `description` field IS the agent's execution prompt. Write it as if instructing a developer:
@@ -181,6 +178,8 @@ The `description` field IS the agent's execution prompt. Write it as if instruct
 4. State commit rules explicitly (separate test commit vs impl commit if required)
 5. Include STEP 0 notes for manual prerequisites (Docker restart, env vars, etc.)
 6. End: "Do NOT proceed to [next step] — stop after this task."
+7. Never write a **mutable git state** into the description — no `HEAD` hashes, no "X is committed/uncommitted in the tree." Reference the review/decision that produced the task instead ("fix what the R06f review flagged"), so the instruction stays valid even after an earlier task in the run commits.
+8. For a task that changes code touching existing tests, run an **assertion-break scan** first (read/grep the affected test files) and state in the description which existing tests break and where their assertion change is handled. Fix-up/amendment waves re-run this scan — it is not inherited from the base plan.
 
 ---
 
@@ -212,7 +211,7 @@ mcp__agenthub-kanban__dispatch_sprint({
   sprintName: "<sprint-name>",
   repoId: "<live-uuid>",
   confirmed: true,
-  concurrencyCap: 1,       ← 1 for sequential chains (R8); 3+ for independent tasks
+  concurrencyCap: 1,       ← 1 for sequential chains; 3 for parallel tasks
   telegramNotify: true/false
 })
 ```
@@ -285,6 +284,24 @@ Run concludes automatically when:
 
 ---
 
+## Approval recovery
+
+A `requiresApproval` task can stall silently — the sidecar's "expired" message is misleading and the gate never re-prompts. Detect and recover as follows:
+
+### Detect a stalled approval
+- `mcp__agenthub-kanban__list_tasks(sprintName: "<sprint-name>")` → find a `requiresApproval` task stuck in `backlog` (or `in_progress` with no active agent log)
+- Or: the approval prompt was sent but never resolved — user got no Telegram, or replied but the run didn't advance
+
+### Recover
+- `mcp__agenthub-kanban__approve_task({runId: "<run-id>", taskId: "<task-id>", approved: true})` (or `approved: false` to deny) — orchestrator kicks within seconds
+- OR reply `approve`/`deny` in Telegram (primary path; requires `telegramNotify: true`)
+
+### Automatic supervisor behavior (new)
+- The deterministic supervisor re-notifies exactly 2×, then escalates with a plain-text `/approve <id>` command (no stale inline button to get lost)
+- Last-resort reset-to-`backlog` only fires when the task never actually ran (no active agent log AND no files-changed report) — a task that already produced work is never re-spawned
+
+---
+
 ## Output
 
 | Phase | Artifact |
@@ -305,8 +322,8 @@ Run concludes automatically when:
 - Never tell user to "find the approval button in AgentHub" — it does not exist (R5)
 - Never create tasks in parallel when they have sequential dependencies
 - Never skip repo gate confirmation — always confirm full path before creating any task
-- Never set `complex: true` on every task — only commit/push boundaries (R9)
-- Never tell the user to resume a paused run via MCP — resume is UI-only (R10)
+- Never write a HEAD hash or a "committed/uncommitted" claim into a task description (git-state independence)
+- Never finalize a code-touching task without an assertion-break scan on the tests it will affect
 
 ## Common Mistakes
 
@@ -318,9 +335,10 @@ Run concludes automatically when:
 | Sprint name collision (already in Kanban) | list_tasks first; rename or sprint-reset |
 | File drop to target repo → nothing happens | Use create_task + dispatch_sprint (Path B) |
 | Approval task stuck, user never got Telegram | Use mcp__agenthub-kanban__approve_task fallback |
-| Dependent task dispatches while prerequisite still running | Set `concurrencyCap: 1` AND `dependsOn` on the dependent task (R8) |
-| Commit buttons appear on every task | Only flag commit/push boundaries `complex: true` (R9) |
+| Single concurrencyCap but tasks are parallel | Use concurrencyCap: 3 for independent tasks |
 | Empty description → agent hallucinates scope | Description IS the prompt — be explicit and complete |
+| Task description hardcodes a HEAD hash / "uncommitted" | Reference the review/decision; never a mutable git state |
+| Fix-up task breaks existing tests mid-run (escalates A/B/C) | Run the assertion-break scan before finalizing any code-touching task |
 
 ## Orchestrator Mechanics Reference
 
@@ -331,6 +349,5 @@ Key numbers:
 - Throughput ceiling: **1 task per tick**
 - Retry on failure: **1 automatic retry**
 - Stale run recovery: **2 hours** of inactivity → auto-failed
-- maxAgents: **50** (cumulative spawn budget for a run — NOT the concurrency limit)
-- concurrencyCap: **per-run concurrent-agent limit** (default 3, max 10) — the scheduler and monitor both enforce it
+- maxAgents: **50** (hardcoded in scheduler deps)
 - Status for dispatch eligibility: **backlog** or **today** only

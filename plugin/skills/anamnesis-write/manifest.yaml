@@ -1,0 +1,19 @@
+version: 1
+domain: memory
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "write read anamnesis memory"
+    weight: 1.0
+  - pattern: "MCP memory persist"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

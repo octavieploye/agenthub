@@ -1,0 +1,19 @@
+version: 1
+domain: code-dev
+type: team
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "design research landing UX trends"
+    weight: 1.0
+  - pattern: "animation interaction Tailwind patterns"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

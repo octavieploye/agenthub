@@ -1,0 +1,19 @@
+version: 1
+domain: content-voice
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "content strategy LinkedIn YouTube channel"
+    weight: 1.0
+  - pattern: "buyer psychology persona content"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

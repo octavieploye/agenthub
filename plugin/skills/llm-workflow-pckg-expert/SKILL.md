@@ -1,7 +1,7 @@
 ---
 name: llm-workflow-pckg-expert
 description: LLM workflow packages expert — audits current package state, distribution gaps, and Opeidos readiness. Covers all packages in agenthub/packages/ and optimaeus-llm/.
-category: intelligence
+category: business-intelligence
 ---
 
 # LLM Workflow Package Expert

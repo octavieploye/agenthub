@@ -23,6 +23,10 @@ Converts a source SVG logo into a complete, verified icon set for any OS target 
 3. **Output directory** — where to place the generated icons (defaults to `build/` for Electron apps)
 4. **App type** — Electron desktop, native mobile, web, or standalone binary (affects which formats are required)
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 ```

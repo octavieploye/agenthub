@@ -1,0 +1,19 @@
+version: 1
+domain: business-research
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "project status report all products PDF"
+    weight: 1.0
+  - pattern: "milestone investor multi-product"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -1,6 +1,6 @@
 ---
 name: team-impl-review
-description: Implementation Review Team Orchestrator — post-sprint audit: plan vs git vs code vs integration. Codebase is ground truth. DONE/PARTIAL/MISSING/CONFLICT verdicts with file:line evidence. Loops with team-dev-loop for fixes.
+description: Implementation Review Team Orchestrator — post-sprint audit that cross-references plan vs git commits vs actual code vs integration wiring. Codebase is ground truth. Produces DONE/PARTIAL/MISSING/CONFLICT report with file:line evidence. Loops with team-dev-loop for fixes.
 category: dev-skills
 ---
 

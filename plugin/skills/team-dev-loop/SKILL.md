@@ -33,6 +33,10 @@ stall_count: 0        (increments when issues_prev == issues_current)
 
 ---
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Loop Workflow
 
 ### INIT
@@ -44,55 +48,6 @@ Print loop header:
 DEV LOOP — Task: {task description}
 MAX_ITER: {N}  |  Started: {timestamp}
 ```
-
----
-
-### STEP 0 — DEPENDENCY SECURITY SCAN (runs once, before iteration 1)
-
-Run immediately after INIT, before any review or code:
-
-```bash
-npm audit --json
-```
-
-Parse output and classify findings:
-
-| Severity | Action |
-|---|---|
-| CRITICAL | **HARD STOP** — surface immediately. Loop does NOT proceed until user explicitly acknowledges each one |
-| HIGH | **HARD STOP** — surface immediately. Loop does NOT proceed until user explicitly acknowledges each one |
-| MODERATE | Surface as warning, loop may proceed — user decides |
-| LOW | Log, loop proceeds |
-
-Also scan `package.json` for deprecated packages:
-- Run `npm outdated` or check `npm audit` output for deprecation notices
-- Deprecated packages: surface as HIGH with the replacement package name and upgrade guide URL
-
-**Output format for each CRITICAL/HIGH finding:**
-```
-[CRITICAL] {package}@{current} — {CVE or reason}
-  Patched in: {safe_version}
-  Action required: upgrade or confirm accepted-risk before loop proceeds
-```
-
-**Gate rule:** If ANY CRITICAL or HIGH finding exists, print:
-```
-DEPENDENCY SCAN — BLOCKED
-{list of findings}
-
-Loop is paused. Options:
-  A. Upgrade affected packages (agent will update package.json + run npm install)
-  B. Accept-risk with sign-off (user states reason, loop proceeds with warning logged)
-  C. Abort loop
-```
-
-Wait for explicit user instruction. Do NOT proceed to iteration 1 until the gate clears.
-
-If scan is clean:
-```
-DEPENDENCY SCAN — CLEAN (no CRITICAL/HIGH)
-```
-Proceed to ITERATION START.
 
 ---
 
@@ -112,7 +67,6 @@ Dispatch simultaneously:
 **review-backend** (uses `dev-backend` role)
 - Read all backend source files in scope
 - Check: missing null guards, wrong field names, broken async, missing service registrations, DB schema/model drift, IPC handler gaps, migration issues
-- Also read `package.json`: flag any newly added packages that are deprecated or have known CVEs (compare against `npm audit` output if available)
 - Output: list of issues with severity (CRITICAL/HIGH/MEDIUM/LOW) and file:line
 
 **review-frontend** (uses `dev-frontend` role)
@@ -233,19 +187,12 @@ goto ITERATION START
 
 ## Exit: Done
 
-Run final dependency scan before handoff:
-```bash
-npm audit --json
-```
-If NEW CRITICAL/HIGH findings appear (introduced by packages added during fixes): surface them now, do NOT hand off to git-ops until resolved.
-
 Print:
 ```
 DEV LOOP COMPLETE
 Iterations: {iter}
 Final state: 0 issues, all tests passing
 Frontend/backend wired: CONFIRMED
-Dependency scan: CLEAN / {N findings — see above}
 ```
 
 Produce a summary of all changes made across iterations (grouped by iteration).
@@ -300,6 +247,3 @@ In both cases: STOP. Do not retry. Present the stall report to the user and wait
 | Both fix-backend and fix-frontend touching a shared types file | Move shared type issues to Workstream I (fix-integration) |
 | Counting stall when new issues were introduced | Stall only fires when current issues = subset of previous; new issues reset stall_count |
 | Continuing past MAX_ITER | Hard stop — escalate to user with remaining issue list |
-| Skipping STEP 0 on first run | STEP 0 is mandatory — no iteration begins without a clean or acknowledged dependency scan |
-| Proceeding past a CRITICAL/HIGH npm audit finding | Hard stop — user must explicitly acknowledge every CRITICAL/HIGH before loop resumes |
-| Not re-running audit at Exit: Done | A fix package could introduce new vulns — always re-audit before git-ops handoff |

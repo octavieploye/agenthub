@@ -29,6 +29,10 @@ Runs a 4-agent research team that maps current web design trends, emotional UX p
 3. **Animation & Interaction Spec** — Tailwind CSS classes, scroll-triggered patterns, hover/click interactions, micro-interaction recipes
 4. **Design Research Brief** — synthesis of all three into prioritized design recommendations
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. **lead-design-research** — opens the session, defines scope, activates competitor-trend-researcher

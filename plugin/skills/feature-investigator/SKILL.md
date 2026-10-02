@@ -1,7 +1,7 @@
 ---
 name: feature-investigator
 description: Cross-project feature tracker — maps planned, implemented, and waiting features across AgentHub, OPTimaeus, Opeidos, and LLM packages. Covers coding tasks, business tasks, admin tasks, and legal tasks.
-category: intelligence
+category: business-intelligence
 ---
 
 # Feature Investigator

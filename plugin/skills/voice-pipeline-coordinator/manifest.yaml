@@ -1,0 +1,19 @@
+version: 1
+domain: devops
+type: skill
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "voice pipeline sprint TTS implementation"
+    weight: 1.0
+  - pattern: "VoxCPM2 build orchestrate"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -21,6 +21,10 @@ Invoke when the user needs quantitative market data gathered and validated, stat
 - Behavioral pattern map from research literature (documented patterns only, cited sources)
 - Structured decision frame: scenario table, trade-offs, data confidence summary, decision trigger conditions
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence (select per scope)
 
 1. `market-stats-researcher` — gather external market data with citations and trust tier ratings

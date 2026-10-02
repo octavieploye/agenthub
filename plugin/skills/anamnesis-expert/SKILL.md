@@ -165,11 +165,63 @@ Authorization: Bearer {AUTH_SECRET}  # shared secret from env
 Content-Type: application/json
 ```
 
+## MCP Architecture (Agent-Facing)
+
+Anamnesis exposes 18 MCP tools to Claude Code agents via `.claude/settings.json`. This is the primary interface for agent reads and writes.
+
+### Configuration
+
+- **MCP server**: `anamnesis` entry in `.claude/settings.json`
+- **Caller**: `hephaestus` (set in MCP config args)
+- **Permission**: read + write_new only (no modify, archive, delete)
+- **Gate**: `gate.py` runs server-side on every write — validates, scores, screens for PII/injection
+- **Circuit breaker**: built into MCP server (3 failures -> 60s backoff)
+- **Client pool**: connection pooling managed by MCP server process
+
+### MCP Tool List (18 tools)
+
+**Write tools** (all pass through server-side gate):
+
+| Tool | Layer | Purpose |
+|---|---|---|
+| `remember` | episodic | Record dated events, incidents, discoveries |
+| `learn` | semantic | Record patterns, domain knowledge, architecture choices |
+| `record_procedure` | procedural | Record build patterns, what worked/failed |
+| `record_constellation` | constellation | Record project topology, task relationships |
+| `record_shadow` | shadow | Record intermediate findings awaiting review |
+| `record_intelligence` | intelligence | Record Cerberus quarantine verdicts |
+
+**Read tools** (no gate required):
+
+| Tool | Purpose |
+|---|---|
+| `recall` | Context-aware memory retrieval (semantic search across layers) |
+| `search_procedures` | Search procedural patterns by domain |
+| `check_drift` | Drift-aware pre-action check (has this decision changed?) |
+| `read_shadow` | Retrieve unreviewed shadow findings |
+| `read_intelligence_verdicts` | Cerberus quarantine verdicts |
+| `read_reputation` | Source credibility tracking |
+| `read_contradictions` | Active plan-vs-reality contradictions |
+| `get_lifecycle_metrics` | Lifecycle statistics (decay, consolidation) |
+| `get_lifecycle_distribution` | Per-layer record counts |
+
+**Utility tools**:
+
+| Tool | Purpose |
+|---|---|
+| `health` | Store health check (postgres, memgraph, qdrant, embedding model) |
+
+### Two Pipelines — Do Not Confuse
+
+1. **MCP tools** (agent-facing): Agents call these via Claude Code MCP integration. Used by Knowledge Manager and any agent that needs Anamnesis context. Gate runs server-side.
+2. **anamnesis-writer.ts** (Electron-side): AUTOMATIC task event pipeline. Fires on kanban card transitions, completions, interrupts. Direct HTTP to Anamnesis, no MCP involved. This is a separate, parallel write path for structured app events.
+
 ## Hephaestus (AgentHub) Integration
 
-### Writer (ACTIVE)
+### Automatic Task Event Writer (ACTIVE)
 
 - **File**: `src/main/services/anamnesis-writer.ts`
+- **Purpose**: Automatic Electron-side pipeline for kanban/task events (NOT for agent knowledge writes)
 - Circuit breaker: 3 failures -> 60s backoff
 - Batch polling: 10 events/flush
 - Auth: `X-Optimaeus-Caller: hephaestus`
@@ -285,9 +337,13 @@ Remaining:
 
 **Model B — Hosted SaaS**: OVH Gravelines (France). Subscription pricing. API + MCP server for any AI tool. Sovereignty Tier 2 (EU cloud). Open to external tools.
 
-### MCP Server (confirmed)
+### MCP Server (ACTIVE — 18 tools)
 
-8 tools: remember, learn, record_procedure, recall, search_procedures, check_drift, health, consolidate
+Write: remember, learn, record_procedure, record_constellation, record_shadow, record_intelligence
+Read: recall, search_procedures, check_drift, read_shadow, read_intelligence_verdicts, read_reputation, read_contradictions, get_lifecycle_metrics, get_lifecycle_distribution
+Utility: health
+
+Configured in AgentHub at `.claude/settings.json`. Gate (`gate.py`) enforced server-side on all writes.
 
 ### P0 Blockers for SaaS Launch
 
@@ -380,7 +436,7 @@ Structured markdown answer addressing the specific question. Include:
 - Memory files about competitive landscape and strategy may be stale — check dates
 - Do not propose implementation changes — report state only
 - For Anamnesis repo work, confirm repo target with user (separate repo from agenthub)
-- The MCP server is confirmed but may not be built yet — verify before claiming it exists
+- The MCP server is ACTIVE with 18 tools — configured in `.claude/settings.json`
 - Hephaestus permission changes (Sprint 1) may or may not be applied — check actual route files
 
 ## Common Mistakes
@@ -388,10 +444,16 @@ Structured markdown answer addressing the specific question. Include:
 | Mistake | Fix |
 |---|---|
 | Treating Anamnesis as a database | It is a 5-layer memory system with consolidation, graph, and vector stores |
-| Calling Anamnesis endpoints directly from renderer | All calls go through main process services (anamnesis-writer.ts, adapter) |
+| Calling Anamnesis endpoints directly from renderer | All calls go through main process services (anamnesis-writer.ts, adapter) or MCP tools |
+| Confusing MCP tools with anamnesis-writer.ts | MCP = agent knowledge writes (via KM). anamnesis-writer.ts = automatic task event pipeline (Electron-side) |
 | Assuming all entities can write to all layers | Check permission matrix — each layer has specific allowed callers |
 | Using `vi.mock()` for Anamnesis adapter in tests | Use `NullAnamnesisAdapter` — it is the real standalone-mode adapter |
 | Confusing Anamnesis repo path with agenthub | Anamnesis: `/Users/octaviesmacpro/workspace/optimaeus-projects/anamnesis`. AgentHub: `/Users/octaviesmacpro/workspace/optimaeus-stacks/agenthub` |
 | Hardcoding model names for embeddings | Model discovery is runtime via Ollama — never hardcode |
 | Mixing up api/contracts.md with actual code | Code is authoritative — contracts.md may lag behind |
 | Assuming multi-tenant exists | Single-tenant only in current build — multi-tenant is P0 blocker for SaaS |
+
+## Changelog
+
+- 2026-08-08: Initial skill definition with architecture, schemas, API contracts, build state, competitive landscape
+- 2026-08-27: Added MCP Architecture section (18 tools, gate.py, two-pipeline distinction). Updated MCP Server from "confirmed/8 tools" to "ACTIVE/18 tools". Clarified anamnesis-writer.ts as automatic task event pipeline (separate from agent MCP tools). Added MCP confusion to Common Mistakes.

@@ -16,7 +16,7 @@ Makes any website — and specifically AI marketplace platforms — visible and 
 - You are launching a new website and want to build AI citation eligibility from day one
 - You want to audit why your brand is not being cited by AI engines
 - You need robots.txt reconfigured for AI crawlers (training bots vs retrieval bots)
-- You are building or launching an AI marketplace and need GEO for the platform itself AND for its listing pages
+- You are building or launching an AI marketplace (Opeidos) and need GEO for the platform itself AND for its listing pages
 - You want to compare AI search visibility against competitors
 - You need a Google Ads + GSC strategy that accounts for AI Overviews
 
@@ -24,107 +24,83 @@ Makes any website — and specifically AI marketplace platforms — visible and 
 
 - The URL or domain to optimize (or a description if pre-launch)
 - Access level: audit-only OR full implementation instructions
-- Target AI engines to prioritize (default: all five)
+- Target AI engines to prioritize (default: all five — Perplexity, Claude, Gemini, ChatGPT, Google AI Overviews)
 - Whether this is a marketplace platform, SaaS app, landing page, workflow listing, or affiliate page
-- Competitor URLs to benchmark against (optional)
+- Competitor URLs to benchmark against (optional but recommended)
+
+## What This Team Produces
+
+1. **AI Search Market Intelligence Report** — where your audience searches, per-engine share, where to invest first
+2. **AI Identity Audit** — entity signal gaps, schema coverage, sameAs holes, 3rd-party citation gaps
+3. **Technical GEO Audit** — robots.txt assessment, bot allowlist/blocklist, crawlability, structured data validity
+4. **Per-Engine Citation Strategy** — tailored plan per engine (Perplexity, Claude, Gemini, ChatGPT, Google AI Overviews)
+5. **Google Layer Plan** — GSC AI report setup, Google Ads AI Overview placement, traditional SEO baseline
+6. **Marketplace GEO Brief** — listing schema, WebMCP readiness, cross-channel data consistency
+7. **Measurement Stack Setup** — DataFast configuration, citation tracking, GSC Generative AI reports, quarterly cadence
+8. **90-Day GEO Action Plan** — priority matrix (impact x effort), robots.txt template, schema snippet library, execution roadmap
+
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
 
 ## Agent Sequence
 
 ```
-Phase 0 — geo-intel-researcher: market intelligence, competitor citation benchmarking
-Phase 1 — ai-identity-analyst: entity signals, sameAs, 3rd-party citations, E-E-A-T
-Phase 2 — technical-geo-auditor: robots.txt, crawlability, structured data, WAF
-Phase 3 — geo-lead: per-engine citation strategy synthesis
-Phase 4 — google-visibility-analyst: GSC AI reports, Google Ads, organic baseline
-Phase 5 — marketplace-geo-specialist: listing schema, WebMCP, data consistency
-Phase 6 — geo-lead: measurement stack + 90-Day GEO Action Plan
+Phase 0 — geo-intel-researcher
+  Market intelligence: where does your audience search? AI share vs Google per niche.
+  Competitor citation benchmarking: who gets cited and why?
+
+Phase 1 — ai-identity-analyst
+  Entity audit: is your brand a distinct, unambiguous entity in AI's view?
+  sameAs coverage, schema.org gaps, 3rd-party corroboration map
+
+Phase 2 — technical-geo-auditor
+  robots.txt: training bots vs retrieval bots
+  Structured data validity, crawlability, WAF/Cloudflare pass-through
+  Bytespider and non-compliant bot defense
+
+Phase 3 — geo-lead (synthesizes P0-P2 into per-engine strategy)
+  Perplexity: recency + structured facts plan
+  Claude: long-form editorial depth plan
+  Gemini: GBP + Google ecosystem plan
+  ChatGPT: Wikipedia/Reddit/authority plan
+  Google AI Overviews: E-E-A-T + freshness plan
+
+Phase 4 — google-visibility-analyst
+  GSC AI performance report setup + baseline
+  Google Ads AI Overview placement strategy
+  Traditional organic baseline (volume funnel)
+
+Phase 5 — marketplace-geo-specialist
+  Listing schema implementation guide (Service, OfferCatalog, FAQPage)
+  WebMCP readiness assessment
+  Cross-channel data consistency audit
+  Internal marketplace algorithm optimization
+
+Phase 6 — geo-lead (measurement + synthesis)
+  DataFast setup for AI referral tracking
+  Citation monitoring tooling recommendation
+  90-Day GEO Action Plan with priority matrix
 ```
 
 ## Key Rules
 
-- Never block retrieval bots in robots.txt — most common GEO mistake
-- Start with Phase 0 — market intelligence determines where to invest
-- Bytespider ignores robots.txt — requires WAF blocking
-- For marketplaces: internal algorithm first, then AI indexing
-- DataFast for measurement only (privacy-first AI referral tracking)
-- Content older than 90 days loses AI citation priority — quarterly refresh is mandatory
+- Never claim Google is dying — it controls 87.6% of referrals. Build Google AND AI search simultaneously.
+- Always start with Phase 0 (market intelligence) — do not skip to implementation without knowing where the target audience searches.
+- robots.txt must distinguish training bots (block) from retrieval bots (allow) — blocking all AI crawlers is the most common and most damaging GEO mistake.
+- For marketplaces: win the internal marketplace algorithm FIRST, then AI crawlers can index and cite the listings.
+- DataFast is used for measurement only (not SEO tooling) — privacy-first AI referral traffic tracking.
+- This workflow works on ANY website and is itself a sellable product on Opeidos.
+- Bytespider ignores robots.txt — WAF-level blocking is required, not a robots directive.
 
-## Output Format
+## Common Mistakes
 
-Each phase produces a structured output. The final deliverable is the 90-Day GEO Action Plan.
-
-### Phase 0 — Market Intelligence
-
-```
-COMPETITOR CITATION BENCHMARK
-==============================
-| Competitor | Perplexity | Claude | Gemini | ChatGPT | Google AI Overview | Citation score |
-|---|---|---|---|---|---|---|
-[5+ competitors — citation score = count of engines citing / 5]
-
-MARKET POSITION:    [cited | partially cited | invisible]
-TOP CITED ENTITY:   [competitor name + why they win citations]
-```
-
-### Phase 1 — Entity Signals
-
-```
-ENTITY IDENTITY AUDIT
-=====================
-| Signal | Present | Quality (1-5) | Fix required |
-|---|---|---|---|
-| sameAs links | [y/n] | [score] | [action] |
-| 3rd-party citations | [y/n] | [score] | [action] |
-| E-E-A-T signals | [y/n] | [score] | [action] |
-| Schema.org markup | [y/n] | [score] | [action] |
-| Knowledge panel | [y/n] | [score] | [action] |
-```
-
-### Phase 2 — Technical Audit
-
-```
-CRAWLABILITY REPORT
-===================
-| Bot | Type | robots.txt | Actual access | Recommendation |
-|---|---|---|---|---|
-[all major AI + search bots]
-
-STRUCTURED DATA:    [types found, validation errors]
-WAF STATUS:         [Bytespider blocked? CloudFlare/Vercel rules?]
-```
-
-### Phase 4 — Google Baseline
-
-```
-GOOGLE VISIBILITY
-=================
-Organic traffic:    [monthly sessions, trend]
-Top 10 keywords:    [keyword, position, volume, intent]
-AI Overview presence: [appearing / not appearing — for which queries]
-GSC coverage:       [indexed pages / submitted pages]
-```
-
-### Final — 90-Day GEO Action Plan
-
-```
-90-DAY GEO ACTION PLAN
-=======================
-GEO READINESS SCORE: [0-100]
-  +20 entity signals complete
-  +20 crawlability clean (no retrieval bot blocks)
-  +20 structured data valid
-  +20 Google baseline established
-  +20 AI citation present in ≥2 engines
-
-ROADMAP
-| Phase | Days | Actions | Owner | Success metric |
-|---|---|---|---|---|
-| Quick wins | 1-30 | [list] | [role] | [measurable] |
-| Foundation | 31-60 | [list] | [role] | [measurable] |
-| Scale | 61-90 | [list] | [role] | [measurable] |
-
-MEASUREMENT STACK
-  Tool:             [DataFast / GSC / manual checks]
-  Frequency:        [weekly / monthly]
-  Alert triggers:   [citation drop, crawl block, ranking loss]
-```
+| Mistake | Fix |
+|---|---|
+| Blocking all AI crawlers in robots.txt | Block training bots only; explicitly allow OAI-SearchBot, Claude-SearchBot, PerplexityBot |
+| Treating GEO and SEO as the same | 28% of AI-cited pages have zero Google visibility — different signals, different strategy |
+| Optimizing for one engine only | Only 11% of cited domains appear across multiple engines — each engine needs its own plan |
+| Generic schema types for marketplace listings | Use Service + OfferCatalog, not just Product — service listings need different schema |
+| Content older than 3 months | AI citation rates drop sharply after 90 days — quarterly refresh is mandatory |
+| Inconsistent brand name, pricing, or descriptions across channels | AI engines drop inconsistent entities from their retrieval sets |
+| Relying on robots.txt to stop Bytespider | Bytespider has documented non-compliance history — use WAF blocking |

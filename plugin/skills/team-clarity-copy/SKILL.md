@@ -21,6 +21,18 @@ Produce CEO/manager-style Copy Packs (headlines, CTAs, taglines, bullets) for la
 - Target audience (1-3 segments)
 - Optionally: existing copy to overhaul, a landing-lab brief, or positioning notes
 
+## Fetching Live Site Content
+
+When a URL is provided as an argument:
+
+- **Public/external URL** → use `WebFetch`
+- **Localhost URL** (e.g. `http://localhost:3001/`) → use Bash curl:
+  ```
+  curl -s http://localhost:PORT/ | sed 's/<[^>]*>//g' | tr -s ' \n' ' '
+  ```
+- **If curl is refused by permissions** → skip the live fetch, proceed with repo docs only, note "live site not fetched" in the Context Brief
+- **Never use WebFetch for localhost** — it will return an Invalid URL error
+
 ## What This Team Produces
 
 A **Copy Pack** per product/segment:

@@ -1,0 +1,19 @@
+version: 1
+domain: security
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "legal scan risk policy contract"
+    weight: 1.0
+  - pattern: "launch compliance ToS GDPR"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

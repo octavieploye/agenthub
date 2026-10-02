@@ -1,7 +1,7 @@
 ---
 name: optimaeus-expert
 description: OPTimaeus expert — status report of what is built, the 3 P0 monetization blockers, build phase, architecture, and path to commercial launch. Reads live from /Users/octaviesmacpro/workspace/optimaeus-projects/optimaeus.
-category: intelligence
+category: business-intelligence
 ---
 
 # OPTimaeus Expert

@@ -1,0 +1,19 @@
+version: 1
+domain: code-dev
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "sprint plan implementation phases ownership"
+    weight: 1.0
+  - pattern: "feature brief to sprint before coding"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

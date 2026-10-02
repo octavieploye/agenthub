@@ -1,0 +1,19 @@
+version: 1
+domain: business-venture
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "meeting readiness price proposal pitch"
+    weight: 1.0
+  - pattern: "pre-meeting bundle stress-test"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

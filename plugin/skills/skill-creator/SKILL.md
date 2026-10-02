@@ -118,6 +118,57 @@ category: {category}        # see Category List below
 | `dev-teams` | Development team orchestration |
 | `language-articulation` | Voice, tone, writing style, translation |
 
+**After creating SKILL.md, generate `manifest.yaml` in the same directory:**
+
+```yaml
+version: 1
+domain: {infer from SKILL_DOMAINS — see valid keys below}
+type: {skill | team | workflow | command — determined in Step 1}
+complexity: {simple | moderate | complex — see rules below}
+securitySensitive: {true if security/threat/risk domain, false otherwise}
+triggers:
+  - pattern: "{1-3 keywords extracted from the When to Use section}"
+    weight: 1.0
+resources:
+  minContextWindow: {16000 if simple | 32000 if moderate | 64000 if complex}
+  estimatedTokens: {15000 if simple | 30000 if moderate | 60000 if complex}
+  preferredTier: {capable | expert | frontier}
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []
+```
+
+**Domain inference — valid `SKILL_DOMAINS` keys:**
+
+| Key | Maps to |
+|---|---|
+| `code-dev` | dev-skills (implementation, debugging) |
+| `code-quality` | dev-skills (review, testing, linting) |
+| `devops` | dev-skills (CI/CD, infra, deployment) |
+| `security` | dev-skills (threat, audit, hardening) |
+| `business-research` | business-analysis, business-intelligence |
+| `business-venture` | business-venture, business-modeling |
+| `market-intel` | business-analysis, marketing |
+| `content-voice` | language-articulation, marketing |
+| `ai-engineering` | ai-engineering |
+| `memory` | business-intelligence (memory/knowledge curation) |
+| `teams` | dev-teams |
+| `workflows` | workflows |
+
+**Complexity rules:**
+- `simple` — 1 agent, no research phase, output is a single artifact
+- `moderate` — 2–3 agents OR multi-phase methodology OR requires WebSearch
+- `complex` — 4+ agents OR cross-repo work OR security-sensitive OR requires synthesis step
+
+**Preferred tier rules:**
+- `capable` — dev-skills, simple content tasks (fast, cost-efficient)
+- `expert` — business research, multi-agent orchestration, code review
+- `frontier` — security audits, architectural decisions, market modeling
+
+**Trigger extraction:** pull 1–3 keyword phrases directly from the "When to Use" section you just wrote. Each phrase becomes one `pattern` entry at `weight: 1.0`.
+
 ---
 
 ### 3B — Team
@@ -356,8 +407,10 @@ Before declaring done:
 
 - [ ] Entry point file exists in the correct directory
 - [ ] Frontmatter has `name`, `description`, and `category` (skills) or `"category"` (teams)
+- [ ] `manifest.yaml` created in same directory as SKILL.md (all required fields filled, no placeholders remaining)
 - [ ] If team: every member has a matching `.claude/commands/{name}.md`
 - [ ] If team: orchestrator SKILL.md exists in `.claude/skills/team-{name}/`
+- [ ] If team: orchestrator `manifest.yaml` exists in `.claude/skills/team-{name}/`
 - [ ] `index.json` updated (`.claude/skills/index.json`)
 - [ ] `index.md` updated (`.claude/skills/index.md`)
 - [ ] No duplicate IDs across skills, teams, and workflows

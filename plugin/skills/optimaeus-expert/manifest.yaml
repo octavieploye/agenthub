@@ -1,0 +1,19 @@
+version: 1
+domain: business-research
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "OPTimaeus status launch blockers"
+    weight: 1.0
+  - pattern: "monetization P0 roadmap"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

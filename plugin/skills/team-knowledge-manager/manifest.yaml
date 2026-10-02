@@ -1,0 +1,19 @@
+version: 1
+domain: memory
+type: team
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "knowledge manager anamnesis read write"
+    weight: 1.0
+  - pattern: "memory gateway persist findings"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

@@ -1,7 +1,7 @@
 ---
 name: team-backend-hardening
 description: Backend Hardening Meta-Orchestrator — sequences 5 audit phases (code quality → production readiness → OWASP → external threats → insider threats), each followed by a dev-loop fix cycle and architect+sr-backend validation gate. Proceeds to next phase only after 100% human approval. Outputs Production-Ready Clearance Report.
-category: security
+category: devops
 ---
 
 # Backend Hardening Meta-Orchestrator

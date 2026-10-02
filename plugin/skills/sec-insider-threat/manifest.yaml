@@ -1,0 +1,19 @@
+version: 1
+domain: security
+type: skill
+complexity: moderate
+securitySensitive: true
+triggers:
+  - pattern: "insider threat IP protection audit"
+    weight: 1.0
+  - pattern: "agent permissions exfiltration"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

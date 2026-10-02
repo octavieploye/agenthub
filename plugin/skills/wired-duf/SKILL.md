@@ -98,7 +98,7 @@ Repo: {path}
 
 ### Wiring Map
 {Frontend component} → {Store/Hook} → {API endpoint} → {Backend handler} → {Data source}
-(one row per data flow, mark gaps with X)
+(one row per data flow, mark gaps with ❌)
 ```
 
 ### Phase 4 — Fix Wave (conditional)

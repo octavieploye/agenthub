@@ -1,7 +1,7 @@
 ---
 name: team-production-readiness
 description: Production Readiness Team Orchestrator — 6-phase audit covering DB architecture, auth security, infrastructure, payments, scale performance, and migration hygiene. Outputs Production Readiness Report with CRITICAL/HIGH/MEDIUM/LOW findings + P0/P1/P2 remediation plan.
-category: security
+category: devops
 ---
 
 # Production Readiness Team

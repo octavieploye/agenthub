@@ -36,6 +36,10 @@ Full-stack legal risk review: scans all materials → classifies severity with c
 | `counter-risk-report.md` | Adversarial extraction: litigation triggers, lawsuit vectors, money/asset loss scenarios, policy contradictions |
 | `legal-guardian-report.md` | Executive summary: overall risk posture, top priority actions, open items for human counsel |
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. **lead-legal-guardian** — Phase 0: intake, confirm materials, jurisdiction, and scope with user

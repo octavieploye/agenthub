@@ -1,0 +1,19 @@
+version: 1
+domain: market-intel
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "landing page value proposition copy"
+    weight: 1.0
+  - pattern: "website rewrite pain articles"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

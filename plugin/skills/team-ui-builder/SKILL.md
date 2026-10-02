@@ -37,6 +37,10 @@ Do NOT use for:
   - Implementation notes + file paths
   - Validation Report (pass/fail per non-tech criterion)
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. **lead-ui-builder** — pre-flight, reads input, checks for existing brief, states phase plan

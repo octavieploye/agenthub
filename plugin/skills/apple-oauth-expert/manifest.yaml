@@ -1,0 +1,19 @@
+version: 1
+domain: code-dev
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "Sign in with Apple OAuth"
+    weight: 1.0
+  - pattern: "ASWebAuthenticationSession MDM"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

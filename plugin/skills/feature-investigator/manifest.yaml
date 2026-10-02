@@ -1,0 +1,19 @@
+version: 1
+domain: business-research
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "feature status cross-project tracker"
+    weight: 1.0
+  - pattern: "planned implemented pending features"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

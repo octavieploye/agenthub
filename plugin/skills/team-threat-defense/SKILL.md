@@ -37,6 +37,10 @@ category: dev-skills
 7. **Priority Remediation List** — P0 (pre-commit), P1 (this sprint), P2 (scheduled)
 8. **Vault/Secrets Rotation Protocol** — ordered list of credentials to rotate
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 ```
@@ -57,7 +61,7 @@ Max 3 agents active at once. Lead orchestrates handoffs.
 /team-threat-defense secrets            → secrets-guardian only
 /team-threat-defense injection          → injection-analyst only
 /team-threat-defense stealth            → stealth-detector only
-/team-threat-defense surface            → threat-scout only
+/team-threat-defense surface            → threat-scout only (surface mapping)
 /team-threat-defense respond            → incident-responder only (requires prior scan output)
 ```
 

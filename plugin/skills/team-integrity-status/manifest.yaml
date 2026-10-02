@@ -1,0 +1,19 @@
+version: 1
+domain: devops
+type: team
+complexity: complex
+securitySensitive: false
+triggers:
+  - pattern: "integrity audit migration schema drift"
+    weight: 1.0
+  - pattern: "full-stack layer health check"
+    weight: 1.0
+resources:
+  minContextWindow: 64000
+  estimatedTokens: 60000
+  preferredTier: frontier
+requires: []
+produces: []
+composableWith: []
+targetRepos: []
+targetDomains: []

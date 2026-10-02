@@ -1,0 +1,37 @@
+version: 1
+domain: workflows
+type: skill
+complexity: moderate
+securitySensitive: false
+triggers:
+  - pattern: "run sprint orchestrator"
+    weight: 1.0
+  - pattern: "dispatch sprint"
+    weight: 1.0
+  - pattern: "task sprint kanban"
+    weight: 1.0
+resources:
+  minContextWindow: 32000
+  estimatedTokens: 30000
+  preferredTier: expert
+requires:
+  - mcp__agenthub-kanban__create_task
+  - mcp__agenthub-kanban__dispatch_sprint
+  - mcp__agenthub-kanban__list_tasks
+  - mcp__agenthub-kanban__approve_task
+produces:
+  - kanban-sprint
+  - orchestrator-run
+composableWith:
+  - sprint-to-orchestrator
+  - sprint-reset
+  - team-dev-loop
+targetRepos: []
+targetDomains:
+  - agenthub
+  - optimaeus
+  - anamnesis
+  - hephaestus
+  - opeidos
+  - data-gouv-hub
+  - oxy

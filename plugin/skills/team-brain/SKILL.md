@@ -21,6 +21,10 @@ No external inputs required — the brain team reads from architecture files, pr
 - Memory surface: relevant prior sessions from the memory folder, if applicable
 - Brain alignment check for brainstorm sessions: does the proposed idea violate any core or sovereignty principle?
 
+## Step 0 — Repo Gate (mandatory, blocks all other steps)
+
+State the full target path or project and confirm with the user before dispatching any agent or reading any file. CWD is not confirmation. STOP AND ASK if the target repo or project is not explicit in the user's message.
+
 ## Agent Sequence
 
 1. `ecosystem-architect` — entity roles, tech stacks, cascade dependencies, API contracts
