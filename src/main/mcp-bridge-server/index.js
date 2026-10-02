@@ -231,6 +231,10 @@ async function reportFilesChanged(args) {
   return callBridge('reportFilesChanged', args || {})
 }
 
+async function createCalendarEvent(args) {
+  return callBridge('createCalendarEvent', args || {})
+}
+
 async function archiveTask(args) {
   return callBridge('archiveTask', args || {})
 }
@@ -410,6 +414,24 @@ const TOOL_DEFS = [
     }
   },
   {
+    name: 'create_calendar_event',
+    description: 'Create a calendar event in Anamnesis (surfaces in OPTimaeus calentity).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Event title (1-255 chars)' },
+        date: { type: 'string', description: 'Event date, YYYY-MM-DD' },
+        event_type: { type: 'string', description: 'follow-up | deadline | milestone | campaign | check-in | meeting | custom' },
+        project_id: { type: 'string', description: 'Optional Anamnesis project UUID (defaults to the default project)' },
+        end_date: { type: 'string', description: 'Optional end date, YYYY-MM-DD' },
+        source_view: { type: 'string', description: 'Optional source view tag (defaults to agenthub)' },
+        description: { type: 'string', description: 'Optional description' },
+        metadata: { type: 'object', description: 'Optional metadata object' }
+      },
+      required: ['title', 'date', 'event_type']
+    }
+  },
+  {
     name: 'archive_task',
     description: 'Soft-delete a task by setting its status to archived.',
     inputSchema: {
@@ -503,6 +525,7 @@ async function handleRequest(method, params, id) {
       case 'audit_deps':          result = auditDeps(args); break
       case 'approve_task':        result = await approveTask(args); break
       case 'report_files_changed':result = await reportFilesChanged(args); break
+      case 'create_calendar_event': result = await createCalendarEvent(args); break
       case 'archive_task':        result = await archiveTask(args); break
       case 'create_project':      result = await createProject(args); break
       case 'resume_run':          result = await resumeRun(args); break

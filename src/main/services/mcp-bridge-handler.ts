@@ -40,6 +40,9 @@ import {
 import type { CreateTaskInput } from '../../shared/types/task.types'
 import type { CreateProjectInput } from '../../shared/types/project.types'
 import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL, DEFAULT_HAIKU_MODEL } from '../../shared/constants/model-catalog'
+import { loadAnamnesisSecret } from './secret-store'
+import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
+import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 
 const LOG_PREFIX = '[mcp-bridge-handler]'
 
@@ -145,7 +148,7 @@ export class McpBridgeHandler {
 
   // ─── Request dispatch ───────────────────────────────────────────────────────
 
-  private handleMessage(socket: net.Socket, raw: unknown): void {
+  private async handleMessage(socket: net.Socket, raw: unknown): Promise<void> {
     const req = raw as BridgeRequest
 
     if (!req || typeof req.id !== 'string') {
@@ -158,16 +161,13 @@ export class McpBridgeHandler {
       return
     }
 
-    let result: unknown
     try {
-      result = this.dispatch(req.method, req.params ?? {})
+      const result = await this.dispatch(req.method, req.params ?? {})
+      this.send(socket, { id: req.id, result })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.send(socket, { id: req.id, error: message })
-      return
     }
-
-    this.send(socket, { id: req.id, result })
   }
 
   private send(socket: net.Socket, resp: BridgeResponse): void {
@@ -181,7 +181,7 @@ export class McpBridgeHandler {
 
   // ─── Method routing ─────────────────────────────────────────────────────────
 
-  private dispatch(method: string, params: Record<string, unknown>): unknown {
+  private async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
     const { db, scheduler } = this.deps
 
     switch (method) {
@@ -365,6 +365,53 @@ export class McpBridgeHandler {
         const batchSize = params['batchSize'] as number | undefined
         const enqueued = publishUnsyncedBrainEntries(db, { limit: batchSize })
         return { dryRun: false, enqueued, remaining: countUnsyncedBrainEntries(db) }
+      }
+
+      // ── Write: create an Anamnesis calendar event (agenthub → Anamnesis /calendar) ──
+      case 'createCalendarEvent': {
+        const title = params['title'] as string | undefined
+        const date = params['date'] as string | undefined
+        const eventType = params['event_type'] as string | undefined
+
+        if (!title || typeof title !== 'string' || title.trim() === '') {
+          throw new Error('create_calendar_event: title is required')
+        }
+        if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          throw new Error('create_calendar_event: date is required (YYYY-MM-DD)')
+        }
+        const VALID_EVENT_TYPES = new Set(['follow-up', 'deadline', 'milestone', 'campaign', 'check-in', 'meeting', 'custom'])
+        if (!eventType || !VALID_EVENT_TYPES.has(eventType)) {
+          throw new Error(`create_calendar_event: event_type must be one of ${[...VALID_EVENT_TYPES].join(', ')}`)
+        }
+
+        const payload: Record<string, unknown> = {
+          title: title.trim(),
+          date,
+          event_type: eventType,
+          project_id: params['project_id'] ?? undefined,
+          end_date: params['end_date'] ?? undefined,
+          source_view: params['source_view'] ?? 'agenthub',
+          description: params['description'] ?? undefined,
+          metadata: params['metadata'] ?? {},
+        }
+
+        const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
+        const authHeaders = resolveAnamnesisAuthHeaders(anamnesisUrl, loadAnamnesisSecret())
+        const res = await fetch(`${anamnesisUrl}/calendar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Optimaeus-Caller': 'hephaestus',
+            ...authHeaders,
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) {
+          const detail = (await res.text().catch(() => '')).slice(0, 300)
+          throw new Error(`create_calendar_event: Anamnesis returned ${res.status}${detail ? `: ${detail}` : ''}`)
+        }
+        return (await res.json()) as unknown
       }
 
       default:

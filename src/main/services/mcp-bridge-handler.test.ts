@@ -562,3 +562,81 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
     expect(brainOutboxCount()).toBe(0)
   })
 })
+
+describe('McpBridgeHandler — createCalendarEvent', () => {
+  let handler: McpBridgeHandler
+  let db: Database.Database
+
+  function call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return sendRequest(handler.socketPath, { id: 'cal', token: handler.token, method, params })
+  }
+
+  beforeEach(async () => {
+    db = new Database(':memory:')
+    handler = new McpBridgeHandler({ db, scheduler: makeScheduler() })
+    await new Promise<void>((resolve) => {
+      handler.start()
+      const interval = setInterval(() => {
+        if (existsSync(handler.socketPath)) {
+          clearInterval(interval)
+          resolve()
+        }
+      }, 10)
+    })
+  })
+
+  afterEach(async () => {
+    vi.unstubAllGlobals()
+    handler.stop()
+    await new Promise((r) => setTimeout(r, 30))
+    if (existsSync(handler.socketPath)) {
+      await unlink(handler.socketPath).catch(() => {})
+    }
+    db.close()
+  })
+
+  it('POSTs a valid event to Anamnesis /calendar and returns the created event', async () => {
+    const fetchMock = vi.fn(async (_url: unknown, init?: { method?: string; body?: string }) => {
+      const body = JSON.parse(init?.body ?? '{}') as Record<string, unknown>
+      expect(String(_url)).toBe('http://localhost:9300/calendar')
+      expect(init?.method).toBe('POST')
+      expect(body.title).toBe('Brainstorm Monday')
+      expect(body.date).toBe('2026-10-05')
+      expect(body.event_type).toBe('meeting')
+      expect(body.project_id).toBe('35a5b599-27de-4b28-a609-e2edb5ae6d86')
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'evt-1', title: 'Brainstorm Monday', date: '2026-10-05', event_type: 'meeting' }),
+        text: async () => '',
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const resp = await call('createCalendarEvent', {
+      title: 'Brainstorm Monday',
+      date: '2026-10-05',
+      event_type: 'meeting',
+      project_id: '35a5b599-27de-4b28-a609-e2edb5ae6d86',
+    })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toMatchObject({ id: 'evt-1', title: 'Brainstorm Monday' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an invalid event_type before any HTTP call', async () => {
+    const resp = await call('createCalendarEvent', { title: 'X', date: '2026-10-05', event_type: 'bogus' })
+    expect(resp['error']).toMatch(/event_type must be one of/)
+  })
+
+  it('rejects a missing title', async () => {
+    const resp = await call('createCalendarEvent', { date: '2026-10-05', event_type: 'meeting' })
+    expect(resp['error']).toMatch(/title is required/)
+  })
+
+  it('rejects a malformed date', async () => {
+    const resp = await call('createCalendarEvent', { title: 'X', date: 'not-a-date', event_type: 'meeting' })
+    expect(resp['error']).toMatch(/date is required/)
+  })
+})
