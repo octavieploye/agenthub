@@ -49,7 +49,7 @@ Reference files — read on demand, not loaded every session:
 - **Never state external facts with confidence** — WebSearch first; prefix unverified claims with "Based on my training data (may be outdated):".
 - **Update how-to docs** when adding/refactoring a feature: write `docs/how-to/<NN-slug>.md` and update `.claude/how-to-index.md`.
 - **Report confusion and discrepancies** before coding from sprints or prior code; if more than 2, list them for review. Note surprises in the relevant AgentMD file.
-- **Be context-aware in long sessions** — before compacting/compressing context (e.g. a long brainstorm), write a summary of decisions and key context so it survives the compaction.
+- **Be context-aware in long sessions** — in a long brainstorm, write a summary of decisions *and a prompt for the next agent to follow* before compacting. For long investigations (personas, market research, modelisation), designate one agent to watch context size and prepare the summary before compaction.
 
 ## Skill discovery
 
@@ -65,9 +65,9 @@ B1 compression bias · B2 training-data authority · B3 assumption-filling · B4
 
 ## Destructive command ban
 
-**Absolute ban (never):** `git clean`, `rm -rf`, `rm -f`, `find -delete`, `shred`, `dd if=/dev/zero`, `DROP TABLE`, `DELETE FROM` (no WHERE), `docker system prune --volumes`, `git reflog expire`, `git gc --prune=now`.
-**Critical ban (3-step human confirmation):** `git reset --hard`, `git push --force`, `git rebase`, `git checkout .`, `git restore .`, `git branch -D`, `kill -9`, `pkill -9`, `rm package-lock.json`.
-Deleting more than 1 file → stop and list them. Full list + safe alternatives: `.claude/commands/destructive-commands-ban.md`.
+Any destructive command — git, docker, db, shell — is banned. **Archive, don't delete**: move to a backup path instead of removing. The only override is your explicit instruction, repeated back (double-confirmed) after the consequence is stated ("recovery is NONE" for irreversible commands).
+
+Banned: `git clean`, `rm -rf`, `rm -f`, `find -delete`, `shred`, `dd if=/dev/zero`, `DROP TABLE`, `DELETE FROM` (no WHERE), `docker system prune --volumes`, `git reflog expire`, `git gc --prune=now`, `git reset --hard`, `git push --force`, `git rebase`, `git checkout .`, `git restore .`, `git branch -D`, `kill -9`, `pkill -9`, `rm package-lock.json`. Deleting more than 1 file → stop and list them. Full list + archive alternatives: `.claude/commands/destructive-commands-ban.md`.
 
 ## Dependency & versions
 
