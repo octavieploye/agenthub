@@ -48,6 +48,10 @@ export function applyAnamnesisEnv(
   if (anamnesis === null || typeof anamnesis !== 'object') return mcpServers
   const entry = anamnesis as Record<string, unknown>
   const env: Record<string, string> = { ...((entry.env ?? {}) as Record<string, string>) }
+  // S102: strip any AUTH_SECRET the target repo's own env may carry BEFORE the URL
+  // gate below decides whether to inject AgentHub's secret. A pre-existing value must
+  // never reach the MCP child when the gate refuses to re-admit one.
+  delete env['AUTH_SECRET']
   env['OPTIMAEUS_CALLER'] = 'hephaestus'
   const allowedSecret = resolveAnamnesisSecretForUrl(effectiveAnamnesisUrl(env), secret)
   if (allowedSecret) env['AUTH_SECRET'] = allowedSecret

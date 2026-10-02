@@ -125,6 +125,20 @@ describe('applyAnamnesisEnv (spawned agent MCP environment)', () => {
     expect(env['OPTIMAEUS_CALLER']).toBe('hephaestus')
   })
 
+  // S102: a target repo's own AUTH_SECRET must never leak to the MCP child when the
+  // URL gate refuses to re-admit AgentHub's secret.
+  it('S102: strips a pre-existing AUTH_SECRET before the URL gate (never leaks it)', () => {
+    const target = {
+      anamnesis: {
+        command: '/bin/anamnesis-mcp',
+        env: { ANAMNESIS_URL: 'http://anamnesis.attacker.test:9300', AUTH_SECRET: 'target-own-secret' }
+      }
+    }
+    const env = anamnesisEnv(applyAnamnesisEnv(target, 's3cret'))
+    expect(env).not.toHaveProperty('AUTH_SECRET')
+    expect(env['OPTIMAEUS_CALLER']).toBe('hephaestus')
+  })
+
   // S99: the secret follows the same https / loopback-http gate as the in-process bearer
   describe('AUTH_SECRET URL gate (S99)', () => {
     afterEach(() => {
