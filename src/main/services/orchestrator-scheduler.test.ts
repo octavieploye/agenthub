@@ -18,6 +18,7 @@ import {
   type OrchestratorAgentEvent,
 } from './agent-lifecycle-bus'
 import type { AgentLifecycleStatus } from '../../shared/types/agent.types'
+import type { OrchestratorRun } from '../../shared/types/orchestrator.types'
 import type { TaskEvent } from '../../shared/types/task.types'
 import { ClaudeCliOutputParser, gateParsedStatus } from '../parsers/cli-output-parser'
 
@@ -180,6 +181,18 @@ function seedBlockedSprintTask(db: Database.Database, sprintName: string, repoId
   const seeded = seedSprintTask(db, sprintName, repoId)
   db.prepare('INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)').run(seeded, blocker)
   return seeded
+}
+
+/**
+ * start() refuses any run without a dispatchable candidate (S104), so a test that needs a running
+ * placeholder run whose tick finds no candidate seeds one task, starts the run, then moves that
+ * task out of the backlog before the first tick fires.
+ */
+function startRunWithDrainedBacklog(scheduler: OrchestratorScheduler, db: Database.Database, repoId: string): OrchestratorRun {
+  const taskId = insertTestTask(db, { repoId, status: 'today', title: 'drained' })
+  const run = scheduler.start({ repoId })
+  db.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").run(taskId)
+  return run
 }
 
 function buildDeps(db: Database.Database, partial: Partial<SchedulerDeps> = {}): SchedulerDeps {
@@ -616,8 +629,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain })
       scheduler = new OrchestratorScheduler(deps)
 
-      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
-      const run = scheduler.start({ repoId: 'repo-1' })
+      // Placeholder run whose backlog is drained before the first tick
+      const run = startRunWithDrainedBacklog(scheduler, db, 'repo-1')
       scheduler.pause(run.id)
       brain.decide.mockClear()
 
@@ -967,8 +980,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, dispatch })
       scheduler = new OrchestratorScheduler(deps)
 
-      // Placeholder run: a named sprint with no dispatchable task is refused at start()
-      scheduler.start({ repoId: 'repo-1' })
+      // Placeholder run whose backlog is drained before the first tick
+      startRunWithDrainedBacklog(scheduler, db, 'repo-1')
       await vi.advanceTimersByTimeAsync(60_000)
 
       // Returns early before brain because candidateTasks is empty (in_progress is not dispatchable)
@@ -1710,8 +1723,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, tickIntervalMs: 999_999 })
       scheduler = new OrchestratorScheduler(deps)
 
-      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
-      const run = scheduler.start({ repoId: 'repo-1' })
+      // Placeholder run whose backlog is drained before the first tick
+      const run = startRunWithDrainedBacklog(scheduler, db, 'repo-1')
       brain.decide.mockClear()
 
       scheduler.approveTaskDispatch(run.id, 'task-abc', true)
@@ -1728,8 +1741,8 @@ describe('OrchestratorScheduler', () => {
       const deps = buildDeps(db, { brain, tickIntervalMs: 999_999 })
       scheduler = new OrchestratorScheduler(deps)
 
-      // Placeholder run on an empty backlog: a named sprint with no dispatchable task is refused at start()
-      const run = scheduler.start({ repoId: 'repo-1' })
+      // Placeholder run whose backlog is drained before the first tick
+      const run = startRunWithDrainedBacklog(scheduler, db, 'repo-1')
       insertApproval(db, { runId: run.id, taskId: 'task-approve', windowMinutes: 30 })
       brain.decide.mockClear()
 
@@ -2124,13 +2137,15 @@ describe('OrchestratorScheduler', () => {
       expect(getQueuedRuns(db)).toHaveLength(0)
     })
 
-    it('still starts a placeholder-named run with an empty repo backlog', () => {
+    it('refuses a placeholder-named run with an empty repo backlog, leaving no run row', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
-      const run = scheduler.start({ repoId: 'repo-1' })
-
-      expect(run.status).toBe('running')
+      expect(() => scheduler.start({ repoId: 'repo-1' })).toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS/)
+      expect(getActiveRuns(db)).toHaveLength(0)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+      const rows = db.prepare('SELECT COUNT(*) AS n FROM orchestrator_runs').get() as { n: number }
+      expect(rows.n).toBe(0)
     })
 
     it('S101: refuses a named sprint run whose explicit taskIds hold no dispatchable task', () => {
@@ -2693,15 +2708,16 @@ describe('OrchestratorScheduler', () => {
       expect(getQueuedRuns(db)).toHaveLength(0)
     })
 
-    it('does not promote when maxConcurrentRuns is 1 (legacy mode)', () => {
-      // Default maxConcurrentRuns=1 — legacy mode never queues
+    it('promotes when maxConcurrentRuns is 1 (S105: runs are queued at limit 1 since the A1 fix)', () => {
+      // Default maxConcurrentRuns=1 — a queued run must start once the active run ends
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
       seedSprintTask(db, 'sprint-1', 'repo-1')
       const run1 = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
 
-      // Manually insert a queued run to simulate edge case
+      // Manually insert a queued run (with a dispatchable task) to simulate a waiting dispatch
+      seedSprintTask(db, 'sprint-q', 'repo-q')
       const now = new Date().toISOString()
       db.prepare(
         `INSERT INTO orchestrator_runs
@@ -2711,8 +2727,7 @@ describe('OrchestratorScheduler', () => {
 
       scheduler.cancel(run1.id)
 
-      // The manually-inserted queued run should NOT be promoted
-      expect(getRun(db, 'manual-queued')!.status).toBe('queued')
+      expect(getRun(db, 'manual-queued')!.status).toBe('running')
     })
 
     it('does not over-promote past the concurrency cap', () => {
@@ -2756,7 +2771,8 @@ describe('OrchestratorScheduler', () => {
       seedSprintTask(db, 'healthy', 'repo-2')
       scheduler.start({ sprintName: 'healthy', repoId: 'repo-2' })
 
-      // Insert a queued run
+      // Insert a queued run (with a dispatchable task, re-checked at promotion — S104)
+      seedSprintTask(db, 'waiting-sprint', 'repo-3')
       const now = new Date().toISOString()
       db.prepare(
         `INSERT INTO orchestrator_runs
