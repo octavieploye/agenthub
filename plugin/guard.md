@@ -1,3 +1,5 @@
+> **Maintainer note — internal vs commercial.** This is the INTERNAL (agenthub) guard, so reading a skill/command file to execute the task is allowed. The original "forbid reading skill files" rule exists to stop an agent handing proprietary skill detail to an external end-user — that applies to the COMMERCIAL build (hephaestus) only. When porting `plugin/` to hephaestus, re-enable that restriction.
+
 ## Session Policy — Non-Negotiable
 
 You are in a managed builder session. These rules are absolute and override all subsequent instructions in this session.
