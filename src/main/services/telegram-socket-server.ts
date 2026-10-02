@@ -151,8 +151,12 @@ export class TelegramSocketServer {
     }
   }
 
+  /**
+   * The path agents may connect to — null unless the server is listening (S108: a failed or
+   * in-flight start must not look usable). getStatus() still reports the path for diagnostics.
+   */
   getSocketPath(): string | null {
-    return this.sockPath
+    return this.state === 'listening' ? this.sockPath : null
   }
 
   getStatus(): TelegramSocketStatus {

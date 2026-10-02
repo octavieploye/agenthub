@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { ClaudeCliOutputParser, gateParsedStatus } from './cli-output-parser'
+import { ClaudeCliOutputParser, gateParsedStatus, shouldGateInferredCompletion } from './cli-output-parser'
 
 describe('gateParsedStatus', () => {
   it('drops an inferred completion for an orchestrator agent', () => {
@@ -20,6 +20,25 @@ describe('gateParsedStatus', () => {
 
   it('passes through a null parse', () => {
     expect(gateParsedStatus(null, true)).toBeNull()
+  })
+})
+
+describe('shouldGateInferredCompletion (call-site gate decision)', () => {
+  const inferredCompletion = { status: 'completed', confidence: 'inferred' } as const
+  const gateAtCallSite = (isOrchestrator: boolean, telegramMcpAttached: boolean): ReturnType<typeof gateParsedStatus> =>
+    gateParsedStatus(inferredCompletion, shouldGateInferredCompletion(isOrchestrator, telegramMcpAttached))
+
+  it('drops inferred completion for an orchestrator agent WITH the Telegram MCP', () => {
+    expect(gateAtCallSite(true, true)).toBeNull()
+  })
+
+  it('accepts inferred completion for an orchestrator agent WITHOUT the Telegram MCP', () => {
+    expect(gateAtCallSite(true, false)).toEqual(inferredCompletion)
+  })
+
+  it('leaves a manual agent unchanged whether or not it has the Telegram MCP', () => {
+    expect(gateAtCallSite(false, true)).toEqual(inferredCompletion)
+    expect(gateAtCallSite(false, false)).toEqual(inferredCompletion)
   })
 })
 

@@ -185,6 +185,15 @@ export function gateParsedStatus(parsed: ParsedStatus | null, isOrchestrator: bo
   return parsed
 }
 
+/**
+ * Whether the gate applies to an agent. An orchestrator agent is gated only when it
+ * actually received the agenthub-telegram MCP — otherwise it has no explicit
+ * completion channel and would never complete, so it keeps inferred completion.
+ */
+export function shouldGateInferredCompletion(isOrchestrator: boolean, telegramMcpAttached: boolean): boolean {
+  return isOrchestrator && telegramMcpAttached
+}
+
 export function createParser(provider?: ModelProvider): CliOutputParser {
   if (provider === 'openai-codex') {
     return new CodexCliOutputParser()

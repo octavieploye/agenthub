@@ -7,7 +7,7 @@ import { getDb, isDbShuttingDown } from '../db/connection'
 import { insertAgent, updateAgentStatus, updateAgentPid, updateAgentColor as dbUpdateAgentColor, updateAgentModel as dbUpdateAgentModel, updateAgentTaskDescription as dbUpdateAgentTaskDescription, updateAgentName as dbUpdateAgentName, updateAgentVoiceMode as dbUpdateAgentVoiceMode, getAgentById, getAllAgents } from '../db/queries/agents.queries'
 import { getRepoById, getRepoByPath, insertRepo, updateRepoLastUsed } from '../db/queries/repos.queries'
 import type { EffortLevel } from '../../shared/types/agent.types'
-import { createParser, gateParsedStatus, type CliOutputParser } from '../parsers/cli-output-parser'
+import { createParser, gateParsedStatus, shouldGateInferredCompletion, type CliOutputParser } from '../parsers/cli-output-parser'
 import { buildCodexCommand } from './codex-command-builder'
 import { checkCodexHealth, ensureCodexMcpServers } from './codex-health'
 import { generateAgentsMd } from './agents-md-generator'
@@ -86,6 +86,8 @@ interface ManagedAgent {
   headlessTerminal: HeadlessTerminalBuffer
   /** True if telegramNotify was enabled at spawn time (agent has prompt suffix). */
   telegramNotifyAtSpawn: boolean
+  /** True if the agenthub-telegram MCP server was actually added to this agent's MCP config at spawn. */
+  telegramMcpAttached: boolean
   /** True once a completion notification has been sent for the current exchange (mid-session toggle path). Reset on next user submit. */
   hasNotifiedCompletion: boolean
   /** Path to the generated .codex/AGENTS.md file — cleaned up on exit. */
@@ -445,7 +447,19 @@ function flushOutputBuffer(agentId: string): void {
   managed.flushTimer = null
 }
 
-function writeMcpConfig(agentId: string, agentName: string, repo: string, targetCwd: string): string | null {
+interface McpConfigResult {
+  path: string | null
+  /** True when the agenthub-telegram server was added to the written config. */
+  telegramAttached: boolean
+}
+
+function writeMcpConfig(
+  agentId: string,
+  agentName: string,
+  repo: string,
+  targetCwd: string,
+  spawnEnv: Record<string, string>
+): McpConfigResult {
   // B2: Always read agenthub's own settings.json as the system-level base (contains anamnesis
   // and other ecosystem MCPs). Then merge target repo's settings on top — target wins on conflicts.
   // readSettingsMcpServers() returns {} gracefully when the file is missing or malformed.
@@ -455,15 +469,18 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
   const baseServers = readSettingsMcpServers(agenthubSettingsPath)
   const targetServers = readSettingsMcpServers(join(targetCwd, '.claude', 'settings.json'))
 
-  // Inject anamnesis auth secret + caller identity at runtime (never stored in config files)
+  // Inject anamnesis auth secret + caller identity at runtime (never stored in config files).
+  // S107: gate on the PTY env the MCP child inherits (includes renderer envOverrides).
   const mcpServers: Record<string, unknown> = applyAnamnesisEnv(
     { ...baseServers, ...targetServers },
-    loadAnamnesisSecret()
+    loadAnamnesisSecret(),
+    spawnEnv
   )
 
   // B1: Telegram is optional — add it only when the socket is available.
   // Never gate the entire MCP config on telegram availability.
   const sockPath = getTelegramSocketPath()
+  const telegramAttached = Boolean(sockPath)
   if (sockPath) {
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, 'telegram-mcp-server', 'index.js')
@@ -496,11 +513,11 @@ function writeMcpConfig(agentId: string, agentName: string, repo: string, target
     }
   }
 
-  if (Object.keys(mcpServers).length === 0) return null
+  if (Object.keys(mcpServers).length === 0) return { path: null, telegramAttached }
 
   const configPath = join(tmpdir(), `agenthub-mcp-${agentId}.json`)
   writeFileSync(configPath, JSON.stringify({ mcpServers }), 'utf-8')
-  return configPath
+  return { path: configPath, telegramAttached }
 }
 
 function cleanupMcpConfig(agentId: string): void {
@@ -691,9 +708,14 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
       }
     }
 
-    // Orchestrator agents complete only via the explicit MCP signal
-    // (completeAgentFromTelegram) — an inferred parser completion never applies.
-    const parsed = gateParsedStatus(parser.parse(data), agentState.isOrchestrator === true)
+    // Orchestrator agents that received the agenthub-telegram MCP complete only via its
+    // explicit signal (completeAgentFromTelegram) — an inferred parser completion never
+    // applies. Without that MCP there is no explicit channel, so inference is kept.
+    const gateApplies = shouldGateInferredCompletion(
+      agentState.isOrchestrator === true,
+      agents.get(agentState.id)?.telegramMcpAttached === true
+    )
+    const parsed = gateParsedStatus(parser.parse(data), gateApplies)
     if (parsed) {
       const mgd = agents.get(agentState.id)
       if (mgd && mgd.state.status !== parsed.status) {
@@ -973,6 +995,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     lastMcpTelegramAt: 0,
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify,
+    telegramMcpAttached: false,
     codexAgentsMdPath: null,
   })
 
@@ -1043,7 +1066,17 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
   const telegramToolFlag = agentState.telegramNotify ? " --allowedTools 'mcp__agenthub-telegram__send_telegram'" : ''
 
   const repoName = options.cwd.split('/').pop() ?? options.cwd
-  const mcpConfigPath = writeMcpConfig(agentState.id, agentState.name, repoName, options.cwd)
+  const mcpConfig = writeMcpConfig(agentState.id, agentState.name, repoName, options.cwd, env)
+  const mcpConfigPath = mcpConfig.path
+  const spawnManaged = agents.get(agentState.id)
+  if (spawnManaged) spawnManaged.telegramMcpAttached = mcpConfig.telegramAttached
+  // S108: without the Telegram MCP an orchestrator agent has no explicit completion channel and
+  // keeps the AH-13 inferred-completion fallback — make that visible.
+  if (agentState.isOrchestrator && !mcpConfig.telegramAttached) {
+    log.warn('Orchestrator agent spawned without the agenthub-telegram MCP — inferred completion fallback active', {
+      agentId: agentState.id,
+    })
+  }
   const mcpFlag = mcpConfigPath ? ` --mcp-config '${mcpConfigPath}'` : ''
 
   // Inject agenthub plugin and skills index into every spawned agent session.

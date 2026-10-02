@@ -235,6 +235,48 @@ describe('TelegramSocketServer', () => {
     })
   })
 
+  // S108: agent-manager treats a non-null socket path as "Telegram MCP attached", so the path is
+  // exposed only while the server is actually listening (diagnostics stay in getStatus()).
+  it('S108: exposes no socket path after a failed startup, while getStatus keeps it for diagnostics', async () => {
+    const listenError = Object.assign(new Error('address already in use'), { code: 'EADDRINUSE' })
+    const emitter = new EventEmitter()
+    const fakeServer = Object.assign(emitter, {
+      listen: vi.fn(() => queueMicrotask(() => emitter.emit('error', listenError))),
+      close: vi.fn(),
+    }) as unknown as net.Server
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+      createServer: vi.fn(() => fakeServer),
+    })
+
+    await expect(server.start(sockPath)).rejects.toBe(listenError)
+
+    expect(server.getSocketPath()).toBeNull()
+    expect(server.getStatus().socketPath).toBe(sockPath)
+  })
+
+  it('S108: exposes no socket path while startup is still in flight', async () => {
+    const fakeServer = Object.assign(new EventEmitter(), {
+      listen: vi.fn(),
+      close: vi.fn(),
+    }) as unknown as net.Server
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+      createServer: vi.fn(() => fakeServer),
+    })
+
+    const startup = server.start(sockPath)
+    await Promise.resolve()
+
+    expect(server.getSocketPath()).toBeNull()
+    server.stop()
+    await expect(startup).rejects.toMatchObject({ code: 'ECANCELED' })
+  })
+
   it('rejects an in-flight startup when stopped', async () => {
     const fakeServer = Object.assign(new EventEmitter(), {
       listen: vi.fn(),
