@@ -26,3 +26,10 @@ The same capabilities (`team-sprint-planner`, `team-ui-builder`, `team-brainstor
 1. Is a "skill" (`SKILL.md`, internal) and a "workflow" (server `.md`, commercial) the *same thing in two formats*, or genuinely different?
 2. Which home is the source of truth?
 3. What is the sync / derivation mechanism (and does `.claude/skills/` become a generated mirror or disappear)?
+
+## Additional items (Monday)
+
+- `.codex/skills/` is a 4th skill location (Codex's own copy of `orchestrator-coordinator`). `.codex/` and `.llm/` should **mirror** `.claude/` instructions/guardrails and **point to** skills/workflows, not duplicate them.
+- `countercheck-rule.md` is duplicated in `.llm/` and `.codex/` and they differ — reconcile to one.
+- `.codex/AGENTS.md` is referenced by the skill-discovery rule but does not exist — create it or fix the reference.
+- `calentity` (OPTimaeus business calendar): wire the route agenthub → Anamnesis → calentity so scheduled items surface in the calendar.
