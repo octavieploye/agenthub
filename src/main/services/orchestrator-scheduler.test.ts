@@ -253,7 +253,7 @@ describe('OrchestratorScheduler', () => {
       expect(run.sprintName).toBe('sprint-1')
     })
 
-    it('returns existing active run at default maxConcurrentRuns=1', () => {
+    it('A1: queues a different sprint at default maxConcurrentRuns=1 instead of absorbing it', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
@@ -263,10 +263,11 @@ describe('OrchestratorScheduler', () => {
 
       seedSprintTask(db, 'sprint-2', 'repo-1')
       const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
-      expect(second.id).toBe(first.id)
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
     })
 
-    it('M-1: reuse preserves telegramNotify when input is explicitly false (promote-only)', () => {
+    it('M-1: re-use (same sprint) preserves telegramNotify when input is explicitly false (promote-only)', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
@@ -274,8 +275,7 @@ describe('OrchestratorScheduler', () => {
       const first = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', telegramNotify: true })
       expect(first.telegramNotify).toBe(true)
 
-      seedSprintTask(db, 'sprint-2', 'repo-1')
-      const second = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1', telegramNotify: false })
+      const second = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1', telegramNotify: false })
       expect(second.id).toBe(first.id)
       expect(second.telegramNotify).toBe(true)
     })
@@ -410,6 +410,21 @@ describe('OrchestratorScheduler', () => {
       scheduler = new OrchestratorScheduler(deps)
 
       expect(() => scheduler.startSingleTask({ taskId: 'no-such-task' })).toThrow('Task not found')
+    })
+
+    it('A1: queues a different single task at default maxConcurrentRuns=1 instead of absorbing it', () => {
+      const taskA = insertTestTask(db, { repoId: 'repo-1' })
+      const taskB = insertTestTask(db, { repoId: 'repo-1' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const first = scheduler.startSingleTask({ taskId: taskA })
+      expect(first.status).toBe('running')
+
+      const second = scheduler.startSingleTask({ taskId: taskB })
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('queued')
+      expect(second.singleTaskId).toBe(taskB)
     })
   })
 
@@ -1308,7 +1323,10 @@ describe('OrchestratorScheduler', () => {
       db.prepare("UPDATE settings SET value = 'false' WHERE key = 'orchestrator.enabled'").run()
       await vi.advanceTimersByTimeAsync(60_000)
       db.prepare("UPDATE settings SET value = 'true' WHERE key = 'orchestrator.enabled'").run()
-      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId] })
+      // S101: the original task is now in_progress, so re-dispatch with a fresh
+      // backlog/today task (start() refuses a taskIds list with no dispatchable task).
+      const taskId2 = insertTestTask(db, { repoId: 'repo-1', status: 'today' })
+      scheduler.start({ sprintName: 'sprint', repoId: 'repo-1', taskIds: [taskId2] })
 
       emitOrchestratorEvent({
         type: 'agent:completed',
@@ -2115,12 +2133,37 @@ describe('OrchestratorScheduler', () => {
       expect(run.status).toBe('running')
     })
 
-    it('still starts a named sprint run with explicit taskIds even if none of them is dispatchable', () => {
+    it('S101: refuses a named sprint run whose explicit taskIds hold no dispatchable task', () => {
       const deps = buildDeps(db)
       scheduler = new OrchestratorScheduler(deps)
 
-      const run = scheduler.start({ sprintName: 'sprint-unknown', repoId: 'repo-1', taskIds: ['missing-task'] })
+      expect(() => scheduler.start({ sprintName: 'sprint-unknown', repoId: 'repo-1', taskIds: ['missing-task'] }))
+        .toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS.*sprint-unknown/)
+      expect(getActiveRuns(db)).toHaveLength(0)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+      const rows = db.prepare('SELECT COUNT(*) AS n FROM orchestrator_runs').get() as { n: number }
+      expect(rows.n).toBe(0)
+    })
 
+    it('S101: refuses a run whose explicit taskIds are all non-dispatchable (archived), leaving no run row', () => {
+      const archivedId = insertTestTask(db, { id: 'archived-1', repoId: 'repo-1', status: 'archived', sprintName: 'sprint-X' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      expect(() => scheduler.start({ sprintName: 'sprint-X', repoId: 'repo-1', taskIds: [archivedId] }))
+        .toThrow(/ORCHESTRATOR_SPRINT_HAS_NO_TASKS.*sprint-X/)
+      expect(getActiveRuns(db)).toHaveLength(0)
+      expect(getQueuedRuns(db)).toHaveLength(0)
+      const rows = db.prepare('SELECT COUNT(*) AS n FROM orchestrator_runs').get() as { n: number }
+      expect(rows.n).toBe(0)
+    })
+
+    it('S101: still starts when at least one explicit taskId is dispatchable', () => {
+      const goodId = insertTestTask(db, { id: 'good-1', repoId: 'repo-1', status: 'backlog', sprintName: 'sprint-Y' })
+      const deps = buildDeps(db)
+      scheduler = new OrchestratorScheduler(deps)
+
+      const run = scheduler.start({ sprintName: 'sprint-Y', repoId: 'repo-1', taskIds: [goodId] })
       expect(run.status).toBe('running')
     })
 

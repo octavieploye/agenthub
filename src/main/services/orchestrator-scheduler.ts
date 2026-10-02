@@ -187,17 +187,21 @@ export class OrchestratorScheduler {
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
 
     // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1),
-    // re-use the existing active run instead of queueing a second one.
+    // re-use the existing active run instead of queueing a second one — but only when the
+    // new dispatch targets the SAME sprint. A different sprint must not be silently absorbed
+    // into an unrelated run (A1); it falls through to the queue path below.
     if (maxConcurrentRuns === 1 && activeRuns.length >= 1) {
       const existing = activeRuns[0]
-      if (input.telegramNotify && !existing.telegramNotify) {
-        updateRunTelegramNotify(this.db, existing.id, true)
+      if (existing.sprintName === (input.sprintName ?? MANUAL_SPRINT_NAME)) {
+        if (input.telegramNotify && !existing.telegramNotify) {
+          updateRunTelegramNotify(this.db, existing.id, true)
+        }
+        this.ensureTicking()
+        // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
+        // so the effective value is `existing || input`. `??` would wrongly report false
+        // when input is explicitly false while the persisted run still notifies.
+        return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
       }
-      this.ensureTicking()
-      // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
-      // so the effective value is `existing || input`. `??` would wrongly report false
-      // when input is explicitly false while the persisted run still notifies.
-      return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
     }
 
     if (activeRuns.length >= maxConcurrentRuns) {
@@ -267,17 +271,21 @@ export class OrchestratorScheduler {
     const maxConcurrentRuns = getMaxConcurrentRuns(this.db)
 
     // Legacy P0 behaviour: at the default setting (maxConcurrentRuns=1),
-    // re-use the existing active run instead of queueing a second one.
+    // re-use the existing active run instead of queueing a second one — but only when it is
+    // the SAME single task. A different task must not be silently absorbed (A1); it falls
+    // through to the queue path below.
     if (maxConcurrentRuns === 1 && activeRuns.length >= 1) {
       const existing = activeRuns[0]
-      if (input.telegramNotify && !existing.telegramNotify) {
-        updateRunTelegramNotify(this.db, existing.id, true)
+      if (existing.singleTaskId === input.taskId) {
+        if (input.telegramNotify && !existing.telegramNotify) {
+          updateRunTelegramNotify(this.db, existing.id, true)
+        }
+        this.ensureTicking()
+        // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
+        // so the effective value is `existing || input`. `??` would wrongly report false
+        // when input is explicitly false while the persisted run still notifies.
+        return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
       }
-      this.ensureTicking()
-      // M-1: promote-only — updateRunTelegramNotify only ever sets true (never demotes),
-      // so the effective value is `existing || input`. `??` would wrongly report false
-      // when input is explicitly false while the persisted run still notifies.
-      return { ...existing, telegramNotify: existing.telegramNotify || (input.telegramNotify ?? false) }
     }
 
     if (activeRuns.length >= maxConcurrentRuns) {
@@ -1006,16 +1014,28 @@ export class OrchestratorScheduler {
   }
 
   /**
-   * A named (non-placeholder) sprint run without explicit taskIds that finds no dispatchable
-   * task of its sprint would never conclude (maybeCompleteRun keeps zero-activity runs alive)
-   * and would hold a run slot forever. Refuse it before any orchestrator_runs row is created.
+   * A named (non-placeholder) sprint run that finds no dispatchable task would never conclude
+   * (maybeCompleteRun keeps zero-activity runs alive) and would hold a run slot forever. Refuse
+   * it before any orchestrator_runs row is created — whether it scopes by sprint name or by an
+   * explicit taskIds list (S101: the list must include at least one backlog/today task).
    */
   private assertSprintHasDispatchableTasks(sprintName: string | undefined, repoId: string, taskIds: string[] | undefined): void {
     if (sprintName === undefined || isPlaceholderSprintName(sprintName)) return
-    if (taskIds && taskIds.length > 0) return
-    const alreadyDone = getCompletedTaskIds(this.db, { repoId, sprintName })
-    const dispatchable = this.fetchSprintQueuedTasks(repoId, sprintName).filter(t => !alreadyDone.has(t.id))
-    if (dispatchable.length > 0) return
+
+    let hasDispatchable: boolean
+    if (taskIds && taskIds.length > 0) {
+      // S101: an explicit taskIds list must include at least one backlog/today task,
+      // else the run would be created with 0 candidates and never conclude.
+      hasDispatchable = taskIds
+        .map((id) => getTaskById(this.db, id))
+        .filter(isDispatchableTask)
+        .length > 0
+    } else {
+      const alreadyDone = getCompletedTaskIds(this.db, { repoId, sprintName })
+      hasDispatchable = this.fetchSprintQueuedTasks(repoId, sprintName).some((t) => !alreadyDone.has(t.id))
+    }
+
+    if (hasDispatchable) return
     throw new Error(
       `ORCHESTRATOR_SPRINT_HAS_NO_TASKS: sprint "${sprintName}" has no dispatchable (backlog/today) tasks in repo ${repoId}; no run was created`
     )
