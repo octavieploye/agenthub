@@ -11,6 +11,19 @@
 
 ---
 
+# Precedence and Decisions (read first — this section wins over every other rule in this file)
+
+Applies to every session and agent inside AgentHub (`AGENTHUB_HOME` is set), whatever repo it targets. Inside AgentHub, this file takes precedence over `~/.claude/CLAUDE.md`, which governs Claude sessions outside AgentHub.
+
+1. **Precedence, highest first:** (1) the user's explicit instruction in the current conversation → (2) safety bans: destructive-command ban, secrets, `.gitignore` — never overridden → (3) this file → (4) the invoked skill or command → (5) memory (leads only, must be verified) → (6) `~/.claude/CLAUDE.md` → (7) Claude Code defaults.
+2. **Decide routine choices yourself**, using facts read from code and files. Escalate to the user ONLY when: (a) two rules conflict and the precedence above does not settle it; (b) the action is destructive, outward-facing or irreversible — push, deploy, production data, dependency version change, accepting a security risk; (c) two readings of the request would lead to materially different results. When escalating, ask ONE question with the recommended answer first. Rules below that say "stop and ask", "do not take any action" or "wait for confirmation" apply only to these three cases.
+3. **Verify before claiming:** any statement about how code or config behaves requires a file:line read in this session. Plans, memory, earlier messages and skill text are leads, not facts.
+4. **Repo gate:** a repo named in the request or in the task description is confirmed — do not ask again. Ask only when no target repo is named.
+5. **Overrides of Claude Code defaults:** no `Co-Authored-By` trailer in commit messages; commit on the current branch (do not create a branch); "act once information is sufficient" never overrides rule 3.
+6. **Response prefix:** `Hey!Master-Optimaeus` (variants such as `Hey!Master-Optimaeus!(canary)` are acceptable).
+
+---
+
 # Repository-Local Skill Discovery
 
 When a user names a skill or slash skill command, first check `.codex/AGENTS.md` for the repository's skill-routing instructions. Then resolve the skill before taking action using these locations, in order unless that routing file specifies otherwise:
@@ -492,7 +505,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - Covers 6 domains: code security (OWASP Top 10), data leakage, dependency risks, DevOps/infrastructure, architecture conflicts, future-proofing.
 - Produces on each scan:
   - Per-scan report: `docs/superpowers/security/YYYY-MM-DD-HH-MM-<scope>-security-report.md`
-  - Updated aggregate audit trail: `docs/superpowers/security/security-log.md`
+  - Updated aggregate audit trail: `security/security-log.md`
   - Updated agent memory: `.claude/sec-devops.md`
 - CRITICAL findings are shown inline immediately and must be resolved (fix, accepted-risk with human sign-off, or deferred) before `git-ops` may commit.
 - Does NOT fix code. Does NOT modify `.gitignore`. Does NOT change dependency versions.
@@ -509,7 +522,7 @@ The lead is responsible for enforcing the 3-agent concurrency rule and delegatin
 - Should only commit after:
   - Relevant tests pass.
   - Lead approves the change set.
-  - `docs/superpowers/security/security-log.md` contains no open CRITICAL findings. If open CRITICALs exist, escalate to Lead and human before proceeding.
+  - `security/security-log.md` contains no open CRITICAL findings. If open CRITICALs exist, escalate to Lead and human before proceeding.
 - Never force-push or rewrite history unless explicitly instructed by the human.
 
 ---
