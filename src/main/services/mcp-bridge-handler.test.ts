@@ -191,6 +191,39 @@ function sendRequest(
   })
 }
 
+// Mirrors the production unix-socket-client.js: write the request, then
+// immediately half-close (client.end()). This is the exact pattern that exposed
+// the async-handler race — with allowHalfOpen:false the server auto-ended the
+// socket before `await fetch(...)` resolved and the response was lost.
+function sendRequestHalfClose(
+  socketPath: string,
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection(socketPath, () => {
+      client.write(JSON.stringify(payload) + '\n')
+      client.end()
+    })
+
+    let buf = ''
+    client.on('data', (chunk: Buffer) => {
+      buf += chunk.toString()
+    })
+    client.on('end', () => {
+      try {
+        resolve(buf ? (JSON.parse(buf) as Record<string, unknown>) : {})
+      } catch (e) {
+        reject(e)
+      }
+    })
+    client.on('error', reject)
+    client.setTimeout(2000, () => {
+      client.destroy()
+      reject(new Error('test timeout waiting for response'))
+    })
+  })
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('McpBridgeHandler', () => {
@@ -563,7 +596,7 @@ describe('McpBridgeHandler — backfillBrainEntries', () => {
   })
 })
 
-describe('McpBridgeHandler — createCalendarEvent', () => {
+describe('McpBridgeHandler — calendar events', () => {
   let handler: McpBridgeHandler
   let db: Database.Database
 
@@ -638,5 +671,106 @@ describe('McpBridgeHandler — createCalendarEvent', () => {
   it('rejects a malformed date', async () => {
     const resp = await call('createCalendarEvent', { title: 'X', date: 'not-a-date', event_type: 'meeting' })
     expect(resp['error']).toMatch(/date is required/)
+  })
+
+  it('delivers the async response even when the client half-closes immediately (regression)', async () => {
+    const fetchMock = vi.fn(async () => {
+      // Force a real macrotask yield so the response write happens after the
+      // client's FIN — the exact condition that dropped the response before
+      // allowHalfOpen:true.
+      await new Promise((r) => setTimeout(r, 25))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'evt-halfclose', title: 'Half close', date: '2026-10-05', event_type: 'meeting' }),
+        text: async () => '',
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const resp = await sendRequestHalfClose(handler.socketPath, {
+      id: 'cal-hc',
+      token: handler.token,
+      method: 'createCalendarEvent',
+      params: { title: 'Half close', date: '2026-10-05', event_type: 'meeting' },
+    })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toMatchObject({ id: 'evt-halfclose' })
+  })
+
+  describe('updateCalendarEvent', () => {
+    it('PATCHes only the provided fields and returns the updated event', async () => {
+      const fetchMock = vi.fn(async (url: unknown, init?: { method?: string; body?: string }) => {
+        expect(String(url)).toBe('http://localhost:9300/calendar/evt-42')
+        expect(init?.method).toBe('PATCH')
+        const body = JSON.parse(init?.body ?? '{}') as Record<string, unknown>
+        expect(body).toEqual({ title: 'Renamed', date: '2026-10-06' })
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 'evt-42', title: 'Renamed', date: '2026-10-06', event_type: 'meeting' }),
+          text: async () => '',
+        }
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const resp = await call('updateCalendarEvent', { event_id: 'evt-42', title: 'Renamed', date: '2026-10-06' })
+
+      expect(resp['error']).toBeUndefined()
+      expect(resp['result']).toMatchObject({ id: 'evt-42', title: 'Renamed' })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a missing event_id before any HTTP call', async () => {
+      const resp = await call('updateCalendarEvent', { title: 'X' })
+      expect(resp['error']).toMatch(/event_id is required/)
+    })
+
+    it('rejects an invalid event_type before any HTTP call', async () => {
+      const resp = await call('updateCalendarEvent', { event_id: 'evt-42', event_type: 'bogus' })
+      expect(resp['error']).toMatch(/event_type must be one of/)
+    })
+
+    it('rejects a malformed date before any HTTP call', async () => {
+      const resp = await call('updateCalendarEvent', { event_id: 'evt-42', date: 'not-a-date' })
+      expect(resp['error']).toMatch(/date must be YYYY-MM-DD/)
+    })
+  })
+
+  describe('deleteCalendarEvent', () => {
+    it('DELETEs the event and returns { ok, id }', async () => {
+      const fetchMock = vi.fn(async (url: unknown, init?: { method?: string }) => {
+        expect(String(url)).toBe('http://localhost:9300/calendar/evt-9')
+        expect(init?.method).toBe('DELETE')
+        return { ok: true, status: 204, json: async () => ({}), text: async () => '' }
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const resp = await call('deleteCalendarEvent', { event_id: 'evt-9' })
+
+      expect(resp['error']).toBeUndefined()
+      expect(resp['result']).toEqual({ ok: true, id: 'evt-9' })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a missing event_id before any HTTP call', async () => {
+      const resp = await call('deleteCalendarEvent', {})
+      expect(resp['error']).toMatch(/event_id is required/)
+    })
+
+    it('surfaces a non-ok Anamnesis response (e.g. 404) as an error', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+        text: async () => "Event 'evt-ghost' not found",
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const resp = await call('deleteCalendarEvent', { event_id: 'evt-ghost' })
+
+      expect(resp['error']).toMatch(/Anamnesis returned 404/)
+    })
   })
 })

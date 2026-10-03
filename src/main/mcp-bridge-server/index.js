@@ -235,6 +235,14 @@ async function createCalendarEvent(args) {
   return callBridge('createCalendarEvent', args || {})
 }
 
+async function updateCalendarEvent(args) {
+  return callBridge('updateCalendarEvent', args || {})
+}
+
+async function deleteCalendarEvent(args) {
+  return callBridge('deleteCalendarEvent', args || {})
+}
+
 async function archiveTask(args) {
   return callBridge('archiveTask', args || {})
 }
@@ -432,6 +440,37 @@ const TOOL_DEFS = [
     }
   },
   {
+    name: 'update_calendar_event',
+    description: 'Update (patch) a calendar event in Anamnesis by id — partial, only provided fields change. Surfaces in OPTimaeus calentity.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'string', description: 'Calendar event UUID (required)' },
+        title: { type: 'string', description: 'New title (1-255 chars)' },
+        date: { type: 'string', description: 'New date, YYYY-MM-DD' },
+        end_date: { type: 'string', description: 'New end date, YYYY-MM-DD' },
+        event_type: { type: 'string', description: 'follow-up | deadline | milestone | campaign | check-in | meeting | custom' },
+        source_view: { type: 'string', description: 'Source view tag' },
+        source_id: { type: 'string', description: 'Source id' },
+        color: { type: 'string', description: 'Color' },
+        description: { type: 'string', description: 'Description' },
+        metadata: { type: 'object', description: 'Metadata object' }
+      },
+      required: ['event_id']
+    }
+  },
+  {
+    name: 'delete_calendar_event',
+    description: 'Delete a calendar event in Anamnesis by id. Hard delete — cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'string', description: 'Calendar event UUID (required)' }
+      },
+      required: ['event_id']
+    }
+  },
+  {
     name: 'archive_task',
     description: 'Soft-delete a task by setting its status to archived.',
     inputSchema: {
@@ -526,6 +565,8 @@ async function handleRequest(method, params, id) {
       case 'approve_task':        result = await approveTask(args); break
       case 'report_files_changed':result = await reportFilesChanged(args); break
       case 'create_calendar_event': result = await createCalendarEvent(args); break
+      case 'update_calendar_event': result = await updateCalendarEvent(args); break
+      case 'delete_calendar_event': result = await deleteCalendarEvent(args); break
       case 'archive_task':        result = await archiveTask(args); break
       case 'create_project':      result = await createProject(args); break
       case 'resume_run':          result = await resumeRun(args); break

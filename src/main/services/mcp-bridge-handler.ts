@@ -46,6 +46,33 @@ import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
 
 const LOG_PREFIX = '[mcp-bridge-handler]'
 
+// ─── Anamnesis calendar (agenthub → Anamnesis /calendar) ─────────────────────
+
+const VALID_EVENT_TYPES = new Set([
+  'follow-up',
+  'deadline',
+  'milestone',
+  'campaign',
+  'check-in',
+  'meeting',
+  'custom',
+])
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Resolve the Anamnesis base URL + shared auth headers for the /calendar routes. */
+function anamnesisRequestHeaders(): { url: string; headers: Record<string, string> } {
+  const url = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
+  return {
+    url,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Optimaeus-Caller': 'hephaestus',
+      ...resolveAnamnesisAuthHeaders(url, loadAnamnesisSecret()),
+    },
+  }
+}
+
 // ─── Public dep surface ───────────────────────────────────────────────────────
 
 export interface BridgeDeps {
@@ -109,7 +136,13 @@ export class McpBridgeHandler {
   }
 
   start(): void {
-    this.server = net.createServer((socket) => {
+    // allowHalfOpen: true — the bridge client (unix-socket-client.js) half-closes
+    // its socket immediately after writing the request. With the default
+    // allowHalfOpen:false, the server auto-ends the socket the moment that FIN
+    // arrives, which silently drops the response of any handler that awaits real
+    // I/O (e.g. createCalendarEvent's `await fetch(...)`). Half-open keeps the
+    // writable side alive until we respond in send() and end the socket there.
+    this.server = net.createServer({ allowHalfOpen: true }, (socket) => {
       const parser = createJsonLineParser(
         (msg) => this.handleMessage(socket, msg),
         (raw, err) => {
@@ -172,7 +205,9 @@ export class McpBridgeHandler {
 
   private send(socket: net.Socket, resp: BridgeResponse): void {
     try {
-      socket.write(JSON.stringify(resp) + '\n')
+      // One request per connection: write the response and half-close so the
+      // client's 'end' event fires and it can parse the single JSON line.
+      socket.end(JSON.stringify(resp) + '\n')
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(LOG_PREFIX, 'failed to write response:', message)
@@ -376,10 +411,9 @@ export class McpBridgeHandler {
         if (!title || typeof title !== 'string' || title.trim() === '') {
           throw new Error('create_calendar_event: title is required')
         }
-        if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        if (!date || typeof date !== 'string' || !DATE_RE.test(date)) {
           throw new Error('create_calendar_event: date is required (YYYY-MM-DD)')
         }
-        const VALID_EVENT_TYPES = new Set(['follow-up', 'deadline', 'milestone', 'campaign', 'check-in', 'meeting', 'custom'])
         if (!eventType || !VALID_EVENT_TYPES.has(eventType)) {
           throw new Error(`create_calendar_event: event_type must be one of ${[...VALID_EVENT_TYPES].join(', ')}`)
         }
@@ -395,15 +429,10 @@ export class McpBridgeHandler {
           metadata: params['metadata'] ?? {},
         }
 
-        const anamnesisUrl = process.env['ANAMNESIS_URL'] ?? DEFAULT_ANAMNESIS_URL
-        const authHeaders = resolveAnamnesisAuthHeaders(anamnesisUrl, loadAnamnesisSecret())
-        const res = await fetch(`${anamnesisUrl}/calendar`, {
+        const { url, headers } = anamnesisRequestHeaders()
+        const res = await fetch(`${url}/calendar`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Optimaeus-Caller': 'hephaestus',
-            ...authHeaders,
-          },
+          headers,
           body: JSON.stringify(payload),
           signal: AbortSignal.timeout(10_000),
         })
@@ -412,6 +441,65 @@ export class McpBridgeHandler {
           throw new Error(`create_calendar_event: Anamnesis returned ${res.status}${detail ? `: ${detail}` : ''}`)
         }
         return (await res.json()) as unknown
+      }
+
+      // ── Write: update an Anamnesis calendar event (PATCH /calendar/{id}) ─────
+      case 'updateCalendarEvent': {
+        const eventId = params['event_id'] as string | undefined
+        if (!eventId || typeof eventId !== 'string' || eventId.trim() === '') {
+          throw new Error('update_calendar_event: event_id is required (UUID)')
+        }
+
+        const eventType = params['event_type'] as string | undefined
+        if (eventType !== undefined && !VALID_EVENT_TYPES.has(eventType)) {
+          throw new Error(`update_calendar_event: event_type must be one of ${[...VALID_EVENT_TYPES].join(', ')}`)
+        }
+        for (const dateField of ['date', 'end_date'] as const) {
+          const value = params[dateField]
+          if (value !== undefined && (typeof value !== 'string' || !DATE_RE.test(value))) {
+            throw new Error(`update_calendar_event: ${dateField} must be YYYY-MM-DD`)
+          }
+        }
+
+        // Partial update — forward only the fields the caller actually provided.
+        const payload: Record<string, unknown> = {}
+        for (const key of ['title', 'date', 'end_date', 'event_type', 'source_view', 'source_id', 'description', 'color', 'metadata'] as const) {
+          if (params[key] !== undefined) payload[key] = params[key]
+        }
+
+        const { url, headers } = anamnesisRequestHeaders()
+        const res = await fetch(`${url}/calendar/${encodeURIComponent(eventId)}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) {
+          const detail = (await res.text().catch(() => '')).slice(0, 300)
+          throw new Error(`update_calendar_event: Anamnesis returned ${res.status}${detail ? `: ${detail}` : ''}`)
+        }
+        return (await res.json()) as unknown
+      }
+
+      // ── Write: delete an Anamnesis calendar event (DELETE /calendar/{id}) ────
+      case 'deleteCalendarEvent': {
+        const eventId = params['event_id'] as string | undefined
+        if (!eventId || typeof eventId !== 'string' || eventId.trim() === '') {
+          throw new Error('delete_calendar_event: event_id is required (UUID)')
+        }
+
+        const { url, headers } = anamnesisRequestHeaders()
+        const res = await fetch(`${url}/calendar/${encodeURIComponent(eventId)}`, {
+          method: 'DELETE',
+          headers,
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) {
+          const detail = (await res.text().catch(() => '')).slice(0, 300)
+          throw new Error(`delete_calendar_event: Anamnesis returned ${res.status}${detail ? `: ${detail}` : ''}`)
+        }
+        // DELETE answers 204 No Content — there is no body to parse.
+        return { ok: true, id: eventId.trim() }
       }
 
       default:
