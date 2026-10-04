@@ -89,13 +89,35 @@ const DECISIONS_STANDALONE_MESSAGE = 'standalone: decisions unavailable'
 const DECISIONS_NONE_MESSAGE = 'no decisions'
 const DECISIONS_ERROR_MESSAGE = 'decisions unavailable: Anamnesis could not be reached or refused the request'
 
-/** list_project_decisions: `repo` is the only required argument. */
+const DECISIONS_REPO_MAX_LENGTH = 100
+
+/** True for ASCII control characters, DEL and the C1 range (incl. NEL). */
+function hasControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true
+  }
+  return false
+}
+
+/** list_project_decisions: `repo` is the only required argument, and must look like a plain repo name. */
 function readDecisionsRepo(params: Record<string, unknown>): string {
   const repo = params['repo']
   if (typeof repo !== 'string' || repo.trim() === '') {
     throw new Error('list_project_decisions: repo is required (repo name)')
   }
-  return repo.trim().toLowerCase()
+  const name = repo.trim()
+  if (name.length > DECISIONS_REPO_MAX_LENGTH) {
+    throw new Error(
+      `list_project_decisions: repo name is too long (max ${DECISIONS_REPO_MAX_LENGTH} characters)`
+    )
+  }
+  if (/^\.+$/.test(name) || /[\\/\s]/.test(name) || name.includes('..') || hasControlCharacter(name)) {
+    throw new Error(
+      'list_project_decisions: repo name must not be only dots or contain "/", "\\", "..", whitespace or control characters'
+    )
+  }
+  return name.toLowerCase()
 }
 
 /** list_project_decisions: `domain` is optional, but when present it must be one of the 7 domains. */

@@ -898,6 +898,96 @@ describe('McpBridgeHandler — listProjectDecisions', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it.each<[string, string]>([
+    ['longer than 100 characters', 'a'.repeat(101)],
+    ['a forward slash', 'agent/hub'],
+    ['a backslash', 'agent\\hub'],
+    ['a dot-dot segment', 'agent..hub'],
+    ['a parent-directory name', '..'],
+    ['a NUL character', 'agent\u0000hub'],
+    ['an escape character', 'agent\u001bhub'],
+    ['a DEL character', 'agent\u007fhub'],
+    ['a C1 control character', 'agent\u0085hub'],
+    ['a space inside the name', 'agent hub'],
+    ['a tab inside the name', 'agent\thub'],
+    ['a newline inside the name', 'agent\nhub']
+  ])('rejects a repo name with %s before any request', async (_label, repo) => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const fetchMock = stubAnamnesis({})
+
+    const resp = await call({ repo })
+
+    expect(resp['result']).toBeUndefined()
+    expect(resp['error']).toMatch(/list_project_decisions: repo/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each<[string, string]>([
+    ['a single dot', '.'],
+    ['two dots', '..'],
+    ['three dots', '...'],
+    ['a single dot between trimmed whitespace', '  .\n']
+  ])('rejects a repo name made only of dots (%s) before any request', async (_label, repo) => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const fetchMock = stubAnamnesis({})
+
+    const resp = await call({ repo })
+
+    expect(resp['result']).toBeUndefined()
+    expect(resp['error']).toMatch(/list_project_decisions: repo name must not/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each<[string, string]>([
+    ['a dot inside the name', 'agent.hub'],
+    ['a leading dot', '.github'],
+    ['a trailing dot', 'agenthub.']
+  ])('still accepts a repo name with %s', async (_label, repo) => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const fetchMock = stubAnamnesis({ project: () => reply(404, 'not found') })
+
+    const resp = await call({ repo })
+
+    expect(resp['error']).toBeUndefined()
+    expect(requestedUrls(fetchMock)[0].pathname).toBe(`/projects/${repo}`)
+  })
+
+  it('accepts a repo name of exactly 100 characters and trims the outer whitespace', async () => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const longName = 'a'.repeat(100)
+    const fetchMock = stubAnamnesis({ project: () => reply(404, 'not found') })
+
+    const resp = await call({ repo: `  ${longName}\n` })
+
+    expect(resp['error']).toBeUndefined()
+    expect(requestedUrls(fetchMock)[0].pathname).toBe(`/projects/${longName}`)
+  })
+
+  it('answers "no decisions" for an unknown project and requests no decisions', async () => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const fetchMock = stubAnamnesis({ project: () => reply(404, `not found ${BODY_MARKER}`) })
+
+    const resp = await call({ repo: 'no-such-repo' })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toBe('no decisions')
+    expect(requestedUrls(fetchMock).map((u) => u.pathname)).not.toContain('/decisions')
+  })
+
+  it('answers "no decisions" for an archived project and requests no decisions', async () => {
+    readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
+    const fetchMock = stubAnamnesis({
+      project: () => reply(200, { id: PROJECT_ID, name: 'old-repo', tier: 'archive' }),
+      decisions: () => reply(200, [decisionRow()])
+    })
+
+    const resp = await call({ repo: 'old-repo' })
+
+    expect(resp['error']).toBeUndefined()
+    expect(resp['result']).toBe('no decisions')
+    expect(requestedUrls(fetchMock).map((u) => u.pathname)).not.toContain('/decisions')
+  })
+
   it('resolves the lower-cased repo to a project, lists its decisions and returns sanitised lines', async () => {
     readerModule.initAnamnesisReader({ baseUrl: DECISIONS_BASE_URL })
     const fetchMock = stubAnamnesis({

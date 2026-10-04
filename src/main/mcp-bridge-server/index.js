@@ -568,6 +568,8 @@ async function handleRequest(method, params, id) {
 
   try {
     let result
+    // Tools whose bridge result is already agent-ready text: sent as-is, not JSON-quoted.
+    let textPassthrough = false
     switch (name) {
       case 'get_context':         result = await getContext(args); break
       case 'list_tasks':          result = await listTasks(args); break
@@ -590,12 +592,16 @@ async function handleRequest(method, params, id) {
       case 'cancel_run':          result = await cancelRun(args); break
       case 'extend_run':          result = await extendRun(args); break
       case 'backfill_brain_entries': result = await callBridge('backfillBrainEntries', args || {}); break
-      case 'list_project_decisions': result = await callBridge('listProjectDecisions', args || {}); break
+      case 'list_project_decisions':
+        result = await callBridge('listProjectDecisions', args || {})
+        textPassthrough = typeof result === 'string'
+        break
       default:
         mcpError(id, -32601, `Unknown tool: ${name}`)
         return
     }
-    mcpResponse(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+    const text = textPassthrough ? result : JSON.stringify(result, null, 2)
+    mcpResponse(id, { content: [{ type: 'text', text }] })
   } catch (err) {
     log(`tool ${name} error: ${err.message}`)
     mcpError(id, -32603, err.message)
