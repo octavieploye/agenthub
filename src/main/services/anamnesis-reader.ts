@@ -9,12 +9,47 @@ import type {
   LifecycleRunResult,
   RestoreResult,
 } from '../../shared/types/lifecycle.types'
+import type {
+  DecisionDomain,
+  DecisionItem,
+  ProjectRef,
+  ProjectStatusItem
+} from '../../shared/types/decisions.types'
 import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
 
 export interface AnamnesisReaderOpts {
   baseUrl: string
   authSecret?: string
   caller?: string
+}
+
+/** Per-request budget for the shared-brain reads, which sit on the agent-spawn path. */
+const BOUNDED_REQUEST_TIMEOUT_MS = 2000
+const DECISIONS_DEFAULT_LIMIT = 50
+const DECISIONS_MAX_LIMIT = 500
+
+/**
+ * A failed bounded Anamnesis read. `status` is the HTTP status, or 0 when no response was
+ * obtained (timeout, network error, unreadable body). The message is fixed: it never carries
+ * the response body or the request's query values.
+ */
+export class AnamnesisHttpError extends Error {
+  readonly status: number
+
+  constructor(status: number) {
+    super(
+      status === 0
+        ? 'Anamnesis request failed (no response)'
+        : `Anamnesis request failed (status ${status})`
+    )
+    this.name = 'AnamnesisHttpError'
+    this.status = status
+  }
+}
+
+function clampDecisionsLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DECISIONS_DEFAULT_LIMIT
+  return Math.min(DECISIONS_MAX_LIMIT, Math.max(1, Math.trunc(limit)))
 }
 
 export class AnamnesisReader {
@@ -67,6 +102,33 @@ export class AnamnesisReader {
     return this.post<RestoreResult>(`/lifecycle/archive/${archiveId}/restore`)
   }
 
+  async listDecisions(params: {
+    projectId: string
+    domain?: DecisionDomain
+    limit?: number
+  }): Promise<DecisionItem[]> {
+    const qs = new URLSearchParams({ project_id: params.projectId })
+    if (params.domain) qs.set('domain', params.domain)
+    qs.set('limit', String(clampDecisionsLimit(params.limit)))
+    return this.getBounded<DecisionItem[]>(`/decisions?${qs.toString()}`)
+  }
+
+  async getProjectStatus(projectId: string): Promise<ProjectStatusItem[]> {
+    return this.getBounded<ProjectStatusItem[]>(`/projects/${encodeURIComponent(projectId)}/status`)
+  }
+
+  /** The project registered under `name`, or null when Anamnesis does not know it (404). */
+  async getProjectByName(name: string): Promise<ProjectRef | null> {
+    const key = encodeURIComponent(name.trim().toLowerCase())
+    try {
+      const row = await this.getBounded<ProjectRef>(`/projects/${key}`)
+      return { id: row.id, name: row.name, tier: row.tier }
+    } catch (err) {
+      if (err instanceof AnamnesisHttpError && err.status === 404) return null
+      throw err
+    }
+  }
+
   async checkHealth(): Promise<boolean> {
     try {
       await this.get('/health')
@@ -84,6 +146,32 @@ export class AnamnesisReader {
       throw new Error(`Anamnesis GET ${path} failed: ${res.status} ${text}`)
     }
     return res.json() as Promise<T>
+  }
+
+  /**
+   * GET with a hard timeout and a body-free error: any non-2xx throws AnamnesisHttpError(status),
+   * any timeout, network or parse failure throws AnamnesisHttpError(0).
+   */
+  private async getBounded<T>(path: string): Promise<T> {
+    let res: Response
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, {
+        method: 'GET',
+        headers: this.headers,
+        signal: AbortSignal.timeout(BOUNDED_REQUEST_TIMEOUT_MS)
+      })
+    } catch {
+      throw new AnamnesisHttpError(0)
+    }
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined)
+      throw new AnamnesisHttpError(res.status)
+    }
+    try {
+      return (await res.json()) as T
+    } catch {
+      throw new AnamnesisHttpError(0)
+    }
   }
 
   private async post<T>(path: string, body?: unknown): Promise<T> {
