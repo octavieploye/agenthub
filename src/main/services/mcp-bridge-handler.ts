@@ -43,6 +43,13 @@ import { DEFAULT_SONNET_MODEL, DEFAULT_OPUS_MODEL, DEFAULT_HAIKU_MODEL } from '.
 import { loadAnamnesisSecret } from './secret-store'
 import { resolveAnamnesisAuthHeaders } from './helpers/anamnesis-bearer'
 import { DEFAULT_ANAMNESIS_URL } from '../../shared/constants/defaults'
+import {
+  ANAMNESIS_DOMAIN_CATEGORIES,
+  isAnamnesisDomainCategory,
+} from '../../shared/constants/anamnesis-domains'
+import type { DecisionDomain } from '../../shared/types/decisions.types'
+import { getAnamnesisReader } from './anamnesis-reader'
+import { formatDecisionLine, resolveActiveProject } from './helpers/decision-prompt-block'
 
 const LOG_PREFIX = '[mcp-bridge-handler]'
 
@@ -70,6 +77,66 @@ function anamnesisRequestHeaders(): { url: string; headers: Record<string, strin
       'X-Optimaeus-Caller': 'hephaestus',
       ...resolveAnamnesisAuthHeaders(url, loadAnamnesisSecret()),
     },
+  }
+}
+
+// ─── Anamnesis decisions lookup (agenthub → Anamnesis /decisions via the reader) ──
+
+const DECISIONS_TOOL_DEFAULT_LIMIT = 20
+const DECISIONS_TOOL_MAX_LIMIT = 50
+
+const DECISIONS_STANDALONE_MESSAGE = 'standalone: decisions unavailable'
+const DECISIONS_NONE_MESSAGE = 'no decisions'
+const DECISIONS_ERROR_MESSAGE = 'decisions unavailable: Anamnesis could not be reached or refused the request'
+
+/** list_project_decisions: `repo` is the only required argument. */
+function readDecisionsRepo(params: Record<string, unknown>): string {
+  const repo = params['repo']
+  if (typeof repo !== 'string' || repo.trim() === '') {
+    throw new Error('list_project_decisions: repo is required (repo name)')
+  }
+  return repo.trim().toLowerCase()
+}
+
+/** list_project_decisions: `domain` is optional, but when present it must be one of the 7 domains. */
+function readDecisionsDomain(params: Record<string, unknown>): DecisionDomain | undefined {
+  const domain = params['domain']
+  if (domain === undefined) return undefined
+  if (!isAnamnesisDomainCategory(domain)) {
+    throw new Error(`list_project_decisions: domain must be one of ${ANAMNESIS_DOMAIN_CATEGORIES.join(', ')}`)
+  }
+  return domain
+}
+
+/** list_project_decisions: default 20, whole numbers 1-50. */
+function readDecisionsLimit(params: Record<string, unknown>): number {
+  const limit = params['limit']
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) return DECISIONS_TOOL_DEFAULT_LIMIT
+  return Math.min(DECISIONS_TOOL_MAX_LIMIT, Math.max(1, Math.trunc(limit)))
+}
+
+/** Resolve the repo to an Anamnesis project and list its decisions as sanitised text lines. */
+async function lookupProjectDecisions(params: Record<string, unknown>): Promise<string> {
+  const repo = readDecisionsRepo(params)
+  const domain = readDecisionsDomain(params)
+  const limit = readDecisionsLimit(params)
+
+  const reader = getAnamnesisReader()
+  if (!reader) return DECISIONS_STANDALONE_MESSAGE
+
+  try {
+    const project = await resolveActiveProject(reader, repo)
+    if (!project) return DECISIONS_NONE_MESSAGE
+    const decisions = await reader.listDecisions({ projectId: project.id, domain, limit })
+    const lines = (Array.isArray(decisions) ? decisions : [])
+      .map(formatDecisionLine)
+      .filter((line) => line !== '')
+    return lines.length > 0 ? lines.join('\n') : DECISIONS_NONE_MESSAGE
+  } catch (err) {
+    // Log the HTTP status only: never the response body, message or stack.
+    const status = (err as { status?: unknown } | null)?.status
+    console.warn(LOG_PREFIX, 'list_project_decisions failed', typeof status === 'number' ? status : 'error')
+    return DECISIONS_ERROR_MESSAGE
   }
 }
 
@@ -501,6 +568,10 @@ export class McpBridgeHandler {
         // DELETE answers 204 No Content — there is no body to parse.
         return { ok: true, id: eventId.trim() }
       }
+
+      // ── Read: shared-brain decisions of a repo (Anamnesis, via the reader) ───
+      case 'listProjectDecisions':
+        return lookupProjectDecisions(params)
 
       default:
         throw new Error(`unknown method: ${method}`)
