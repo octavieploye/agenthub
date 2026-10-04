@@ -148,7 +148,61 @@ describe('decisions.ipc — DECISIONS.LIST', () => {
       limit: 20
     })
 
-    expect(result).toEqual({ state: 'ok', decisions: [decisionRow], statuses: [statusRow] })
+    expect(result).toEqual({
+      state: 'ok',
+      decisions: [
+        {
+          id: decisionRow.id,
+          domain: decisionRow.domain,
+          title: decisionRow.title,
+          summary: decisionRow.summary,
+          status: decisionRow.status
+        }
+      ],
+      statuses: [
+        {
+          project_id: statusRow.project_id,
+          domain: statusRow.domain,
+          state: statusRow.state,
+          summary: statusRow.summary
+        }
+      ]
+    })
+  })
+
+  it('forwards only the fields the panel shows: rationale and the other columns never cross IPC', async () => {
+    stubFetch(async (url) => {
+      if (url.pathname === PROJECT_PATH) return okResponse(projectRow('active'))
+      if (url.pathname === '/decisions') {
+        return okResponse([{ ...decisionRow, rationale: BODY_MARKER, decided_by: BODY_MARKER }])
+      }
+      if (url.pathname === `/projects/${PROJECT_ID}/status`) {
+        return okResponse([{ ...statusRow, updated_by: BODY_MARKER }])
+      }
+      return failResponse(404)
+    })
+
+    const result = (await getHandler(listChannel())(undefined, { repoId })) as {
+      state: string
+      decisions: Record<string, unknown>[]
+      statuses: Record<string, unknown>[]
+    }
+
+    expect(result.state).toBe('ok')
+    expect(JSON.stringify(result)).not.toContain(BODY_MARKER)
+    expect(Object.keys(result.decisions[0]).sort()).toEqual([
+      'domain',
+      'id',
+      'status',
+      'summary',
+      'title'
+    ])
+    expect(Object.keys(result.statuses[0]).sort()).toEqual([
+      'domain',
+      'project_id',
+      'state',
+      'summary'
+    ])
   })
 
   it('filters the request by project, domain and limit and never sends include_archive', async () => {
