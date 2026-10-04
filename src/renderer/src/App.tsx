@@ -33,6 +33,7 @@ import { ContinuationDialog } from './widgets/continuation-dialog/ContinuationDi
 import ActivityLogView from './widgets/activity-log/ActivityLogView'
 import BrainPanel from './widgets/brain-panel/BrainPanel'
 import MemoryHealthPanel from './widgets/memory-health/MemoryHealthPanel'
+import DecisionsPanel from './widgets/decisions-panel/DecisionsPanel'
 import type { RepoSwitcherHandle } from './widgets/repo-switcher/RepoSwitcher'
 import { useWindowSize } from './hooks/useWindowSize'
 import { useAgentTts } from './hooks/useAgentTts'
@@ -1106,6 +1107,8 @@ function AppMain(): React.JSX.Element {
             <BrainPanel />
           ) : viewMode === 'memory' ? (
             <MemoryHealthPanel />
+          ) : viewMode === 'decisions' ? (
+            <DecisionsPanel />
           ) : viewMode === 'raid' ? (
             /* Raid view — 3-column layout: RepoSidebar + AgentList + DetailPanel */
             <div className="flex h-full overflow-x-auto">
