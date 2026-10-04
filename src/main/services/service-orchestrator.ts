@@ -26,7 +26,7 @@ import { ContainerManager } from './container-manager'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
 import type { IForgejoAdapter } from './adapters/forgejo-adapter'
 import { resolveAppMode, createAnamnesisAdapter, createForgejoAdapter } from './adapters/adapter-factory'
-import { initAnamnesisReader } from './anamnesis-reader'
+import { initAnamnesisReader, getAnamnesisReader } from './anamnesis-reader'
 import { SprintWatcher } from './sprint-watcher'
 import { TokenBudgetTracker } from './token-budget'
 import { TelegramSidecarService } from './telegram-sidecar-service'
@@ -54,6 +54,8 @@ import { cleanupOldRetryFailures, getRun, getTaskLogsByRun } from '../db/queries
 import { recommend } from './model-recommender'
 import { getTaskByAgentId, getTaskById, updateTask } from '../db/queries/tasks.queries'
 import { emitTaskStatusEvent } from './helpers/task-status-events'
+import { createDecisionBlockFetcher } from './helpers/decision-prompt-block'
+import { resolveTaskPrompt } from './helpers/task-prompt'
 import { parseJsonlContent, extractUsageEntries } from '../parsers/jsonl-parser'
 import { setSnapshotEngine } from '../ipc/snapshots.ipc'
 import type { GuardrailConfig } from '../../shared/types/config.types'
@@ -90,6 +92,9 @@ let mcpBridgeHandler: McpBridgeHandler | null = null
 let quotaScrapeScheduler: QuotaScrapeScheduler | null = null
 let intakeDir = ''
 let currentSessionId: string | null = null
+// Shared-brain decisions block for orchestrated agent prompts. Created once; the reader is
+// looked up per call, so it yields "" until the reader exists and always in standalone mode.
+const fetchDecisionBlock = createDecisionBlockFetcher({ getReader: () => getAnamnesisReader() })
 
 // Deterministic sprint color: same repo/sprint name → same palette color,
 // independent of dispatch order or restart. Prefers the trailing integer in the
@@ -564,10 +569,11 @@ export function initializeServices(db: Database.Database): void {
   anamnesisWriter.flush().catch((err) => log.warn('Anamnesis startup flush failed (server likely not running)', err))
 
   // 15a. AnamnesisReader — lifecycle data reader (system mode only)
-  // NOTE: This reader is INTERNAL to the main process. It is NOT exposed to agents
-  // via MCP tools. Agents access Anamnesis through the separate anamnesis MCP server
-  // (registered in .claude/settings.json). This reader serves orchestrator-level queries
-  // such as sprint_inventory pre-flight checks (M4) and lifecycle dashboard data.
+  // NOTE: This reader lives in the main process. In system mode it is also exposed to agents
+  // through the list_project_decisions bridge tool; every other agent access to Anamnesis goes
+  // through the separate anamnesis MCP server (registered in .claude/settings.json). This reader
+  // serves orchestrator-level queries such as sprint_inventory pre-flight checks (M4) and
+  // lifecycle dashboard data.
   if (appMode === 'system') {
     const authSecret = loadAnamnesisSecret()
     initAnamnesisReader({ baseUrl: anamnesisUrl, authSecret, caller: 'hephaestus' })
@@ -860,9 +866,16 @@ export function initializeServices(db: Database.Database): void {
         )
         const metadataBlock = metadataParts.length > 0 ? `\n\n${metadataParts.join('\n')}` : ''
 
-        const taskDescription = effectiveSkill
-          ? `${GUARDRAIL_PROMPTS.dev}\n\nUse skill: /${effectiveSkill}\n\n${baseDescription}${metadataBlock}`
-          : `${GUARDRAIL_PROMPTS.dev}\n\n${baseDescription}${metadataBlock}`
+        // Shared-brain decisions (Anamnesis). A throw here would make the scheduler skip the task,
+        // so any failure falls back to no block; only the error type is logged.
+        const taskDescription = await resolveTaskPrompt({
+          parts: { guardrail: GUARDRAIL_PROMPTS.dev, skill: effectiveSkill, baseDescription, metadataBlock },
+          fetchDecisionBlock,
+          repoName: taskRepo.name,
+          taskCategory: task.category,
+          onError: (errorType) =>
+            log.warn('[orchestrator] decision block skipped', { taskId: task.id, errorType })
+        })
 
         if (task.estimatedTokens || task.riskScore) {
           log.info('[orchestrator] task metadata', {
