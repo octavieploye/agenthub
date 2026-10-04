@@ -25,16 +25,31 @@ const WHITESPACE_RUN = /[\s\u0085]+/g
 
 /**
  * Characters a human reader cannot see: format characters (zero-width, bidi controls, soft hyphen,
- * BOM), private-use, lone surrogates, and the whole TAG / variation-selector-supplement plane-14 block.
+ * BOM), private-use, lone surrogates, the whole TAG / variation-selector-supplement plane-14 block,
+ * and the invisible characters outside those categories: variation selectors (U+FE00–FE0F), the
+ * combining grapheme joiner (U+034F) and the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0).
  */
-const INVISIBLE_CHARS = /[\p{Cf}\p{Co}\p{Cs}\u{E0000}-\u{E0FFF}]/gu
+const INVISIBLE_CHARS =
+  /[\p{Cf}\p{Co}\p{Cs}\u{E0000}-\u{E0FFF}\u{115F}\u{1160}\u{3164}\u{FFA0}]|\u{034F}|[\u{FE00}-\u{FE0F}]/gu
 const MIN_RAW_CHARS = 2000
 const RAW_CHARS_PER_OUTPUT_CHAR = 8
 
 const REDACTED = '[REDACTED]'
-/** `scheme://userinfo@` — the userinfo (user, or user:password) is masked, scheme and host kept. */
-const URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@]{1,512}@/gi
+/**
+ * `scheme://userinfo@` — the userinfo is masked, scheme and host kept. With a `user:password` form
+ * the password may hold `/` and `@`, so the mask runs to the LAST `@` of the run; without a colon
+ * the userinfo stops at the first `/`, which leaves `host/@path` URLs alone. Runs are bounded.
+ */
+const URL_CREDENTIALS =
+  /\b([a-z][a-z0-9+.-]{0,31}:\/\/)(?:[^\s/@:]{0,256}:\S{0,512}|[^\s/@]{1,512})@/gi
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+/** `Authorization: Basic <base64>` (also JSON-quoted); a value of any length is masked. */
+const BASIC_AUTH_HEADER =
+  /\b(Authorization(?:\\?["'])?\s{0,8}[:=]\s{0,8}(?:\\?["'])?Basic)\s+[A-Za-z0-9+/=_-]+/gi
+/** Bare `Basic <value>`; masked only when the value is long and looks like base64 (see below). */
+const BASIC_TOKEN = /\b(Basic)\s+([A-Za-z0-9+/=_-]{20,})/gi
+/** A digit, a base64 symbol or a lower-to-upper case change: base64 has them, a prose word does not. */
+const BASE64_LIKE = /[\d+/=]|[a-z][A-Z]/
 /** Bare JWT; the lookbehind allows a start only at the head of a base64url run. */
 const JWT = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g
 const PREFIXED_TOKENS = [
@@ -91,10 +106,19 @@ function maskPasswordProse(text: string): string {
   )
 }
 
+/** Mask `Basic <base64>` credentials, with or without the `Authorization` header in front. */
+function maskBasicAuth(text: string): string {
+  return text
+    .replace(BASIC_AUTH_HEADER, `$1 ${REDACTED}`)
+    .replace(BASIC_TOKEN, (match, scheme: string, value: string) =>
+      BASE64_LIKE.test(value) ? `${scheme} ${REDACTED}` : match
+    )
+}
+
 /** Replace secret-like tokens with a fixed marker. */
 function maskSecrets(text: string): string {
   let out = text.replace(URL_CREDENTIALS, `$1${REDACTED}@`)
-  out = out.replace(BEARER_TOKEN, `Bearer ${REDACTED}`).replace(JWT, REDACTED)
+  out = maskBasicAuth(out.replace(BEARER_TOKEN, `Bearer ${REDACTED}`)).replace(JWT, REDACTED)
   for (const pattern of PREFIXED_TOKENS) out = out.replace(pattern, REDACTED)
   out = out.replace(LONG_HEX, REDACTED)
   return maskPasswordProse(out.replace(SECRET_ASSIGNMENT, `$1$2${REDACTED}`))

@@ -45,6 +45,21 @@ const FAKE_STRIPE_BODY = '4eC39HqLyjWDarjtT1zdp7dc'
 const FAKE_SK_LIVE = ['sk', 'live', FAKE_STRIPE_BODY].join('_')
 const FAKE_RK_LIVE = ['rk', 'live', FAKE_STRIPE_BODY].join('_')
 
+// Basic-auth fakes are encoded at runtime for the same reason.
+const FAKE_BASIC = Buffer.from('admin:hunter2hunter2').toString('base64')
+const FAKE_BASIC_SHORT = Buffer.from('a:b').toString('base64')
+
+/** Invisible characters that are not in Unicode categories Cf/Co/Cs. */
+const INVISIBLE_NON_FORMAT_CHARS: Array<[string, string]> = [
+  ['variation selector U+FE00', '︀'],
+  ['variation selector U+FE0F', '️'],
+  ['combining grapheme joiner U+034F', '͏'],
+  ['Hangul choseong filler U+115F', 'ᅟ'],
+  ['Hangul jungseong filler U+1160', 'ᅠ'],
+  ['Hangul filler U+3164', 'ㅤ'],
+  ['half-width Hangul filler U+FFA0', 'ﾠ']
+]
+
 /** Spell `text` in the invisible Unicode TAG block (U+E0000 + ASCII code). */
 function toTagBlock(text: string): string {
   return Array.from(text, (ch) => String.fromCodePoint(0xe0000 + ch.charCodeAt(0))).join('')
@@ -267,6 +282,74 @@ describe('sanitizeDecisionText', () => {
     expect(sanitizeDecisionText(prose, 200)).toBe(prose)
   })
 
+  // ── L1: invisible characters outside Cf/Co/Cs ───────────────────────────────
+
+  it.each(INVISIBLE_NON_FORMAT_CHARS)('removes the invisible %s', (_label, ch) => {
+    expect(sanitizeDecisionText(`ig${ch}nore this`, 100)).toBe('ignore this')
+  })
+
+  it.each(INVISIBLE_NON_FORMAT_CHARS)('masks a prefixed token split by the %s', (_label, ch) => {
+    const out = sanitizeDecisionText(`key sk-abcdefgh${ch}ijklmnopqrstuvwxyz012345 here`, 200)
+    expect(out).toBe('key [REDACTED] here')
+  })
+
+  it.each(INVISIBLE_NON_FORMAT_CHARS)('masks a key name split by the %s', (_label, ch) => {
+    const out = sanitizeDecisionText(`API_K${ch}EY=abc123secretvalue`, 200)
+    expect(out).not.toContain('abc123secretvalue')
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('keeps normal Hangul text unchanged', () => {
+    const title = '한국어 결정 사항: 로컬 저장소 사용'
+    expect(sanitizeDecisionText(title, 200)).toBe(title)
+  })
+
+  // ── L2: URL credentials whose password contains `/` or `@` ──────────────────
+
+  it.each([
+    ['dsn postgres://admin:pa/ss@db/prod', 'dsn postgres://[REDACTED]@db/prod'],
+    ['dsn postgres://admin:p@ss@db/prod', 'dsn postgres://[REDACTED]@db/prod'],
+    ['dsn postgres://admin:p@s/s@w@db/prod', 'dsn postgres://[REDACTED]@db/prod'],
+    ['cache redis://:pa/ss@cache:6379 here', 'cache redis://[REDACTED]@cache:6379 here']
+  ])('masks the whole userinfo up to the last @ in %j', (raw, expected) => {
+    expect(sanitizeDecisionText(raw, 200)).toBe(expected)
+  })
+
+  it.each([
+    'see https://medium.com/@someone/post for context',
+    'install from https://example.com/pkg@1.2.3 today'
+  ])('leaves a URL with an @ in its path unchanged: %j', (prose) => {
+    expect(sanitizeDecisionText(prose, 200)).toBe(prose)
+  })
+
+  // ── L3: Authorization: Basic ────────────────────────────────────────────────
+
+  it.each([
+    [`Authorization: Basic ${FAKE_BASIC}`, FAKE_BASIC],
+    [`authorization: basic ${FAKE_BASIC}`, FAKE_BASIC],
+    [`{"Authorization": "Basic ${FAKE_BASIC}"}`, FAKE_BASIC],
+    [`curl -H 'Authorization: Basic ${FAKE_BASIC_SHORT}' host`, FAKE_BASIC_SHORT],
+    [`use Basic ${FAKE_BASIC} now`, FAKE_BASIC]
+  ])('masks the Basic credentials in %j', (raw, secret) => {
+    const out = sanitizeDecisionText(raw, 400)
+    expect(out).not.toContain(secret)
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('keeps the header name and scheme when masking Basic credentials', () => {
+    expect(sanitizeDecisionText(`send Authorization: Basic ${FAKE_BASIC} today`, 200)).toBe(
+      'send Authorization: Basic [REDACTED] today'
+    )
+  })
+
+  it.each([
+    'Basic authentication is disabled',
+    'a basic configuration walkthrough',
+    'Basic internationalisation support'
+  ])('leaves ordinary prose with the word "basic" unchanged: %j', (prose) => {
+    expect(sanitizeDecisionText(prose, 200)).toBe(prose)
+  })
+
   // ── Properties ──────────────────────────────────────────────────────────────
 
   it.each(HOSTILE_INPUTS)('returns only visible, single-line, secret-free text for %j', (raw) => {
@@ -289,7 +372,13 @@ describe('sanitizeDecisionText', () => {
     ['escape openers', '\u001b]\u001b['.repeat(25_000)],
     ['invisible chars', `${ZWSP}${RLO}`.repeat(50_000)],
     ['stripe prefixes', 'sk_live_'.repeat(12_500)],
-    ['whitespace', ' \n\t'.repeat(33_334)]
+    ['whitespace', ' \n\t'.repeat(33_334)],
+    ['url credentials', 'a://a:'.repeat(16_667)],
+    ['url at-signs', `a://a:${'x@'.repeat(50_000)}`],
+    ['url slashes', `a://a:${'x/'.repeat(50_000)}`],
+    ['basic words', 'Basic '.repeat(16_667)],
+    ['authorization headers', 'Authorization: Basic '.repeat(4_762)],
+    ['variation selectors', '\ufe0f\u034f\u3164'.repeat(33_334)]
   ])('sanitises a 100 000-character hostile input (%s) in well under a second', (_label, raw) => {
     expect(raw.length).toBeGreaterThanOrEqual(100_000)
     const started = performance.now()
