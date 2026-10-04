@@ -13,17 +13,31 @@ const FAILED: DecisionsResult = { state: 'unavailable' }
 /** Last-request-wins: a slow earlier response never overwrites a newer repo's result. */
 let latestRequest = 0
 
-/** An "ok" result must carry arrays; anything else is a broken response, never rendered. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function hasStrings(value: unknown, keys: string[]): boolean {
+  return isRecord(value) && keys.every((key) => typeof value[key] === 'string')
+}
+
+const DECISION_KEYS = ['id', 'domain', 'title', 'status']
+const STATUS_KEYS = ['project_id', 'domain', 'state']
+
+/**
+ * An "ok" result must carry arrays; anything else is a broken response, never rendered.
+ * Malformed elements (null, primitives, rows missing the fields the panel reads) are dropped.
+ */
 function normalizeResult(raw: unknown): DecisionsResult {
-  if (typeof raw !== 'object' || raw === null) return FAILED
+  if (!isRecord(raw)) return FAILED
   const candidate = raw as DecisionsResult
-  if (
-    candidate.state === 'ok' &&
-    (!Array.isArray(candidate.decisions) || !Array.isArray(candidate.statuses))
-  ) {
-    return FAILED
+  if (candidate.state !== 'ok') return candidate
+  if (!Array.isArray(candidate.decisions) || !Array.isArray(candidate.statuses)) return FAILED
+  return {
+    state: 'ok',
+    decisions: candidate.decisions.filter((row) => hasStrings(row, DECISION_KEYS)),
+    statuses: candidate.statuses.filter((row) => hasStrings(row, STATUS_KEYS))
   }
-  return candidate
 }
 
 export const useDecisionsStore = create<DecisionsStoreState>((set) => ({

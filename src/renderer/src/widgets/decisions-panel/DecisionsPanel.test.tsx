@@ -6,7 +6,8 @@ import { useViewStore } from '@renderer/stores/view-store'
 import {
   DECISION_STATUS_LABELS,
   type DecisionItem,
-  type DecisionsResult
+  type DecisionsResult,
+  type ProjectStatusItem
 } from '@shared/types/decisions.types'
 
 const list = vi.fn()
@@ -27,6 +28,18 @@ function decision(overrides: Partial<DecisionItem> = {}): DecisionItem {
     decided_at: null,
     supersedes_id: null,
     ethical_review_id: null,
+    ...overrides
+  }
+}
+
+function statusItem(overrides: Partial<ProjectStatusItem> = {}): ProjectStatusItem {
+  return {
+    project_id: 'p-1',
+    domain: 'code',
+    state: 'on track',
+    summary: 'Shipping weekly',
+    updated_by: null,
+    updated_at: '2026-10-02T10:00:00Z',
     ...overrides
   }
 }
@@ -185,6 +198,76 @@ describe('DecisionsPanel', () => {
     expect(await screen.findByText(expected)).toBeInTheDocument()
   })
 
+  it.each(['   ', '\t\n'])(
+    'treats a whitespace-only repo id (%j) like no repo selected: no IPC call, no endless loading',
+    async (blank) => {
+      useViewStore.setState({ selectedRepoId: blank })
+      mockResult({ state: 'ok', decisions: [], statuses: [] })
+      render(<DecisionsPanel />)
+
+      expect(screen.getByTestId('decisions-no-repo')).toBeInTheDocument()
+      expect(screen.queryByText(/loading decisions/i)).toBeNull()
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled()
+      await act(async () => {})
+      expect(list).not.toHaveBeenCalled()
+    }
+  )
+
+  it('renders one status row per project status with its domain, state and summary', async () => {
+    mockResult({
+      state: 'ok',
+      decisions: [],
+      statuses: [
+        statusItem({ domain: 'code', state: 'on track', summary: 'Shipping weekly' }),
+        statusItem({ domain: 'legal', state: 'blocked', summary: null })
+      ]
+    })
+    render(<DecisionsPanel />)
+
+    expect(await screen.findByText('Project status')).toBeInTheDocument()
+    const rows = screen.getAllByTestId('status-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('code')
+    expect(rows[0]).toHaveTextContent('on track')
+    expect(rows[0]).toHaveTextContent('Shipping weekly')
+    expect(rows[1]).toHaveTextContent('legal')
+    expect(rows[1]).toHaveTextContent('blocked')
+  })
+
+  it('shows no status section when there are no project statuses', async () => {
+    mockResult({ state: 'ok', decisions: [decision()], statuses: [] })
+    render(<DecisionsPanel />)
+    await screen.findByText('Use SQLite for local storage')
+    expect(screen.queryByText('Project status')).toBeNull()
+    expect(screen.queryAllByTestId('status-row')).toHaveLength(0)
+  })
+
+  it('shows the Cancelled label for a cancelled decision', async () => {
+    mockResult({
+      state: 'ok',
+      decisions: [decision({ id: 'c', title: 'Row cancelled', status: 'cancelled' })],
+      statuses: []
+    })
+    render(<DecisionsPanel />)
+    const row = (await screen.findByText('Row cancelled')).closest('[data-testid="decision-row"]')
+    expect(DECISION_STATUS_LABELS.cancelled).toBe('Cancelled')
+    expect(row).toHaveTextContent('Cancelled')
+  })
+
+  it('Refresh click triggers exactly one more call with the exact arguments', async () => {
+    mockResult({ state: 'ok', decisions: [decision()], statuses: [] })
+    render(<DecisionsPanel />)
+    await screen.findByText('Use SQLite for local storage')
+    expect(list).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+    expect(list).toHaveBeenLastCalledWith({ repoId: REPO_ID, domain: undefined })
+    await act(async () => {})
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
   it('gives every state a distinct text', async () => {
     const results: DecisionsResult[] = [
       { state: 'ok', decisions: [], statuses: [] },
@@ -237,6 +320,51 @@ describe('decisions-store', () => {
     list.mockResolvedValue(ok)
     await useDecisionsStore.getState().refresh(REPO_ID)
     expect(useDecisionsStore.getState().result).toEqual(ok)
+  })
+
+  it('maps a rejected IPC call (the catch path) to unavailable and clears loading', async () => {
+    list.mockRejectedValue(new Error('ipc exploded'))
+    await useDecisionsStore.getState().refresh(REPO_ID)
+    expect(useDecisionsStore.getState().result).toEqual({ state: 'unavailable' })
+    expect(useDecisionsStore.getState().loading).toBe(false)
+  })
+
+  it.each<[string, unknown[]]>([
+    ['null', [null]],
+    ['a string', ['nope']],
+    ['a number', [7]],
+    ['undefined', [undefined]]
+  ])('drops a decisions element that is %s and keeps the valid ones', async (_name, bad) => {
+    const good = decision({ id: 'good' })
+    list.mockResolvedValue({ state: 'ok', decisions: [bad[0], good], statuses: [] })
+    await useDecisionsStore.getState().refresh(REPO_ID)
+    expect(useDecisionsStore.getState().result).toEqual({
+      state: 'ok',
+      decisions: [good],
+      statuses: []
+    })
+  })
+
+  it('drops malformed statuses elements and keeps the valid ones', async () => {
+    const good = statusItem()
+    list.mockResolvedValue({ state: 'ok', decisions: [], statuses: [null, 3, good] })
+    await useDecisionsStore.getState().refresh(REPO_ID)
+    expect(useDecisionsStore.getState().result).toEqual({
+      state: 'ok',
+      decisions: [],
+      statuses: [good]
+    })
+  })
+
+  it('does not throw in the panel when the list holds null elements', async () => {
+    list.mockResolvedValue({
+      state: 'ok',
+      decisions: [null, decision({ title: 'Survivor' })],
+      statuses: [null]
+    })
+    render(<DecisionsPanel />)
+    expect(await screen.findByText('Survivor')).toBeInTheDocument()
+    expect(screen.getAllByTestId('decision-row')).toHaveLength(1)
   })
 
   it('is last-request-wins: a slow earlier response never overwrites a newer one', async () => {

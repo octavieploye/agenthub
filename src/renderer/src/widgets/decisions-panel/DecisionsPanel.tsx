@@ -93,7 +93,9 @@ function OkContent({
 }
 
 export default function DecisionsPanel(): React.JSX.Element {
-  const selectedRepoId = useViewStore((s) => s.selectedRepoId)
+  const rawRepoId = useViewStore((s) => s.selectedRepoId)
+  // A blank id is "no repo selected": the store refuses it, so it would show "Loading…" forever.
+  const selectedRepoId = rawRepoId?.trim() ? rawRepoId : null
   const result = useDecisionsStore((s) => s.result)
   const loading = useDecisionsStore((s) => s.loading)
   const refresh = useDecisionsStore((s) => s.refresh)
