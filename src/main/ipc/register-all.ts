@@ -34,6 +34,7 @@ import { registerTelegramIpc } from './telegram.ipc'
 import { registerBrainIpcHandlers } from './brain.ipc'
 import { registerOrchestratorHandlers } from './orchestrator.ipc'
 import { registerLifecycleHandlers } from './lifecycle.ipc'
+import { registerDecisionsIpcHandlers } from './decisions.ipc'
 
 export function registerAllIpcHandlers(): void {
   registerAgentHandlers()
@@ -71,5 +72,6 @@ export function registerAllIpcHandlers(): void {
   registerBrainIpcHandlers()
   registerOrchestratorHandlers()
   registerLifecycleHandlers()
+  registerDecisionsIpcHandlers()
   log.info('All IPC handlers registered')
 }

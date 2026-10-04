@@ -331,6 +331,9 @@ const agentHubBridge = {
     runCycle: () => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.RUN_CYCLE),
     restore: (archiveId: string) => ipcRenderer.invoke(IPC_CHANNELS.LIFECYCLE.RESTORE, archiveId),
   },
+  decisions: {
+    list: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.DECISIONS.LIST, input),
+  },
   orchestrator: {
     start: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.START, input),
     pause: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ORCHESTRATOR.PAUSE, input),

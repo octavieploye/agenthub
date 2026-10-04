@@ -242,6 +242,9 @@ export const IPC_CHANNELS = {
     RUN_CYCLE:        'lifecycle:run-cycle',
     RESTORE:          'lifecycle:restore',
   },
+  DECISIONS: {
+    LIST: 'decisions:list',
+  },
 } as const
 
 export const IPC_EVENTS = {

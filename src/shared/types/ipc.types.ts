@@ -271,6 +271,9 @@ export interface AgentHubBridge {
     runCycle: () => Promise<IpcResponse<import('./lifecycle.types').LifecycleRunResult>>
     restore: (archiveId: string) => Promise<IpcResponse<import('./lifecycle.types').RestoreResult>>
   }
+  decisions: {
+    list: (input: { repoId: string; domain?: import('./decisions.types').DecisionDomain; limit?: number }) => Promise<import('./decisions.types').DecisionsResult>
+  }
   on: {
     agentStatusChange: (callback: (agentId: string, status: import('./agent.types').AgentLifecycleStatus, confidence: import('./agent.types').StatusConfidence) => void) => () => void
     agentOutput: (callback: (agentId: string, data: string) => void) => () => void
