@@ -1,5 +1,6 @@
 import { it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
 import Database from 'better-sqlite3'
+import log from 'electron-log/main'
 import { runMigrations } from '../db/migration-runner'
 import { insertTask } from '../db/queries/tasks.queries'
 import { insertTaskEvent, getUnsyncedEvents } from '../db/queries/task-events.queries'
@@ -1075,4 +1076,364 @@ it('S95: failing project-status PUTs never trip the circuit breaker and the even
   await writer.flush()
   expect(getUnsyncedEvents(db)).toHaveLength(0)
   expect(reconcileRows()).toHaveLength(4)
+})
+
+// ── Z-P0-1: while the circuit is open there is always exactly one pending retry timer ──
+
+const BACKOFF_MS = 60_000
+
+function insertTransitionEvent(payload: Record<string, unknown> = {}): { eventId: string; taskId: string; repoId: string } {
+  const repoId = seedRepoOnce()
+  const task = insertTask(db, { repoId, title: 'T', status: 'backlog' })
+  const event = insertTaskEvent(db, {
+    taskId: task.id,
+    eventType: 'CARD_TRANSITION',
+    fromStatus: 'backlog',
+    toStatus: 'today',
+    agentId: null,
+    payload
+  })
+  return { eventId: event.id, taskId: task.id, repoId }
+}
+
+/** A writer whose memory endpoint is unreachable, flushed until the circuit opens (3 failed sends). */
+async function writerWithOpenCircuit(): Promise<{ writer: AnamnesisWriter; memoryMock: EndpointMock }> {
+  const memoryMock = endpointMock().mockRejectedValue(new Error('Connection failed'))
+  const { fetchMock } = mockEndpoints({ memory: memoryMock })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+  await writer.flush()
+  await writer.flush()
+  await writer.flush()
+  expect(memoryMock).toHaveBeenCalledTimes(3)
+  return { writer, memoryMock }
+}
+
+it('Z-P0-1: a failed half-open retry arms the next retry 60 s later', async () => {
+  vi.useFakeTimers()
+  try {
+    insertTransitionEvent()
+    const { memoryMock } = await writerWithOpenCircuit()
+
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+    expect(memoryMock).toHaveBeenCalledTimes(5)
+    expect(getUnsyncedEvents(db)).toHaveLength(1)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('Z-P0-1: after several failed retries a later success delivers the event and closes the circuit', async () => {
+  vi.useFakeTimers()
+  try {
+    insertTransitionEvent()
+    const { writer, memoryMock } = await writerWithOpenCircuit()
+
+    for (let retry = 1; retry <= 4; retry++) {
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+      expect(memoryMock).toHaveBeenCalledTimes(3 + retry)
+    }
+
+    memoryMock.mockResolvedValue(response())
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+
+    expect(memoryMock).toHaveBeenCalledTimes(8)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+
+    // Circuit closed: a new event is sent at once, without waiting for a back-off.
+    insertTransitionEvent()
+    writer.onEventInserted()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(memoryMock).toHaveBeenCalledTimes(9)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('Z-P0-1: a long outage keeps exactly one pending timer and sends one event per back-off (no burst)', async () => {
+  vi.useFakeTimers()
+  try {
+    for (let i = 0; i < 5; i++) insertTransitionEvent()
+    const { writer, memoryMock } = await writerWithOpenCircuit()
+    expect(vi.getTimerCount()).toBe(1)
+
+    for (let retry = 1; retry <= 10; retry++) {
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+      writer.onEventInserted()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(memoryMock).toHaveBeenCalledTimes(3 + retry)
+      expect(vi.getTimerCount()).toBe(1)
+    }
+
+    memoryMock.mockResolvedValue(response())
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+
+    expect(memoryMock).toHaveBeenCalledTimes(13 + 5)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('Z-P0-1: onEventInserted attempts a flush once the back-off has elapsed, without adding a timer', async () => {
+  vi.useFakeTimers()
+  try {
+    insertTransitionEvent()
+    const { writer, memoryMock } = await writerWithOpenCircuit()
+
+    // Move the clock past the back-off without firing the retry timer.
+    vi.setSystemTime(Date.now() + BACKOFF_MS + 1)
+    writer.onEventInserted()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(vi.getTimerCount()).toBe(1)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+// ── Z-P0-2: an event Anamnesis rejects for good is marked rejected and never sent again ──
+
+const PAYLOAD_MARKER = 'PAYLOAD-MARKER-XYZ'
+
+interface RejectionRow {
+  rejected_at: string | null
+  rejection_status: number | null
+  synced_to_anamnesis: number
+}
+
+function rejectionRow(eventId: string): RejectionRow {
+  return db
+    .prepare('SELECT rejected_at, rejection_status, synced_to_anamnesis FROM task_events WHERE id = ?')
+    .get(eventId) as RejectionRow
+}
+
+function rejectedActivityRows(): ReconcileRow[] {
+  return db
+    .prepare(`SELECT event_type, entity_type, entity_id, repo_id, details FROM activity_log WHERE event_type = 'anamnesis_event_rejected'`)
+    .all() as ReconcileRow[]
+}
+
+function writerAnswering(memoryMock: EndpointMock): { writer: AnamnesisWriter; fetchMock: EndpointMock } {
+  const { fetchMock } = mockEndpoints({ memory: memoryMock })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+  return { writer, fetchMock }
+}
+
+it.each([400, 413, 422])(
+  'Z-P0-2: a %i marks the event rejected, keeps synced_to_anamnesis at 0 and never re-sends it',
+  async (status) => {
+    const { eventId } = insertTransitionEvent()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, status))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    const row = rejectionRow(eventId)
+    expect(row.rejected_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+    expect(row.rejection_status).toBe(status)
+    expect(row.synced_to_anamnesis).toBe(0)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+
+    await writer.flush()
+    expect(memoryMock).toHaveBeenCalledOnce()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM task_events').get()).toEqual({ n: 1 })
+  }
+)
+
+it('Z-P0-2: three 422 events at the head do not block a good event and leave the circuit closed', async () => {
+  const head = [insertTransitionEvent(), insertTransitionEvent(), insertTransitionEvent()]
+  const good = insertTransitionEvent()
+  db.prepare(`UPDATE task_events SET created_at = '2026-10-05T23:59:59.999Z' WHERE id = ?`).run(good.eventId)
+  db.prepare(`UPDATE task_events SET created_at = '2026-10-05T00:00:00.000Z' WHERE id != ?`).run(good.eventId)
+  const memoryMock = endpointMock()
+    .mockResolvedValueOnce(response(false, 422))
+    .mockResolvedValueOnce(response(false, 422))
+    .mockResolvedValueOnce(response(false, 422))
+    .mockResolvedValue(response())
+  const { writer } = writerAnswering(memoryMock)
+
+  await writer.flush()
+
+  expect(memoryMock).toHaveBeenCalledTimes(4)
+  for (const { eventId } of head) expect(rejectionRow(eventId).rejection_status).toBe(422)
+  expect(rejectionRow(good.eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 1 })
+  expect(getUnsyncedEvents(db)).toHaveLength(0)
+
+  // Circuit still closed: the next flush sends a new event straight away.
+  insertTransitionEvent()
+  await writer.flush()
+  expect(memoryMock).toHaveBeenCalledTimes(5)
+  expect(getUnsyncedEvents(db)).toHaveLength(0)
+})
+
+it('Z-P0-2: a corrupt payload_json is rejected with a NULL status, not sent, and does not block later events', async () => {
+  const warnSpy = vi.spyOn(log, 'warn')
+  try {
+    const corrupt = insertTransitionEvent()
+    const good = insertTransitionEvent()
+    db.prepare(`UPDATE task_events SET payload_json = ?, created_at = '2026-10-05T00:00:00.000Z' WHERE id = ?`).run(
+      `{"taskTitle":"${PAYLOAD_MARKER}`,
+      corrupt.eventId
+    )
+    const memoryMock = endpointMock().mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    expect(memoryMock).toHaveBeenCalledOnce()
+    const row = rejectionRow(corrupt.eventId)
+    expect(row.rejected_at).toBeTruthy()
+    expect(row.rejection_status).toBeNull()
+    expect(row.synced_to_anamnesis).toBe(0)
+    expect(rejectionRow(good.eventId).synced_to_anamnesis).toBe(1)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+
+    const rows = rejectedActivityRows()
+    expect(rows).toHaveLength(1)
+    expect(JSON.parse(rows[0].details ?? '{}')).toEqual({
+      eventId: corrupt.eventId,
+      eventType: 'CARD_TRANSITION',
+      httpStatus: null
+    })
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(PAYLOAD_MARKER)
+
+    await writer.flush()
+    expect(memoryMock).toHaveBeenCalledOnce()
+    expect(rejectedActivityRows()).toHaveLength(1)
+  } finally {
+    warnSpy.mockRestore()
+  }
+})
+
+it('Z-P0-2: three corrupt payloads never open the circuit', async () => {
+  for (let i = 0; i < 3; i++) insertTransitionEvent()
+  db.prepare(`UPDATE task_events SET payload_json = '{broken'`).run()
+  const memoryMock = endpointMock().mockResolvedValue(response())
+  const { writer } = writerAnswering(memoryMock)
+
+  await writer.flush()
+  expect(memoryMock).not.toHaveBeenCalled()
+
+  insertTransitionEvent()
+  await writer.flush()
+  expect(memoryMock).toHaveBeenCalledOnce()
+  expect(getUnsyncedEvents(db)).toHaveLength(0)
+})
+
+it.each([503, 429, 401, 403, 404, 408, 500])(
+  'Z-P0-2: a %i leaves the event unsynced and NOT rejected',
+  async (status) => {
+    const { eventId } = insertTransitionEvent()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, status))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    expect(rejectionRow(eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+    expect(getUnsyncedEvents(db)).toHaveLength(1)
+    expect(rejectedActivityRows()).toHaveLength(0)
+
+    await writer.flush()
+    expect(memoryMock).toHaveBeenCalledTimes(2)
+  }
+)
+
+it('Z-P0-2: a network error leaves the event unsynced and NOT rejected', async () => {
+  const { eventId } = insertTransitionEvent()
+  const memoryMock = endpointMock().mockRejectedValue(new Error('connect ECONNREFUSED'))
+  const { writer } = writerAnswering(memoryMock)
+
+  await writer.flush()
+
+  expect(rejectionRow(eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+  expect(getUnsyncedEvents(db)).toHaveLength(1)
+  expect(rejectedActivityRows()).toHaveLength(0)
+})
+
+it('Z-P0-2: retryable answers still open the circuit after 3 failures (401 is not a rejection)', async () => {
+  vi.useFakeTimers()
+  try {
+    for (let i = 0; i < 5; i++) insertTransitionEvent()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, 401))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    expect(memoryMock).toHaveBeenCalledTimes(3)
+    expect(getUnsyncedEvents(db)).toHaveLength(5)
+    expect(vi.getTimerCount()).toBe(1)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('Z-P0-2: each rejection writes one activity record and one warning, neither holding payload text', async () => {
+  const warnSpy = vi.spyOn(log, 'warn')
+  try {
+    const { eventId, taskId, repoId } = insertTransitionEvent({ taskTitle: PAYLOAD_MARKER })
+    const memoryMock = endpointMock().mockResolvedValue(response(false, 422))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+    await writer.flush()
+
+    const rows = rejectedActivityRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].entity_type).toBe('task')
+    expect(rows[0].entity_id).toBe(taskId)
+    expect(rows[0].repo_id).toBe(repoId)
+    expect(JSON.parse(rows[0].details ?? '{}')).toEqual({ eventId, eventType: 'CARD_TRANSITION', httpStatus: 422 })
+    expect(JSON.stringify(rows)).not.toContain(PAYLOAD_MARKER)
+
+    const rejectionWarnings = warnSpy.mock.calls.filter((call) => JSON.stringify(call).includes(eventId))
+    expect(rejectionWarnings).toHaveLength(1)
+    expect(rejectionWarnings[0][1]).toEqual({ eventId, eventType: 'CARD_TRANSITION', status: 422 })
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(PAYLOAD_MARKER)
+  } finally {
+    warnSpy.mockRestore()
+  }
+})
+
+it('Z-P0-2: a rejected event without a task uses the event id as the activity entity id', async () => {
+  insertBrainEvent({ entry_id: 'b9', repo_name: 'test-repo', subject: PAYLOAD_MARKER })
+  const [{ id: eventId }] = getUnsyncedEvents(db)
+  const memoryMock = endpointMock().mockResolvedValue(response(false, 422))
+  const { writer } = writerAnswering(memoryMock)
+
+  await writer.flush()
+
+  const rows = rejectedActivityRows()
+  expect(rows).toHaveLength(1)
+  expect(rows[0].entity_id).toBe(eventId)
+  expect(rows[0].repo_id).toBeNull()
+  expect(JSON.stringify(rows)).not.toContain(PAYLOAD_MARKER)
+})
+
+it('Z-P0-2: a rejected CARD_COMPLETED event makes no project-status PUT', async () => {
+  insertCompletedEvent('Finish feature')
+  const fetchMock = vi.fn<EndpointHandler>(async (input) => {
+    const url = String(input)
+    if (url === `${ANAMNESIS_URL}/projects`) return projectResponse()
+    if (url.startsWith(`${ANAMNESIS_URL}/memory/`)) return response(false, 422)
+    return response()
+  })
+  const writer = new AnamnesisWriter(db, { anamnesisUrl: ANAMNESIS_URL, fetch: fetchMock as typeof fetch })
+
+  await writer.flush()
+
+  expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0)
+  expect(rejectedActivityRows()).toHaveLength(1)
+  expect(reconcileRows()).toHaveLength(0)
 })
