@@ -9,6 +9,9 @@
 // for real; only the Electron shell and unrelated service deps are stubbed.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 // ── Boundary mocks (must appear before any import from the module) ────────────
 
@@ -58,7 +61,11 @@ vi.mock('child_process', () => ({
 
 // ── Module under test ─────────────────────────────────────────────────────────
 
-import { handleTelegramCommand, _setOrchestratorSchedulerForTest } from './service-orchestrator'
+import {
+  handleTelegramCommand,
+  computeRunTokenUsage,
+  _setOrchestratorSchedulerForTest
+} from './service-orchestrator'
 import type { OrchestratorScheduler } from './orchestrator-scheduler'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,5 +99,51 @@ describe('handleTelegramCommand — extend', () => {
     handleTelegramCommand(mockDb, { type: 'command', command: 'extend', runId: 'not-a-uuid' })
 
     expect(extendRunWallClock).not.toHaveBeenCalled()
+  })
+})
+
+describe('computeRunTokenUsage', () => {
+  const realHome = process.env.HOME
+
+  afterEach(() => {
+    process.env.HOME = realHome
+  })
+
+  it('skips transcript files last modified before the run started', () => {
+    const home = mkdtempSync(join(tmpdir(), 'agenthub-run-tokens-'))
+    process.env.HOME = home
+    const repoPath = '/work/some-repo'
+    const projectDir = join(home, '.claude', 'projects', repoPath.replace(/\//g, '-'))
+    mkdirSync(projectDir, { recursive: true })
+
+    const now = Date.now()
+    const startedAt = new Date(now - 60 * 60_000).toISOString()
+    const usageLine = (minutesAgo: number, outputTokens: number): string =>
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: new Date(now - minutesAgo * 60_000).toISOString(),
+        sessionId: 's',
+        message: { role: 'assistant', usage: { input_tokens: 1, output_tokens: outputTokens } }
+      }) + '\n'
+
+    // A file untouched since before the run cannot hold entries from the run.
+    // The in-window entry here only exists to prove the file is never read.
+    const stale = join(projectDir, 'stale.jsonl')
+    writeFileSync(stale, usageLine(30, 500))
+    const twoHoursAgo = new Date(now - 120 * 60_000)
+    utimesSync(stale, twoHoursAgo, twoHoursAgo)
+    writeFileSync(join(projectDir, 'live.jsonl'), usageLine(10, 70))
+
+    const rows: Record<string, Record<string, unknown>> = {
+      orchestrator_runs: { id: 'run-1', repo_id: 'repo-1', status: 'running', started_at: startedAt },
+      repos: { id: 'repo-1', name: 'some-repo', path: repoPath, hidden: 0 }
+    }
+    const db = {
+      prepare: (sql: string) => ({
+        get: () => rows[sql.includes('orchestrator_runs') ? 'orchestrator_runs' : 'repos']
+      })
+    } as unknown as Parameters<typeof computeRunTokenUsage>[0]
+
+    expect(computeRunTokenUsage(db, 'run-1')).toBe(70)
   })
 })

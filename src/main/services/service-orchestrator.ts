@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { emitToAllRenderers } from '../utils/emit-to-all-renderers'
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import log from 'electron-log/main'
@@ -275,7 +275,11 @@ export function computeRunTokenUsage(db: Database.Database, runId: string): numb
   for (const name of readdirSync(projectDir)) {
     if (!name.endsWith('.jsonl')) continue
     try {
-      const content = readFileSync(join(projectDir, name), 'utf-8')
+      const filePath = join(projectDir, name)
+      // A file untouched since before the run started cannot hold entries from
+      // the run — skip it without reading (the folder can hold hundreds of MB).
+      if (statSync(filePath).mtimeMs < startMs) continue
+      const content = readFileSync(filePath, 'utf-8')
       for (const entry of extractUsageEntries(parseJsonlContent(content))) {
         const t = entry.timestamp ? new Date(entry.timestamp).getTime() : NaN
         if (isNaN(t) || t < startMs || t > endMs) continue
