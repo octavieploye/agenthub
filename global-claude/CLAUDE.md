@@ -1,6 +1,8 @@
 # CLAUDE.md — Global Rules
 # Managed by agenthub. To apply: node scripts/sync-global-claude.mjs
 
+> **Scope:** these rules govern Claude sessions OUTSIDE AgentHub. When the environment variable `AGENTHUB_HOME` is set (any session or agent running inside AgentHub, whatever repo it targets), `agenthub/.claude/CLAUDE.md` takes precedence over this file wherever the two conflict.
+
 ## Core Rules (non-negotiable)
 
 - **Never assume.** If anything is unclear, ambiguous, or missing — stop and ask.
