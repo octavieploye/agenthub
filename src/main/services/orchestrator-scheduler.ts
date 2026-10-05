@@ -123,6 +123,8 @@ export class OrchestratorScheduler {
   private tickInFlight = false
   private tickRequested = false
   private pausedRunIds = new Set<string>()
+  /** Runs a tick has already evaluated — a run absent from this set is on its admission tick (S109). */
+  private tickedRunIds = new Set<string>()
   private retryMap = new Map<string, RetryRecord>()
   // Recorded at construction so the first-cadence window starts from T=0, not from first tick.
   private readonly schedulerStartTime = Date.now()
@@ -366,6 +368,7 @@ export class OrchestratorScheduler {
 
   cancel(runId: string): void {
     this.pausedRunIds.delete(runId)
+    this.tickedRunIds.delete(runId)
     this.lastHeartbeatAt.delete(runId)
     updateRunStatus(this.db, runId, 'cancelled')
     deleteApprovalsForRun(this.db, runId)
@@ -670,6 +673,9 @@ export class OrchestratorScheduler {
 
       if (this.pausedRunIds.has(run.id)) continue
 
+      const pastAdmissionTick = this.tickedRunIds.has(run.id)
+      this.tickedRunIds.add(run.id)
+
       // Budget gate — per-run: each active run independently capped at
       // run.agentLifetimeCap (defaults to 50 via mapRunRow).
       const spawned = getAgentsSpawned(this.db, run.id)
@@ -681,6 +687,7 @@ export class OrchestratorScheduler {
       // Fetch candidate tasks
       const candidateTasks = this.fetchCandidateTasks(run)
       if (candidateTasks.length === 0) {
+        if (pastAdmissionTick && this.releaseSlotIfNeverDispatchable(run)) continue
         this.maybeCompleteRun(run)
         continue
       }
@@ -1103,6 +1110,27 @@ export class OrchestratorScheduler {
     return candidates
   }
 
+  /**
+   * S109: the admission predicate must hold for the run's lifetime. A running run that never
+   * dispatched anything, waits on no approval and has no candidate left can never conclude —
+   * cancel it so it releases its slot. Returns true when the run was cancelled.
+   */
+  private releaseSlotIfNeverDispatchable(run: OrchestratorRun): boolean {
+    if (getTaskLogsByRun(this.db, run.id).length > 0) return false
+    const hasPendingApproval = this.db
+      .prepare("SELECT 1 FROM orchestrator_approvals WHERE run_id = ? AND status = 'pending' LIMIT 1")
+      .get(run.id)
+    if (hasPendingApproval) return false
+    if (this.hasDispatchableCandidate(run)) return false
+
+    log.warn('OrchestratorScheduler: run released its slot — no dispatchable task was left', {
+      runId: run.id,
+      sprintName: run.sprintName,
+    })
+    this.cancel(run.id)
+    return true
+  }
+
   private maybeCompleteRun(run: OrchestratorRun): void {
     const allLogs = getTaskLogsByRun(this.db, run.id)
     const activeLogs = allLogs.filter(l => l.status === 'active')
@@ -1120,8 +1148,9 @@ export class OrchestratorScheduler {
     })
 
     // Never auto-complete a run that has had zero activity: no logs dispatched AND no approvals
-    // ever inserted. This keeps task-less runs alive (they can be cancelled later) while still
-    // allowing runs that went through an approval lifecycle to conclude normally.
+    // ever inserted. This keeps task-less runs alive (the tick cancels them after their admission
+    // tick — releaseSlotIfNeverDispatchable, S109) while still allowing runs that went through an
+    // approval lifecycle to conclude normally.
     if (candidateTasks.length === 0 && allLogs.length === 0) {
       const hasAnyApproval = this.db
         .prepare('SELECT 1 FROM orchestrator_approvals WHERE run_id = ? LIMIT 1')
@@ -1135,6 +1164,7 @@ export class OrchestratorScheduler {
       updateRunStatus(this.db, run.id, finalStatus)
       deleteApprovalsForRun(this.db, run.id)
       this.lastHeartbeatAt.delete(run.id)
+      this.tickedRunIds.delete(run.id)
       this.emitStatusChange(run.id, finalStatus, run.sprintName)
       this.notifyLifecycle(
         run,

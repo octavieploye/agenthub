@@ -814,6 +814,112 @@ describe('OrchestratorScheduler', () => {
     })
   })
 
+  describe('S109: a running run that can never dispatch releases its slot', () => {
+    const TICK_MS = 1_000
+
+    /** A named sprint run whose only task leaves the backlog right after admission. */
+    function startSprintRunThenDrain(sprintName: string): OrchestratorRun {
+      const taskId = seedSprintTask(db, sprintName, 'repo-1')
+      const run = scheduler.start({ sprintName, repoId: 'repo-1' })
+      db.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").run(taskId)
+      return run
+    }
+
+    it('keeps the run on its admission tick, then cancels it with a warning on the next tick', async () => {
+      const warn = vi.spyOn(log, 'warn')
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const run = startSprintRunThenDrain('sprint-1')
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(getRun(db, run.id)!.status).toBe('running')
+
+      await vi.advanceTimersByTimeAsync(TICK_MS)
+      expect(getRun(db, run.id)!.status).toBe('cancelled')
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringMatching(/released its slot.*no dispatchable task/),
+        expect.objectContaining({ runId: run.id })
+      )
+    })
+
+    it('promotes the next queued run once the stuck run is cancelled', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const stuck = startSprintRunThenDrain('sprint-1')
+      seedSprintTask(db, 'sprint-2', 'repo-1')
+      const waiting = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+      expect(waiting.status).toBe('queued')
+
+      await vi.advanceTimersByTimeAsync(1 + TICK_MS)
+
+      expect(getRun(db, stuck.id)!.status).toBe('cancelled')
+      expect(getRun(db, waiting.id)!.status).toBe('running')
+    })
+
+    it('cancels a run whose candidate vanished after a first tick that dispatched nothing', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const taskId = seedSprintTask(db, 'sprint-1', 'repo-1')
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+
+      await vi.advanceTimersByTimeAsync(1)
+      db.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").run(taskId)
+      await vi.advanceTimersByTimeAsync(TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('cancelled')
+    })
+
+    it('does not fire while the run still has a dispatchable task', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      seedSprintTask(db, 'sprint-1', 'repo-1')
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+
+      await vi.advanceTimersByTimeAsync(5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('running')
+    })
+
+    it('does not fire while a task of the run waits for approval', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const taskId = seedSprintTask(db, 'sprint-1', 'repo-1')
+      db.prepare('UPDATE tasks SET requires_approval = 1 WHERE id = ?').run(taskId)
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+
+      await vi.advanceTimersByTimeAsync(5 * TICK_MS)
+
+      expect(getApproval(db, run.id, taskId)?.status).toBe('pending')
+      expect(getRun(db, run.id)!.status).toBe('running')
+    })
+
+    it('does not fire when the candidate left but an approval of the run is still pending', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const run = startSprintRunThenDrain('sprint-1')
+      insertApproval(db, { runId: run.id, taskId: 'task-waiting', windowMinutes: 30 })
+
+      await vi.advanceTimersByTimeAsync(5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).not.toBe('cancelled')
+    })
+
+    it('does not fire for a task blocked only by a dependency inside the same run', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      seedBlockedSprintTask(db, 'sprint-1', 'repo-1')
+      const run = scheduler.start({ sprintName: 'sprint-1', repoId: 'repo-1' })
+
+      await vi.advanceTimersByTimeAsync(5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('running')
+    })
+
+    it('does not fire for a paused run', async () => {
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
+      const run = startSprintRunThenDrain('sprint-1')
+
+      await vi.advanceTimersByTimeAsync(1)
+      scheduler.pause(run.id)
+      await vi.advanceTimersByTimeAsync(5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('paused')
+    })
+  })
+
   // -------------------------------------------------------------------------
   // pause()
   // -------------------------------------------------------------------------
