@@ -37,13 +37,22 @@ export function insertTaskEvent(db: Database.Database, input: InsertTaskEventInp
 
 export function getUnsyncedEvents(db: Database.Database): TaskEvent[] {
   const rows = db
-    .prepare('SELECT * FROM task_events WHERE synced_to_anamnesis = 0 ORDER BY created_at ASC')
+    .prepare('SELECT * FROM task_events WHERE synced_to_anamnesis = 0 AND rejected_at IS NULL ORDER BY created_at ASC')
     .all() as Record<string, unknown>[]
   return rows.map(mapEventRow)
 }
 
 export function markEventSynced(db: Database.Database, id: string): void {
   db.prepare('UPDATE task_events SET synced_to_anamnesis = 1 WHERE id = ?').run(id)
+}
+
+/** Mark an event Anamnesis rejected for good: kept in the table, never sent again. `status` is NULL for a corrupt payload. */
+export function markEventRejected(db: Database.Database, id: string, status: number | null): void {
+  db.prepare('UPDATE task_events SET rejected_at = ?, rejection_status = ? WHERE id = ?').run(
+    new Date().toISOString(),
+    status,
+    id
+  )
 }
 
 export function getEventsByTask(db: Database.Database, taskId: string): TaskEvent[] {

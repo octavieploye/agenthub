@@ -13,6 +13,7 @@ export type ActivityEventType =
   | 'note_created'
   | 'repo_added'
   | 'anamnesis_status_unreconciled'
+  | 'anamnesis_event_rejected'
 
 export type ActivityEntityType = 'agent' | 'task' | 'bug' | 'note' | 'repo'
 

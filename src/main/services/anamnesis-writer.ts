@@ -1,7 +1,7 @@
 import { basename, isAbsolute } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
-import { getUnsyncedEvents, markEventSynced } from '../db/queries/task-events.queries'
+import { getUnsyncedEvents, markEventRejected, markEventSynced } from '../db/queries/task-events.queries'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
@@ -46,6 +46,12 @@ const BRAIN_ENTRY_PAYLOAD_KEYS = [
   'created_at',
   'domain_category'
 ] as const
+
+/** HTTP statuses of the memory endpoint that reject an event for good; every other failure is retried. */
+const PERMANENT_REJECTION_STATUSES: ReadonlySet<number> = new Set([400, 413, 422])
+
+/** What one send did to its event: delivered, rejected for good, or left queued for a retry. */
+type SendOutcome = 'synced' | 'rejected' | 'failed'
 
 /** Why a project-status PUT did not land: an HTTP rejection or a transport error. */
 interface ProjectStatusFailure {
@@ -107,15 +113,17 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   }
 
   onEventInserted(): void {
-    if (this.circuitOpen) return
+    if (this.circuitOpen && !this.backoffElapsed()) return
     this.flush().catch((err) => log.error('AnamnesisWriter flush error', err))
   }
 
   async flush(): Promise<void> {
     if (this.flushing) return
     if (this.circuitOpen) {
-      const elapsed = Date.now() - this.lastFailureTime
-      if (elapsed < AnamnesisWriter.BACKOFF_MS) return
+      if (!this.backoffElapsed()) {
+        this.armRecoveryTimer()
+        return
+      }
       log.info('AnamnesisWriter: circuit half-open, retrying')
     }
 
@@ -126,8 +134,8 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       const remaining = allEvents.length - batch.length
 
       for (const event of batch) {
-        const ok = await this.sendEvent(event)
-        if (!ok && this.circuitOpen) return
+        const outcome = await this.sendEvent(event)
+        if (outcome === 'failed' && this.circuitOpen) return
       }
 
       if (remaining > 0) {
@@ -137,6 +145,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       }
     } finally {
       this.flushing = false
+      if (this.circuitOpen) this.armRecoveryTimer()
     }
   }
 
@@ -295,16 +304,22 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     }
   }
 
-  private async sendEvent(event: TaskEvent): Promise<boolean> {
+  /** Parse an event's stored payload; null when payload_json is corrupt. */
+  private parsePayload(event: TaskEvent): Record<string, unknown> | null {
+    try {
+      return JSON.parse(event.payloadJson) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  private async sendEvent(event: TaskEvent): Promise<SendOutcome> {
     const path = ENDPOINT_MAP[event.eventType]
     const url = `${this.anamnesisUrl}${path}`
-    let rawPayload: Record<string, unknown>
-    try {
-      rawPayload = JSON.parse(event.payloadJson) as Record<string, unknown>
-    } catch (parseErr) {
-      log.warn('AnamnesisWriter: corrupted payloadJson, skipping event', { eventId: event.id, err: String(parseErr) })
-      this.recordFailure()
-      return false
+    const rawPayload = this.parsePayload(event)
+    if (!rawPayload) {
+      this.rejectEvent(event, null)
+      return 'rejected'
     }
 
     // Resolve project UUID from task (or brain entry payload) → repo → Anamnesis project registry
@@ -343,17 +358,41 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
             typeof sentPayload['taskTitle'] === 'string' ? sentPayload['taskTitle'] : null
           await this.publishProjectStatus(event, projectId, domainCategory, summary)
         }
-        return true
+        return 'synced'
+      } else if (PERMANENT_REJECTION_STATUSES.has(res.status)) {
+        this.rejectEvent(event, res.status)
+        return 'rejected'
       } else {
         log.warn('AnamnesisWriter: non-OK response', { status: res.status, eventId: event.id })
         this.recordFailure()
-        return false
+        return 'failed'
       }
     } catch (err) {
       log.warn('AnamnesisWriter: Anamnesis unreachable, event queued', { eventId: event.id })
       this.recordFailure()
-      return false
+      return 'failed'
     }
+  }
+
+  /**
+   * Z-P0-2: take a permanently rejected event out of the outbox (kept in the table, never sent
+   * again) and leave a warning plus an activity_log record. `status` is the HTTP status, null for
+   * a corrupt payload. Never logs the payload or the response body; never counts toward the breaker.
+   */
+  private rejectEvent(event: TaskEvent, status: number | null): void {
+    markEventRejected(this.db, event.id, status)
+    log.warn('AnamnesisWriter: event rejected for good, will not be sent again', {
+      eventId: event.id,
+      eventType: event.eventType,
+      status
+    })
+    insertActivityEvent(this.db, {
+      eventType: 'anamnesis_event_rejected',
+      entityType: 'task',
+      entityId: event.taskId ?? event.id,
+      repoId: this.resolveTaskRepoId(event.taskId) ?? undefined,
+      details: { eventId: event.id, eventType: event.eventType, httpStatus: status }
+    })
   }
 
   /**
@@ -419,14 +458,32 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     }
   }
 
+  /** Z-P0-1: a failed half-open retry lands here too, so the next retry is always armed. */
   private openCircuit(): void {
-    if (this.circuitOpen) return
-    this.circuitOpen = true
-    log.warn(`AnamnesisWriter: circuit open after ${this.consecutiveFailures} failures, backing off ${AnamnesisWriter.BACKOFF_MS}ms`)
+    if (!this.circuitOpen) {
+      this.circuitOpen = true
+      log.warn(`AnamnesisWriter: circuit open after ${this.consecutiveFailures} failures, backing off ${AnamnesisWriter.BACKOFF_MS}ms`)
+    }
+    this.armRecoveryTimer()
+  }
+
+  /** True once the fixed back-off since the last failed send is over. */
+  private backoffElapsed(): boolean {
+    return Date.now() - this.lastFailureTime >= AnamnesisWriter.BACKOFF_MS
+  }
+
+  /**
+   * Arm the retry for the end of the current back-off — a full back-off when it is already over.
+   * No-op while a timer is pending: there is never more than one.
+   */
+  private armRecoveryTimer(): void {
+    if (this.recoveryTimer) return
+    const remaining = AnamnesisWriter.BACKOFF_MS - (Date.now() - this.lastFailureTime)
+    const delay = remaining > 0 ? remaining : AnamnesisWriter.BACKOFF_MS
     this.recoveryTimer = setTimeout(() => {
       this.recoveryTimer = null
       log.info('AnamnesisWriter: circuit retry timer fired')
       this.flush().catch((err) => log.error('AnamnesisWriter flush error on retry', err))
-    }, AnamnesisWriter.BACKOFF_MS)
+    }, delay)
   }
 }
