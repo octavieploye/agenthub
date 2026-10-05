@@ -88,6 +88,8 @@ interface ManagedAgent {
   telegramNotifyAtSpawn: boolean
   /** True if the agenthub-telegram MCP server was actually added to this agent's MCP config at spawn. */
   telegramMcpAttached: boolean
+  /** True while the inferred-completion fallback is active because the Telegram socket went away after spawn (S110) — keeps the warning to one line per outage. */
+  telegramSocketLossWarned: boolean
   /** True once a completion notification has been sent for the current exchange (mid-session toggle path). Reset on next user submit. */
   hasNotifiedCompletion: boolean
   /** Path to the generated .codex/AGENTS.md file — cleaned up on exit. */
@@ -711,10 +713,24 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     // Orchestrator agents that received the agenthub-telegram MCP complete only via its
     // explicit signal (completeAgentFromTelegram) — an inferred parser completion never
     // applies. Without that MCP there is no explicit channel, so inference is kept.
+    // S110: the channel is checked when it is used — a socket that stopped listening after
+    // spawn leaves no explicit channel either, so inference is allowed again.
+    const gatedAgent = agents.get(agentState.id)
+    const telegramSocketAvailable = getTelegramSocketPath() !== null
     const gateApplies = shouldGateInferredCompletion(
       agentState.isOrchestrator === true,
-      agents.get(agentState.id)?.telegramMcpAttached === true
+      gatedAgent?.telegramMcpAttached === true,
+      telegramSocketAvailable
     )
+    if (gatedAgent && agentState.isOrchestrator && gatedAgent.telegramMcpAttached) {
+      if (!telegramSocketAvailable && !gatedAgent.telegramSocketLossWarned) {
+        log.warn('Orchestrator agent spawned without the agenthub-telegram MCP — inferred completion fallback active', {
+          agentId: agentState.id,
+          reason: 'telegram socket no longer available',
+        })
+      }
+      gatedAgent.telegramSocketLossWarned = !telegramSocketAvailable
+    }
     const parsed = gateParsedStatus(parser.parse(data), gateApplies)
     if (parsed) {
       const mgd = agents.get(agentState.id)
@@ -996,6 +1012,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     headlessTerminal: new HeadlessTerminalBuffer(options.cols ?? 120, options.rows ?? 30),
     telegramNotifyAtSpawn: agentState.telegramNotify,
     telegramMcpAttached: false,
+    telegramSocketLossWarned: false,
     codexAgentsMdPath: null,
   })
 

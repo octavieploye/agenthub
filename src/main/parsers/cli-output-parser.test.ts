@@ -42,6 +42,37 @@ describe('shouldGateInferredCompletion (call-site gate decision)', () => {
   })
 })
 
+describe('S110: the gate follows the live Telegram socket state', () => {
+  const inferredCompletion = { status: 'completed', confidence: 'inferred' } as const
+  const gateAtCallSite = (
+    isOrchestrator: boolean,
+    telegramMcpAttached: boolean,
+    telegramSocketAvailable: boolean
+  ): ReturnType<typeof gateParsedStatus> =>
+    gateParsedStatus(
+      inferredCompletion,
+      shouldGateInferredCompletion(isOrchestrator, telegramMcpAttached, telegramSocketAvailable)
+    )
+
+  it('keeps the gate for an orchestrator agent WITH the Telegram MCP while the socket is available', () => {
+    expect(gateAtCallSite(true, true, true)).toBeNull()
+  })
+
+  it('accepts inferred completion for an orchestrator agent WITH the Telegram MCP once the socket is gone', () => {
+    expect(gateAtCallSite(true, true, false)).toEqual(inferredCompletion)
+  })
+
+  it('still accepts inferred completion for an orchestrator agent WITHOUT the Telegram MCP', () => {
+    expect(gateAtCallSite(true, false, true)).toEqual(inferredCompletion)
+    expect(gateAtCallSite(true, false, false)).toEqual(inferredCompletion)
+  })
+
+  it('leaves a manual agent unchanged whatever the socket state', () => {
+    expect(gateAtCallSite(false, true, true)).toEqual(inferredCompletion)
+    expect(gateAtCallSite(false, true, false)).toEqual(inferredCompletion)
+  })
+})
+
 describe('ClaudeCliOutputParser', () => {
   let parser: ClaudeCliOutputParser
 

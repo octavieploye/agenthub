@@ -277,6 +277,28 @@ describe('TelegramSocketServer', () => {
     await expect(startup).rejects.toMatchObject({ code: 'ECANCELED' })
   })
 
+  // S110: agent-manager re-reads the socket path when it considers an inferred completion, so a
+  // server that errors after listening must stop exposing its path.
+  it('S110: exposes no socket path once the server errors after listening', async () => {
+    let listening: net.Server | null = null
+    server = new TelegramSocketServer({
+      notify: mockNotify,
+      logInfo: vi.fn(),
+      logError: vi.fn(),
+      createServer: (handler) => {
+        listening = net.createServer(handler)
+        return listening
+      },
+    })
+    await server.start(sockPath)
+    expect(server.getSocketPath()).toBe(sockPath)
+
+    listening!.emit('error', Object.assign(new Error('socket lost'), { code: 'EIO' }))
+
+    expect(server.getSocketPath()).toBeNull()
+    expect(server.getStatus()).toMatchObject({ state: 'error', errorCode: 'EIO' })
+  })
+
   it('rejects an in-flight startup when stopped', async () => {
     const fakeServer = Object.assign(new EventEmitter(), {
       listen: vi.fn(),
