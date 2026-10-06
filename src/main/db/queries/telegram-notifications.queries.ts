@@ -8,6 +8,7 @@ export type OrchestratorLifecycleNotificationType =
   | 'task_failed'
   | 'run_completed'
   | 'run_failed'
+  | 'run_cancelled'
   | 'run_heartbeat'
 
 export type TelegramNotificationType =
@@ -23,6 +24,7 @@ const ORCHESTRATOR_NOTIFICATION_ROUTES: Record<
   task_failed: { type: 'failed', label: '❌ Task failed' },
   run_completed: { type: 'completed', label: '🏁 Run completed' },
   run_failed: { type: 'failed', label: '🚨 Run failed' },
+  run_cancelled: { type: 'completed', label: '⛔ Run cancelled' },
   run_heartbeat: { type: 'completed', label: '💓 Heartbeat' },
 }
 

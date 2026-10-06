@@ -157,6 +157,7 @@ describe('telegram-notifications queries', () => {
     ['task_failed', 'failed', '❌ Task failed'],
     ['run_completed', 'completed', '🏁 Run completed'],
     ['run_failed', 'failed', '🚨 Run failed'],
+    ['run_cancelled', 'completed', '⛔ Run cancelled'],
     ['run_heartbeat', 'completed', '💓 Heartbeat'],
   ] as const)('routes %s to a phone-friendly %s payload', (eventType, payloadType, label) => {
     const routed = routeTelegramNotification('Lifecycle details', eventType)
@@ -257,6 +258,19 @@ describe('buildOrchestratorLifecyclePayload', () => {
       type: 'run_failed',
       isComplexTask: false,
     })
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
+  })
+
+  it('run_cancelled with repoPath → commitable=false, no commit button', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'my-sprint\ncancelled — no dispatchable task was left',
+      type: 'run_cancelled',
+      isComplexTask: true,
+    })
+    expect(payload.type).toBe('completed')
+    expect(payload.summary).toBe('⛔ Run cancelled\nmy-sprint\ncancelled — no dispatchable task was left')
     expect(payload.commitable).toBe(false)
     expect(payload.commitAgentId).toBeUndefined()
   })

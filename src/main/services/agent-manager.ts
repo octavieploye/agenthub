@@ -724,7 +724,7 @@ export function spawnAgent(options: AgentSpawnOptions): AgentState {
     )
     if (gatedAgent && agentState.isOrchestrator && gatedAgent.telegramMcpAttached) {
       if (!telegramSocketAvailable && !gatedAgent.telegramSocketLossWarned) {
-        log.warn('Orchestrator agent spawned without the agenthub-telegram MCP — inferred completion fallback active', {
+        log.warn('Telegram socket unavailable after spawn — inferred completion fallback active', {
           agentId: agentState.id,
           reason: 'telegram socket no longer available',
         })

@@ -1128,6 +1128,7 @@ export class OrchestratorScheduler {
       sprintName: run.sprintName,
     })
     this.cancel(run.id)
+    this.notifyLifecycle(run, 'run_cancelled', `${run.sprintName}\ncancelled — no dispatchable task was left`)
     return true
   }
 
@@ -1147,10 +1148,13 @@ export class OrchestratorScheduler {
       return true
     })
 
-    // Never auto-complete a run that has had zero activity: no logs dispatched AND no approvals
-    // ever inserted. This keeps task-less runs alive (the tick cancels them after their admission
-    // tick — releaseSlotIfNeverDispatchable, S109) while still allowing runs that went through an
-    // approval lifecycle to conclude normally.
+    // Never auto-complete a run that has had zero activity: no logs dispatched AND no approval row.
+    // Such a task-less run stays running here; the tick cancels it after its admission tick
+    // (releaseSlotIfNeverDispatchable, S109). A zero-log run that has any approval row concludes
+    // below. For a zero-log run whose only approval was denied or expired, with no candidate left,
+    // the outcome depends on the tick: on its admission tick it reaches this point and ends
+    // `completed`; on a later tick the release check runs first (it looks for a pending approval
+    // only) and the run ends `cancelled`.
     if (candidateTasks.length === 0 && allLogs.length === 0) {
       const hasAnyApproval = this.db
         .prepare('SELECT 1 FROM orchestrator_approvals WHERE run_id = ? LIMIT 1')

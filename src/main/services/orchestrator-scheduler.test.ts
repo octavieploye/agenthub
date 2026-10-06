@@ -920,6 +920,58 @@ describe('OrchestratorScheduler', () => {
 
       expect(getRun(db, run.id)!.status).toBe('paused')
     })
+
+    /** Same as startSprintRunThenDrain, with the run's Telegram notifications switched on or off. */
+    function startNotifyingRunThenDrain(sprintName: string, telegramNotify: boolean): OrchestratorRun {
+      const taskId = seedSprintTask(db, sprintName, 'repo-1')
+      const run = scheduler.start({ sprintName, repoId: 'repo-1', telegramNotify })
+      db.prepare("UPDATE tasks SET status = 'in_progress' WHERE id = ?").run(taskId)
+      return run
+    }
+
+    it('S-L1: tells the owner exactly once when it cancels a telegramNotify run', async () => {
+      const sendTelegramNotification = vi.fn()
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS, sendTelegramNotification }))
+      const run = startNotifyingRunThenDrain('sprint-1', true)
+
+      await vi.advanceTimersByTimeAsync(1 + 5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('cancelled')
+      expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        'sprint-1\ncancelled — no dispatchable task was left',
+        'run_cancelled',
+        'repo-1',
+        undefined
+      )
+    })
+
+    it('S-L1: sends nothing when the cancelled run has telegramNotify off', async () => {
+      const sendTelegramNotification = vi.fn()
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS, sendTelegramNotification }))
+      const run = startNotifyingRunThenDrain('sprint-1', false)
+
+      await vi.advanceTimersByTimeAsync(1 + 5 * TICK_MS)
+
+      expect(getRun(db, run.id)!.status).toBe('cancelled')
+      expect(sendTelegramNotification).not.toHaveBeenCalled()
+    })
+
+    it('S-L1: a failing notification still cancels the run and promotes the next queued one', async () => {
+      const sendTelegramNotification = vi.fn(() => {
+        throw new Error('Telegram unavailable')
+      })
+      scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS, sendTelegramNotification }))
+      const stuck = startNotifyingRunThenDrain('sprint-1', true)
+      seedSprintTask(db, 'sprint-2', 'repo-1')
+      const waiting = scheduler.start({ sprintName: 'sprint-2', repoId: 'repo-1' })
+
+      await vi.advanceTimersByTimeAsync(1 + TICK_MS)
+
+      expect(getRun(db, stuck.id)!.status).toBe('cancelled')
+      expect(getRun(db, waiting.id)!.status).toBe('running')
+      expect(sendTelegramNotification).toHaveBeenCalledTimes(1)
+    })
   })
 
   // -------------------------------------------------------------------------
