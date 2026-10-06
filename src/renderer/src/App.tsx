@@ -53,14 +53,78 @@ import type { TriageEvent } from '@shared/types/triage.types'
 import {
   startIpcListener,
   markTerminalSessionEnded,
-  clearTerminalSessionEnded
+  clearTerminalSessionEnded,
+  getTerminal
 } from './widgets/full-terminal/terminal-manager'
+import { useHistoryStore } from './stores/history-store'
 import { initCrashLogger } from './crash-logger'
 import { usePrefetchAgentData } from './hooks/usePrefetchAgentData'
 import { useAgentHydration } from './hooks/useAgentHydration'
 import { RateLimitPrompt } from './widgets/rate-limit-prompt/RateLimitPrompt'
 import { useKeyboardNav } from './hooks/useKeyboardNav'
 import { VoiceInputProvider } from './contexts/VoiceInputContext'
+
+// ── TEMP switch-probe ─────────────────────────────────────────────────────────
+// Timing for the agent-switch lag investigation. Logs to the DevTools console
+// with the prefix [switch-probe]. Remove once the cause is confirmed.
+let switchProbeSeq = 0
+
+function probeAgentSwitch(agentId: string): void {
+  const t0 = performance.now()
+  const ev = window.event
+  const out: Record<string, unknown> = {
+    seq: ++switchProbeSeq,
+    agent: agentId.slice(0, 8),
+    via: ev?.type ?? 'unknown',
+    // Time the click/keypress waited before this handler ran
+    inputDelayMs: ev ? Math.round(t0 - ev.timeStamp) : null,
+    firstOpen: !getTerminal(agentId)?.element,
+    historyFetch: !useHistoryStore.getState().hasFetched.get(agentId)
+  }
+  const mark = (key: string): void => {
+    out[key] = Math.round(performance.now() - t0)
+  }
+  // Round trip to a trivial main-process handler: how busy the main process is
+  const ping = window.agentHub.usage
+    .getSnapshot()
+    .then(() => mark('mainPingMs'))
+    .catch(() => mark('mainPingFailedMs'))
+  const drained = new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      mark('renderMs')
+      requestAnimationFrame(() => {
+        mark('paintMs')
+        const term = getTerminal(agentId)
+        const finish = (): void => {
+          mark('termDrainMs')
+          out.termLines = term?.buffer.active.length ?? null
+          resolve()
+        }
+        // Fires once xterm has parsed everything queued before it
+        if (term) term.write('', finish)
+        else finish()
+      })
+    })
+  })
+  Promise.all([ping, drained]).then(() => console.log('[switch-probe] ' + JSON.stringify(out)))
+}
+
+const switchProbeWindow = window as Window & { __switchProbeLongTasks?: boolean }
+if (!switchProbeWindow.__switchProbeLongTasks) {
+  switchProbeWindow.__switchProbeLongTasks = true
+  try {
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.duration >= 150) {
+          console.log(`[switch-probe] renderer blocked ${Math.round(entry.duration)}ms`)
+        }
+      }
+    }).observe({ entryTypes: ['longtask'] })
+  } catch {
+    // longtask entries unsupported — probe runs without them
+  }
+}
+// ── /TEMP switch-probe ────────────────────────────────────────────────────────
 
 function App(): React.JSX.Element {
   // Detect breakout mode from URL search params
@@ -609,6 +673,7 @@ function AppMain(): React.JSX.Element {
   }, [contextMenu])
 
   const handleSelectAgent = useCallback((agentId: string) => {
+    probeAgentSwitch(agentId) // TEMP switch-probe
     setActiveAgent(agentId)
     setFocusedAgent(agentId)
     const agent = agents.get(agentId)

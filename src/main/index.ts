@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, Menu, nativeImage, session, systemPreferences } from 'electron'
+import { app, shell, BrowserWindow, Menu, nativeImage, powerMonitor, session, systemPreferences } from 'electron'
+import { appendFile } from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -159,7 +160,32 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+    // TEMP switch-probe: copy renderer probe lines into the probe log
+    window.webContents.on('console-message', (details) => {
+      if (details.message.startsWith('[switch-probe]')) switchProbeLog(details.message)
+    })
   })
+
+  // TEMP switch-probe: own file next to main.log — main.log rotates at 1 MB and
+  // loses the history before a lag can be reported
+  const switchProbeFile = join(app.getPath('logs'), 'switch-probe.log')
+  function switchProbeLog(message: string): void {
+    log.info(message)
+    appendFile(switchProbeFile, `[${new Date().toISOString()}] ${message}\n`, () => {})
+  }
+
+  // TEMP switch-probe: report main-process event loop stalls of 100ms or more
+  let switchProbeLastTick = Date.now()
+  setInterval(() => {
+    const now = Date.now()
+    const stall = now - switchProbeLastTick - 250
+    switchProbeLastTick = now
+    if (stall >= 100) switchProbeLog(`[switch-probe] main process stalled ${stall}ms`)
+  }, 250)
+
+  // TEMP switch-probe: mark sleep/wake so lag after reopening the laptop can be placed
+  powerMonitor.on('suspend', () => switchProbeLog('[switch-probe] system suspend'))
+  powerMonitor.on('resume', () => switchProbeLog('[switch-probe] system resume'))
 
   // Allow microphone access from the renderer (required for voice input)
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
