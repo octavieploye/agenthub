@@ -891,6 +891,8 @@ describe('OrchestratorScheduler', () => {
     it('does not fire when the candidate left but an approval of the run is still pending', async () => {
       scheduler = new OrchestratorScheduler(buildDeps(db, { tickIntervalMs: TICK_MS }))
       const run = startSprintRunThenDrain('sprint-1')
+      // The approval appears after the admission tick, so the run is still running when the release check runs.
+      await vi.advanceTimersByTimeAsync(1)
       insertApproval(db, { runId: run.id, taskId: 'task-waiting', windowMinutes: 30 })
 
       await vi.advanceTimersByTimeAsync(5 * TICK_MS)
