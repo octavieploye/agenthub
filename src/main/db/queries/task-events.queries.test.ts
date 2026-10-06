@@ -8,6 +8,7 @@ import {
   getUnsyncedEvents,
   markEventSynced,
   markEventRejected,
+  rejectEventWithActivity,
   getEventsByTask
 } from './task-events.queries'
 import { insertTask } from './tasks.queries'
@@ -155,4 +156,104 @@ it('Z-P0-2: migration 058 applies on a version-57 database and leaves existing r
   } finally {
     legacy.close()
   }
+})
+
+// ── W-L3: the rejected row and its activity record are written together or not at all ──
+
+interface ActivityRow {
+  event_type: string
+  entity_type: string
+  entity_id: string
+  repo_id: string | null
+  details: string | null
+  created_at: string
+}
+
+function rejectedActivityRows(): ActivityRow[] {
+  return db
+    .prepare(
+      `SELECT event_type, entity_type, entity_id, repo_id, details, created_at FROM activity_log WHERE event_type = 'anamnesis_event_rejected'`
+    )
+    .all() as ActivityRow[]
+}
+
+it('W-L3: rejectEventWithActivity marks the row rejected and writes one activity record', () => {
+  const task = insertTask(db, { repoId: 'r1', title: 'Task', status: 'backlog' })
+  const event = insertTaskEvent(db, { taskId: task.id, eventType: 'CARD_TRANSITION', fromStatus: 'backlog', toStatus: 'today', agentId: null, payload: {} })
+
+  rejectEventWithActivity(db, event, 422, 'r1')
+
+  expect(rejectionRow(event.id).rejection_status).toBe(422)
+  const rows = rejectedActivityRows()
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ entity_type: 'task', entity_id: task.id, repo_id: 'r1' })
+  expect(rows[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  expect(JSON.parse(rows[0].details ?? '{}')).toEqual({ eventId: event.id, eventType: 'CARD_TRANSITION', httpStatus: 422 })
+})
+
+it('W-L3: rejectEventWithActivity uses the event id as entity id for an event without a task', () => {
+  const event = insertTaskEvent(db, { taskId: null, eventType: 'BRAIN_ENTRY_PUBLISHED', fromStatus: null, toStatus: 'active', agentId: null, payload: {} })
+
+  rejectEventWithActivity(db, event, null, null)
+
+  const rows = rejectedActivityRows()
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ entity_id: event.id, repo_id: null })
+  expect(JSON.parse(rows[0].details ?? '{}')).toEqual({ eventId: event.id, eventType: 'BRAIN_ENTRY_PUBLISHED', httpStatus: null })
+})
+
+it('W-L3: rejectEventWithActivity throws and leaves the row unrejected when the activity record cannot be written', () => {
+  const event = insertTaskEvent(db, { taskId: null, eventType: 'BRAIN_ENTRY_PUBLISHED', fromStatus: null, toStatus: 'active', agentId: null, payload: {} })
+  db.exec(
+    `CREATE TRIGGER fail_activity_insert BEFORE INSERT ON activity_log
+     BEGIN SELECT RAISE(ABORT, 'activity insert failed'); END`
+  )
+
+  expect(() => rejectEventWithActivity(db, event, 422, null)).toThrow(/activity insert failed/)
+
+  expect(rejectionRow(event.id)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+  expect(getUnsyncedEvents(db).map((e) => e.id)).toEqual([event.id])
+})
+
+it('W-L3: rejectEventWithActivity throws and writes no activity record when the row update fails', () => {
+  const event = insertTaskEvent(db, { taskId: null, eventType: 'BRAIN_ENTRY_PUBLISHED', fromStatus: null, toStatus: 'active', agentId: null, payload: {} })
+  db.exec(
+    `CREATE TRIGGER fail_rejection_update BEFORE UPDATE OF rejected_at ON task_events
+     BEGIN SELECT RAISE(ABORT, 'rejection update failed'); END`
+  )
+
+  expect(() => rejectEventWithActivity(db, event, 422, null)).toThrow(/rejection update failed/)
+
+  expect(rejectedActivityRows()).toHaveLength(0)
+})
+
+// ── W-L8: TaskEvent exposes the rejection columns ──
+
+it('W-L8: getEventsByTask exposes rejectedAt and rejectionStatus, null for an event that was not rejected', () => {
+  const task = insertTask(db, { repoId: 'r1', title: 'Task', status: 'backlog' })
+  const rejected = insertTaskEvent(db, { taskId: task.id, eventType: 'CARD_TRANSITION', fromStatus: 'backlog', toStatus: 'today', agentId: null, payload: {} })
+  insertTaskEvent(db, { taskId: task.id, eventType: 'CARD_TRANSITION', fromStatus: 'today', toStatus: 'in_progress', agentId: null, payload: {} })
+  markEventRejected(db, rejected.id, 413)
+
+  const [first, second] = getEventsByTask(db, task.id)
+
+  expect(first.rejectedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  expect(first.rejectionStatus).toBe(413)
+  expect(second.rejectedAt).toBeNull()
+  expect(second.rejectionStatus).toBeNull()
+})
+
+it('W-L8: a corrupt-payload rejection exposes rejectedAt with a null rejectionStatus, and unsynced events expose both as null', () => {
+  const task = insertTask(db, { repoId: 'r1', title: 'Task', status: 'backlog' })
+  const rejected = insertTaskEvent(db, { taskId: task.id, eventType: 'CARD_TRANSITION', fromStatus: 'backlog', toStatus: 'today', agentId: null, payload: {} })
+  insertTaskEvent(db, { taskId: task.id, eventType: 'CARD_TRANSITION', fromStatus: 'today', toStatus: 'in_progress', agentId: null, payload: {} })
+  markEventRejected(db, rejected.id, null)
+
+  const [first] = getEventsByTask(db, task.id)
+  expect(first.rejectedAt).toBeTruthy()
+  expect(first.rejectionStatus).toBeNull()
+
+  const [unsynced] = getUnsyncedEvents(db)
+  expect(unsynced.rejectedAt).toBeNull()
+  expect(unsynced.rejectionStatus).toBeNull()
 })

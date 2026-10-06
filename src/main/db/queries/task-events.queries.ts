@@ -55,6 +55,26 @@ export function markEventRejected(db: Database.Database, id: string, status: num
   )
 }
 
+/**
+ * Mark an event rejected and write its 'anamnesis_event_rejected' activity record in one
+ * transaction: both or neither. Throws on a database error, unlike insertActivityEvent.
+ */
+export function rejectEventWithActivity(
+  db: Database.Database,
+  event: Pick<TaskEvent, 'id' | 'taskId' | 'eventType'>,
+  status: number | null,
+  repoId: string | null
+): void {
+  const details = JSON.stringify({ eventId: event.id, eventType: event.eventType, httpStatus: status })
+  db.transaction(() => {
+    markEventRejected(db, event.id, status)
+    db.prepare(
+      `INSERT INTO activity_log (event_type, entity_type, entity_id, repo_id, agent_id, details, created_at)
+       VALUES ('anamnesis_event_rejected', 'task', ?, ?, NULL, ?, ?)`
+    ).run(event.taskId ?? event.id, repoId, details, new Date().toISOString())
+  })()
+}
+
 export function getEventsByTask(db: Database.Database, taskId: string): TaskEvent[] {
   const rows = db
     .prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC, rowid ASC')
@@ -73,6 +93,8 @@ function mapEventRow(row: Record<string, unknown>): TaskEvent {
     payloadJson: row.payload_json as string,
     createdAt: row.created_at as string,
     syncedToAnamnesis: row.synced_to_anamnesis as number,
-    enrichedFromAnamnesis: row.enriched_from_anamnesis as number
+    enrichedFromAnamnesis: row.enriched_from_anamnesis as number,
+    rejectedAt: (row.rejected_at as string) ?? null,
+    rejectionStatus: (row.rejection_status as number) ?? null
   }
 }

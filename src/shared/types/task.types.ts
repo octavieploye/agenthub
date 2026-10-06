@@ -162,6 +162,10 @@ export interface TaskEvent {
   createdAt: string
   syncedToAnamnesis: number
   enrichedFromAnamnesis: number
+  /** When Anamnesis rejected the event for good; null while it is not rejected. */
+  rejectedAt?: string | null
+  /** HTTP status of the rejection; null for a corrupt payload or an event that is not rejected. */
+  rejectionStatus?: number | null
 }
 
 export interface BacklogGroup {

@@ -1437,3 +1437,463 @@ it('Z-P0-2: a rejected CARD_COMPLETED event makes no project-status PUT', async 
   expect(rejectedActivityRows()).toHaveLength(1)
   expect(reconcileRows()).toHaveLength(0)
 })
+
+// ── W-L1 / W-L2 / W-L3: a local database error while recording a rejection ──
+
+/** Make every rejected-row update fail, as a broken local database would. */
+function breakRejectionUpdate(): void {
+  db.exec(
+    `CREATE TRIGGER fail_rejection_update BEFORE UPDATE OF rejected_at ON task_events
+     BEGIN SELECT RAISE(ABORT, 'rejection update failed'); END`
+  )
+}
+
+/** Make every activity_log insert fail. */
+function breakActivityInsert(): void {
+  db.exec(
+    `CREATE TRIGGER fail_activity_insert BEFORE INSERT ON activity_log
+     BEGIN SELECT RAISE(ABORT, 'activity insert failed'); END`
+  )
+}
+
+function errorsAbout(errorSpy: { mock: { calls: unknown[][] } }, eventId: string): unknown[][] {
+  return errorSpy.mock.calls.filter((call) => JSON.stringify(call).includes(eventId))
+}
+
+it('W-L1: a database error while rejecting a 422 event is logged, not counted toward the breaker, and does not stop the flush', async () => {
+  vi.useFakeTimers()
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    const head = [
+      insertTransitionEvent({ taskTitle: PAYLOAD_MARKER }),
+      insertTransitionEvent({ taskTitle: PAYLOAD_MARKER }),
+      insertTransitionEvent({ taskTitle: PAYLOAD_MARKER })
+    ]
+    const good = insertTransitionEvent()
+    db.prepare(`UPDATE task_events SET created_at = '2026-10-05T23:59:59.999Z' WHERE id = ?`).run(good.eventId)
+    db.prepare(`UPDATE task_events SET created_at = '2026-10-05T00:00:00.000Z' WHERE id != ?`).run(good.eventId)
+    breakRejectionUpdate()
+    const memoryMock = endpointMock()
+      .mockResolvedValueOnce(response(false, 422))
+      .mockResolvedValueOnce(response(false, 422))
+      .mockResolvedValueOnce(response(false, 422))
+      .mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    // The flush went on to the good event; the circuit is closed (no retry timer).
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(rejectionRow(good.eventId).synced_to_anamnesis).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
+
+    // The three events stay unsynced, not rejected, with no activity record.
+    for (const { eventId } of head) {
+      expect(rejectionRow(eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+      const errors = errorsAbout(errorSpy, eventId)
+      expect(errors).toHaveLength(1)
+      expect(errors[0][1]).toEqual({ eventId, eventType: 'CARD_TRANSITION' })
+    }
+    expect(getUnsyncedEvents(db)).toHaveLength(3)
+    expect(rejectedActivityRows()).toHaveLength(0)
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(PAYLOAD_MARKER)
+
+    // After a restart (new writer), database healthy again: the three events are sent again and rejected.
+    db.exec('DROP TRIGGER fail_rejection_update')
+    memoryMock.mockResolvedValue(response(false, 422))
+    await writerAnswering(memoryMock).writer.flush()
+    expect(memoryMock).toHaveBeenCalledTimes(7)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+    expect(rejectedActivityRows()).toHaveLength(3)
+  } finally {
+    errorSpy.mockRestore()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L2: a database error while rejecting a corrupt payload is logged and does not abort the flush', async () => {
+  vi.useFakeTimers()
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    const corrupt = insertTransitionEvent()
+    const good = insertTransitionEvent()
+    db.prepare(`UPDATE task_events SET payload_json = ?, created_at = '2026-10-05T00:00:00.000Z' WHERE id = ?`).run(
+      `{"taskTitle":"${PAYLOAD_MARKER}`,
+      corrupt.eventId
+    )
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await expect(writer.flush()).resolves.toBeUndefined()
+
+    expect(memoryMock).toHaveBeenCalledOnce()
+    expect(rejectionRow(good.eventId).synced_to_anamnesis).toBe(1)
+    expect(rejectionRow(corrupt.eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+    expect(getUnsyncedEvents(db).map((e) => e.id)).toEqual([corrupt.eventId])
+    expect(rejectedActivityRows()).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+
+    const errors = errorsAbout(errorSpy, corrupt.eventId)
+    expect(errors).toHaveLength(1)
+    expect(errors[0][1]).toEqual({ eventId: corrupt.eventId, eventType: 'CARD_TRANSITION' })
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(PAYLOAD_MARKER)
+
+    // After a restart (new writer), database healthy again: the corrupt event is rejected, still without a send.
+    db.exec('DROP TRIGGER fail_rejection_update')
+    await writerAnswering(memoryMock).writer.flush()
+    expect(memoryMock).toHaveBeenCalledOnce()
+    expect(rejectionRow(corrupt.eventId).rejected_at).toBeTruthy()
+    expect(rejectedActivityRows()).toHaveLength(1)
+  } finally {
+    errorSpy.mockRestore()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L1 + W-L2: three database errors on corrupt payloads never open the circuit', async () => {
+  vi.useFakeTimers()
+  try {
+    for (let i = 0; i < 3; i++) insertTransitionEvent()
+    db.prepare(`UPDATE task_events SET payload_json = '{broken'`).run()
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+    expect(memoryMock).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+
+    const good = insertTransitionEvent()
+    await writer.flush()
+    expect(memoryMock).toHaveBeenCalledOnce()
+    expect(rejectionRow(good.eventId).synced_to_anamnesis).toBe(1)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L3: when the activity record cannot be written the event is not marked rejected either', async () => {
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    const { eventId } = insertTransitionEvent()
+    breakActivityInsert()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, 422))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    expect(rejectionRow(eventId)).toEqual({ rejected_at: null, rejection_status: null, synced_to_anamnesis: 0 })
+    expect(rejectedActivityRows()).toHaveLength(0)
+    expect(getUnsyncedEvents(db)).toHaveLength(1)
+    expect(errorsAbout(errorSpy, eventId)).toHaveLength(1)
+
+    // After a restart (new writer), database healthy again.
+    db.exec('DROP TRIGGER fail_activity_insert')
+    await writerAnswering(memoryMock).writer.flush()
+
+    expect(memoryMock).toHaveBeenCalledTimes(2)
+    expect(rejectionRow(eventId).rejection_status).toBe(422)
+    expect(rejectedActivityRows()).toHaveLength(1)
+  } finally {
+    errorSpy.mockRestore()
+  }
+})
+
+// ── R-001 / R-004: an unrecordable rejection is attempted once per writer instance ──
+
+const FLUSH_ROUNDS = 50
+
+/** Let the self-rescheduled flushes run: bounded fake time, one millisecond per round. */
+async function runFlushRounds(): Promise<void> {
+  for (let i = 0; i < FLUSH_ROUNDS; i++) await vi.advanceTimersByTimeAsync(1)
+}
+
+/** `count` events at the head of the outbox, all older than any event inserted without a date. */
+function insertHeadEvents(count: number, payload: Record<string, unknown> = {}): string[] {
+  const ids: string[] = []
+  for (let i = 0; i < count; i++) {
+    const { eventId } = insertTransitionEvent(payload)
+    db.prepare(`UPDATE task_events SET created_at = '2026-10-05T00:00:00.000Z' WHERE id = ?`).run(eventId)
+    ids.push(eventId)
+  }
+  return ids
+}
+
+it('R-001a: 11 unrecordable 422 events are each sent once, then the flush stops rescheduling itself', async () => {
+  vi.useFakeTimers()
+  try {
+    insertHeadEvents(11)
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, 422))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+    await runFlushRounds()
+
+    expect(memoryMock).toHaveBeenCalledTimes(11)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(getUnsyncedEvents(db)).toHaveLength(11)
+
+    // A later flush of the same writer does not attempt them again.
+    writer.onEventInserted()
+    await writer.flush()
+    await runFlushRounds()
+    expect(memoryMock).toHaveBeenCalledTimes(11)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('R-001a: 11 unrecordable corrupt payloads are each logged once, then the flush stops rescheduling itself', async () => {
+  vi.useFakeTimers()
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    const ids = insertHeadEvents(11)
+    db.prepare(`UPDATE task_events SET payload_json = '{broken'`).run()
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await expect(writer.flush()).resolves.toBeUndefined()
+    await runFlushRounds()
+
+    expect(memoryMock).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledTimes(11)
+    for (const eventId of ids) expect(errorsAbout(errorSpy, eventId)).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(getUnsyncedEvents(db)).toHaveLength(11)
+  } finally {
+    errorSpy.mockRestore()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('R-001b: a good event queued behind 10 unrecordable events is sent and marked synced', async () => {
+  vi.useFakeTimers()
+  try {
+    const head = insertHeadEvents(10)
+    const good = insertTransitionEvent()
+    breakRejectionUpdate()
+    const memoryMock = endpointMock()
+    for (let i = 0; i < head.length; i++) memoryMock.mockResolvedValueOnce(response(false, 422))
+    memoryMock.mockResolvedValue(response())
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+    await runFlushRounds()
+
+    expect(memoryMock).toHaveBeenCalledTimes(11)
+    expect(rejectionRow(good.eventId).synced_to_anamnesis).toBe(1)
+    expect(getUnsyncedEvents(db).map((e) => e.id).sort()).toEqual([...head].sort())
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('R-001d: a new writer over the same database attempts the unrecordable events again, once', async () => {
+  vi.useFakeTimers()
+  try {
+    insertHeadEvents(11)
+    breakRejectionUpdate()
+    const firstMemory = endpointMock().mockResolvedValue(response(false, 422))
+    const first = writerAnswering(firstMemory).writer
+    await first.flush()
+    await runFlushRounds()
+    expect(firstMemory).toHaveBeenCalledTimes(11)
+
+    const secondMemory = endpointMock().mockResolvedValue(response(false, 422))
+    const restarted = writerAnswering(secondMemory).writer
+    await restarted.flush()
+    await runFlushRounds()
+    await restarted.flush()
+    await runFlushRounds()
+
+    expect(secondMemory).toHaveBeenCalledTimes(11)
+    expect(firstMemory).toHaveBeenCalledTimes(11)
+    expect(getUnsyncedEvents(db)).toHaveLength(11)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('R-001e: with unrecordable events left out, the circuit still opens with exactly one timer and retries once per back-off', async () => {
+  vi.useFakeTimers()
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    insertHeadEvents(10)
+    db.prepare(`UPDATE task_events SET payload_json = '{broken'`).run()
+    insertTransitionEvent()
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockRejectedValue(new Error('Connection failed'))
+    const { writer } = writerAnswering(memoryMock)
+
+    // Round 1: the 10 corrupt events come back unrecorded; round 2: the good event fails once.
+    await writer.flush()
+    await runFlushRounds()
+    expect(memoryMock).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+
+    await writer.flush()
+    await writer.flush()
+    expect(memoryMock).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(vi.getTimerCount()).toBe(1)
+
+    memoryMock.mockResolvedValue(response())
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+    expect(memoryMock).toHaveBeenCalledTimes(5)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(getUnsyncedEvents(db)).toHaveLength(10)
+    expect(errorSpy).toHaveBeenCalledTimes(10)
+  } finally {
+    errorSpy.mockRestore()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('R-004: the log line of an unrecordable rejection carries the SQLite error code and nothing else from the error', async () => {
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    const { eventId } = insertTransitionEvent({ taskTitle: PAYLOAD_MARKER })
+    breakRejectionUpdate()
+    const memoryMock = endpointMock().mockResolvedValue(response(false, 422))
+    const { writer } = writerAnswering(memoryMock)
+
+    await writer.flush()
+
+    const errors = errorsAbout(errorSpy, eventId)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toHaveLength(3)
+    expect(errors[0][2]).toEqual({ code: 'SQLITE_CONSTRAINT_TRIGGER' })
+    const logged = JSON.stringify(errorSpy.mock.calls)
+    expect(logged).not.toContain('rejection update failed')
+    expect(logged).not.toContain(PAYLOAD_MARKER)
+  } finally {
+    errorSpy.mockRestore()
+  }
+})
+
+// ── W-L11: coverage of the retry timer and of rejected rows across restarts ──
+
+it('W-L11a: a stale retry timer firing inside a refreshed back-off sends nothing and leaves exactly one pending timer', async () => {
+  vi.useFakeTimers()
+  try {
+    insertTransitionEvent()
+    const { writer, memoryMock } = await writerWithOpenCircuit()
+    expect(vi.getTimerCount()).toBe(1)
+
+    // Half of the back-off passes, then the clock jumps past it without firing the timer:
+    // a new event triggers a half-open retry that fails and refreshes the back-off.
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS / 2)
+    vi.setSystemTime(Date.now() + BACKOFF_MS)
+    writer.onEventInserted()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(vi.getTimerCount()).toBe(1)
+
+    // The first timer is now stale: it fires half-way through the refreshed back-off.
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS / 2 + 1)
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(vi.getTimerCount()).toBe(1)
+
+    // The re-armed timer fires at the end of the refreshed back-off and retries once.
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS / 2)
+    expect(memoryMock).toHaveBeenCalledTimes(5)
+    expect(vi.getTimerCount()).toBe(1)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L11b: a flush that throws while the circuit is open still leaves one armed timer', async () => {
+  vi.useFakeTimers()
+  const errorSpy = vi.spyOn(log, 'error')
+  try {
+    insertTransitionEvent()
+    const { memoryMock } = await writerWithOpenCircuit()
+
+    // The outbox query fails on the half-open retry.
+    db.exec('ALTER TABLE task_events RENAME TO task_events_away')
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+
+    expect(errorSpy).toHaveBeenCalledWith('AnamnesisWriter flush error on retry', expect.anything())
+    expect(memoryMock).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(1)
+
+    // Database healthy again: the armed timer delivers the event and the circuit closes.
+    db.exec('ALTER TABLE task_events_away RENAME TO task_events')
+    memoryMock.mockResolvedValue(response())
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    errorSpy.mockRestore()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L11c: a half-open batch made only of rejected events neither closes nor re-opens the circuit', async () => {
+  vi.useFakeTimers()
+  try {
+    const { eventId } = insertTransitionEvent()
+    const { writer, memoryMock } = await writerWithOpenCircuit()
+
+    memoryMock.mockResolvedValue(response(false, 422))
+    await vi.advanceTimersByTimeAsync(BACKOFF_MS + 1)
+
+    expect(memoryMock).toHaveBeenCalledTimes(4)
+    expect(rejectionRow(eventId).rejection_status).toBe(422)
+    // Not closed: the circuit still holds exactly one retry timer.
+    expect(vi.getTimerCount()).toBe(1)
+
+    // Not re-opened: the back-off was not refreshed, so a new event is tried at once,
+    // and its success closes the circuit and clears the timer.
+    memoryMock.mockResolvedValue(response())
+    insertTransitionEvent()
+    writer.onEventInserted()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(memoryMock).toHaveBeenCalledTimes(5)
+    expect(getUnsyncedEvents(db)).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
+
+it('W-L11d: a new writer over a database that already holds rejected rows does not re-send them', async () => {
+  const { eventId } = insertTransitionEvent()
+  const firstMemory = endpointMock().mockResolvedValue(response(false, 422))
+  await writerAnswering(firstMemory).writer.flush()
+  expect(rejectionRow(eventId).rejection_status).toBe(422)
+
+  const secondMemory = endpointMock().mockResolvedValue(response())
+  const restarted = writerAnswering(secondMemory).writer
+  await restarted.flush()
+  restarted.onEventInserted()
+  await restarted.flush()
+
+  expect(secondMemory).not.toHaveBeenCalled()
+  expect(rejectionRow(eventId)).toMatchObject({ rejection_status: 422, synced_to_anamnesis: 0 })
+  expect(rejectedActivityRows()).toHaveLength(1)
+})

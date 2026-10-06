@@ -1,7 +1,7 @@
 import { basename, isAbsolute } from 'path'
 import log from 'electron-log/main'
 import type Database from 'better-sqlite3'
-import { getUnsyncedEvents, markEventRejected, markEventSynced } from '../db/queries/task-events.queries'
+import { getUnsyncedEvents, markEventSynced, rejectEventWithActivity } from '../db/queries/task-events.queries'
 import { insertActivityEvent } from '../db/queries/activity.queries'
 import type { TaskEvent, TaskEventType } from '../../shared/types/task.types'
 import type { IAnamnesisAdapter } from './adapters/anamnesis-adapter'
@@ -50,8 +50,11 @@ const BRAIN_ENTRY_PAYLOAD_KEYS = [
 /** HTTP statuses of the memory endpoint that reject an event for good; every other failure is retried. */
 const PERMANENT_REJECTION_STATUSES: ReadonlySet<number> = new Set([400, 413, 422])
 
-/** What one send did to its event: delivered, rejected for good, or left queued for a retry. */
-type SendOutcome = 'synced' | 'rejected' | 'failed'
+/**
+ * What one send did to its event: delivered, rejected for good, left queued after a failed send,
+ * or left queued because the rejection could not be recorded locally ('unrecorded').
+ */
+type SendOutcome = 'synced' | 'rejected' | 'failed' | 'unrecorded'
 
 /** Why a project-status PUT did not land: an HTTP rejection or a transport error. */
 interface ProjectStatusFailure {
@@ -80,6 +83,12 @@ const AT_TOKEN_RE = /\S*@\S*/g
 /** A scheme-less host:port (dotted host or name), with an optional path. */
 const HOST_PORT_RE = /\b(?:(?:[a-z0-9-]+\.)+[a-z0-9-]+|[a-z][a-z0-9-]*):\d{1,5}\b(?:\/\S*)?/gi
 
+/** The SQLite error code of a caught database error (e.g. SQLITE_CONSTRAINT_TRIGGER), null when it has none. */
+function sqliteErrorCode(err: unknown): string | null {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' ? code : null
+}
+
 interface AnamnesisWriterDeps {
   anamnesisUrl: string
   fetch?: typeof globalThis.fetch
@@ -96,6 +105,12 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
   private lastFailureTime = 0
   private flushing = false
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * Ids of events whose rejection could not be recorded locally. Left out of every later flush of
+   * this instance, so each is attempted once per process; not persisted, so tried again after a restart.
+   */
+  private unrecordedEventIds = new Set<string>()
 
   /** Cache: repo name → Anamnesis project UUID */
   private projectUuidCache = new Map<string, string>()
@@ -129,7 +144,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
 
     this.flushing = true
     try {
-      const allEvents = getUnsyncedEvents(this.db)
+      const allEvents = getUnsyncedEvents(this.db).filter((event) => !this.unrecordedEventIds.has(event.id))
       const batch = allEvents.slice(0, AnamnesisWriter.BATCH_SIZE)
       const remaining = allEvents.length - batch.length
 
@@ -317,10 +332,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     const path = ENDPOINT_MAP[event.eventType]
     const url = `${this.anamnesisUrl}${path}`
     const rawPayload = this.parsePayload(event)
-    if (!rawPayload) {
-      this.rejectEvent(event, null)
-      return 'rejected'
-    }
+    if (!rawPayload) return this.rejectEvent(event, null)
 
     // Resolve project UUID from task (or brain entry payload) → repo → Anamnesis project registry
     let projectId: string | null = null
@@ -333,6 +345,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
     const sentPayload = this.allowlistPayload(event, rawPayload)
     const body = this.buildAnamnesisPayload(event, sentPayload, projectId, domainCategory)
 
+    let rejectionStatus: number
     try {
       const res = await this.fetch(url, {
         method: 'POST',
@@ -360,8 +373,7 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
         }
         return 'synced'
       } else if (PERMANENT_REJECTION_STATUSES.has(res.status)) {
-        this.rejectEvent(event, res.status)
-        return 'rejected'
+        rejectionStatus = res.status
       } else {
         log.warn('AnamnesisWriter: non-OK response', { status: res.status, eventId: event.id })
         this.recordFailure()
@@ -372,27 +384,36 @@ export class AnamnesisWriter implements IAnamnesisAdapter {
       this.recordFailure()
       return 'failed'
     }
+    // Outside the try: a local database error here is not "Anamnesis unreachable".
+    return this.rejectEvent(event, rejectionStatus)
   }
 
   /**
    * Z-P0-2: take a permanently rejected event out of the outbox (kept in the table, never sent
    * again) and leave a warning plus an activity_log record. `status` is the HTTP status, null for
    * a corrupt payload. Never logs the payload or the response body; never counts toward the breaker.
+   * The row update and the activity record are one transaction. A local database error is logged
+   * with its SQLite error code only (never the error message) and the event stays unsynced but is
+   * left out of this instance's later flushes: it neither counts toward the breaker nor aborts the flush.
    */
-  private rejectEvent(event: TaskEvent, status: number | null): void {
-    markEventRejected(this.db, event.id, status)
+  private rejectEvent(event: TaskEvent, status: number | null): SendOutcome {
+    try {
+      rejectEventWithActivity(this.db, event, status, this.resolveTaskRepoId(event.taskId))
+    } catch (err) {
+      this.unrecordedEventIds.add(event.id)
+      log.error(
+        'AnamnesisWriter: could not record the rejection, event stays queued',
+        { eventId: event.id, eventType: event.eventType },
+        { code: sqliteErrorCode(err) }
+      )
+      return 'unrecorded'
+    }
     log.warn('AnamnesisWriter: event rejected for good, will not be sent again', {
       eventId: event.id,
       eventType: event.eventType,
       status
     })
-    insertActivityEvent(this.db, {
-      eventType: 'anamnesis_event_rejected',
-      entityType: 'task',
-      entityId: event.taskId ?? event.id,
-      repoId: this.resolveTaskRepoId(event.taskId) ?? undefined,
-      details: { eventId: event.id, eventType: event.eventType, httpStatus: status }
-    })
+    return 'rejected'
   }
 
   /**
