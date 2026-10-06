@@ -12,7 +12,9 @@ const EVENT_ICONS: Record<string, string> = {
   bug_created: '\u{1F41B}',
   bug_resolved: '\u{1F527}',
   note_created: '\u{1F4D2}',
-  repo_added: '\u{1F4C2}'
+  repo_added: '\u{1F4C2}',
+  anamnesis_event_rejected: '\u{1F6AB}',
+  anamnesis_status_unreconciled: '\u{1F501}'
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -27,7 +29,9 @@ const EVENT_LABELS: Record<string, string> = {
   bug_created: 'Bug reported',
   bug_resolved: 'Bug resolved',
   note_created: 'Note created',
-  repo_added: 'Repo added'
+  repo_added: 'Repo added',
+  anamnesis_event_rejected: 'Anamnesis rejected an event',
+  anamnesis_status_unreconciled: 'Anamnesis status not reconciled'
 }
 
 function formatTime(iso: string): string {
