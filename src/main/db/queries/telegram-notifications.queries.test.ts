@@ -217,15 +217,29 @@ describe('buildOrchestratorLifecyclePayload', () => {
     expect(payload.commitAgentId).toBeUndefined()
   })
 
-  it('run_completed with repoPath → commitable=true regardless of isComplexTask', () => {
+  // A run-completed notice is a commit boundary only when the run completed a `complex` task:
+  // a run of non-complex tasks (their review gate commits, or nothing is to be committed) must
+  // not offer Commit / Commit & push on whatever happens to be uncommitted in the repo.
+  it('run_completed of a run with a complex task → commitable=true and commitAgentId set', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      summary: 'my-sprint\n2 completed · 0 failed',
+      type: 'run_completed',
+      isComplexTask: true,
+    })
+    expect(payload.commitable).toBe(true)
+    expect(payload.commitAgentId).toBe('agent-abc')
+  })
+
+  it('run_completed of a run without a complex task → commitable=false, no commit button', () => {
     const payload = buildOrchestratorLifecyclePayload({
       ...baseOpts,
       summary: 'my-sprint\n2 completed · 0 failed',
       type: 'run_completed',
       isComplexTask: false,
     })
-    expect(payload.commitable).toBe(true)
-    expect(payload.commitAgentId).toBe('agent-abc')
+    expect(payload.commitable).toBe(false)
+    expect(payload.commitAgentId).toBeUndefined()
   })
 
   it('complex task_completed without repoPath → commitable=false', () => {
