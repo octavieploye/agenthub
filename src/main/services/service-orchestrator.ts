@@ -42,6 +42,7 @@ import { QuotaScrapeScheduler } from './quota-scrape-scheduler'
 import type { TelegramFromSidecarMsg, TelegramSocketStatus } from '../../shared/types/telegram.types'
 import { getTelegramAllowedUser } from '../db/queries/telegram.queries'
 import {
+  isCommitBoundaryNotification,
   routeTelegramNotification,
   type TelegramNotificationType,
 } from '../db/queries/telegram-notifications.queries'
@@ -715,7 +716,7 @@ export function initializeServices(db: Database.Database): void {
   }
 
   // 18. OrchestratorScheduler — new modular sprint execution engine
-  const sendTelegramNotification = (summary: string, type: TelegramNotificationType, repoId?: string, agentId?: string): void => {
+  const sendTelegramNotification = (summary: string, type: TelegramNotificationType, repoId?: string, agentId?: string, runHasComplexTask?: boolean): void => {
     const routed = routeTelegramNotification(summary, type)
     const msgKey = `orchestrator:${type}:${summary.slice(0, 40).replace(/\s+/g, '-').replace(/[^a-z0-9:-]/gi, '').toLowerCase()}`
     const repoRecord = repoId ? getRepoById(db, repoId) : null
@@ -729,7 +730,10 @@ export function initializeServices(db: Database.Database): void {
       repo: repoRecord?.name ?? '',
       summary: routed.summary,
       repoPath: repoPath || undefined,
-      commitable: type === 'run_completed' && Boolean(repoPath),
+      // Commit boundary: only a run that completed a `complex` task offers Commit / Commit & push.
+      commitable:
+        type === 'run_completed' &&
+        isCommitBoundaryNotification(type, runHasComplexTask === true, repoPath || undefined),
       colorIndex: colorIdx >= 0 ? colorIdx : undefined,
       timestamp: new Date().toISOString(),
     })

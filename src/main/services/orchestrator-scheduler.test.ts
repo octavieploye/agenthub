@@ -1833,6 +1833,77 @@ describe('OrchestratorScheduler', () => {
       )
     })
 
+    it('marks the run-completed notice as a commit boundary only when the run completed a complex task', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Complex task' })
+      // This file builds its own minimal schema, without the column migration 055 adds.
+      db.exec('ALTER TABLE tasks ADD COLUMN complex INTEGER NOT NULL DEFAULT 0')
+      db.prepare('UPDATE tasks SET complex = 1 WHERE id = ?').run(taskId)
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-complex') },
+        sendTelegramNotification,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({
+        sprintName: 'boundary-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-complex', 'completed'),
+      })
+
+      expect(sendTelegramNotification).toHaveBeenCalledWith(
+        expect.stringContaining('boundary-sprint'),
+        'run_completed',
+        'repo-1',
+        undefined,
+        true
+      )
+    })
+
+    it('does not mark the run-completed notice as a commit boundary for a run of non-complex tasks', async () => {
+      const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Plain task' })
+      const decision: SchedulerBrainDecision = {
+        taskId,
+        spawnOptions: { repoId: 'repo-1', name: 'agent-1', cwd: '/tmp' },
+        reason: 'test',
+      }
+      const sendTelegramNotification = vi.fn()
+      const deps = buildDeps(db, {
+        brain: { decide: vi.fn().mockResolvedValueOnce(decision).mockResolvedValue(null) },
+        dispatch: { execute: vi.fn().mockReturnValue('agent-plain') },
+        sendTelegramNotification,
+      })
+      scheduler = new OrchestratorScheduler(deps)
+      scheduler.start({
+        sprintName: 'plain-sprint',
+        repoId: 'repo-1',
+        taskIds: [taskId],
+        telegramNotify: true,
+      })
+      await vi.advanceTimersByTimeAsync(1)
+
+      emitOrchestratorEvent({
+        type: 'agent:completed',
+        triageEvent: fakeTriageEvent('agent-plain', 'completed'),
+      })
+
+      const runCompleted = sendTelegramNotification.mock.calls.filter(([, type]) => type === 'run_completed')
+      expect(runCompleted).toHaveLength(1)
+      expect(runCompleted[0]).toHaveLength(4)
+    })
+
     it('notifies task failure and the final failed run without changing retry behavior', async () => {
       const taskId = insertTestTask(db, { repoId: 'repo-1', status: 'today', title: 'Fail task' })
       const decision: SchedulerBrainDecision = {

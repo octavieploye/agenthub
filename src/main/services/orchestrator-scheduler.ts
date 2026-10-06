@@ -96,7 +96,8 @@ export interface SchedulerDeps {
   heartbeatIntervalMs?: number
   getAgentStatus?: (agentId: string) => AgentLifecycleStatus | null
   notifyApproval?: (taskId: string, runId: string, title: string, repoId: string, sprintName?: string, description?: string) => void
-  sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType, repoId?: string, agentId?: string) => void
+  /** `runHasComplexTask` is passed (as true) only for a run_completed whose run completed a `complex` task — the commit boundary. */
+  sendTelegramNotification?: (summary: string, type: OrchestratorLifecycleNotificationType, repoId?: string, agentId?: string, runHasComplexTask?: boolean) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -1170,10 +1171,14 @@ export class OrchestratorScheduler {
       this.lastHeartbeatAt.delete(run.id)
       this.tickedRunIds.delete(run.id)
       this.emitStatusChange(run.id, finalStatus, run.sprintName)
+      const runHasComplexTask =
+        finalStatus === 'completed' && [...completedIds].some(id => getTaskById(this.db, id)?.complex === true)
       this.notifyLifecycle(
         run,
         finalStatus === 'failed' ? 'run_failed' : 'run_completed',
-        `${run.sprintName}\n${completedIds.size} completed · ${failedIds.size} failed`
+        `${run.sprintName}\n${completedIds.size} completed · ${failedIds.size} failed`,
+        undefined,
+        runHasComplexTask
       )
       log.info('OrchestratorScheduler: run concluded', { runId: run.id, status: finalStatus })
       this.promoteNextQueued()
@@ -1195,11 +1200,16 @@ export class OrchestratorScheduler {
     run: OrchestratorRun,
     type: OrchestratorLifecycleNotificationType,
     summary: string,
-    agentId?: string
+    agentId?: string,
+    runHasComplexTask = false
   ): void {
     if (!run.telegramNotify) return
     try {
-      this.deps.sendTelegramNotification?.(summary, type, run.repoId, agentId)
+      if (runHasComplexTask) {
+        this.deps.sendTelegramNotification?.(summary, type, run.repoId, agentId, true)
+      } else {
+        this.deps.sendTelegramNotification?.(summary, type, run.repoId, agentId)
+      }
     } catch (err) {
       log.warn('OrchestratorScheduler: lifecycle Telegram notification failed', {
         runId: run.id,

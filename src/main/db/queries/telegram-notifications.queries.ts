@@ -155,17 +155,29 @@ export interface LifecyclePayloadOptions {
   repoName: string
   repoPath: string | undefined
   commitAgentId: string | undefined
+  /** The completed task is `complex`; for run_completed, the run completed a `complex` task. */
   isComplexTask: boolean
   colorIndex: number | undefined
+}
+
+/**
+ * Commit boundary: Commit / Commit & push are offered only for a completed `complex` task, or for
+ * the completion of a run that completed one. A run of non-complex tasks never offers them — the
+ * buttons commit whatever is uncommitted in the repo, not what the run produced.
+ */
+export function isCommitBoundaryNotification(
+  type: TelegramNotificationType,
+  hasComplexTask: boolean,
+  repoPath: string | undefined
+): boolean {
+  return Boolean(repoPath) && hasComplexTask && (type === 'run_completed' || type === 'task_completed')
 }
 
 export function buildOrchestratorLifecyclePayload(
   opts: LifecyclePayloadOptions
 ): Omit<TelegramNotificationPayload, 'timestamp'> {
   const routed = routeTelegramNotification(opts.summary, opts.type)
-  const isCommitable =
-    Boolean(opts.repoPath) &&
-    (opts.type === 'run_completed' || (opts.type === 'task_completed' && opts.isComplexTask))
+  const isCommitable = isCommitBoundaryNotification(opts.type, opts.isComplexTask, opts.repoPath)
   return {
     type: routed.type,
     agentId: opts.msgKey,

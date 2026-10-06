@@ -276,6 +276,17 @@ describe('buildOrchestratorLifecyclePayload', () => {
     expect(payload.commitAgentId).toBeUndefined()
   })
 
+  it('run_completed of a run with a complex task but no repoPath → commitable=false', () => {
+    const payload = buildOrchestratorLifecyclePayload({
+      ...baseOpts,
+      repoPath: undefined,
+      summary: 'my-sprint\n1 completed · 0 failed',
+      type: 'run_completed',
+      isComplexTask: true,
+    })
+    expect(payload.commitable).toBe(false)
+  })
+
   it('run_cancelled with repoPath → commitable=false, no commit button', () => {
     const payload = buildOrchestratorLifecyclePayload({
       ...baseOpts,
